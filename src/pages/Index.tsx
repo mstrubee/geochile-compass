@@ -425,6 +425,15 @@ const Index = () => {
             onMapClick={handleMapClick}
             savedPois={pois}
             savedPoisVisible={savedPoisVisible}
+            microzones={microzones}
+            microActive={mode === "microzone"}
+            microSubmode={microSubmode}
+            microDraftVertices={microDraft}
+            onMicroAddVertex={handleMicroAddVertex}
+            onMicroClosePolygon={handleMicroClosePolygon}
+            onMicroBufferClick={handleMicroBufferClick}
+            fitMicrozoneId={fitMicrozoneId}
+            onFitMicrozoneDone={() => setFitMicrozoneId(null)}
           />
 
           <SearchBar />
