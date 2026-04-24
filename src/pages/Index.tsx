@@ -51,6 +51,14 @@ const Index = () => {
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
   const [manzanaVariable, setManzanaVariable] = useState<ManzanaVariable>("nse");
   const [viewport, setViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
+  // Capa de densidad poblacional (manzanas coloreadas por densidad), controlada desde "Capas territoriales"
+  const [densityViewport, setDensityViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
+  const handleDensityViewportChange = useCallback(
+    (bbox: [number, number, number, number], zoom: number) => {
+      setDensityViewport({ bbox, zoom });
+    },
+    [],
+  );
   // Capa GSE por manzana (Censo 2012)
   const [gseVariable, setGseVariable] = useState<GseVariable>("gse");
   const [gseViewport, setGseViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
@@ -205,6 +213,14 @@ const Index = () => {
     bbox: viewport?.bbox ?? null,
     zoom: viewport?.zoom ?? 12,
     variable: manzanaVariable,
+    minZoom: 12,
+  });
+
+  const { data: densityData } = useManzanas({
+    enabled: layers.density,
+    bbox: densityViewport?.bbox ?? null,
+    zoom: densityViewport?.zoom ?? 12,
+    variable: "density",
     minZoom: 12,
   });
 
