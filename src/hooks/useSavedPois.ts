@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
-import type { PoiInsert, SavedPoi } from "@/types/pois";
+import type { PoiInsert, PoiUpdate, SavedPoi } from "@/types/pois";
 
 export const useSavedPois = () => {
   const { user } = useAuth();
@@ -17,7 +17,7 @@ export const useSavedPois = () => {
     const { data, error } = await supabase
       .from("pois")
       .select(
-        "id,name,description,category,color,icon,lat,lng,properties,source_layer,created_at",
+        "id,name,description,category,color,icon,lat,lng,properties,source_layer,folder_id,created_at",
       )
       .order("created_at", { ascending: false });
     setLoading(false);
@@ -33,11 +33,12 @@ export const useSavedPois = () => {
   }, [refresh]);
 
   const addMany = useCallback(
-    async (items: PoiInsert[]) => {
+    async (items: PoiInsert[], folder_id: string | null = null) => {
       if (!user) throw new Error("Debes iniciar sesión");
       if (!items.length) return 0;
       const rows = items.map((p) => ({
         ...p,
+        folder_id: p.folder_id ?? folder_id,
         properties: (p.properties ?? {}) as never,
         user_id: user.id,
       }));
@@ -51,9 +52,41 @@ export const useSavedPois = () => {
     [user, refresh],
   );
 
+  const update = useCallback(
+    async (id: string, patch: PoiUpdate) => {
+      const { error } = await supabase.from("pois").update(patch).eq("id", id);
+      if (error) throw new Error(error.message);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const moveMany = useCallback(
+    async (ids: string[], folder_id: string | null) => {
+      if (!ids.length) return;
+      const { error } = await supabase
+        .from("pois")
+        .update({ folder_id })
+        .in("id", ids);
+      if (error) throw new Error(error.message);
+      await refresh();
+    },
+    [refresh],
+  );
+
   const remove = useCallback(
     async (id: string) => {
       const { error } = await supabase.from("pois").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const removeMany = useCallback(
+    async (ids: string[]) => {
+      if (!ids.length) return;
+      const { error } = await supabase.from("pois").delete().in("id", ids);
       if (error) throw new Error(error.message);
       await refresh();
     },
@@ -70,5 +103,15 @@ export const useSavedPois = () => {
     await refresh();
   }, [user, refresh]);
 
-  return { pois, loading, addMany, remove, clearAll, refresh };
+  return {
+    pois,
+    loading,
+    addMany,
+    update,
+    moveMany,
+    remove,
+    removeMany,
+    clearAll,
+    refresh,
+  };
 };
