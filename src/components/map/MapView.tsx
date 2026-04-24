@@ -4,6 +4,8 @@ import L from "leaflet";
 import { CommuneLayer } from "./CommuneLayer";
 import { TrafficLayer } from "./TrafficLayer";
 import { NSELayer } from "./NSELayer";
+import { ManzanaLayer } from "./ManzanaLayer";
+import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 
 // Fix default Leaflet marker icon paths (when bundled)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -50,9 +52,21 @@ interface MapViewProps {
   layers: import("@/types/layers").LayerState;
   nseFilter: import("@/data/communes").NSE | null;
   trafficFilter: import("@/utils/traffic").TrafficLevel | null;
+  manzanaData: ManzanaFeatureCollection | null;
+  manzanaVariable: ManzanaVariable;
+  onManzanaViewportChange: (bbox: [number, number, number, number], zoom: number) => void;
 }
 
-export const MapView = ({ basemap, onMouseMove, layers, nseFilter, trafficFilter }: MapViewProps) => {
+export const MapView = ({
+  basemap,
+  onMouseMove,
+  layers,
+  nseFilter,
+  trafficFilter,
+  manzanaData,
+  manzanaVariable,
+  onManzanaViewportChange,
+}: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
     <MapContainer
@@ -71,6 +85,12 @@ export const MapView = ({ basemap, onMouseMove, layers, nseFilter, trafficFilter
       <ZoomControlTopRight />
       <MouseTracker onMouseMove={onMouseMove} />
       <InvalidateOnResize />
+      <ManzanaLayer
+        visible={layers.manzanas}
+        data={manzanaData}
+        variable={manzanaVariable}
+        onViewportChange={onManzanaViewportChange}
+      />
       <CommuneLayer visible={layers.communes} />
       <NSELayer visible={layers.nse} nseFilter={nseFilter} trafficFilter={trafficFilter} />
       <TrafficLayer visible={layers.traffic} nseFilter={nseFilter} trafficFilter={trafficFilter} />

@@ -1,6 +1,8 @@
 import type { LayerState } from "@/types/layers";
 import { COMMUNES, NSE_LABELS, NSE_COLOR_HSL, type NSE } from "@/data/communes";
 import { TRAFFIC_LEVELS, trafficLevelOf, type TrafficLevel } from "@/utils/traffic";
+import type { ManzanaSource, ManzanaVariable } from "@/types/manzanas";
+import { scaleForVariable, VARIABLE_LABEL } from "@/utils/colorScales";
 
 interface LegendProps {
   shifted: boolean;
@@ -9,6 +11,9 @@ interface LegendProps {
   onNseFilterChange: (n: NSE | null) => void;
   trafficFilter: TrafficLevel | null;
   onTrafficFilterChange: (t: TrafficLevel | null) => void;
+  manzanaVariable: ManzanaVariable;
+  manzanaSource: ManzanaSource | null;
+  manzanaError: string | null;
 }
 
 interface NSERow {
@@ -121,10 +126,14 @@ export const Legend = ({
   onNseFilterChange,
   trafficFilter,
   onTrafficFilterChange,
+  manzanaVariable,
+  manzanaSource,
+  manzanaError,
 }: LegendProps) => {
   const showNSE = layers.nse;
   const showTraffic = layers.traffic;
-  const showAny = showNSE || showTraffic;
+  const showManzanas = layers.manzanas;
+  const showAny = showNSE || showTraffic || showManzanas;
 
   // Count combined matches when both filters could apply
   const matched = COMMUNES.filter(
@@ -133,10 +142,12 @@ export const Legend = ({
       (trafficFilter === null || trafficLevelOf(c.traffic) === trafficFilter)
   ).length;
 
+  const manzanaScale = showManzanas ? scaleForVariable(manzanaVariable) : [];
+
   return (
     <div
       className={[
-        "absolute bottom-[22px] z-[500] w-[220px] rounded-lg border border-border bg-surface/95 p-3 backdrop-blur transition-[right] duration-300",
+        "absolute bottom-[22px] z-[500] w-[230px] rounded-lg border border-border bg-surface/95 p-3 backdrop-blur transition-[right] duration-300",
         shifted ? "right-[374px]" : "right-3.5",
       ].join(" ")}
     >
@@ -159,6 +170,37 @@ export const Legend = ({
           <div className="mt-2 border-t border-border pt-1.5 font-mono text-[9px] text-text-muted">
             Activa una capa para filtrar
           </div>
+        </>
+      )}
+
+      {showManzanas && (
+        <>
+          <div className="mb-1.5 mt-1 flex items-center gap-2">
+            <div className="flex-1 font-mono text-[9px] uppercase tracking-[2px] text-text-muted">
+              Manzanas · {VARIABLE_LABEL[manzanaVariable]}
+            </div>
+            {manzanaSource === "mock" && (
+              <span className="rounded-sm border border-brand-orange/40 bg-brand-orange/10 px-1.5 py-0.5 font-mono text-[8px] uppercase text-brand-orange">
+                Simulado
+              </span>
+            )}
+            {manzanaSource === "INE Censo 2017" && (
+              <span className="rounded-sm border border-brand-green/40 bg-brand-green/10 px-1.5 py-0.5 font-mono text-[8px] uppercase text-brand-green">
+                INE 2017
+              </span>
+            )}
+          </div>
+          <div className="space-y-0.5">
+            {manzanaScale.map((s) => (
+              <div key={s.label} className="flex items-center gap-2 px-1.5 py-0.5 text-[11px] text-foreground">
+                <span className="h-2 w-[18px] flex-shrink-0 rounded-sm" style={{ background: s.color }} />
+                <span className="flex-1">{s.label}</span>
+              </div>
+            ))}
+          </div>
+          {manzanaError && (
+            <div className="mt-1.5 font-mono text-[9px] text-brand-red">{manzanaError}</div>
+          )}
         </>
       )}
 

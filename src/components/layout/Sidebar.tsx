@@ -1,6 +1,7 @@
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Loader2 } from "lucide-react";
 import type { LayerKey, LayerState } from "@/types/layers";
+import type { ManzanaVariable } from "@/types/manzanas";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite";
@@ -8,6 +9,10 @@ interface SidebarProps {
   mode: "none" | "isochrone" | "microzone";
   layers: LayerState;
   onToggleLayer: (key: LayerKey) => void;
+  manzanaVariable: ManzanaVariable;
+  onManzanaVariableChange: (v: ManzanaVariable) => void;
+  manzanaLoading: boolean;
+  manzanaCount: number;
 }
 
 interface LayerRow {
@@ -23,6 +28,13 @@ const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "nse", color: "bg-brand-purple", name: "Grupo Socioeconómico", count: 20, sub: "ABC1 · C2 · C3 · D · E" },
   { key: "traffic", color: "bg-brand-orange", name: "Tráfico Vehicular", count: 20 },
   { key: "density", color: "bg-brand-pink", name: "Densidad Población", count: 20 },
+];
+
+const MANZANA_VARIABLES: { key: ManzanaVariable; label: string }[] = [
+  { key: "density", label: "Densidad Pob." },
+  { key: "nse", label: "NSE" },
+  { key: "income", label: "Ingresos" },
+  { key: "traffic", label: "Tráfico" },
 ];
 
 const POI_LAYERS: LayerRow[] = [
@@ -77,7 +89,17 @@ const LayerItem = ({ row, on, onToggle }: LayerItemProps) => (
   </button>
 );
 
-export const Sidebar = ({ basemap, onBasemapChange, mode, layers, onToggleLayer }: SidebarProps) => {
+export const Sidebar = ({
+  basemap,
+  onBasemapChange,
+  mode,
+  layers,
+  onToggleLayer,
+  manzanaVariable,
+  onManzanaVariableChange,
+  manzanaLoading,
+  manzanaCount,
+}: SidebarProps) => {
   return (
     <aside className="flex w-[272px] flex-shrink-0 flex-col overflow-hidden border-r border-border bg-surface">
       <div className="scrollbar-thin flex-1 overflow-y-auto">
@@ -85,7 +107,7 @@ export const Sidebar = ({ basemap, onBasemapChange, mode, layers, onToggleLayer 
         <SidebarSection title="Resumen" accent="primary">
           <div className="grid grid-cols-2 gap-1.5 pt-1">
             <StatCard value={20} label="Comunas" />
-            <StatCard value={0} label="Manzanas vis." />
+            <StatCard value={manzanaCount} label="Manzanas vis." />
             <StatCard value={0} label="POIs OSM" />
             <StatCard value={0} label="Isócronas" />
           </div>
