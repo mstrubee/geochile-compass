@@ -177,6 +177,30 @@ export const PoiManagerDialog = ({
     }
   };
 
+  const descendantsOf = (id: string): Set<string> => {
+    const out = new Set<string>();
+    const walk = (pid: string) => {
+      (childrenOf.get(pid) ?? []).forEach((c) => {
+        if (!out.has(c.id)) {
+          out.add(c.id);
+          walk(c.id);
+        }
+      });
+    };
+    walk(id);
+    return out;
+  };
+
+  const handleMoveFolder = async (folderId: string, parentId: string | null) => {
+    try {
+      await onMoveFolder(folderId, parentId);
+      toast.success("Carpeta movida");
+      if (parentId) setExpanded((p) => new Set(p).add(parentId));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error");
+    }
+  };
+
   const renderPoiRow = (p: SavedPoi, depth: number) => (
     <div
       key={p.id}
