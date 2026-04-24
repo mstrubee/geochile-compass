@@ -43,6 +43,7 @@ const Index = () => {
     bbox: viewport?.bbox ?? null,
     zoom: viewport?.zoom ?? 12,
     variable: manzanaVariable,
+    minZoom: 12,
   });
 
   const toggleLayer = (key: keyof LayerState) => {

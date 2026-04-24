@@ -1,4 +1,4 @@
-import type { FeatureCollection, Polygon, Feature } from "geojson";
+import type { FeatureCollection, Polygon, MultiPolygon, Feature } from "geojson";
 import type { NSE } from "@/data/communes";
 
 export type ManzanaVariable = "density" | "nse" | "income" | "traffic";
@@ -38,7 +38,7 @@ export interface ManzanaFeatureCollection {
   metadata: ManzanaMetadata;
 }
 
-export type ManzanaFeature = Feature<Polygon, ManzanaProperties>;
+export type ManzanaFeature = Feature<Polygon | MultiPolygon, ManzanaProperties>;
 
 export interface ManzanaService {
   fetchManzanas(params: ManzanaParams): Promise<ManzanaFeatureCollection>;

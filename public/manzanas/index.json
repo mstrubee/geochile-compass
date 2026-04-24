@@ -1,0 +1,618 @@
+{
+  "region": "R13 - Metropolitana",
+  "source": "INE Censo 2017",
+  "communes": [
+    {
+      "commune": "ALHUÉ",
+      "slug": "alhue",
+      "file": "alhue.geojson",
+      "count": 146,
+      "bbox": [
+        -71.1210888,
+        -34.0386696,
+        -71.0884049,
+        -34.0275713
+      ]
+    },
+    {
+      "commune": "BUIN",
+      "slug": "buin",
+      "file": "buin.geojson",
+      "count": 1506,
+      "bbox": [
+        -70.8702975,
+        -33.8165012,
+        -70.6598675,
+        -33.6579497
+      ]
+    },
+    {
+      "commune": "CALERA DE TANGO",
+      "slug": "calera-de-tango",
+      "file": "calera-de-tango.geojson",
+      "count": 180,
+      "bbox": [
+        -70.8369373,
+        -33.6623429,
+        -70.755698,
+        -33.5897078
+      ]
+    },
+    {
+      "commune": "CERRILLOS",
+      "slug": "cerrillos",
+      "file": "cerrillos.geojson",
+      "count": 1314,
+      "bbox": [
+        -70.7395141,
+        -33.5276215,
+        -70.6855941,
+        -33.473549
+      ]
+    },
+    {
+      "commune": "CERRO NAVIA",
+      "slug": "cerro-navia",
+      "file": "cerro-navia.geojson",
+      "count": 2262,
+      "bbox": [
+        -70.7814893,
+        -33.438716,
+        -70.7159978,
+        -33.4123996
+      ]
+    },
+    {
+      "commune": "COLINA",
+      "slug": "colina",
+      "file": "colina.geojson",
+      "count": 1734,
+      "bbox": [
+        -70.7478253,
+        -33.3268777,
+        -70.6111694,
+        -33.0678754
+      ]
+    },
+    {
+      "commune": "CONCHALÍ",
+      "slug": "conchali",
+      "file": "conchali.geojson",
+      "count": 2260,
+      "bbox": [
+        -70.6984981,
+        -33.4027171,
+        -70.657221,
+        -33.3662878
+      ]
+    },
+    {
+      "commune": "CURACAVÍ",
+      "slug": "curacavi",
+      "file": "curacavi.geojson",
+      "count": 400,
+      "bbox": [
+        -71.1717397,
+        -33.4660569,
+        -71.0224255,
+        -33.3890543
+      ]
+    },
+    {
+      "commune": "EL BOSQUE",
+      "slug": "el-bosque",
+      "file": "el-bosque.geojson",
+      "count": 2484,
+      "bbox": [
+        -70.7010975,
+        -33.5850606,
+        -70.6535621,
+        -33.5395024
+      ]
+    },
+    {
+      "commune": "EL MONTE",
+      "slug": "el-monte",
+      "file": "el-monte.geojson",
+      "count": 450,
+      "bbox": [
+        -71.0602124,
+        -33.7153372,
+        -70.9701777,
+        -33.6714203
+      ]
+    },
+    {
+      "commune": "ESTACIÓN CENTRAL",
+      "slug": "estacion-central",
+      "file": "estacion-central.geojson",
+      "count": 2090,
+      "bbox": [
+        -70.733062,
+        -33.4812811,
+        -70.6717585,
+        -33.4439395
+      ]
+    },
+    {
+      "commune": "HUECHURABA",
+      "slug": "huechuraba",
+      "file": "huechuraba.geojson",
+      "count": 1286,
+      "bbox": [
+        -70.6923731,
+        -33.3983916,
+        -70.6018594,
+        -33.3362625
+      ]
+    },
+    {
+      "commune": "INDEPENDENCIA",
+      "slug": "independencia",
+      "file": "independencia.geojson",
+      "count": 940,
+      "bbox": [
+        -70.6815272,
+        -33.4317948,
+        -70.6503351,
+        -33.3989822
+      ]
+    },
+    {
+      "commune": "ISLA DE MAIPO",
+      "slug": "isla-de-maipo",
+      "file": "isla-de-maipo.geojson",
+      "count": 468,
+      "bbox": [
+        -71.0335342,
+        -33.7825192,
+        -70.8471944,
+        -33.711355
+      ]
+    },
+    {
+      "commune": "LA CISTERNA",
+      "slug": "la-cisterna",
+      "file": "la-cisterna.geojson",
+      "count": 1096,
+      "bbox": [
+        -70.6844295,
+        -33.5486231,
+        -70.6446966,
+        -33.510962
+      ]
+    },
+    {
+      "commune": "LA FLORIDA",
+      "slug": "la-florida",
+      "file": "la-florida.geojson",
+      "count": 5634,
+      "bbox": [
+        -70.614767,
+        -33.5701553,
+        -70.5181388,
+        -33.5038878
+      ]
+    },
+    {
+      "commune": "LA GRANJA",
+      "slug": "la-granja",
+      "file": "la-granja.geojson",
+      "count": 1840,
+      "bbox": [
+        -70.6364435,
+        -33.5597163,
+        -70.6098437,
+        -33.51314
+      ]
+    },
+    {
+      "commune": "LA PINTANA",
+      "slug": "la-pintana",
+      "file": "la-pintana.geojson",
+      "count": 2622,
+      "bbox": [
+        -70.6706314,
+        -33.6274214,
+        -70.6070623,
+        -33.5550356
+      ]
+    },
+    {
+      "commune": "LA REINA",
+      "slug": "la-reina",
+      "file": "la-reina.geojson",
+      "count": 1230,
+      "bbox": [
+        -70.5839277,
+        -33.4651205,
+        -70.5006845,
+        -33.4290464
+      ]
+    },
+    {
+      "commune": "LAMPA",
+      "slug": "lampa",
+      "file": "lampa.geojson",
+      "count": 1286,
+      "bbox": [
+        -70.8932889,
+        -33.3319814,
+        -70.721981,
+        -33.2235114
+      ]
+    },
+    {
+      "commune": "LAS CONDES",
+      "slug": "las-condes",
+      "file": "las-condes.geojson",
+      "count": 2956,
+      "bbox": [
+        -70.6065309,
+        -33.4335751,
+        -70.4788362,
+        -33.3642364
+      ]
+    },
+    {
+      "commune": "LO BARNECHEA",
+      "slug": "lo-barnechea",
+      "file": "lo-barnechea.geojson",
+      "count": 984,
+      "bbox": [
+        -70.5814976,
+        -33.375164,
+        -70.4301927,
+        -33.3106917
+      ]
+    },
+    {
+      "commune": "LO ESPEJO",
+      "slug": "lo-espejo",
+      "file": "lo-espejo.geojson",
+      "count": 1348,
+      "bbox": [
+        -70.7054484,
+        -33.5381951,
+        -70.6714042,
+        -33.5023207
+      ]
+    },
+    {
+      "commune": "LO PRADO",
+      "slug": "lo-prado",
+      "file": "lo-prado.geojson",
+      "count": 1486,
+      "bbox": [
+        -70.7407985,
+        -33.4577058,
+        -70.7058051,
+        -33.4362932
+      ]
+    },
+    {
+      "commune": "MACUL",
+      "slug": "macul",
+      "file": "macul.geojson",
+      "count": 1582,
+      "bbox": [
+        -70.6228634,
+        -33.5098822,
+        -70.5769686,
+        -33.4700771
+      ]
+    },
+    {
+      "commune": "MAIPÚ",
+      "slug": "maipu",
+      "file": "maipu.geojson",
+      "count": 9210,
+      "bbox": [
+        -70.8325692,
+        -33.5715264,
+        -70.7209771,
+        -33.4636143
+      ]
+    },
+    {
+      "commune": "MARÍA PINTO",
+      "slug": "maria-pinto",
+      "file": "maria-pinto.geojson",
+      "count": 152,
+      "bbox": [
+        -71.2725915,
+        -33.5542532,
+        -71.076,
+        -33.4532845
+      ]
+    },
+    {
+      "commune": "MELIPILLA",
+      "slug": "melipilla",
+      "file": "melipilla.geojson",
+      "count": 1646,
+      "bbox": [
+        -71.241671,
+        -33.7552221,
+        -71.1455944,
+        -33.5606554
+      ]
+    },
+    {
+      "commune": "ÑUÑOA",
+      "slug": "nunoa",
+      "file": "nunoa.geojson",
+      "count": 1950,
+      "bbox": [
+        -70.6314007,
+        -33.4748874,
+        -70.5709817,
+        -33.4341336
+      ]
+    },
+    {
+      "commune": "PADRE HURTADO",
+      "slug": "padre-hurtado",
+      "file": "padre-hurtado.geojson",
+      "count": 952,
+      "bbox": [
+        -70.8348061,
+        -33.596318,
+        -70.7835257,
+        -33.5486765
+      ]
+    },
+    {
+      "commune": "PAINE",
+      "slug": "paine",
+      "file": "paine.geojson",
+      "count": 740,
+      "bbox": [
+        -70.8912128,
+        -33.9039611,
+        -70.6331627,
+        -33.7725624
+      ]
+    },
+    {
+      "commune": "PEDRO AGUIRRE CERDA",
+      "slug": "pedro-aguirre-cerda",
+      "file": "pedro-aguirre-cerda.geojson",
+      "count": 1756,
+      "bbox": [
+        -70.6945119,
+        -33.5105559,
+        -70.6551729,
+        -33.4758836
+      ]
+    },
+    {
+      "commune": "PEÑAFLOR",
+      "slug": "penaflor",
+      "file": "penaflor.geojson",
+      "count": 1142,
+      "bbox": [
+        -70.9091027,
+        -33.6237299,
+        -70.8363747,
+        -33.592246
+      ]
+    },
+    {
+      "commune": "PEÑALOLÉN",
+      "slug": "penalolen",
+      "file": "penalolen.geojson",
+      "count": 3290,
+      "bbox": [
+        -70.5897761,
+        -33.5124962,
+        -70.5042401,
+        -33.4591557
+      ]
+    },
+    {
+      "commune": "PIRQUE",
+      "slug": "pirque",
+      "file": "pirque.geojson",
+      "count": 178,
+      "bbox": [
+        -70.5780321,
+        -33.7376751,
+        -70.5216011,
+        -33.6153644
+      ]
+    },
+    {
+      "commune": "PROVIDENCIA",
+      "slug": "providencia",
+      "file": "providencia.geojson",
+      "count": 1244,
+      "bbox": [
+        -70.6361711,
+        -33.4497618,
+        -70.5825014,
+        -33.4091659
+      ]
+    },
+    {
+      "commune": "PUDAHUEL",
+      "slug": "pudahuel",
+      "file": "pudahuel.geojson",
+      "count": 3458,
+      "bbox": [
+        -70.8800559,
+        -33.4711284,
+        -70.7313729,
+        -33.385419
+      ]
+    },
+    {
+      "commune": "PUENTE ALTO",
+      "slug": "puente-alto",
+      "file": "puente-alto.geojson",
+      "count": 9536,
+      "bbox": [
+        -70.6312318,
+        -33.6434293,
+        -70.4969216,
+        -33.5475867
+      ]
+    },
+    {
+      "commune": "QUILICURA",
+      "slug": "quilicura",
+      "file": "quilicura.geojson",
+      "count": 2842,
+      "bbox": [
+        -70.7832612,
+        -33.3932187,
+        -70.6799584,
+        -33.3185756
+      ]
+    },
+    {
+      "commune": "QUINTA NORMAL",
+      "slug": "quinta-normal",
+      "file": "quinta-normal.geojson",
+      "count": 1490,
+      "bbox": [
+        -70.7221513,
+        -33.4487786,
+        -70.6771975,
+        -33.4081643
+      ]
+    },
+    {
+      "commune": "RECOLETA",
+      "slug": "recoleta",
+      "file": "recoleta.geojson",
+      "count": 2192,
+      "bbox": [
+        -70.6582138,
+        -33.4355814,
+        -70.6161593,
+        -33.3768327
+      ]
+    },
+    {
+      "commune": "RENCA",
+      "slug": "renca",
+      "file": "renca.geojson",
+      "count": 2142,
+      "bbox": [
+        -70.7679984,
+        -33.425894,
+        -70.6714611,
+        -33.3814333
+      ]
+    },
+    {
+      "commune": "SAN BERNARDO",
+      "slug": "san-bernardo",
+      "file": "san-bernardo.geojson",
+      "count": 4816,
+      "bbox": [
+        -70.7532939,
+        -33.6760971,
+        -70.6591136,
+        -33.5242391
+      ]
+    },
+    {
+      "commune": "SAN JOAQUÍN",
+      "slug": "san-joaquin",
+      "file": "san-joaquin.geojson",
+      "count": 1584,
+      "bbox": [
+        -70.6418446,
+        -33.5186482,
+        -70.6113178,
+        -33.4696579
+      ]
+    },
+    {
+      "commune": "SAN JOSÉ DE MAIPO",
+      "slug": "san-jose-de-maipo",
+      "file": "san-jose-de-maipo.geojson",
+      "count": 242,
+      "bbox": [
+        -70.4970095,
+        -33.7348676,
+        -70.2977112,
+        -33.5729559
+      ]
+    },
+    {
+      "commune": "SAN MIGUEL",
+      "slug": "san-miguel",
+      "file": "san-miguel.geojson",
+      "count": 1074,
+      "bbox": [
+        -70.6707159,
+        -33.5187467,
+        -70.6367435,
+        -33.476946
+      ]
+    },
+    {
+      "commune": "SAN RAMÓN",
+      "slug": "san-ramon",
+      "file": "san-ramon.geojson",
+      "count": 1390,
+      "bbox": [
+        -70.6549074,
+        -33.5581351,
+        -70.6311977,
+        -33.5174283
+      ]
+    },
+    {
+      "commune": "SANTIAGO",
+      "slug": "santiago",
+      "file": "santiago.geojson",
+      "count": 2578,
+      "bbox": [
+        -70.6918143,
+        -33.4784302,
+        -70.6251385,
+        -33.4268482
+      ]
+    },
+    {
+      "commune": "TALAGANTE",
+      "slug": "talagante",
+      "file": "talagante.geojson",
+      "count": 968,
+      "bbox": [
+        -70.9587559,
+        -33.7143135,
+        -70.8310166,
+        -33.6395263
+      ]
+    },
+    {
+      "commune": "TILTIL",
+      "slug": "tiltil",
+      "file": "tiltil.geojson",
+      "count": 234,
+      "bbox": [
+        -70.933569,
+        -33.1770432,
+        -70.7844142,
+        -33.0715867
+      ]
+    },
+    {
+      "commune": "VITACURA",
+      "slug": "vitacura",
+      "file": "vitacura.geojson",
+      "count": 1208,
+      "bbox": [
+        -70.60361,
+        -33.4079097,
+        -70.5178077,
+        -33.3507139
+      ]
+    }
+  ]
+}
