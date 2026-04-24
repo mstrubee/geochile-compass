@@ -462,7 +462,11 @@ const Index = () => {
             >
               {mode === "isochrone"
                 ? "Haz clic en el mapa para generar una isócrona"
-                : "Clic para añadir vértice · Doble clic para cerrar · ESC para cancelar"}
+                : microSubmode === "polygon"
+                  ? "Clic para añadir vértice · Doble clic para cerrar · ESC para cancelar"
+                  : microSubmode === "buffer"
+                    ? `Clic para crear un buffer de ${microBufferRadius >= 1000 ? `${(microBufferRadius / 1000).toFixed(1)} km` : `${microBufferRadius} m`}`
+                    : "Modo Voronoi · usa el botón en la barra lateral para generarlo"}
             </div>
           )}
 
