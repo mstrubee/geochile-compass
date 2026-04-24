@@ -125,6 +125,9 @@ export const Sidebar = ({
   onAddUserLayer,
   onToggleUserLayer,
   onRemoveUserLayer,
+  onSavePoisFromLayer,
+  getLayerPointCount,
+  isAuthenticated,
   isoMode = "foot-walking",
   onIsoModeChange,
   isoMinutes = [5, 10, 15],
@@ -135,6 +138,11 @@ export const Sidebar = ({
   onClearIsochrones,
   onFocusIsochrone,
   isoLoading = false,
+  savedPois = [],
+  savedPoisVisible = true,
+  onToggleSavedPoisVisible,
+  onRemoveSavedPoi,
+  onClearSavedPois,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
