@@ -1,6 +1,6 @@
 import { useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import type { LayerKey, LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
@@ -44,6 +44,8 @@ interface SidebarProps {
   onToggleSavedPoisVisible: () => void;
   onRemoveSavedPoi: (id: string) => void;
   onClearSavedPois: () => void;
+  onOpenPoiManager: () => void;
+  poiFolderCount: number;
 }
 
 interface LayerRow {
@@ -143,6 +145,8 @@ export const Sidebar = ({
   onToggleSavedPoisVisible,
   onRemoveSavedPoi,
   onClearSavedPois,
+  onOpenPoiManager,
+  poiFolderCount = 0,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
