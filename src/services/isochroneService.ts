@@ -12,16 +12,26 @@ export interface IsochroneRequest {
 export async function fetchIsochrone(
   req: IsochroneRequest,
 ): Promise<Feature<Polygon | MultiPolygon, { value: number }>[]> {
-  const { data, error } = await supabase.functions.invoke<FeatureCollection>(
+  const { data, error } = await supabase.functions.invoke<FeatureCollection | string>(
     "isochrone",
     { body: req },
   );
   if (error) throw new Error(error.message);
-  if (!data || !Array.isArray(data.features)) {
+  let parsed: FeatureCollection | null = null;
+  if (typeof data === "string") {
+    try {
+      parsed = JSON.parse(data) as FeatureCollection;
+    } catch {
+      parsed = null;
+    }
+  } else if (data && typeof data === "object") {
+    parsed = data as FeatureCollection;
+  }
+  if (!parsed || !Array.isArray(parsed.features)) {
+    console.error("Isochrone invalid payload:", data);
     throw new Error("Respuesta inválida del servicio de isócronas");
   }
-  // ORS devuelve features con properties.value (segundos). Ordenar mayor->menor para dibujar bien.
-  const feats = data.features as Feature<Polygon | MultiPolygon, { value: number }>[];
+  const feats = parsed.features as Feature<Polygon | MultiPolygon, { value: number }>[];
   return [...feats].sort(
     (a, b) => (b.properties?.value ?? 0) - (a.properties?.value ?? 0),
   );
