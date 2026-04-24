@@ -1358,20 +1358,30 @@ export const Sidebar = ({
                         <ContextMenu>
                           <ContextMenuTrigger asChild>
                             <div>
-                              <button
-                                type="button"
-                                onClick={() => togglePoiFolder("__root__")}
-                                className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
-                              >
-                                {orphanOpen ? (
-                                  <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                                ) : (
-                                  <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                                )}
-                                <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                                <span className="flex-1 truncate text-[11.5px] italic text-muted-foreground">Sin carpeta</span>
-                                <span className="font-mono text-[9.5px] text-text-muted">{orphan.length}</span>
-                              </button>
+                              <div className="group flex w-full items-center gap-1 rounded-md py-1 pr-1 hover:bg-surface-2/60">
+                                <Checkbox
+                                  checked={!hiddenSet.has("__orphan__")}
+                                  onCheckedChange={() => toggleFolderVisible("__orphan__")}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-3 w-3 flex-shrink-0"
+                                  aria-label="Mostrar/ocultar POIs sin carpeta"
+                                  title="Mostrar/ocultar en el mapa"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => togglePoiFolder("__root__")}
+                                  className="flex flex-1 items-center gap-1 text-left min-w-0"
+                                >
+                                  {orphanOpen ? (
+                                    <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                  )}
+                                  <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                  <span className="flex-1 truncate text-[11.5px] italic text-muted-foreground">Sin carpeta</span>
+                                  <span className="font-mono text-[9.5px] text-text-muted">{orphan.length}</span>
+                                </button>
+                              </div>
                               {orphanOpen && orphan.map((p) => renderPoi(p, 0))}
                             </div>
                           </ContextMenuTrigger>
