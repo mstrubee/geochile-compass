@@ -474,6 +474,8 @@ const Index = () => {
             manzanaData={manzanaData}
             manzanaVariable={manzanaVariable}
             onManzanaViewportChange={handleViewportChange}
+            densityData={densityData}
+            onDensityViewportChange={handleDensityViewportChange}
             gseData={gseData}
             gseVariable={gseVariable}
             onGseViewportChange={handleGseViewportChange}
