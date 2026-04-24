@@ -126,6 +126,7 @@ export const MapView = ({
   onMicroBufferClick,
   fitMicrozoneId,
   onFitMicrozoneDone,
+  flyTarget,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
