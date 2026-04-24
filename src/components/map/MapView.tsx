@@ -160,6 +160,17 @@ export const MapView = ({
         onFitDone={onFitIsochroneDone}
       />
       <SavedPoisLayer pois={savedPois} visible={savedPoisVisible} />
+      <MicrozoneLayer
+        microzones={microzones}
+        active={microActive}
+        submode={microSubmode}
+        draftVertices={microDraftVertices}
+        onAddVertex={onMicroAddVertex}
+        onClosePolygon={onMicroClosePolygon}
+        onBufferClick={onMicroBufferClick}
+        fitId={fitMicrozoneId}
+        onFitDone={onFitMicrozoneDone}
+      />
     </MapContainer>
   );
 };
