@@ -63,7 +63,7 @@ const Index = () => {
     removeMany: removePois,
     clearAll: clearAllPois,
   } = useSavedPois();
-  const { folders, create: createFolder, rename: renameFolder, remove: deleteFolder } = usePoiFolders();
+  const { folders, create: createFolder, rename: renameFolder, remove: deleteFolder, refresh: refreshFolders } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
   const [managerOpen, setManagerOpen] = useState(false);
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
@@ -88,18 +88,10 @@ const Index = () => {
   );
 
   const confirmSavePois = useCallback(
-    async (
-      folderId: string | null,
-      opts: { newFolderName?: string; parentId?: string | null },
-    ) => {
+    async (folderId: string | null) => {
       if (!savePending) return;
       try {
-        let targetFolderId = folderId;
-        if (opts.newFolderName) {
-          const created = await createFolder(opts.newFolderName, opts.parentId ?? null);
-          targetFolderId = created.id;
-        }
-        const n = await addMany(savePending.items, targetFolderId);
+        const n = await addMany(savePending.items, folderId);
         toast.success(`${n} POIs guardados`);
         setSavePending(null);
       } catch (err) {
@@ -107,7 +99,7 @@ const Index = () => {
         toast.error(`No se pudieron guardar: ${msg}`);
       }
     },
-    [savePending, addMany, createFolder],
+    [savePending, addMany],
   );
 
   const isoColorPalette = [
@@ -335,6 +327,8 @@ const Index = () => {
           defaultName={savePending.defaultName}
           pointCount={savePending.items.length}
           folders={folders}
+          onCreateFolder={createFolder}
+          onRefreshFolders={refreshFolders}
           onConfirm={confirmSavePois}
         />
       )}
