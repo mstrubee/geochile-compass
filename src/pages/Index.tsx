@@ -645,6 +645,8 @@ const Index = () => {
           onRestoreFolder={restoreFolder}
           onPurgePois={purgePois}
           onPurgeFolder={purgeFolder}
+          hiddenPoiFolders={hiddenPoiFolders}
+          onHiddenPoiFoldersChange={setHiddenPoiFolders}
           microSubmode={microSubmode}
           onMicroSubmodeChange={setMicroSubmode}
           microBufferRadius={microBufferRadius}
