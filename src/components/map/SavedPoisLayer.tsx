@@ -17,20 +17,31 @@ export const SavedPoisLayer = ({ pois, visible }: Props) => {
 
     pois.forEach((p) => {
       const color = p.color || "#34D399";
-      const marker = L.circleMarker([p.lat, p.lng], {
-        radius: 6,
-        color: "#fff",
-        weight: 1.5,
-        fillColor: color,
-        fillOpacity: 0.95,
-      });
+      const iconUrl = isImageUrl(p.icon);
+      const marker: L.Layer = iconUrl
+        ? L.marker([p.lat, p.lng], {
+            icon: L.icon({
+              iconUrl,
+              iconSize: [28, 28],
+              iconAnchor: [14, 28],
+              popupAnchor: [0, -26],
+              className: "saved-poi-icon",
+            }),
+          })
+        : L.circleMarker([p.lat, p.lng], {
+            radius: 6,
+            color: "#fff",
+            weight: 1.5,
+            fillColor: color,
+            fillOpacity: 0.95,
+          });
       const desc = p.description ? `<br/>${escapeHtml(p.description)}` : "";
       const cat = p.category
         ? `<div style="opacity:.7;font-size:11px;margin-top:2px">${escapeHtml(
             p.category,
           )}</div>`
         : "";
-      marker.bindPopup(
+      (marker as L.Marker | L.CircleMarker).bindPopup(
         `<div style="font-size:12px;min-width:140px"><b>${escapeHtml(
           p.name,
         )}</b>${desc}${cat}</div>`,
