@@ -578,33 +578,97 @@ export const Sidebar = ({
                 <span className="font-mono text-[10px] text-text-muted">{savedPois.length}</span>
                 <IOSSwitch on={savedPoisVisible} />
               </button>
-              <div className="scrollbar-thin max-h-48 space-y-0.5 overflow-y-auto">
-                {savedPois.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-surface-2/60"
-                  >
-                    <span
-                      className="h-2 w-2 flex-shrink-0 rounded-full"
-                      style={{ backgroundColor: p.color || "#34D399" }}
-                    />
-                    <span className="flex-1 truncate text-[12px] text-foreground" title={p.name}>
-                      {p.name}
-                    </span>
-                    {p.source_layer && (
-                      <span className="max-w-[80px] truncate font-mono text-[9px] text-text-muted" title={p.source_layer}>
-                        {p.source_layer}
-                      </span>
-                    )}
-                    <button
-                      onClick={() => onRemoveSavedPoi(p.id)}
-                      className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
-                      aria-label={`Eliminar ${p.name}`}
+              <div className="scrollbar-thin max-h-72 space-y-0.5 overflow-y-auto">
+                {(() => {
+                  const renderPoi = (p: SavedPoi, depth: number) => (
+                    <div
+                      key={p.id}
+                      className="group flex items-center gap-2 rounded-md py-0.5 pr-1 hover:bg-surface-2/60"
+                      style={{ paddingLeft: `${depth * 12 + 8}px` }}
                     >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
+                      <span
+                        className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                        style={{ backgroundColor: p.color || "#34D399" }}
+                      />
+                      <span className="flex-1 truncate text-[11.5px] text-foreground" title={p.name}>
+                        {p.name}
+                      </span>
+                      <button
+                        onClick={() => onRemoveSavedPoi(p.id)}
+                        className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 transition-colors hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                        aria-label={`Eliminar ${p.name}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+
+                  const renderFolder = (f: PoiFolder, depth: number): JSX.Element => {
+                    const isOpen = expandedPoiFolders.has(f.id);
+                    const subs = poiChildrenMap.get(f.id) ?? [];
+                    const own = poisByFolderMap.get(f.id) ?? [];
+                    const total = totalCounts.get(f.id) ?? 0;
+                    return (
+                      <div key={f.id}>
+                        <button
+                          type="button"
+                          onClick={() => togglePoiFolder(f.id)}
+                          className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
+                          style={{ paddingLeft: `${depth * 12 + 2}px` }}
+                        >
+                          {isOpen ? (
+                            <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                          )}
+                          <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
+                          <span className="flex-1 truncate text-[11.5px] font-medium text-foreground" title={f.name}>
+                            {f.name}
+                          </span>
+                          <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
+                        </button>
+                        {isOpen && (
+                          <div>
+                            {subs.map((s) => renderFolder(s, depth + 1))}
+                            {own.map((p) => renderPoi(p, depth + 1))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
+
+                  const rootFolders = poiChildrenMap.get(null) ?? [];
+                  const orphan = poisByFolderMap.get(null) ?? [];
+                  const orphanOpen = expandedPoiFolders.has("__root__");
+
+                  return (
+                    <>
+                      {rootFolders.map((f) => renderFolder(f, 0))}
+                      {orphan.length > 0 && (
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => togglePoiFolder("__root__")}
+                            className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
+                          >
+                            {orphanOpen ? (
+                              <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                            )}
+                            <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                            <span className="flex-1 truncate text-[11.5px] italic text-muted-foreground">Sin carpeta</span>
+                            <span className="font-mono text-[9.5px] text-text-muted">{orphan.length}</span>
+                          </button>
+                          {orphanOpen && orphan.map((p) => renderPoi(p, 0))}
+                        </div>
+                      )}
+                      {rootFolders.length === 0 && orphan.length === 0 && (
+                        <div className="px-2 py-1 text-[11px] text-muted-foreground">Sin POIs.</div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
               <button
                 onClick={onClearSavedPois}
