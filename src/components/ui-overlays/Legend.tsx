@@ -2,7 +2,9 @@ import type { LayerState } from "@/types/layers";
 import { COMMUNES, NSE_LABELS, NSE_COLOR_HSL, type NSE } from "@/data/communes";
 import { TRAFFIC_LEVELS, trafficLevelOf, type TrafficLevel } from "@/utils/traffic";
 import type { ManzanaSource, ManzanaVariable } from "@/types/manzanas";
+import type { GseVariable } from "@/types/gse";
 import { scaleForVariable, VARIABLE_LABEL } from "@/utils/colorScales";
+import { GSE_VARIABLE_LABEL, scaleForGseVariable } from "@/utils/gseScales";
 
 interface LegendProps {
   shifted: boolean;
@@ -14,6 +16,9 @@ interface LegendProps {
   manzanaVariable: ManzanaVariable;
   manzanaSource: ManzanaSource | null;
   manzanaError: string | null;
+  gseVariable: GseVariable;
+  gseError: string | null;
+  gseCount: number;
 }
 
 interface NSERow {
@@ -129,6 +134,9 @@ export const Legend = ({
   manzanaVariable,
   manzanaSource,
   manzanaError,
+  gseVariable,
+  gseError,
+  gseCount,
 }: LegendProps) => {
   const showNSE = layers.nse;
   const showTraffic = layers.traffic;
@@ -206,24 +214,32 @@ export const Legend = ({
 
       {showNSE && (
         <>
-          <SectionTitle title="NSE" hasFilter={nseFilter !== null} onClear={() => onNseFilterChange(null)} />
-          <div className="space-y-0.5">
-            {computeNSERows().map((r) => {
-              const selected = nseFilter === r.nse;
-              const dim = nseFilter !== null && !selected;
-              return (
-                <FilterRow
-                  key={r.nse}
-                  hsl={r.hsl}
-                  label={r.label}
-                  meta={`${r.count} · ${r.pct.toFixed(0)}%`}
-                  selected={selected}
-                  dim={dim}
-                  onClick={() => onNseFilterChange(selected ? null : r.nse)}
-                />
-              );
-            })}
+          <div className="mb-1.5 mt-1 flex items-center gap-2">
+            <div className="flex-1 font-mono text-[9px] uppercase tracking-[2px] text-text-muted">
+              GSE · {GSE_VARIABLE_LABEL[gseVariable]}
+            </div>
+            <span className="rounded-sm border border-brand-purple/40 bg-brand-purple/10 px-1.5 py-0.5 font-mono text-[8px] uppercase text-brand-purple">
+              Censo 2012
+            </span>
           </div>
+          <div className="space-y-0.5">
+            {scaleForGseVariable(gseVariable).map((s) => (
+              <div key={s.label} className="flex items-center gap-2 px-1.5 py-0.5 text-[11px] text-foreground">
+                <span className="h-2 w-[18px] flex-shrink-0 rounded-sm" style={{ background: s.color }} />
+                <span className="flex-1">{s.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 font-mono text-[9px] text-text-muted">
+            <span className="inline-block h-2 w-[18px] rounded-sm border border-dashed" style={{ borderColor: "hsl(var(--border))" }} />
+            Círculo punteado = estimación comunal (sin manzana)
+          </div>
+          <div className="mt-1 font-mono text-[9px] text-text-muted">
+            {gseCount.toLocaleString("es-CL")} manzanas en vista
+          </div>
+          {gseError && (
+            <div className="mt-1 font-mono text-[9px] text-brand-orange">{gseError}</div>
+          )}
         </>
       )}
 

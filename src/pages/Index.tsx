@@ -10,6 +10,7 @@ import { Legend } from "@/components/ui-overlays/Legend";
 import { SearchBar, type SearchResult } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
 import { useManzanas } from "@/hooks/useManzanas";
+import { useGseManzanas } from "@/hooks/useGseManzanas";
 import { useSavedPois } from "@/hooks/useSavedPois";
 import { usePoiFolders } from "@/hooks/usePoiFolders";
 import { useAuth } from "@/hooks/useAuth";
@@ -19,6 +20,7 @@ import type { NSE } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
 import type { LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
+import type { GseVariable } from "@/types/gse";
 import type { UserLayer } from "@/types/userLayers";
 import type { IsoMode, Isochrone } from "@/types/isochrones";
 import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
@@ -49,6 +51,9 @@ const Index = () => {
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
   const [manzanaVariable, setManzanaVariable] = useState<ManzanaVariable>("density");
   const [viewport, setViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
+  // Capa GSE por manzana (Censo 2012)
+  const [gseVariable, setGseVariable] = useState<GseVariable>("gse");
+  const [gseViewport, setGseViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
   const [userLayers, setUserLayers] = useState<UserLayer[]>([]);
   const [fitId, setFitId] = useState<string | null>(null);
 
@@ -202,6 +207,21 @@ const Index = () => {
     variable: manzanaVariable,
     minZoom: 12,
   });
+
+  const { data: gseData, error: gseError } = useGseManzanas({
+    enabled: layers.nse,
+    bbox: gseViewport?.bbox ?? null,
+    zoom: gseViewport?.zoom ?? 12,
+    variable: gseVariable,
+    minZoom: 11,
+  });
+
+  const handleGseViewportChange = useCallback(
+    (bbox: [number, number, number, number], zoom: number) => {
+      setGseViewport({ bbox, zoom });
+    },
+    [],
+  );
 
   // ---------- Microzonas ----------
   const addMicrozone = useCallback(
@@ -372,6 +392,9 @@ const Index = () => {
           onManzanaVariableChange={setManzanaVariable}
           manzanaLoading={manzanaLoading}
           manzanaCount={manzanaData?.features.length ?? 0}
+          gseVariable={gseVariable}
+          onGseVariableChange={setGseVariable}
+          gseCount={gseData?.features.length ?? 0}
           userLayers={userLayers}
           onAddUserLayer={addUserLayer}
           onToggleUserLayer={toggleUserLayer}
@@ -435,6 +458,9 @@ const Index = () => {
             manzanaData={manzanaData}
             manzanaVariable={manzanaVariable}
             onManzanaViewportChange={handleViewportChange}
+            gseData={gseData}
+            gseVariable={gseVariable}
+            onGseViewportChange={handleGseViewportChange}
             userLayers={userLayers}
             fitUserLayerId={fitId}
             onFitUserLayerDone={handleFitDone}
@@ -472,6 +498,9 @@ const Index = () => {
             manzanaVariable={manzanaVariable}
             manzanaSource={manzanaData?.metadata.source ?? null}
             manzanaError={manzanaError}
+            gseVariable={gseVariable}
+            gseError={gseError}
+            gseCount={gseData?.features.length ?? 0}
           />
           <CoordsBar coords={coords} />
 

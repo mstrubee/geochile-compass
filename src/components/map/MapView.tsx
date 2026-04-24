@@ -3,13 +3,14 @@ import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { CommuneLayer } from "./CommuneLayer";
 import { TrafficLayer } from "./TrafficLayer";
-import { NSELayer } from "./NSELayer";
+import { GseLayer } from "./GseLayer";
 import { ManzanaLayer } from "./ManzanaLayer";
 import { UserLayersLayer } from "./UserLayersLayer";
 import { IsochroneLayer } from "./IsochroneLayer";
 import { SavedPoisLayer } from "./SavedPoisLayer";
 import { MicrozoneLayer } from "./MicrozoneLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
+import type { GseFeatureCollection, GseVariable } from "@/types/gse";
 import type { UserLayer } from "@/types/userLayers";
 import type { Isochrone } from "@/types/isochrones";
 import type { SavedPoi } from "@/types/pois";
@@ -94,6 +95,9 @@ interface MapViewProps {
   manzanaData: ManzanaFeatureCollection | null;
   manzanaVariable: ManzanaVariable;
   onManzanaViewportChange: (bbox: [number, number, number, number], zoom: number) => void;
+  gseData: GseFeatureCollection | null;
+  gseVariable: GseVariable;
+  onGseViewportChange: (bbox: [number, number, number, number], zoom: number) => void;
   userLayers: UserLayer[];
   fitUserLayerId: string | null;
   onFitUserLayerDone: () => void;
@@ -131,6 +135,9 @@ export const MapView = ({
   manzanaData,
   manzanaVariable,
   onManzanaViewportChange,
+  gseData,
+  gseVariable,
+  onGseViewportChange,
   userLayers,
   fitUserLayerId,
   onFitUserLayerDone,
@@ -179,7 +186,13 @@ export const MapView = ({
         onViewportChange={onManzanaViewportChange}
       />
       <CommuneLayer visible={layers.communes} />
-      <NSELayer visible={layers.nse} nseFilter={nseFilter} trafficFilter={trafficFilter} />
+      <GseLayer
+        visible={layers.nse}
+        data={gseData}
+        variable={gseVariable}
+        onViewportChange={onGseViewportChange}
+        showCommuneFallback
+      />
       <TrafficLayer visible={layers.traffic} nseFilter={nseFilter} trafficFilter={trafficFilter} />
       <UserLayersLayer
         layers={userLayers}
