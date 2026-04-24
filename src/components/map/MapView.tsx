@@ -6,8 +6,10 @@ import { TrafficLayer } from "./TrafficLayer";
 import { NSELayer } from "./NSELayer";
 import { ManzanaLayer } from "./ManzanaLayer";
 import { UserLayersLayer } from "./UserLayersLayer";
+import { IsochroneLayer } from "./IsochroneLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { UserLayer } from "@/types/userLayers";
+import type { Isochrone } from "@/types/isochrones";
 
 // Fix default Leaflet marker icon paths (when bundled)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -39,6 +41,13 @@ const MouseTracker = ({ onMouseMove }: { onMouseMove: (c: { lat: number; lng: nu
   return null;
 };
 
+const ClickHandler = ({ onClick }: { onClick: (c: { lat: number; lng: number }) => void }) => {
+  useMapEvents({
+    click: (e) => onClick({ lat: e.latlng.lat, lng: e.latlng.lng }),
+  });
+  return null;
+};
+
 const InvalidateOnResize = () => {
   const map = useMap();
   useEffect(() => {
@@ -60,6 +69,11 @@ interface MapViewProps {
   userLayers: UserLayer[];
   fitUserLayerId: string | null;
   onFitUserLayerDone: () => void;
+  isochrones: Isochrone[];
+  fitIsochroneId: string | null;
+  onFitIsochroneDone: () => void;
+  isoMode: boolean;
+  onMapClick: (c: { lat: number; lng: number }) => void;
 }
 
 export const MapView = ({
@@ -74,6 +88,11 @@ export const MapView = ({
   userLayers,
   fitUserLayerId,
   onFitUserLayerDone,
+  isochrones,
+  fitIsochroneId,
+  onFitIsochroneDone,
+  isoMode,
+  onMapClick,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -92,6 +111,7 @@ export const MapView = ({
       />
       <ZoomControlTopRight />
       <MouseTracker onMouseMove={onMouseMove} />
+      {isoMode && <ClickHandler onClick={onMapClick} />}
       <InvalidateOnResize />
       <ManzanaLayer
         visible={layers.manzanas}
@@ -106,6 +126,11 @@ export const MapView = ({
         layers={userLayers}
         fitId={fitUserLayerId}
         onFitDone={onFitUserLayerDone}
+      />
+      <IsochroneLayer
+        isochrones={isochrones}
+        fitId={fitIsochroneId}
+        onFitDone={onFitIsochroneDone}
       />
     </MapContainer>
   );

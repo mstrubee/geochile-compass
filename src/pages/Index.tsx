@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MapView } from "@/components/map/MapView";
@@ -7,11 +8,13 @@ import { Legend } from "@/components/ui-overlays/Legend";
 import { SearchBar } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
 import { useManzanas } from "@/hooks/useManzanas";
+import { fetchIsochrone } from "@/services/isochroneService";
 import type { NSE } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
 import type { LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
 import type { UserLayer } from "@/types/userLayers";
+import type { IsoMode, Isochrone } from "@/types/isochrones";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -34,6 +37,18 @@ const Index = () => {
   const [userLayers, setUserLayers] = useState<UserLayer[]>([]);
   const [fitId, setFitId] = useState<string | null>(null);
 
+  // Isócronas
+  const [isoMode, setIsoMode] = useState<IsoMode>("foot-walking");
+  const [isoMinutes, setIsoMinutes] = useState<number[]>([5, 10, 15]);
+  const [isochrones, setIsochrones] = useState<Isochrone[]>([]);
+  const [fitIsoId, setFitIsoId] = useState<string | null>(null);
+  const [isoLoading, setIsoLoading] = useState(false);
+
+  const isoColorPalette = [
+    "#34D399", "#60A5FA", "#F472B6", "#FBBF24",
+    "#A78BFA", "#FB7185", "#22D3EE", "#FB923C",
+  ];
+
   const addUserLayer = useCallback((layer: UserLayer) => {
     setUserLayers((prev) => [...prev, layer]);
     setFitId(layer.id);
@@ -45,6 +60,52 @@ const Index = () => {
     setUserLayers((prev) => prev.filter((l) => l.id !== id));
   }, []);
   const handleFitDone = useCallback(() => setFitId(null), []);
+
+  const toggleIsochrone = useCallback((id: string) => {
+    setIsochrones((prev) => prev.map((i) => (i.id === id ? { ...i, visible: !i.visible } : i)));
+  }, []);
+  const removeIsochrone = useCallback((id: string) => {
+    setIsochrones((prev) => prev.filter((i) => i.id !== id));
+  }, []);
+  const clearIsochrones = useCallback(() => setIsochrones([]), []);
+  const handleFitIsoDone = useCallback(() => setFitIsoId(null), []);
+
+  const handleMapClick = useCallback(
+    async (c: { lat: number; lng: number }) => {
+      if (mode !== "isochrone") return;
+      const minutes = [...isoMinutes].filter((n) => n > 0).sort((a, b) => a - b);
+      if (!minutes.length) {
+        toast.error("Define al menos un valor de minutos");
+        return;
+      }
+      setIsoLoading(true);
+      const tId = toast.loading("Calculando isócrona…");
+      try {
+        const features = await fetchIsochrone({ mode: isoMode, lat: c.lat, lng: c.lng, minutes });
+        const id = `iso-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const color = isoColorPalette[isochrones.length % isoColorPalette.length];
+        const newIso: Isochrone = {
+          id,
+          mode: isoMode,
+          minutes,
+          center: c,
+          color,
+          visible: true,
+          createdAt: Date.now(),
+          features,
+        };
+        setIsochrones((prev) => [...prev, newIso]);
+        setFitIsoId(id);
+        toast.success("Isócrona añadida", { id: tId });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Error";
+        toast.error(`No se pudo calcular: ${msg}`, { id: tId });
+      } finally {
+        setIsoLoading(false);
+      }
+    },
+    [mode, isoMode, isoMinutes, isochrones.length],
+  );
 
   const handleViewportChange = useCallback(
     (bbox: [number, number, number, number], zoom: number) => {
@@ -90,6 +151,16 @@ const Index = () => {
           onAddUserLayer={addUserLayer}
           onToggleUserLayer={toggleUserLayer}
           onRemoveUserLayer={removeUserLayer}
+          isoMode={isoMode}
+          onIsoModeChange={setIsoMode}
+          isoMinutes={isoMinutes}
+          onIsoMinutesChange={setIsoMinutes}
+          isochrones={isochrones}
+          onToggleIsochrone={toggleIsochrone}
+          onRemoveIsochrone={removeIsochrone}
+          onClearIsochrones={clearIsochrones}
+          onFocusIsochrone={setFitIsoId}
+          isoLoading={isoLoading}
         />
 
         <div
@@ -113,6 +184,11 @@ const Index = () => {
             userLayers={userLayers}
             fitUserLayerId={fitId}
             onFitUserLayerDone={handleFitDone}
+            isochrones={isochrones}
+            fitIsochroneId={fitIsoId}
+            onFitIsochroneDone={handleFitIsoDone}
+            isoMode={mode === "isochrone"}
+            onMapClick={handleMapClick}
           />
 
           <SearchBar />

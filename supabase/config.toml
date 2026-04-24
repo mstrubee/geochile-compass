@@ -1,0 +1,4 @@
+project_id = "tcmyidycqdrrtwuaovbk"
+
+[functions.isochrone]
+verify_jwt = false
