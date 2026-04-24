@@ -8,13 +8,17 @@ import { Legend } from "@/components/ui-overlays/Legend";
 import { SearchBar } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
 import { useManzanas } from "@/hooks/useManzanas";
+import { useSavedPois } from "@/hooks/useSavedPois";
+import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
+import { extractPointPois, countPoints } from "@/types/pois";
 import type { NSE } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
 import type { LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
 import type { UserLayer } from "@/types/userLayers";
 import type { IsoMode, Isochrone } from "@/types/isochrones";
+import { useNavigate } from "react-router-dom";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -43,6 +47,37 @@ const Index = () => {
   const [isochrones, setIsochrones] = useState<Isochrone[]>([]);
   const [fitIsoId, setFitIsoId] = useState<string | null>(null);
   const [isoLoading, setIsoLoading] = useState(false);
+
+  // POIs guardados
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { pois, addMany, remove: removePoi, clearAll: clearAllPois } = useSavedPois();
+  const [savedPoisVisible, setSavedPoisVisible] = useState(true);
+
+  const savePoisFromLayer = useCallback(
+    async (layerId: string) => {
+      if (!user) {
+        toast.error("Inicia sesión para guardar POIs");
+        navigate("/auth");
+        return;
+      }
+      const layer = userLayers.find((l) => l.id === layerId);
+      if (!layer) return;
+      const items = extractPointPois(layer.data, layer.name, { color: layer.color });
+      if (!items.length) {
+        toast.error("Esta capa no contiene puntos");
+        return;
+      }
+      try {
+        const n = await addMany(items);
+        toast.success(`${n} POIs guardados desde "${layer.name}"`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Error";
+        toast.error(`No se pudieron guardar: ${msg}`);
+      }
+    },
+    [user, userLayers, addMany, navigate],
+  );
 
   const isoColorPalette = [
     "#34D399", "#60A5FA", "#F472B6", "#FBBF24",
@@ -151,6 +186,12 @@ const Index = () => {
           onAddUserLayer={addUserLayer}
           onToggleUserLayer={toggleUserLayer}
           onRemoveUserLayer={removeUserLayer}
+          onSavePoisFromLayer={savePoisFromLayer}
+          getLayerPointCount={(id) => {
+            const l = userLayers.find((x) => x.id === id);
+            return l ? countPoints(l.data) : 0;
+          }}
+          isAuthenticated={!!user}
           isoMode={isoMode}
           onIsoModeChange={setIsoMode}
           isoMinutes={isoMinutes}
@@ -161,6 +202,11 @@ const Index = () => {
           onClearIsochrones={clearIsochrones}
           onFocusIsochrone={setFitIsoId}
           isoLoading={isoLoading}
+          savedPois={pois}
+          savedPoisVisible={savedPoisVisible}
+          onToggleSavedPoisVisible={() => setSavedPoisVisible((v) => !v)}
+          onRemoveSavedPoi={removePoi}
+          onClearSavedPois={clearAllPois}
         />
 
         <div
@@ -189,6 +235,8 @@ const Index = () => {
             onFitIsochroneDone={handleFitIsoDone}
             isoMode={mode === "isochrone"}
             onMapClick={handleMapClick}
+            savedPois={pois}
+            savedPoisVisible={savedPoisVisible}
           />
 
           <SearchBar />
