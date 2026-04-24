@@ -36,7 +36,11 @@ export const useSavedPois = () => {
     async (items: PoiInsert[]) => {
       if (!user) throw new Error("Debes iniciar sesión");
       if (!items.length) return 0;
-      const rows = items.map((p) => ({ ...p, user_id: user.id }));
+      const rows = items.map((p) => ({
+        ...p,
+        properties: (p.properties ?? {}) as never,
+        user_id: user.id,
+      }));
       const { error, count } = await supabase
         .from("pois")
         .insert(rows, { count: "exact" });
