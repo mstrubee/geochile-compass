@@ -80,6 +80,8 @@ interface SidebarProps {
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
   /** Importa archivos KMZ/KML/GeoJSON directamente a una carpeta destino (sin diálogo). */
   onImportFilesIntoFolder?: (files: File[], folderId: string | null) => Promise<void> | void;
+  /** Crea una carpeta nueva (opcionalmente como subcarpeta de `parentId`). */
+  onCreateFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | void> | void;
   // Papelera
   trashedPois?: SavedPoi[];
   trashedFolders?: PoiFolder[];
