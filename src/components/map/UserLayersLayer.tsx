@@ -54,39 +54,45 @@ export const UserLayersLayer = ({ layers, fitId, onFitDone }: Props) => {
           pointToLayer: (feature, latlng) => {
             const p = (feature?.properties ?? {}) as Record<string, unknown>;
             const iconUrl = (p.icon as string) || (p["marker-symbol"] as string);
+            const candidates = Array.isArray(p.iconCandidates)
+              ? (p.iconCandidates as string[])
+              : iconUrl
+                ? [iconUrl]
+                : [];
             const name = String(p.name || p.brand || ul.name || "?");
-            const fallbackMarker = () =>
-              L.marker(latlng, {
-                icon: makeBadgeIcon(name, ul.color),
-              });
 
-            if (typeof iconUrl === "string" && /^(https?:|data:)/i.test(iconUrl)) {
+            if (candidates.length) {
               const scale = typeof p["icon-scale"] === "number" ? (p["icon-scale"] as number) : 1;
               const size = Math.max(16, Math.round(32 * scale));
               const marker = L.marker(latlng, {
                 icon: L.divIcon({
                   className: "user-layer-icon-wrap",
-                  html: `<img src="${iconUrl}" alt="" style="width:${size}px;height:${size}px;border-radius:6px;background:#fff;object-fit:contain;box-shadow:0 1px 4px rgba(0,0,0,.4);" onerror="this.dataset.failed='1'" />`,
+                  html: `<img src="${candidates[0]}" alt="" style="width:${size}px;height:${size}px;border-radius:6px;background:#fff;object-fit:contain;box-shadow:0 1px 4px rgba(0,0,0,.4);" />`,
                   iconSize: [size, size],
                   iconAnchor: [size / 2, size / 2],
                   popupAnchor: [0, -size / 2],
                 }),
               });
-              // Detect load failure and swap to fallback badge
-              setTimeout(() => {
+              // Probar candidatos en cascada; si todos fallan → badge
+              const tryCandidate = (idx: number) => {
                 const el = marker.getElement()?.querySelector("img") as HTMLImageElement | null;
                 if (!el) return;
-                const swap = () => {
-                  marker.setIcon(makeBadgeIcon(name, ul.color));
+                const onFail = () => {
+                  const next = idx + 1;
+                  if (next < candidates.length) {
+                    el.src = candidates[next];
+                    el.addEventListener("error", () => tryCandidate(next), { once: true });
+                  } else {
+                    marker.setIcon(makeBadgeIcon(name, ul.color));
+                  }
                 };
-                if (el.dataset.failed === "1" || el.complete && el.naturalWidth === 0) swap();
-                else {
-                  el.addEventListener("error", swap, { once: true });
-                }
-              }, 0);
+                if (el.complete && el.naturalWidth === 0) onFail();
+                else el.addEventListener("error", onFail, { once: true });
+              };
+              setTimeout(() => tryCandidate(0), 0);
               return marker;
             }
-            return fallbackMarker();
+            return L.marker(latlng, { icon: makeBadgeIcon(name, ul.color) });
           },
           onEachFeature: (feature, layer) => {
             const props = feature.properties ?? {};
