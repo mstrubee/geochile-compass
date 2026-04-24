@@ -59,7 +59,8 @@ export const SavePoisDialog = ({
       setNewSubName("");
       onRefreshFolders?.();
     }
-  }, [open, defaultName, onRefreshFolders]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Reset subcarpeta al cambiar carpeta padre
   useEffect(() => {
