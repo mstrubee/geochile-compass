@@ -124,6 +124,7 @@ const Index = () => {
     refresh: refreshFolders,
   } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
+  const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(new Set());
   const [managerOpen, setManagerOpen] = useState(false);
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
 
