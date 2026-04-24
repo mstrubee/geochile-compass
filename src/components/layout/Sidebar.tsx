@@ -217,6 +217,47 @@ export const Sidebar = ({
     return counts;
   }, [poiChildrenMap, poisByFolderMap]);
 
+  // Descendientes de una carpeta (para evitar pegar en sí misma o sus hijas)
+  const descendantsOfFolder = (id: string): Set<string> => {
+    const out = new Set<string>();
+    const walk = (pid: string) => {
+      (poiChildrenMap.get(pid) ?? []).forEach((c) => {
+        if (!out.has(c.id)) {
+          out.add(c.id);
+          walk(c.id);
+        }
+      });
+    };
+    walk(id);
+    return out;
+  };
+
+  const handlePaste = async (targetFolderId: string | null) => {
+    if (!clipboard) return;
+    try {
+      if (clipboard.kind === "folder") {
+        if (clipboard.id === targetFolderId) {
+          toast.error("No puedes pegar la carpeta dentro de sí misma");
+          return;
+        }
+        if (targetFolderId && descendantsOfFolder(clipboard.id).has(targetFolderId)) {
+          toast.error("No puedes pegar una carpeta dentro de su descendiente");
+          return;
+        }
+        await onMoveFolder(clipboard.id, targetFolderId);
+      } else {
+        await onMovePois([clipboard.id], targetFolderId);
+      }
+      toast.success(`"${clipboard.name}" movido`);
+      if (targetFolderId) {
+        setExpandedPoiFolders((p) => new Set(p).add(targetFolderId));
+      }
+      setClipboard(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al pegar");
+    }
+  };
+
   const colorPalette = [
     "#34D399", "#F472B6", "#FBBF24", "#60A5FA",
     "#A78BFA", "#FB7185", "#22D3EE", "#FB923C",
