@@ -27,6 +27,73 @@ const parseGeoJsonString = (text: string): FeatureCollection => {
   throw new Error("GeoJSON debe ser Feature o FeatureCollection");
 };
 
+const MIME_BY_EXT: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  svg: "image/svg+xml",
+  webp: "image/webp",
+  bmp: "image/bmp",
+};
+
+const arrayBufferToBase64 = (buf: ArrayBuffer): string => {
+  let binary = "";
+  const bytes = new Uint8Array(buf);
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(
+      null,
+      bytes.subarray(i, i + chunk) as unknown as number[]
+    );
+  }
+  return btoa(binary);
+};
+
+/**
+ * Resolve relative icon paths (e.g. "files/icon.png") inside a KMZ archive
+ * to data URLs so they render in the browser.
+ */
+const resolveKmzIcons = async (
+  fc: FeatureCollection,
+  zip: JSZip
+): Promise<void> => {
+  const cache = new Map<string, string | null>();
+
+  const resolve = async (href: string): Promise<string | null> => {
+    if (!href) return null;
+    if (/^(https?:|data:)/i.test(href)) return href;
+    if (cache.has(href)) return cache.get(href)!;
+    // Normalize: strip leading "./" and any query/fragment
+    const clean = href.replace(/^\.\//, "").split(/[?#]/)[0];
+    const entry =
+      zip.file(clean) ||
+      zip.file(decodeURIComponent(clean)) ||
+      Object.values(zip.files).find(
+        (f) => f.name.toLowerCase() === clean.toLowerCase()
+      );
+    if (!entry) {
+      cache.set(href, null);
+      return null;
+    }
+    const ext = clean.split(".").pop()?.toLowerCase() ?? "";
+    const mime = MIME_BY_EXT[ext] ?? "application/octet-stream";
+    const buf = await entry.async("arraybuffer");
+    const dataUrl = `data:${mime};base64,${arrayBufferToBase64(buf)}`;
+    cache.set(href, dataUrl);
+    return dataUrl;
+  };
+
+  for (const feature of fc.features) {
+    const props = feature.properties as Record<string, unknown> | null;
+    const icon = props?.icon;
+    if (typeof icon === "string") {
+      const resolved = await resolve(icon);
+      if (resolved) (props as Record<string, unknown>).icon = resolved;
+    }
+  }
+};
+
 export const parseFile = async (file: File): Promise<FeatureCollection> => {
   if (file.size > MAX_FILE_SIZE) {
     throw new Error(`Archivo demasiado grande (máx 20MB)`);
@@ -46,5 +113,7 @@ export const parseFile = async (file: File): Promise<FeatureCollection> => {
     f.name.toLowerCase().endsWith(".kml")
   );
   if (!kmlEntry) throw new Error("KMZ sin archivo .kml interno");
-  return parseKmlString(await kmlEntry.async("string"));
+  const fc = parseKmlString(await kmlEntry.async("string"));
+  await resolveKmzIcons(fc, zip);
+  return fc;
 };
