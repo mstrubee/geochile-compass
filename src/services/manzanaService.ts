@@ -1,4 +1,3 @@
-import hexGrid from "@turf/hex-grid";
 import type {
   ManzanaService,
   ManzanaParams,
@@ -6,94 +5,164 @@ import type {
   ManzanaFeature,
   ManzanaProperties,
 } from "@/types/manzanas";
-import { idwValue } from "@/utils/idwInterpolation";
-import type { NSE } from "@/data/communes";
+import type { Polygon, MultiPolygon, Feature } from "geojson";
+import { COMMUNES, NSE_INCOME, type NSE } from "@/data/communes";
 
-const MAX_FEATURES = 2000;
+/**
+ * Carga manzanas reales del Censo 2017 (RM) pre-procesadas en build-time.
+ * Datos en /public/manzanas/ generados por scripts/build-manzanas.mjs.
+ *
+ * Estrategia:
+ *   1. Lee /manzanas/index.json una vez (cache).
+ *   2. Para el bbox del viewport, identifica comunas cuyo bbox intersecta.
+ *   3. Carga el .geojson de cada comuna (cache por comuna).
+ *   4. Filtra features por bbox del viewport y enriquece propiedades:
+ *      - pop, hh, commune ← Censo 2017
+ *      - nse, income, traffic ← heredados de la comuna (COMMUNES en src/data)
+ *      - density ← pop / área aproximada de la manzana (constante 0.01 km²)
+ */
 
-// Cell size (km) tuned by zoom — denser grid at higher zoom
-const cellSizeForZoom = (zoom: number): number => {
-  if (zoom >= 14) return 0.18;
-  if (zoom >= 13) return 0.30;
-  if (zoom >= 12) return 0.50;
-  if (zoom >= 11) return 0.90;
-  return 1.6;
+interface CommuneIndexEntry {
+  commune: string;
+  slug: string;
+  file: string;
+  count: number;
+  bbox: [number, number, number, number];
+}
+
+interface ManzanaIndex {
+  region: string;
+  source: string;
+  communes: CommuneIndexEntry[];
+}
+
+interface RawProps {
+  id: string;
+  commune: string;
+  pop: number;
+  hh: number;
+}
+
+const MAX_FEATURES = 6000;
+const ASSUMED_BLOCK_AREA_KM2 = 0.01; // ~10,000 m² promedio por manzana urbana
+
+const norm = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const COMMUNE_BY_NAME = new Map(COMMUNES.map((c) => [norm(c.name), c]));
+
+const enrichProps = (raw: RawProps): ManzanaProperties => {
+  const meta = COMMUNE_BY_NAME.get(norm(raw.commune));
+  const nse: NSE = (meta?.nse ?? 3) as NSE;
+  const traffic = meta?.traffic ?? 50;
+  const income = NSE_INCOME[nse];
+  const density = Math.max(50, Math.round(raw.pop / ASSUMED_BLOCK_AREA_KM2));
+  return {
+    id: raw.id,
+    commune: raw.commune,
+    pop: raw.pop,
+    hh: raw.hh,
+    nse,
+    traffic,
+    income,
+    density,
+  };
 };
 
-const noise = (amount = 0.15) => 1 + (Math.random() * 2 - 1) * amount;
-const clampNSE = (n: number): NSE => Math.max(1, Math.min(5, Math.round(n))) as NSE;
+const bboxIntersects = (
+  a: [number, number, number, number],
+  b: [number, number, number, number]
+): boolean => !(a[2] < b[0] || a[0] > b[2] || a[3] < b[1] || a[1] > b[3]);
 
-class MockManzanaService implements ManzanaService {
+const featureInBbox = (
+  geom: Polygon | MultiPolygon,
+  bbox: [number, number, number, number]
+): boolean => {
+  // Cheap test: does any vertex fall inside, or does the geom bbox overlap?
+  const rings: number[][][] =
+    geom.type === "Polygon" ? geom.coordinates : geom.coordinates.flat();
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const ring of rings) {
+    for (const [x, y] of ring) {
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+  return bboxIntersects([minX, minY, maxX, maxY], bbox);
+};
+
+class RealManzanaService implements ManzanaService {
+  private indexPromise: Promise<ManzanaIndex> | null = null;
+  private fileCache = new Map<string, Promise<Feature<Polygon | MultiPolygon, RawProps>[]>>();
+
   async isAvailable() {
-    return true;
+    try {
+      await this.loadIndex();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private loadIndex(): Promise<ManzanaIndex> {
+    if (!this.indexPromise) {
+      this.indexPromise = fetch("/manzanas/index.json").then(async (r) => {
+        if (!r.ok) throw new Error(`index.json HTTP ${r.status}`);
+        return (await r.json()) as ManzanaIndex;
+      });
+    }
+    return this.indexPromise;
+  }
+
+  private loadCommune(slug: string): Promise<Feature<Polygon | MultiPolygon, RawProps>[]> {
+    let p = this.fileCache.get(slug);
+    if (!p) {
+      p = fetch(`/manzanas/${slug}.geojson`).then(async (r) => {
+        if (!r.ok) throw new Error(`${slug}.geojson HTTP ${r.status}`);
+        const fc = (await r.json()) as {
+          features: Feature<Polygon | MultiPolygon, RawProps>[];
+        };
+        return fc.features ?? [];
+      });
+      this.fileCache.set(slug, p);
+    }
+    return p;
   }
 
   async fetchManzanas(params: ManzanaParams): Promise<ManzanaFeatureCollection> {
-    // Simulate network latency
-    await new Promise((r) => setTimeout(r, 200 + Math.random() * 200));
+    const { west, south, east, north, variable } = params;
+    const viewportBbox: [number, number, number, number] = [west, south, east, north];
+    const index = await this.loadIndex();
 
-    const { west, south, east, north, variable, zoom } = params;
-    const cellSize = cellSizeForZoom(zoom);
+    const matching = index.communes.filter((c) => bboxIntersects(c.bbox, viewportBbox));
+    if (matching.length === 0) {
+      return {
+        type: "FeatureCollection",
+        features: [],
+        metadata: { total: 0, bbox: viewportBbox, variable, source: "INE Censo 2017" },
+      };
+    }
 
-    const grid = hexGrid<Record<string, never>>(
-      [west, south, east, north],
-      cellSize,
-      { units: "kilometers" }
-    );
+    const buckets = await Promise.all(matching.map((c) => this.loadCommune(c.slug)));
 
     const features: ManzanaFeature[] = [];
-    for (let i = 0; i < grid.features.length && features.length < MAX_FEATURES; i++) {
-      const hex = grid.features[i];
-      // Centroid for IDW (simple average of polygon ring vertices)
-      const ring = hex.geometry.coordinates[0];
-      let sx = 0;
-      let sy = 0;
-      for (const [lng, lat] of ring) {
-        sx += lng;
-        sy += lat;
+    outer: for (const bucket of buckets) {
+      for (const f of bucket) {
+        if (!f.geometry) continue;
+        if (!featureInBbox(f.geometry, viewportBbox)) continue;
+        features.push({
+          type: "Feature",
+          geometry: f.geometry,
+          properties: enrichProps(f.properties),
+        });
+        if (features.length >= MAX_FEATURES) break outer;
       }
-      const cx = sx / ring.length;
-      const cy = sy / ring.length;
-
-      const { value: densityRaw, nearest } = idwValue(cy, cx, "density");
-      const { value: nseRaw } = idwValue(cy, cx, "nse", 2, 3);
-      const { value: trafficRaw } = idwValue(cy, cx, "traffic");
-      const { value: popRaw } = idwValue(cy, cx, "pop");
-      const { value: hhRaw } = idwValue(cy, cx, "hh");
-
-      const nse = clampNSE(nseRaw);
-      // Synthesize income from NSE band with mild variance
-      const incomeBase: Record<NSE, number> = {
-        1: 420_000,
-        2: 580_000,
-        3: 960_000,
-        4: 2_100_000,
-        5: 5_200_000,
-      };
-
-      const density = Math.max(50, Math.round(densityRaw * noise()));
-      const traffic = Math.max(0, Math.min(100, Math.round(trafficRaw * noise(0.10))));
-      const income = Math.round(incomeBase[nse] * noise(0.18));
-      // Per-block pop scaled down significantly from commune values
-      const pop = Math.max(20, Math.round((popRaw / 1500) * noise()));
-      const hh = Math.max(8, Math.round((hhRaw / 1500) * noise()));
-
-      const properties: ManzanaProperties = {
-        id: `mock-${i}`,
-        density,
-        nse,
-        income,
-        traffic,
-        pop,
-        hh,
-        commune: nearest.name,
-      };
-
-      features.push({
-        type: "Feature",
-        geometry: hex.geometry,
-        properties,
-      });
     }
 
     return {
@@ -101,43 +170,16 @@ class MockManzanaService implements ManzanaService {
       features,
       metadata: {
         total: features.length,
-        bbox: [west, south, east, north],
+        bbox: viewportBbox,
         variable,
-        source: "mock",
+        source: "INE Censo 2017",
       },
     };
   }
 }
 
-class RealManzanaService implements ManzanaService {
-  // TODO: conectar con PostGIS backend
-  // Datos: shapefile manzanas INE Censo 2017 (~120k manzanas RM)
-  // Fuente: ide.cl / redatam.org
-  // Stack sugerido: PostGIS + Node.js/Python + tile server
-  // Migración: solo cambiar VITE_MANZANA_API_URL en .env
-  constructor(private apiUrl: string) {}
-
-  async isAvailable() {
-    try {
-      const res = await fetch(`${this.apiUrl}/health`, { method: "GET" });
-      return res.ok;
-    } catch {
-      return false;
-    }
-  }
-
-  async fetchManzanas(params: ManzanaParams): Promise<ManzanaFeatureCollection> {
-    const url = new URL(`${this.apiUrl}/manzanas`);
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error(`Manzana API error ${res.status}`);
-    return (await res.json()) as ManzanaFeatureCollection;
-  }
-}
-
 export function createManzanaService(): ManzanaService {
-  const apiUrl = import.meta.env.VITE_MANZANA_API_URL as string | undefined;
-  return apiUrl ? new RealManzanaService(apiUrl) : new MockManzanaService();
+  return new RealManzanaService();
 }
 
 // Singleton
