@@ -233,6 +233,7 @@ const Index = () => {
           onClearSavedPois={clearAllPois}
           onOpenPoiManager={() => setManagerOpen(true)}
           poiFolderCount={folders.length}
+          poiFolders={folders}
         />
 
         <div
