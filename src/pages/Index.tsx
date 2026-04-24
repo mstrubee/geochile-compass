@@ -110,6 +110,9 @@ const Index = () => {
             manzanaData={manzanaData}
             manzanaVariable={manzanaVariable}
             onManzanaViewportChange={handleViewportChange}
+            userLayers={userLayers}
+            fitUserLayerId={fitId}
+            onFitUserLayerDone={handleFitDone}
           />
 
           <SearchBar />
