@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
+import { CommuneLayer } from "./CommuneLayer";
 
 // Fix default Leaflet marker icon paths (when bundled)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -65,6 +66,7 @@ export const MapView = ({ basemap, onMouseMove }: MapViewProps) => {
       <ZoomControlTopRight />
       <MouseTracker onMouseMove={onMouseMove} />
       <InvalidateOnResize />
+      <CommuneLayer />
     </MapContainer>
   );
 };
