@@ -1075,6 +1075,17 @@ export const Sidebar = ({
                                 </ContextMenuItem>
                               </>
                             )}
+                            {onDeleteFolder && (
+                              <>
+                                <ContextMenuSeparator />
+                                <ContextMenuItem
+                                  onSelect={() => confirmDeleteFolder(f.id, f.name)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Mover carpeta a papelera
+                                </ContextMenuItem>
+                              </>
+                            )}
                           </ContextMenuContent>
                         </ContextMenu>
                         {isOpen && (
