@@ -256,6 +256,7 @@ export const Sidebar = ({
   }, [userLayers]);
   // Carpetas expandidas en el árbol de POIs guardados (por defecto: todas las raíz + "sin carpeta")
   const [expandedPoiFolders, setExpandedPoiFolders] = useState<Set<string>>(new Set(["__root__"]));
+  const [trashSearch, setTrashSearch] = useState("");
   const togglePoiFolder = (id: string) =>
     setExpandedPoiFolders((prev) => {
       const next = new Set(prev);
