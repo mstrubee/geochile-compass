@@ -14,12 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      poi_folders: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          name: string
+          parent_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          parent_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          parent_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poi_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pois: {
         Row: {
           category: string | null
           color: string | null
           created_at: string
           description: string | null
+          folder_id: string | null
           icon: string | null
           id: string
           lat: number
@@ -35,6 +74,7 @@ export type Database = {
           color?: string | null
           created_at?: string
           description?: string | null
+          folder_id?: string | null
           icon?: string | null
           id?: string
           lat: number
@@ -50,6 +90,7 @@ export type Database = {
           color?: string | null
           created_at?: string
           description?: string | null
+          folder_id?: string | null
           icon?: string | null
           id?: string
           lat?: number
@@ -60,7 +101,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pois_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
