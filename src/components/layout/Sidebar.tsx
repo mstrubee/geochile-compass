@@ -1,6 +1,7 @@
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Loader2 } from "lucide-react";
 import type { LayerKey, LayerState } from "@/types/layers";
+import type { ManzanaVariable } from "@/types/manzanas";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite";
@@ -8,6 +9,10 @@ interface SidebarProps {
   mode: "none" | "isochrone" | "microzone";
   layers: LayerState;
   onToggleLayer: (key: LayerKey) => void;
+  manzanaVariable: ManzanaVariable;
+  onManzanaVariableChange: (v: ManzanaVariable) => void;
+  manzanaLoading: boolean;
+  manzanaCount: number;
 }
 
 interface LayerRow {

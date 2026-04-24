@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MapView } from "@/components/map/MapView";
@@ -6,8 +6,11 @@ import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
 import { Legend } from "@/components/ui-overlays/Legend";
 import { SearchBar } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
+import { useManzanas } from "@/hooks/useManzanas";
 import type { NSE } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
+import type { LayerState } from "@/types/layers";
+import type { ManzanaVariable } from "@/types/manzanas";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -16,16 +19,33 @@ const Index = () => {
   const [basemap, setBasemap] = useState<"dark" | "light" | "satellite">("dark");
   const [panelOpen, setPanelOpen] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [layers, setLayers] = useState({
+  const [layers, setLayers] = useState<LayerState>({
     communes: true,
     nse: false,
     traffic: false,
     density: false,
+    manzanas: false,
   });
   const [nseFilter, setNseFilter] = useState<NSE | null>(null);
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
+  const [manzanaVariable, setManzanaVariable] = useState<ManzanaVariable>("density");
+  const [viewport, setViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
 
-  const toggleLayer = (key: keyof typeof layers) => {
+  const handleViewportChange = useCallback(
+    (bbox: [number, number, number, number], zoom: number) => {
+      setViewport({ bbox, zoom });
+    },
+    []
+  );
+
+  const { data: manzanaData, loading: manzanaLoading, error: manzanaError } = useManzanas({
+    enabled: layers.manzanas,
+    bbox: viewport?.bbox ?? null,
+    zoom: viewport?.zoom ?? 12,
+    variable: manzanaVariable,
+  });
+
+  const toggleLayer = (key: keyof LayerState) => {
     setLayers((l) => ({ ...l, [key]: !l[key] }));
     if (key === "nse" && layers.nse) setNseFilter(null);
     if (key === "traffic" && layers.traffic) setTrafficFilter(null);
@@ -46,6 +66,10 @@ const Index = () => {
           mode={mode}
           layers={layers}
           onToggleLayer={toggleLayer}
+          manzanaVariable={manzanaVariable}
+          onManzanaVariableChange={setManzanaVariable}
+          manzanaLoading={manzanaLoading}
+          manzanaCount={manzanaData?.features.length ?? 0}
         />
 
         <div
@@ -63,6 +87,9 @@ const Index = () => {
             layers={layers}
             nseFilter={nseFilter}
             trafficFilter={trafficFilter}
+            manzanaData={manzanaData}
+            manzanaVariable={manzanaVariable}
+            onManzanaViewportChange={handleViewportChange}
           />
 
           <SearchBar />
@@ -73,6 +100,9 @@ const Index = () => {
             onNseFilterChange={setNseFilter}
             trafficFilter={trafficFilter}
             onTrafficFilterChange={setTrafficFilter}
+            manzanaVariable={manzanaVariable}
+            manzanaSource={manzanaData?.metadata.source ?? null}
+            manzanaError={manzanaError}
           />
           <CoordsBar coords={coords} />
 
@@ -92,7 +122,6 @@ const Index = () => {
             </div>
           )}
 
-          {/* Demo: open panel button (since analysis isn't wired yet) */}
           <button
             onClick={() => setPanelOpen(true)}
             className="absolute bottom-12 right-4 z-[500] rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
