@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { GeoJSON, Popup, useMap, useMapEvents } from "react-leaflet";
+import { useEffect } from "react";
+import { GeoJSON, useMap, useMapEvents } from "react-leaflet";
 import type { Layer } from "leaflet";
 import type { Feature } from "geojson";
 import type {
@@ -21,18 +21,20 @@ interface ManzanaLayerProps {
 export const ManzanaLayer = ({ visible, data, variable, onViewportChange }: ManzanaLayerProps) => {
   const map = useMap();
 
-  // Push initial viewport once
-  useMemo(() => {
+  // Push initial viewport once mounted
+  useEffect(() => {
+    if (typeof onViewportChange !== "function") return;
     const b = map.getBounds();
     onViewportChange(
       [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
       map.getZoom()
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [map]);
 
   useMapEvents({
     moveend: () => {
+      if (typeof onViewportChange !== "function") return;
       const b = map.getBounds();
       onViewportChange(
         [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
@@ -40,6 +42,7 @@ export const ManzanaLayer = ({ visible, data, variable, onViewportChange }: Manz
       );
     },
     zoomend: () => {
+      if (typeof onViewportChange !== "function") return;
       const b = map.getBounds();
       onViewportChange(
         [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
@@ -94,6 +97,4 @@ export const ManzanaLayer = ({ visible, data, variable, onViewportChange }: Manz
     />
   );
 
-  // Suppress unused
-  void Popup;
 };
