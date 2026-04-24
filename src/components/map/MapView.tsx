@@ -111,6 +111,15 @@ export const MapView = ({
   onMapClick,
   savedPois,
   savedPoisVisible,
+  microzones,
+  microActive,
+  microSubmode,
+  microDraftVertices,
+  onMicroAddVertex,
+  onMicroClosePolygon,
+  onMicroBufferClick,
+  fitMicrozoneId,
+  onFitMicrozoneDone,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
