@@ -14,6 +14,7 @@ import type { ManzanaVariable } from "@/types/manzanas";
 import type { UserLayer } from "@/types/userLayers";
 import type { IsoMode, Isochrone } from "@/types/isochrones";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
+import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
 import { ISO_MODE_LABEL } from "@/types/isochrones";
 import { parseFile, getExtension } from "@/utils/fileParsers";
 
