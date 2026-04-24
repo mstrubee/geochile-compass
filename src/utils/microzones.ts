@@ -119,10 +119,10 @@ export const computeMicrozoneStats = (
   stats.nseDistribution = dist;
   let max = 0;
   let dom: NSE | null = null;
-  (Object.entries(dist) as Array<[NSE, number]>).forEach(([k, v]) => {
+  (Object.entries(dist) as Array<[string, number]>).forEach(([k, v]) => {
     if (v > max) {
       max = v;
-      dom = k;
+      dom = k as NSE;
     }
   });
   stats.dominantNse = dom;
