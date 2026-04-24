@@ -195,6 +195,150 @@ const Index = () => {
     minZoom: 12,
   });
 
+  // ---------- Microzonas ----------
+  const addMicrozone = useCallback(
+    (
+      kind: MicrozoneSubmode,
+      geometry: Microzone["geometry"],
+      name: string,
+    ) => {
+      const id = `mz-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const color = MICRO_PALETTE[microzones.length % MICRO_PALETTE.length];
+      const stats = computeMicrozoneStats(geometry, manzanaData);
+      const mz: Microzone = {
+        id,
+        name,
+        kind,
+        color,
+        visible: true,
+        createdAt: Date.now(),
+        geometry,
+        stats,
+      };
+      setMicrozones((prev) => [...prev, mz]);
+      setFitMicrozoneId(id);
+      toast.success(
+        stats.manzanaCount > 0
+          ? `Microzona creada · ${stats.manzanaCount} manzanas · ${stats.pop.toLocaleString("es-CL")} hab.`
+          : "Microzona creada (activa la capa Manzanas para análisis demográfico)",
+      );
+      return id;
+    },
+    [microzones.length, manzanaData],
+  );
+
+  const handleMicroAddVertex = useCallback(
+    (c: { lat: number; lng: number }) => {
+      setMicroDraft((prev) => [...prev, c]);
+    },
+    [],
+  );
+
+  const handleMicroClosePolygon = useCallback(() => {
+    setMicroDraft((prev) => {
+      if (prev.length < 3) {
+        toast.error("Necesitas al menos 3 vértices");
+        return prev;
+      }
+      const geom = polygonFromLatLngs(prev);
+      if (!geom) {
+        toast.error("Polígono inválido");
+        return prev;
+      }
+      addMicrozone("polygon", geom, `Polígono ${microzones.length + 1}`);
+      return [];
+    });
+  }, [addMicrozone, microzones.length]);
+
+  const handleMicroBufferClick = useCallback(
+    (c: { lat: number; lng: number }) => {
+      const geom = bufferAroundPoint(c, microBufferRadius);
+      if (!geom) {
+        toast.error("No se pudo crear el buffer");
+        return;
+      }
+      const radioLabel = microBufferRadius >= 1000
+        ? `${(microBufferRadius / 1000).toFixed(1)} km`
+        : `${microBufferRadius} m`;
+      addMicrozone("buffer", geom, `Buffer ${radioLabel}`);
+    },
+    [microBufferRadius, addMicrozone],
+  );
+
+  const generateVoronoi = useCallback(() => {
+    if (!savedPoisVisible) {
+      toast.error("Activa 'Mostrar en mapa' para los POIs");
+      return;
+    }
+    if (pois.length < 2) {
+      toast.error("Se necesitan al menos 2 POIs visibles");
+      return;
+    }
+    const cells = voronoiFromPois(pois.map((p) => ({ id: p.id, lat: p.lat, lng: p.lng })));
+    if (cells.length === 0) {
+      toast.error("No se pudieron calcular celdas Voronoi");
+      return;
+    }
+    cells.forEach((cell, idx) => {
+      const stats = computeMicrozoneStats(cell, manzanaData);
+      const id = `mz-vor-${Date.now()}-${idx}`;
+      const color = MICRO_PALETTE[(microzones.length + idx) % MICRO_PALETTE.length];
+      setMicrozones((prev) => [
+        ...prev,
+        {
+          id,
+          name: `Voronoi #${idx + 1}`,
+          kind: "voronoi",
+          color,
+          visible: true,
+          createdAt: Date.now() + idx,
+          geometry: cell,
+          stats,
+        },
+      ]);
+    });
+    toast.success(`${cells.length} zonas Voronoi creadas`);
+  }, [pois, manzanaData, microzones.length, savedPoisVisible]);
+
+  const removeMicrozone = useCallback((id: string) => {
+    setMicrozones((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
+  const toggleMicrozone = useCallback((id: string) => {
+    setMicrozones((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, visible: !m.visible } : m)),
+    );
+  }, []);
+
+  const clearMicrozones = useCallback(() => {
+    setMicrozones([]);
+    setMicroDraft([]);
+  }, []);
+
+  // Recalcular stats cuando cambia manzanaData
+  useEffect(() => {
+    if (!manzanaData || microzones.length === 0) return;
+    setMicrozones((prev) =>
+      prev.map((m) => ({ ...m, stats: computeMicrozoneStats(m.geometry, manzanaData) })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manzanaData]);
+
+  // Limpiar borrador al salir del modo
+  useEffect(() => {
+    if (mode !== "microzone") setMicroDraft([]);
+  }, [mode]);
+
+  // ESC para cancelar borrador en modo polígono
+  useEffect(() => {
+    if (mode !== "microzone") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMicroDraft([]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode]);
+
   const toggleLayer = (key: keyof LayerState) => {
     setLayers((l) => ({ ...l, [key]: !l[key] }));
     if (key === "nse" && layers.nse) setNseFilter(null);
