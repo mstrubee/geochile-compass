@@ -6,6 +6,7 @@ import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
 import { Legend } from "@/components/ui-overlays/Legend";
 import { SearchBar } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
+import type { NSE } from "@/data/communes";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -20,9 +21,16 @@ const Index = () => {
     traffic: false,
     density: false,
   });
+  const [nseFilter, setNseFilter] = useState<NSE | null>(null);
 
-  const toggleLayer = (key: keyof typeof layers) =>
-    setLayers((l) => ({ ...l, [key]: !l[key] }));
+  const toggleLayer = (key: keyof typeof layers) => {
+    setLayers((l) => {
+      const next = { ...l, [key]: !l[key] };
+      return next;
+    });
+    // Clear NSE filter when NSE layer is turned off
+    if (key === "nse" && layers.nse) setNseFilter(null);
+  };
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
@@ -50,10 +58,15 @@ const Index = () => {
             .filter(Boolean)
             .join(" ")}
         >
-          <MapView basemap={basemap} onMouseMove={setCoords} layers={layers} />
+          <MapView basemap={basemap} onMouseMove={setCoords} layers={layers} nseFilter={nseFilter} />
 
           <SearchBar />
-          <Legend shifted={panelOpen} layers={layers} />
+          <Legend
+            shifted={panelOpen}
+            layers={layers}
+            nseFilter={nseFilter}
+            onNseFilterChange={setNseFilter}
+          />
           <CoordsBar coords={coords} />
 
           {/* Mode hint */}
