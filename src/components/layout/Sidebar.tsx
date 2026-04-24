@@ -329,24 +329,26 @@ export const Sidebar = ({
               />
             ))}
           </div>
-          <div
+          <button
+            type="button"
+            onClick={onToggleIsoMode}
             className={[
-              "mb-2 rounded-lg px-2.5 py-2 text-[11px] leading-relaxed",
+              "mb-2 w-full rounded-lg px-2.5 py-2 text-[12px] font-medium transition-all",
               mode === "isochrone"
-                ? "bg-iso-1/15 text-iso-1"
-                : "bg-surface-2/60 text-muted-foreground",
+                ? "bg-iso-1 text-background shadow-apple-sm"
+                : "bg-primary text-primary-foreground hover:opacity-90",
             ].join(" ")}
           >
             {isoLoading ? (
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center justify-center gap-1.5">
                 <Loader2 className="h-3 w-3 animate-spin" /> Calculando isócrona…
               </span>
             ) : mode === "isochrone" ? (
-              <>Haz clic en el mapa para añadir una isócrona.</>
+              <>● Modo activo · Haz clic en el mapa (clic aquí para desactivar)</>
             ) : (
-              <>Activa <b>Isócronas</b> en la barra superior y haz clic en el mapa.</>
+              <>Activar modo isócrona</>
             )}
-          </div>
+          </button>
 
           {isochrones.length > 0 && (
             <div className="space-y-0.5">
