@@ -53,7 +53,7 @@ const Index = () => {
           <MapView basemap={basemap} onMouseMove={setCoords} layers={layers} />
 
           <SearchBar />
-          <Legend shifted={panelOpen} />
+          <Legend shifted={panelOpen} layers={layers} />
           <CoordsBar coords={coords} />
 
           {/* Mode hint */}
