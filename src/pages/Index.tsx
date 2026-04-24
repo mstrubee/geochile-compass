@@ -384,6 +384,9 @@ const Index = () => {
           onManzanaVariableChange={setManzanaVariable}
           manzanaLoading={manzanaLoading}
           manzanaCount={manzanaData?.features.length ?? 0}
+          gseVariable={gseVariable}
+          onGseVariableChange={setGseVariable}
+          gseCount={gseData?.features.length ?? 0}
           userLayers={userLayers}
           onAddUserLayer={addUserLayer}
           onToggleUserLayer={toggleUserLayer}
