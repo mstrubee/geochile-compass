@@ -50,16 +50,16 @@ export const TrafficLayer = ({ visible = true, nseFilter = null, trafficFilter =
         const isMatch = matchNse && matchTraffic;
         const baseR = radiusForTraffic(c.traffic);
         const radius = anyFilter && isMatch ? baseR + 4 : baseR;
-        const fillOpacity = !anyFilter ? 0.55 : isMatch ? 0.7 : 0.06;
-        const strokeOpacity = !anyFilter ? 1 : isMatch ? 1 : 0.18;
-        const weight = anyFilter && isMatch ? 2.5 : 1.5;
+        const fillOpacity = !anyFilter ? 0.7 : isMatch ? 0.85 : 0.1;
+        const strokeOpacity = !anyFilter ? 1 : isMatch ? 1 : 0.25;
+        const weight = anyFilter && isMatch ? 2.5 : 1.75;
         return (
           <CircleMarker
             key={`tr-${c.name}`}
             center={[c.lat, c.lng]}
             radius={radius}
             pathOptions={{
-              color: tc.hsl,
+              color: "hsl(222 38% 12%)",
               weight,
               opacity: strokeOpacity,
               fillColor: tc.hsl,
