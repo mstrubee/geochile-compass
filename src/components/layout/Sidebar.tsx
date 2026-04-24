@@ -11,7 +11,7 @@ interface SidebarProps {
 }
 
 interface LayerRow {
-  key: LayerKey;
+  key?: LayerKey;
   color: string;
   name: string;
   count: number;
