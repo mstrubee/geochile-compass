@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { CommuneLayer } from "./CommuneLayer";
 import { TrafficLayer } from "./TrafficLayer";
+import { NSELayer } from "./NSELayer";
 
 // Fix default Leaflet marker icon paths (when bundled)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -69,6 +70,7 @@ export const MapView = ({ basemap, onMouseMove, layers }: MapViewProps) => {
       <MouseTracker onMouseMove={onMouseMove} />
       <InvalidateOnResize />
       <CommuneLayer visible={layers.communes} />
+      <NSELayer visible={layers.nse} />
       <TrafficLayer visible={layers.traffic} />
     </MapContainer>
   );
