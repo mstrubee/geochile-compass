@@ -147,8 +147,8 @@ export const Legend = ({
   return (
     <div
       className={[
-        "absolute bottom-[22px] z-[500] w-[230px] rounded-lg border border-border bg-surface/95 p-3 backdrop-blur transition-[right] duration-300",
-        shifted ? "right-[374px]" : "right-3.5",
+        "absolute bottom-7 z-[500] w-[240px] rounded-2xl border border-border/60 bg-surface/70 p-3.5 shadow-apple backdrop-blur-2xl backdrop-saturate-150 transition-[right] duration-300",
+        shifted ? "right-[394px]" : "right-4",
       ].join(" ")}
     >
       {!showAny && (
