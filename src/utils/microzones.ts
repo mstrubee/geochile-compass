@@ -122,7 +122,7 @@ export const computeMicrozoneStats = (
   (Object.entries(dist) as Array<[string, number]>).forEach(([k, v]) => {
     if (v > max) {
       max = v;
-      dom = k as NSE;
+      dom = k as unknown as NSE;
     }
   });
   stats.dominantNse = dom;
