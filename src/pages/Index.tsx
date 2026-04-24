@@ -57,7 +57,13 @@ const Index = () => {
             .filter(Boolean)
             .join(" ")}
         >
-          <MapView basemap={basemap} onMouseMove={setCoords} layers={layers} nseFilter={nseFilter} />
+          <MapView
+            basemap={basemap}
+            onMouseMove={setCoords}
+            layers={layers}
+            nseFilter={nseFilter}
+            trafficFilter={trafficFilter}
+          />
 
           <SearchBar />
           <Legend
@@ -65,6 +71,8 @@ const Index = () => {
             layers={layers}
             nseFilter={nseFilter}
             onNseFilterChange={setNseFilter}
+            trafficFilter={trafficFilter}
+            onTrafficFilterChange={setTrafficFilter}
           />
           <CoordsBar coords={coords} />
 
