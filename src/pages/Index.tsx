@@ -59,6 +59,14 @@ const Index = () => {
   const [fitIsoId, setFitIsoId] = useState<string | null>(null);
   const [isoLoading, setIsoLoading] = useState(false);
 
+  // Búsqueda de direcciones (centra el mapa)
+  const [flyTarget, setFlyTarget] = useState<{
+    id: number;
+    lat: number;
+    lng: number;
+    bbox: [number, number, number, number] | null;
+  } | null>(null);
+
   // Microzonas
   const [microSubmode, setMicroSubmode] = useState<MicrozoneSubmode>("polygon");
   const [microBufferRadius, setMicroBufferRadius] = useState<number>(500); // metros
