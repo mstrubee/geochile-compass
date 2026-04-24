@@ -133,6 +133,83 @@ async function runQuery(query: string, signal?: AbortSignal): Promise<OverpassRe
     : new Error("No se pudo conectar con Overpass API");
 }
 
+/**
+ * Map de cadenas conocidas → dominio para obtener logo desde Clearbit/Google favicons.
+ * La key se compara en minúsculas contra brand/name normalizados.
+ */
+const BRAND_DOMAINS: Record<string, string> = {
+  // Supermercados Chile
+  "jumbo": "jumbo.cl",
+  "lider": "lider.cl",
+  "líder": "lider.cl",
+  "santa isabel": "santaisabel.cl",
+  "unimarc": "unimarc.cl",
+  "tottus": "tottus.cl",
+  "ekono": "ekono.cl",
+  "acuenta": "acuenta.cl",
+  "mayorista 10": "mayorista10.cl",
+  "construmart": "construmart.cl",
+  // Farmacias
+  "cruz verde": "cruzverde.cl",
+  "salcobrand": "salcobrand.cl",
+  "ahumada": "farmaciasahumada.cl",
+  "farmacias ahumada": "farmaciasahumada.cl",
+  "dr. simi": "drsimi.cl",
+  "dr simi": "drsimi.cl",
+  // Restaurantes / fast food
+  "mcdonald's": "mcdonalds.cl",
+  "mcdonalds": "mcdonalds.cl",
+  "burger king": "burgerking.cl",
+  "kfc": "kfc.cl",
+  "starbucks": "starbucks.cl",
+  "subway": "subway.com",
+  "domino's": "dominos.cl",
+  "dominos": "dominos.cl",
+  "pizza hut": "pizzahut.cl",
+  "papa john's": "papajohns.cl",
+  "telepizza": "telepizza.cl",
+  "doggis": "doggis.cl",
+  "juan maestro": "juanmaestro.cl",
+  "schop dog": "schopdog.cl",
+  // Talleres / autos
+  "copec": "copec.cl",
+  "shell": "shell.cl",
+  "petrobras": "petrobras.cl",
+  "enex": "enex.cl",
+  // Tiendas
+  "falabella": "falabella.com",
+  "paris": "paris.cl",
+  "ripley": "ripley.cl",
+  "la polar": "lapolar.cl",
+  "sodimac": "sodimac.cl",
+  "easy": "easy.cl",
+  "homecenter": "sodimac.cl",
+};
+
+function normalizeBrand(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function brandLogoUrl(tags: Record<string, string>): string | null {
+  const candidates = [tags.brand, tags["brand:en"], tags.name, tags["name:es"], tags.operator];
+  for (const c of candidates) {
+    if (!c) continue;
+    const norm = normalizeBrand(c);
+    // exact match
+    if (BRAND_DOMAINS[norm]) return `https://logo.clearbit.com/${BRAND_DOMAINS[norm]}`;
+    // partial match (eg "Farmacia Cruz Verde Centro")
+    for (const key of Object.keys(BRAND_DOMAINS)) {
+      if (norm.includes(key)) return `https://logo.clearbit.com/${BRAND_DOMAINS[key]}`;
+    }
+  }
+  // wikidata logo via brand:wikidata? skip — keep simple
+  return null;
+}
+
 function elementsToFeatureCollection(
   elements: OverpassElement[],
   category: string,
@@ -149,6 +226,7 @@ function elementsToFeatureCollection(
       tags["name:es"] ||
       tags.operator ||
       `${category} #${el.id}`;
+    const logo = brandLogoUrl(tags);
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: [lon, lat] },
@@ -158,6 +236,7 @@ function elementsToFeatureCollection(
         osm_type: el.type,
         osm_id: el.id,
         category,
+        ...(logo ? { icon: logo, "icon-scale": 0.9 } : {}),
       },
     });
   }
