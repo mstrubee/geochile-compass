@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import type { PoiFolder } from "@/types/pois";
 
 interface Props {
@@ -13,75 +14,116 @@ interface Props {
   defaultName: string;
   pointCount: number;
   folders: PoiFolder[];
-  onConfirm: (folderId: string | null, opts: { newFolderName?: string; parentId?: string | null }) => Promise<void>;
+  onCreateFolder: (name: string, parentId: string | null) => Promise<PoiFolder>;
+  onRefreshFolders?: () => Promise<void> | void;
+  /** folderId final (puede ser null = raíz) */
+  onConfirm: (folderId: string | null) => Promise<void>;
 }
 
-export const SavePoisDialog = ({ open, onOpenChange, defaultName, pointCount, folders, onConfirm }: Props) => {
-  const [mode, setMode] = useState<"existing" | "new" | "none">("new");
-  // existing-mode state
-  const [rootId, setRootId] = useState<string>("");
-  const [subId, setSubId] = useState<string>("__none__"); // "__none__" = la raíz; "__new__" = crear subcarpeta
+const ROOT = "__root__";
+const NEW = "__new__";
+
+export const SavePoisDialog = ({
+  open,
+  onOpenChange,
+  defaultName,
+  pointCount,
+  folders,
+  onCreateFolder,
+  onRefreshFolders,
+  onConfirm,
+}: Props) => {
+  // Selección del nivel 1 (carpeta raíz): id, ROOT, o NEW
+  const [rootSel, setRootSel] = useState<string>(ROOT);
+  const [newRootName, setNewRootName] = useState("");
+
+  // Selección del nivel 2 (subcarpeta): id, ROOT (= ninguna), o NEW
+  const [subSel, setSubSel] = useState<string>(ROOT);
   const [newSubName, setNewSubName] = useState("");
-  // new-folder-mode state
-  const [newName, setNewName] = useState(defaultName);
-  const [parentId, setParentId] = useState<string>("__root__");
+
   const [busy, setBusy] = useState(false);
+  const [creatingRoot, setCreatingRoot] = useState(false);
 
   const rootFolders = useMemo(() => folders.filter((f) => !f.parent_id), [folders]);
-  const childrenOfRoot = useMemo(
-    () => folders.filter((f) => f.parent_id === rootId),
-    [folders, rootId],
+  const childrenOfSel = useMemo(
+    () => (rootSel && rootSel !== ROOT && rootSel !== NEW ? folders.filter((f) => f.parent_id === rootSel) : []),
+    [folders, rootSel],
   );
 
-  // Re-init when opening
+  // Reset al abrir + refresh
   useEffect(() => {
     if (open) {
-      setNewName(defaultName);
-      setMode("new");
-      setParentId("__root__");
-      setRootId(rootFolders[0]?.id ?? "");
-      setSubId("__none__");
+      setRootSel(ROOT);
+      setNewRootName(defaultName);
+      setSubSel(ROOT);
       setNewSubName("");
+      onRefreshFolders?.();
     }
-  }, [open, defaultName, rootFolders]);
+  }, [open, defaultName, onRefreshFolders]);
 
-  // Reset sub selection when changing root
+  // Reset subcarpeta al cambiar carpeta padre
   useEffect(() => {
-    setSubId("__none__");
+    setSubSel(ROOT);
     setNewSubName("");
-  }, [rootId]);
+  }, [rootSel]);
+
+  // Crear carpeta raíz inline (la deja seleccionada)
+  const createRootInline = async () => {
+    const name = newRootName.trim();
+    if (!name) {
+      toast.error("Escribe un nombre");
+      return;
+    }
+    setCreatingRoot(true);
+    try {
+      const f = await onCreateFolder(name, null);
+      await onRefreshFolders?.();
+      setRootSel(f.id);
+      setNewRootName("");
+      toast.success(`Carpeta "${f.name}" creada`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error creando carpeta");
+    } finally {
+      setCreatingRoot(false);
+    }
+  };
+
+  const canSubmit =
+    !busy &&
+    (rootSel !== NEW || newRootName.trim().length > 0) &&
+    (subSel !== NEW || newSubName.trim().length > 0);
 
   const submit = async () => {
     setBusy(true);
     try {
-      if (mode === "none") {
-        await onConfirm(null, {});
-      } else if (mode === "existing") {
-        if (!rootId) return;
-        if (subId === "__new__") {
-          const name = newSubName.trim();
-          if (!name) return;
-          await onConfirm(null, { newFolderName: name, parentId: rootId });
-        } else if (subId === "__none__") {
-          await onConfirm(rootId, {});
-        } else {
-          await onConfirm(subId, {});
-        }
+      // Resolver carpeta raíz final
+      let rootId: string | null = null;
+      if (rootSel === ROOT) {
+        rootId = null;
+      } else if (rootSel === NEW) {
+        const created = await onCreateFolder(newRootName.trim(), null);
+        rootId = created.id;
       } else {
-        await onConfirm(null, {
-          newFolderName: newName.trim() || defaultName,
-          parentId: parentId === "__root__" ? null : parentId,
-        });
+        rootId = rootSel;
       }
+
+      // Resolver subcarpeta final
+      let finalId: string | null = rootId;
+      if (rootId && subSel === NEW) {
+        const created = await onCreateFolder(newSubName.trim(), rootId);
+        finalId = created.id;
+      } else if (rootId && subSel !== ROOT && subSel !== NEW) {
+        finalId = subSel;
+      }
+
+      await onConfirm(finalId);
       onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al guardar");
     } finally {
       setBusy(false);
     }
   };
-
-  const existingDisabled =
-    mode === "existing" &&
-    (!rootId || (subId === "__new__" && !newSubName.trim()));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -89,108 +131,87 @@ export const SavePoisDialog = ({ open, onOpenChange, defaultName, pointCount, fo
         <DialogHeader>
           <DialogTitle>Guardar {pointCount} POIs</DialogTitle>
         </DialogHeader>
+
         <div className="space-y-3">
-          <div className="flex gap-1 rounded-lg bg-muted p-0.5 text-xs">
-            {(
-              [
-                { k: "new", l: "Nueva carpeta" },
-                { k: "existing", l: "Carpeta existente" },
-                { k: "none", l: "Sin carpeta" },
-              ] as const
-            ).map((o) => (
-              <button
-                key={o.k}
-                type="button"
-                onClick={() => setMode(o.k)}
-                className={[
-                  "flex-1 rounded-md px-2 py-1.5 transition",
-                  mode === o.k ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
-                ].join(" ")}
-              >
-                {o.l}
-              </button>
-            ))}
+          {/* Nivel 1: Carpeta */}
+          <div className="space-y-1.5">
+            <Label htmlFor="rootSel">Carpeta</Label>
+            <Select value={rootSel} onValueChange={setRootSel}>
+              <SelectTrigger id="rootSel"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ROOT}>— Sin carpeta (raíz) —</SelectItem>
+                {rootFolders.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                ))}
+                <SelectItem value={NEW}>
+                  <span className="flex items-center gap-1.5">
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    Crear nueva carpeta…
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
+            {rootSel === NEW && (
+              <div className="flex gap-2">
+                <Input
+                  autoFocus
+                  placeholder="Nombre de la nueva carpeta"
+                  value={newRootName}
+                  onChange={(e) => setNewRootName(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={createRootInline}
+                  disabled={creatingRoot || !newRootName.trim()}
+                >
+                  {creatingRoot ? <Loader2 className="h-4 w-4 animate-spin" /> : "Crear"}
+                </Button>
+              </div>
+            )}
           </div>
 
-          {mode === "new" && (
-            <div className="space-y-2">
-              <Label htmlFor="newName">Nombre de la carpeta</Label>
-              <Input id="newName" value={newName} onChange={(e) => setNewName(e.target.value)} />
-              <Label htmlFor="parent">Carpeta padre (opcional)</Label>
-              <Select value={parentId} onValueChange={setParentId}>
-                <SelectTrigger id="parent"><SelectValue placeholder="Raíz" /></SelectTrigger>
+          {/* Nivel 2: Subcarpeta (solo si hay padre seleccionado) */}
+          {rootSel !== ROOT && rootSel !== NEW && (
+            <div className="space-y-1.5">
+              <Label htmlFor="subSel">Subcarpeta (opcional)</Label>
+              <Select value={subSel} onValueChange={setSubSel}>
+                <SelectTrigger id="subSel"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__root__">— Raíz —</SelectItem>
-                  {rootFolders.map((f) => (
+                  <SelectItem value={ROOT}>— Sin subcarpeta —</SelectItem>
+                  {childrenOfSel.map((f) => (
                     <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}
+                  <SelectItem value={NEW}>
+                    <span className="flex items-center gap-1.5">
+                      <FolderPlus className="h-3.5 w-3.5" />
+                      Crear nueva subcarpeta…
+                    </span>
+                  </SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-muted-foreground">
-                Máximo 2 niveles: Carpeta › Subcarpeta.
-              </p>
-            </div>
-          )}
 
-          {mode === "existing" && (
-            <div className="space-y-2">
-              {rootFolders.length === 0 ? (
-                <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-                  No hay carpetas. Crea una nueva.
-                </div>
-              ) : (
-                <>
-                  <Label htmlFor="rootFolder">Carpeta</Label>
-                  <Select value={rootId} onValueChange={setRootId}>
-                    <SelectTrigger id="rootFolder"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {rootFolders.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  {rootId && (
-                    <>
-                      <Label htmlFor="subFolder">Subcarpeta</Label>
-                      <Select value={subId} onValueChange={setSubId}>
-                        <SelectTrigger id="subFolder"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">— Sin subcarpeta —</SelectItem>
-                          {childrenOfRoot.map((f) => (
-                            <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                          ))}
-                          <SelectItem value="__new__">
-                            <span className="flex items-center gap-1.5">
-                              <FolderPlus className="h-3.5 w-3.5" />
-                              Crear nueva subcarpeta…
-                            </span>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-
-                      {subId === "__new__" && (
-                        <Input
-                          autoFocus
-                          placeholder="Nombre de la nueva subcarpeta"
-                          value={newSubName}
-                          onChange={(e) => setNewSubName(e.target.value)}
-                        />
-                      )}
-                    </>
-                  )}
-                </>
+              {subSel === NEW && (
+                <Input
+                  placeholder="Nombre de la nueva subcarpeta"
+                  value={newSubName}
+                  onChange={(e) => setNewSubName(e.target.value)}
+                />
               )}
             </div>
           )}
 
-          {mode === "none" && (
-            <p className="text-xs text-muted-foreground">Los POIs quedarán en la raíz, sin carpeta asociada.</p>
-          )}
+          <p className="text-[11px] text-muted-foreground">
+            Máximo 2 niveles: Carpeta › Subcarpeta.
+          </p>
         </div>
+
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>Cancelar</Button>
-          <Button onClick={submit} disabled={busy || existingDisabled}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+            Cancelar
+          </Button>
+          <Button onClick={submit} disabled={!canSubmit}>
             {busy ? "Guardando…" : "Guardar"}
           </Button>
         </DialogFooter>
