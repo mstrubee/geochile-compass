@@ -138,6 +138,7 @@ export const MapView = ({
         fitId={fitIsochroneId}
         onFitDone={onFitIsochroneDone}
       />
+      <SavedPoisLayer pois={savedPois} visible={savedPoisVisible} />
     </MapContainer>
   );
 };
