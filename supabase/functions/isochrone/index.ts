@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
 
     return new Response(text, {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/geo+json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown error";
