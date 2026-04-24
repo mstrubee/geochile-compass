@@ -153,6 +153,8 @@ export const Sidebar = ({
   onOpenPoiManager,
   poiFolderCount = 0,
   poiFolders = [],
+  onMoveFolder,
+  onMovePois,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
