@@ -111,7 +111,13 @@ const Index = () => {
   const { folders, create: createFolder, rename: renameFolder, remove: deleteFolder, move: moveFolder, refresh: refreshFolders } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
   const [managerOpen, setManagerOpen] = useState(false);
+  const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(new Set());
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
+
+  // POIs visibles en mapa: excluye los que están en carpetas ocultas.
+  const visiblePois = hiddenPoiFolders.size
+    ? pois.filter((p) => !p.folder_id || !hiddenPoiFolders.has(p.folder_id))
+    : pois;
 
   const savePoisFromLayer = useCallback(
     (layerId: string) => {
