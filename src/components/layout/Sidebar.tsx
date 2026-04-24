@@ -744,23 +744,36 @@ export const Sidebar = ({
                     <>
                       {rootFolders.map((f) => renderFolder(f, 0))}
                       {orphan.length > 0 && (
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() => togglePoiFolder("__root__")}
-                            className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
-                          >
-                            {orphanOpen ? (
-                              <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                            ) : (
-                              <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                            )}
-                            <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                            <span className="flex-1 truncate text-[11.5px] italic text-muted-foreground">Sin carpeta</span>
-                            <span className="font-mono text-[9.5px] text-text-muted">{orphan.length}</span>
-                          </button>
-                          {orphanOpen && orphan.map((p) => renderPoi(p, 0))}
-                        </div>
+                        <ContextMenu>
+                          <ContextMenuTrigger asChild>
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => togglePoiFolder("__root__")}
+                                className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
+                              >
+                                {orphanOpen ? (
+                                  <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                )}
+                                <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                <span className="flex-1 truncate text-[11.5px] italic text-muted-foreground">Sin carpeta</span>
+                                <span className="font-mono text-[9.5px] text-text-muted">{orphan.length}</span>
+                              </button>
+                              {orphanOpen && orphan.map((p) => renderPoi(p, 0))}
+                            </div>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent className="z-[1100]">
+                            <ContextMenuItem
+                              disabled={!clipboard}
+                              onSelect={() => handlePaste(null)}
+                            >
+                              <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
+                              {clipboard ? `Pegar "${clipboard.name}" en raíz` : "Pegar en raíz"}
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
                       )}
                       {rootFolders.length === 0 && orphan.length === 0 && (
                         <div className="px-2 py-1 text-[11px] text-muted-foreground">Sin POIs.</div>
