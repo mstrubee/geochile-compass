@@ -74,12 +74,6 @@ const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "density", color: "bg-brand-pink", name: "Densidad población", count: 20 },
 ];
 
-const POI_LAYERS: LayerRow[] = [
-  { color: "bg-brand-green", name: "Supermercados", count: 12, sub: "Locales cargados / OSM" },
-  { color: "bg-brand-red", name: "Farmacias", count: 15 },
-  { color: "bg-brand-orange", name: "Estaciones de servicio", count: 10 },
-];
-
 const StatCard = ({ value, label }: { value: string | number; label: string }) => (
   <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
     <div className="text-[20px] font-semibold leading-none tracking-tight text-foreground">{value}</div>
@@ -391,11 +385,6 @@ export const Sidebar = ({
           ))}
         </SidebarSection>
 
-        <SidebarSection title="Puntos de interés">
-          {POI_LAYERS.map((row) => (
-            <LayerItem key={row.name} row={row} on={true} />
-          ))}
-        </SidebarSection>
 
         <SidebarSection title="Isócronas">
           <div className="mb-2 flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
@@ -600,7 +589,7 @@ export const Sidebar = ({
           )}
         </SidebarSection>
 
-        <SidebarSection title="POIs guardados">
+        <SidebarSection title="Puntos de interés">
           {!isAuthenticated ? (
             <div className="rounded-lg bg-surface-2/60 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
               Inicia sesión para guardar puntos de forma permanente.
