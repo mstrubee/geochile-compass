@@ -1151,21 +1151,126 @@ export const Sidebar = ({
                     toast.info("No hay POIs para borrar");
                     return;
                   }
-                  if (!window.confirm(`¿Borrar TODOS los POIs guardados? Se eliminarán ${total} puntos. Esta acción no se puede deshacer.`)) return;
-                  const txt = window.prompt(`Confirmación final: escribe BORRAR para eliminar los ${total} POIs.`);
-                  if (txt?.trim().toUpperCase() !== "BORRAR") {
-                    toast.info("Borrado cancelado");
-                    return;
-                  }
+                  if (!window.confirm(`¿Mover TODOS los ${total} POIs a la papelera? Podrás recuperarlos durante 30 días.`)) return;
                   onClearSavedPois();
                 }}
                 className="mt-1.5 w-full rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
               >
-                Borrar todos
+                Mover todos a papelera
               </button>
             </>
           )}
         </SidebarSection>
+
+        {(trashedPois.length > 0 || trashedFolders.length > 0) && (
+          <SidebarSection title={`Papelera · 30 días (${trashedPois.length + trashedFolders.length})`}>
+            <p className="mb-1.5 px-1 text-[10px] leading-relaxed text-text-muted">
+              Los elementos eliminados se borran definitivamente a los 30 días.
+            </p>
+            <div className="scrollbar-thin max-h-56 space-y-0.5 overflow-y-auto">
+              {trashedFolders.map((f) => {
+                const days = f.deleted_at
+                  ? Math.max(0, 30 - Math.floor((Date.now() - new Date(f.deleted_at).getTime()) / 86400000))
+                  : 30;
+                return (
+                  <div key={f.id} className="group flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-surface-2/60">
+                    <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                    <span className="flex-1 truncate text-[11.5px] text-muted-foreground line-through" title={f.name}>
+                      {f.name}
+                    </span>
+                    <span className="font-mono text-[9.5px] text-text-muted">{days}d</span>
+                    {onRestoreFolder && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await onRestoreFolder(f.id);
+                            toast.success(`"${f.name}" restaurada`);
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Error");
+                          }
+                        }}
+                        className="rounded px-1.5 py-0.5 text-[10px] text-primary opacity-0 hover:bg-primary/10 group-hover:opacity-100"
+                        title="Restaurar"
+                      >
+                        Restaurar
+                      </button>
+                    )}
+                    {onPurgeFolder && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm(`Eliminar "${f.name}" definitivamente? Esta acción no se puede deshacer.`)) return;
+                          try {
+                            await onPurgeFolder(f.id);
+                            toast.success("Eliminado definitivamente");
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Error");
+                          }
+                        }}
+                        className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                        aria-label="Borrar definitivamente"
+                        title="Borrar definitivamente"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {trashedPois.map((p) => {
+                const days = p.deleted_at
+                  ? Math.max(0, 30 - Math.floor((Date.now() - new Date(p.deleted_at).getTime()) / 86400000))
+                  : 30;
+                return (
+                  <div key={p.id} className="group flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-surface-2/60">
+                    <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: p.color || "#34D399" }} />
+                    <span className="flex-1 truncate text-[11.5px] text-muted-foreground line-through" title={p.name}>
+                      {p.name}
+                    </span>
+                    <span className="font-mono text-[9.5px] text-text-muted">{days}d</span>
+                    {onRestorePois && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await onRestorePois([p.id]);
+                            toast.success(`"${p.name}" restaurado`);
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Error");
+                          }
+                        }}
+                        className="rounded px-1.5 py-0.5 text-[10px] text-primary opacity-0 hover:bg-primary/10 group-hover:opacity-100"
+                        title="Restaurar"
+                      >
+                        Restaurar
+                      </button>
+                    )}
+                    {onPurgePois && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm(`Eliminar "${p.name}" definitivamente? Esta acción no se puede deshacer.`)) return;
+                          try {
+                            await onPurgePois([p.id]);
+                            toast.success("Eliminado definitivamente");
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Error");
+                          }
+                        }}
+                        className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                        aria-label="Borrar definitivamente"
+                        title="Borrar definitivamente"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </SidebarSection>
+        )}
 
         <SidebarSection title="Mapa base">
           <div className="flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
