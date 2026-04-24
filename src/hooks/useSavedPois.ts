@@ -161,8 +161,17 @@ export const useSavedPois = () => {
   const purgePermanently = useCallback(
     async (ids: string[]) => {
       if (!ids.length) return;
-      const { error } = await supabase.from("pois").delete().in("id", ids);
-      if (error) throw new Error(error.message);
+      // Borrar en lotes pequeños: un .in("id", [...]) con miles de UUIDs
+      // genera una URL gigantesca y el servidor responde 400/414.
+      const CHUNK = 100;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK);
+        const { error } = await supabase.from("pois").delete().in("id", slice);
+        if (error) {
+          console.error(`[purgePermanently] chunk ${i} falló:`, error);
+          throw new Error(error.message);
+        }
+      }
       await refresh();
     },
     [refresh],
