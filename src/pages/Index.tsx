@@ -151,6 +151,16 @@ const Index = () => {
           onAddUserLayer={addUserLayer}
           onToggleUserLayer={toggleUserLayer}
           onRemoveUserLayer={removeUserLayer}
+          isoMode={isoMode}
+          onIsoModeChange={setIsoMode}
+          isoMinutes={isoMinutes}
+          onIsoMinutesChange={setIsoMinutes}
+          isochrones={isochrones}
+          onToggleIsochrone={toggleIsochrone}
+          onRemoveIsochrone={removeIsochrone}
+          onClearIsochrones={clearIsochrones}
+          onFocusIsochrone={setFitIsoId}
+          isoLoading={isoLoading}
         />
 
         <div
@@ -174,6 +184,11 @@ const Index = () => {
             userLayers={userLayers}
             fitUserLayerId={fitId}
             onFitUserLayerDone={handleFitDone}
+            isochrones={isochrones}
+            fitIsochroneId={fitIsoId}
+            onFitIsochroneDone={handleFitIsoDone}
+            isoMode={mode === "isochrone"}
+            onMapClick={handleMapClick}
           />
 
           <SearchBar />
