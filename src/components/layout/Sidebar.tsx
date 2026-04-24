@@ -423,7 +423,7 @@ export const Sidebar = ({
           </div>
         </SidebarSection>
 
-        <SidebarSection title="Manzanas — Visualización">
+        <SidebarSection title="Comunas RM — Visualización">
           <div className="mb-2 text-[11px] text-muted-foreground">Variable a visualizar</div>
           {/* Segmented control */}
           <div className="mb-3 flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
