@@ -36,25 +36,39 @@ export const UserLayersLayer = ({ layers, fitId, onFitDone }: Props) => {
           pointToLayer: (feature, latlng) => {
             const p = (feature?.properties ?? {}) as Record<string, unknown>;
             const iconUrl = (p.icon as string) || (p["marker-symbol"] as string);
+            const name = String(p.name || p.brand || ul.name || "?");
+            const fallbackMarker = () =>
+              L.marker(latlng, {
+                icon: makeBadgeIcon(name, ul.color),
+              });
+
             if (typeof iconUrl === "string" && /^(https?:|data:)/i.test(iconUrl)) {
               const scale = typeof p["icon-scale"] === "number" ? (p["icon-scale"] as number) : 1;
               const size = Math.max(16, Math.round(32 * scale));
-              const icon = L.icon({
-                iconUrl,
-                iconSize: [size, size],
-                iconAnchor: [size / 2, size / 2],
-                popupAnchor: [0, -size / 2],
-                className: "user-layer-icon",
+              const marker = L.marker(latlng, {
+                icon: L.divIcon({
+                  className: "user-layer-icon-wrap",
+                  html: `<img src="${iconUrl}" alt="" style="width:${size}px;height:${size}px;border-radius:6px;background:#fff;object-fit:contain;box-shadow:0 1px 4px rgba(0,0,0,.4);" onerror="this.dataset.failed='1'" />`,
+                  iconSize: [size, size],
+                  iconAnchor: [size / 2, size / 2],
+                  popupAnchor: [0, -size / 2],
+                }),
               });
-              return L.marker(latlng, { icon });
+              // Detect load failure and swap to fallback badge
+              setTimeout(() => {
+                const el = marker.getElement()?.querySelector("img") as HTMLImageElement | null;
+                if (!el) return;
+                const swap = () => {
+                  marker.setIcon(makeBadgeIcon(name, ul.color));
+                };
+                if (el.dataset.failed === "1" || el.complete && el.naturalWidth === 0) swap();
+                else {
+                  el.addEventListener("error", swap, { once: true });
+                }
+              }, 0);
+              return marker;
             }
-            return L.circleMarker(latlng, {
-              radius: 5,
-              color: ul.color,
-              weight: 2,
-              fillColor: ul.color,
-              fillOpacity: 0.7,
-            });
+            return fallbackMarker();
           },
           onEachFeature: (feature, layer) => {
             const props = feature.properties ?? {};
