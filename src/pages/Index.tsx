@@ -316,6 +316,7 @@ const Index = () => {
         onCreateFolder={createFolder}
         onRenameFolder={renameFolder}
         onDeleteFolder={deleteFolder}
+        onMoveFolder={moveFolder}
         onUpdatePoi={updatePoi}
         onDeletePois={removePois}
         onMovePois={movePois}
