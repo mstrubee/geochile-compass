@@ -240,6 +240,12 @@ export const PoiManagerDialog = ({
     </div>
   );
 
+  const folderPath = (id: string): string => {
+    const f = folders.find((x) => x.id === id);
+    if (!f) return "";
+    return f.parent_id ? `${folderPath(f.parent_id)} › ${f.name}` : f.name;
+  };
+
   const renderFolder = (f: PoiFolder, depth: number) => {
     const isOpen = expanded.has(f.id);
     const subs = childrenOf.get(f.id) ?? [];
