@@ -263,6 +263,36 @@ export const Sidebar = ({
       return next;
     });
 
+  // Visibilidad por carpeta (estilo Google Earth). Si el padre no controla el estado,
+  // se mantiene localmente como fallback. Una carpeta está visible si ni ella ni
+  // ninguno de sus ancestros está en `hiddenSet`.
+  const [hiddenPoiFoldersInternal, setHiddenPoiFoldersInternal] = useState<Set<string>>(new Set());
+  const hiddenSet = hiddenPoiFolders ?? hiddenPoiFoldersInternal;
+  const setHiddenSet = (next: Set<string>) => {
+    if (onHiddenPoiFoldersChange) onHiddenPoiFoldersChange(next);
+    else setHiddenPoiFoldersInternal(next);
+  };
+  // Mapa id -> parent_id para resolver herencia de visibilidad rápidamente
+  const folderParentMap = useMemo(() => {
+    const m = new Map<string, string | null>();
+    poiFolders.forEach((f) => m.set(f.id, f.parent_id));
+    return m;
+  }, [poiFolders]);
+  const isFolderEffectivelyHidden = (id: string): boolean => {
+    let cur: string | null | undefined = id;
+    while (cur) {
+      if (hiddenSet.has(cur)) return true;
+      cur = folderParentMap.get(cur) ?? null;
+    }
+    return false;
+  };
+  const toggleFolderVisible = (id: string) => {
+    const next = new Set(hiddenSet);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setHiddenSet(next);
+  };
+
   // Portapapeles para cortar/pegar (carpetas o POIs)
   const [clipboard, setClipboard] = useState<
     | { kind: "folder"; id: string; name: string }
