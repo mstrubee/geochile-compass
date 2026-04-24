@@ -127,20 +127,27 @@ const Index = () => {
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
 
   const savePoisFromLayer = useCallback(
-    (layerId: string) => {
+    (layerIdOrIds: string | string[]) => {
       if (!user) {
         toast.error("Inicia sesión para guardar POIs");
         navigate("/auth");
         return;
       }
-      const layer = userLayers.find((l) => l.id === layerId);
-      if (!layer) return;
-      const items = extractPointPois(layer.data, layer.name, { color: layer.color });
+      const ids = Array.isArray(layerIdOrIds) ? layerIdOrIds : [layerIdOrIds];
+      const layers = ids
+        .map((id) => userLayers.find((l) => l.id === id))
+        .filter((l): l is NonNullable<typeof l> => !!l);
+      if (!layers.length) return;
+      const items = layers.flatMap((layer) =>
+        extractPointPois(layer.data, layer.name, { color: layer.color }),
+      );
       if (!items.length) {
-        toast.error("Esta capa no contiene puntos");
+        toast.error(layers.length > 1 ? "Las capas seleccionadas no contienen puntos" : "Esta capa no contiene puntos");
         return;
       }
-      setSavePending({ items, defaultName: layer.name });
+      const defaultName =
+        layers.length === 1 ? layers[0].name : `${layers.length} capas`;
+      setSavePending({ items, defaultName });
     },
     [user, userLayers, navigate],
   );
