@@ -25,7 +25,7 @@ const OUT_DIR = path.join(ROOT, "public", "manzanas");
 const CACHE = path.join(ROOT, ".cache", "R13.geojson");
 
 const SOURCE_URL =
-  "https://raw.githubusercontent.com/robsalasco/censo_2017_geojson_chile/master/R13.geojson";
+  "https://raw.githubusercontent.com/robsalasco/censo_2017_geojson_chile/master/Manzanas/R13.geojson";
 
 const TOLERANCE = 0.00005; // ~5m
 const slugify = (s) =>
