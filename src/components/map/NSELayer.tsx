@@ -31,24 +31,31 @@ const NSEPopup = ({ c }: { c: Commune }) => {
 
 interface NSELayerProps {
   visible?: boolean;
+  filter?: import("@/data/communes").NSE | null;
 }
 
-export const NSELayer = ({ visible = true }: NSELayerProps) => {
+export const NSELayer = ({ visible = true, filter = null }: NSELayerProps) => {
   if (!visible) return null;
   return (
     <>
       {COMMUNES.map((c) => {
         const color = `hsl(${NSE_COLOR_HSL[c.nse]})`;
+        const isMatch = filter == null || c.nse === filter;
+        const radius = filter != null && isMatch ? 18 : 14;
+        const fillOpacity = isMatch ? 0.65 : 0.08;
+        const strokeOpacity = isMatch ? 1 : 0.2;
+        const weight = filter != null && isMatch ? 2.5 : 1.5;
         return (
           <CircleMarker
             key={`nse-${c.name}`}
             center={[c.lat, c.lng]}
-            radius={14}
+            radius={radius}
             pathOptions={{
               color,
-              weight: 1.5,
+              weight,
+              opacity: strokeOpacity,
               fillColor: color,
-              fillOpacity: 0.6,
+              fillOpacity,
             }}
           >
             <Popup>
