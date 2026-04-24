@@ -805,7 +805,20 @@ export const Sidebar = ({
                 })()}
               </div>
               <button
-                onClick={onClearSavedPois}
+                onClick={() => {
+                  const total = savedPois.length;
+                  if (total === 0) {
+                    toast.info("No hay POIs para borrar");
+                    return;
+                  }
+                  if (!window.confirm(`¿Borrar TODOS los POIs guardados? Se eliminarán ${total} puntos. Esta acción no se puede deshacer.`)) return;
+                  const txt = window.prompt(`Confirmación final: escribe BORRAR para eliminar los ${total} POIs.`);
+                  if (txt?.trim().toUpperCase() !== "BORRAR") {
+                    toast.info("Borrado cancelado");
+                    return;
+                  }
+                  onClearSavedPois();
+                }}
                 className="mt-1.5 w-full rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
               >
                 Borrar todos
