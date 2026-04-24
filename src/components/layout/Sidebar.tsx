@@ -212,6 +212,7 @@ export const Sidebar = ({
   onMoveFolder,
   onMovePois,
   onImportFilesIntoFolder,
+  onCreateFolder,
   trashedPois = [],
   trashedFolders = [],
   onRestorePois,
