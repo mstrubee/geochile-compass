@@ -28,6 +28,7 @@ interface Props {
   onCreateFolder: (name: string, parentId: string | null) => Promise<PoiFolder>;
   onRenameFolder: (id: string, name: string) => Promise<void>;
   onDeleteFolder: (id: string) => Promise<void>;
+  onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
   onUpdatePoi: (id: string, patch: PoiUpdate) => Promise<void>;
   onDeletePois: (ids: string[]) => Promise<void>;
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
