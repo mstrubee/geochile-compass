@@ -209,6 +209,7 @@ export const Sidebar = ({
   poiFolders = [],
   onMoveFolder,
   onMovePois,
+  onImportFilesIntoFolder,
   trashedPois = [],
   trashedFolders = [],
   onRestorePois,
