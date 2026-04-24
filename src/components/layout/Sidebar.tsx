@@ -640,26 +640,38 @@ export const Sidebar = ({
               <div className="scrollbar-thin max-h-72 space-y-0.5 overflow-y-auto">
                 {(() => {
                   const renderPoi = (p: SavedPoi, depth: number) => (
-                    <div
-                      key={p.id}
-                      className="group flex items-center gap-2 rounded-md py-0.5 pr-1 hover:bg-surface-2/60"
-                      style={{ paddingLeft: `${depth * 12 + 8}px` }}
-                    >
-                      <span
-                        className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
-                        style={{ backgroundColor: p.color || "#34D399" }}
-                      />
-                      <span className="flex-1 truncate text-[11.5px] text-foreground" title={p.name}>
-                        {p.name}
-                      </span>
-                      <button
-                        onClick={() => onRemoveSavedPoi(p.id)}
-                        className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 transition-colors hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
-                        aria-label={`Eliminar ${p.name}`}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
+                    <ContextMenu key={p.id}>
+                      <ContextMenuTrigger asChild>
+                        <div
+                          className="group flex items-center gap-2 rounded-md py-0.5 pr-1 hover:bg-surface-2/60"
+                          style={{ paddingLeft: `${depth * 12 + 8}px` }}
+                        >
+                          <span
+                            className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                            style={{ backgroundColor: p.color || "#34D399" }}
+                          />
+                          <span className="flex-1 truncate text-[11.5px] text-foreground" title={p.name}>
+                            {p.name}
+                          </span>
+                          <button
+                            onClick={() => onRemoveSavedPoi(p.id)}
+                            className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 transition-colors hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                            aria-label={`Eliminar ${p.name}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent className="z-[1100]">
+                        <ContextMenuItem onSelect={() => setClipboard({ kind: "poi", id: p.id, name: p.name })}>
+                          <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem onSelect={() => onRemoveSavedPoi(p.id)} className="text-destructive focus:text-destructive">
+                          <Trash2 className="mr-2 h-3.5 w-3.5" /> Eliminar
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
                   );
 
                   const renderFolder = (f: PoiFolder, depth: number): JSX.Element => {
@@ -667,25 +679,53 @@ export const Sidebar = ({
                     const subs = poiChildrenMap.get(f.id) ?? [];
                     const own = poisByFolderMap.get(f.id) ?? [];
                     const total = totalCounts.get(f.id) ?? 0;
+                    const canPasteHere =
+                      !!clipboard &&
+                      !(clipboard.kind === "folder" && clipboard.id === f.id) &&
+                      !(clipboard.kind === "folder" && descendantsOfFolder(clipboard.id).has(f.id));
                     return (
                       <div key={f.id}>
-                        <button
-                          type="button"
-                          onClick={() => togglePoiFolder(f.id)}
-                          className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
-                          style={{ paddingLeft: `${depth * 12 + 2}px` }}
-                        >
-                          {isOpen ? (
-                            <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                          )}
-                          <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
-                          <span className="flex-1 truncate text-[11.5px] font-medium text-foreground" title={f.name}>
-                            {f.name}
-                          </span>
-                          <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
-                        </button>
+                        <ContextMenu>
+                          <ContextMenuTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => togglePoiFolder(f.id)}
+                              className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
+                              style={{ paddingLeft: `${depth * 12 + 2}px` }}
+                            >
+                              {isOpen ? (
+                                <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                              )}
+                              <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
+                              <span className="flex-1 truncate text-[11.5px] font-medium text-foreground" title={f.name}>
+                                {f.name}
+                              </span>
+                              <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
+                            </button>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent className="z-[1100]">
+                            <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name })}>
+                              <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar carpeta
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                              disabled={!canPasteHere}
+                              onSelect={() => handlePaste(f.id)}
+                            >
+                              <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
+                              {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
+                            </ContextMenuItem>
+                            {clipboard && (
+                              <>
+                                <ContextMenuSeparator />
+                                <ContextMenuItem onSelect={() => setClipboard(null)}>
+                                  <X className="mr-2 h-3.5 w-3.5" /> Cancelar corte
+                                </ContextMenuItem>
+                              </>
+                            )}
+                          </ContextMenuContent>
+                        </ContextMenu>
                         {isOpen && (
                           <div>
                             {subs.map((s) => renderFolder(s, depth + 1))}
