@@ -299,6 +299,32 @@ export const PoiManagerDialog = ({
               >
                 <Pencil className="h-3 w-3" />
               </button>
+              <Select
+                value={f.parent_id ?? "__null__"}
+                onValueChange={(v) => handleMoveFolder(f.id, v === "__null__" ? null : v)}
+              >
+                <SelectTrigger
+                  className="hidden h-6 w-6 items-center justify-center rounded border-0 bg-transparent p-0 hover:bg-primary/10 hover:text-primary group-hover:flex [&>svg:last-child]:hidden"
+                  aria-label="Mover carpeta"
+                  title="Convertir en hija de…"
+                >
+                  <Move className="h-3 w-3" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__null__">— Raíz (sin padre) —</SelectItem>
+                  {folders
+                    .filter((opt) => {
+                      if (opt.id === f.id) return false;
+                      const desc = descendantsOf(f.id);
+                      return !desc.has(opt.id);
+                    })
+                    .map((opt) => (
+                      <SelectItem key={opt.id} value={opt.id}>
+                        {folderPath(opt.id)}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
               <button
                 onClick={() => handleDeleteFolderPois(f.id)}
                 disabled={!myPois.length}
