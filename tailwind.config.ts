@@ -8,9 +8,9 @@ export default {
     container: { center: true, padding: "2rem", screens: { "2xl": "1400px" } },
     extend: {
       fontFamily: {
-        display: ["Syne", "system-ui", "sans-serif"],
-        body: ["Outfit", "system-ui", "sans-serif"],
-        mono: ["DM Mono", "ui-monospace", "monospace"],
+        display: ["Inter", "system-ui", "sans-serif"],
+        body: ["Inter", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -53,7 +53,6 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Territorial palette
         brand: {
           orange: "hsl(var(--orange))",
           green: "hsl(var(--green))",
@@ -84,24 +83,19 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      boxShadow: {
+        apple: "0 1px 2px hsl(0 0% 0% / 0.18), 0 8px 24px hsl(0 0% 0% / 0.32)",
+        "apple-sm": "0 1px 2px hsl(0 0% 0% / 0.2)",
+        "apple-lg": "0 2px 4px hsl(0 0% 0% / 0.22), 0 24px 48px hsl(0 0% 0% / 0.4)",
+      },
       keyframes: {
         "accordion-down": { from: { height: "0" }, to: { height: "var(--radix-accordion-content-height)" } },
         "accordion-up": { from: { height: "var(--radix-accordion-content-height)" }, to: { height: "0" } },
-        "pulse-iso": {
-          "0%, 100%": { boxShadow: "0 0 0 0 hsl(var(--iso-1) / 0.3)" },
-          "50%": { boxShadow: "0 0 0 5px hsl(var(--iso-1) / 0.08)" },
-        },
-        "pulse-mz": {
-          "0%, 100%": { boxShadow: "0 0 0 0 hsl(var(--purple) / 0.3)" },
-          "50%": { boxShadow: "0 0 0 5px hsl(var(--purple) / 0.08)" },
-        },
         "blink": { "0%, 100%": { opacity: "1" }, "50%": { opacity: "0.3" } },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "pulse-iso": "pulse-iso 1.8s ease-in-out infinite",
-        "pulse-mz": "pulse-mz 1.8s ease-in-out infinite",
         "blink": "blink 2s ease-in-out infinite",
       },
     },
