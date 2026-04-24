@@ -1,11 +1,12 @@
 import { useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import type { LayerKey, LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
 import type { UserLayer } from "@/types/userLayers";
 import type { IsoMode, Isochrone } from "@/types/isochrones";
+import type { SavedPoi } from "@/types/pois";
 import { ISO_MODE_LABEL } from "@/types/isochrones";
 import { parseFile, getExtension } from "@/utils/fileParsers";
 
@@ -23,6 +24,9 @@ interface SidebarProps {
   onAddUserLayer: (layer: UserLayer) => void;
   onToggleUserLayer: (id: string) => void;
   onRemoveUserLayer: (id: string) => void;
+  onSavePoisFromLayer: (id: string) => void;
+  getLayerPointCount: (id: string) => number;
+  isAuthenticated: boolean;
   // Isochrones
   isoMode: IsoMode;
   onIsoModeChange: (m: IsoMode) => void;
@@ -34,6 +38,12 @@ interface SidebarProps {
   onClearIsochrones: () => void;
   onFocusIsochrone: (id: string) => void;
   isoLoading: boolean;
+  // Saved POIs
+  savedPois: SavedPoi[];
+  savedPoisVisible: boolean;
+  onToggleSavedPoisVisible: () => void;
+  onRemoveSavedPoi: (id: string) => void;
+  onClearSavedPois: () => void;
 }
 
 interface LayerRow {
