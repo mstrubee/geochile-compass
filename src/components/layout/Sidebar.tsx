@@ -175,6 +175,13 @@ export const Sidebar = ({
       return next;
     });
 
+  // Portapapeles para cortar/pegar (carpetas o POIs)
+  const [clipboard, setClipboard] = useState<
+    | { kind: "folder"; id: string; name: string }
+    | { kind: "poi"; id: string; name: string }
+    | null
+  >(null);
+
   // Indexación jerárquica
   const poiChildrenMap = useMemo(() => {
     const m = new Map<string | null, PoiFolder[]>();
