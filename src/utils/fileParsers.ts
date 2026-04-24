@@ -43,6 +43,77 @@ const parseKmlStringWithFolders = (text: string): FeatureCollection => {
   const root = doc.documentElement;
   if (!root) throw new Error("KML vacío");
 
+  // ── Pre-extracción de iconos definidos en <Style> y <StyleMap> ─────────────
+  // Construye mapas "#styleId" → href para asociarlos a cada Placemark vía
+  // su <styleUrl>. togeojson a veces no rellena properties.icon, así que lo
+  // hacemos nosotros como fallback.
+  const styleIconMap = new Map<string, string>();
+  const styleMapPairs = new Map<string, string>();
+
+  const getIconHrefFromStyle = (styleEl: Element): string | null => {
+    // Busca <Icon><href> y también <gx:Icon><href> (extensión Google).
+    // getElementsByTagNameNS("*", "Icon") cubre ambos casos.
+    const iconStyles = styleEl.getElementsByTagName("IconStyle");
+    for (let i = 0; i < iconStyles.length; i++) {
+      const icons = iconStyles[i].getElementsByTagNameNS("*", "Icon");
+      for (let j = 0; j < icons.length; j++) {
+        const hrefs = icons[j].getElementsByTagNameNS("*", "href");
+        if (hrefs.length && hrefs[0].textContent) {
+          return hrefs[0].textContent.trim();
+        }
+      }
+    }
+    return null;
+  };
+
+  const styles = root.getElementsByTagName("Style");
+  for (let i = 0; i < styles.length; i++) {
+    const s = styles[i];
+    const id = s.getAttribute("id");
+    if (!id) continue;
+    const href = getIconHrefFromStyle(s);
+    if (href) styleIconMap.set(`#${id}`, href);
+  }
+
+  const styleMaps = root.getElementsByTagName("StyleMap");
+  for (let i = 0; i < styleMaps.length; i++) {
+    const sm = styleMaps[i];
+    const id = sm.getAttribute("id");
+    if (!id) continue;
+    const pairs = sm.getElementsByTagName("Pair");
+    let chosen: string | null = null;
+    let firstUrl: string | null = null;
+    for (let j = 0; j < pairs.length; j++) {
+      const p = pairs[j];
+      const keyEl = p.getElementsByTagName("key")[0];
+      const urlEl = p.getElementsByTagName("styleUrl")[0];
+      if (!urlEl?.textContent) continue;
+      const url = urlEl.textContent.trim();
+      if (!firstUrl) firstUrl = url;
+      if (keyEl?.textContent?.trim() === "normal") {
+        chosen = url;
+        break;
+      }
+    }
+    const target = chosen ?? firstUrl;
+    if (target) styleMapPairs.set(`#${id}`, target);
+  }
+
+  const resolveStyleUrlToIcon = (styleUrl: string): string | null => {
+    const seen = new Set<string>();
+    let cur = styleUrl.startsWith("#") ? styleUrl : `#${styleUrl}`;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      if (styleIconMap.has(cur)) return styleIconMap.get(cur)!;
+      if (styleMapPairs.has(cur)) {
+        cur = styleMapPairs.get(cur)!;
+        continue;
+      }
+      break;
+    }
+    return null;
+  };
+
   const features: Feature[] = [];
 
   // Build a tiny KML wrapper around a single Placemark so togeojson can convert it.
@@ -54,8 +125,27 @@ const parseKmlStringWithFolders = (text: string): FeatureCollection => {
     return fc.features ?? [];
   };
 
+  const getPlacemarkIcon = (placemark: Element): string | null => {
+    // 1) Style inline directamente dentro del Placemark
+    for (let i = 0; i < placemark.children.length; i++) {
+      const c = placemark.children[i];
+      if (c.tagName === "Style") {
+        const href = getIconHrefFromStyle(c);
+        if (href) return href;
+      }
+    }
+    // 2) styleUrl → mapa global
+    for (let i = 0; i < placemark.children.length; i++) {
+      const c = placemark.children[i];
+      if (c.tagName === "styleUrl" && c.textContent) {
+        const href = resolveStyleUrlToIcon(c.textContent.trim());
+        if (href) return href;
+      }
+    }
+    return null;
+  };
+
   const folderName = (folder: Element): string => {
-    // Direct child <name>, not nested ones from inner Placemarks.
     for (let i = 0; i < folder.children.length; i++) {
       const c = folder.children[i];
       if (c.tagName === "name") return (c.textContent ?? "").trim() || "Sin nombre";
@@ -64,21 +154,23 @@ const parseKmlStringWithFolders = (text: string): FeatureCollection => {
   };
 
   const walk = (node: Element, path: string[]) => {
-    // Only iterate direct children to preserve the hierarchy.
     for (let i = 0; i < node.children.length; i++) {
       const child = node.children[i];
       const tag = child.tagName;
       if (tag === "Folder" || tag === "Document") {
         const name = folderName(child);
-        // <Document> at the root contributes no folder level.
         const isRootDocument = tag === "Document" && path.length === 0 && node === root;
         const nextPath = isRootDocument ? path : [...path, name];
         walk(child, nextPath);
       } else if (tag === "Placemark") {
         const converted = convertPlacemark(child);
+        const iconHref = getPlacemarkIcon(child);
         for (const f of converted) {
           const props = (f.properties ?? {}) as Record<string, unknown>;
           props[FOLDER_PATH_KEY] = path;
+          if (iconHref && typeof props.icon !== "string") {
+            props.icon = iconHref;
+          }
           f.properties = props;
           features.push(f);
         }
@@ -88,11 +180,14 @@ const parseKmlStringWithFolders = (text: string): FeatureCollection => {
 
   walk(root, []);
 
-  // Fallback: if we found nothing (unusual KML structure), use plain togeojson.
   if (features.length === 0) {
     const fc = kml(doc) as FeatureCollection;
     return fc;
   }
+
+  console.info(
+    `[KML] ${features.length} features · ${styleIconMap.size} estilos con icono · ${styleMapPairs.size} StyleMaps`,
+  );
 
   return { type: "FeatureCollection", features };
 };
@@ -130,22 +225,54 @@ const resolveKmzIcons = async (
 ): Promise<void> => {
   const cache = new Map<string, string | null>();
 
+  // Construye un índice rápido name → entry y otro basename → entry para
+  // soportar referencias relativas con o sin prefijo de carpeta.
+  const entries = Object.values(zip.files).filter((f) => !f.dir);
+  const byLower = new Map<string, typeof entries[number]>();
+  const byBasenameLower = new Map<string, typeof entries[number]>();
+  for (const e of entries) {
+    const lower = e.name.toLowerCase();
+    byLower.set(lower, e);
+    const base = lower.split("/").pop() || lower;
+    if (!byBasenameLower.has(base)) byBasenameLower.set(base, e);
+  }
+
   const resolve = async (href: string): Promise<string | null> => {
     if (!href) return null;
     if (/^(https?:|data:)/i.test(href)) return href;
     if (cache.has(href)) return cache.get(href)!;
     const clean = href.replace(/^\.\//, "").split(/[?#]/)[0];
-    const entry =
-      zip.file(clean) ||
-      zip.file(decodeURIComponent(clean)) ||
-      Object.values(zip.files).find(
-        (f) => f.name.toLowerCase() === clean.toLowerCase()
-      );
+    const candidates = [
+      clean,
+      decodeURIComponent(clean),
+      clean.toLowerCase(),
+      decodeURIComponent(clean).toLowerCase(),
+    ];
+    let entry: typeof entries[number] | undefined;
+    for (const c of candidates) {
+      const direct = zip.file(c);
+      if (direct) {
+        entry = direct;
+        break;
+      }
+      const lower = c.toLowerCase();
+      const m = byLower.get(lower);
+      if (m) {
+        entry = m;
+        break;
+      }
+    }
+    // Fallback por basename (KMZ con prefijo de carpeta como "files/...")
     if (!entry) {
+      const base = clean.toLowerCase().split("/").pop();
+      if (base) entry = byBasenameLower.get(base);
+    }
+    if (!entry) {
+      console.warn("[KMZ] icon no encontrado en zip:", href);
       cache.set(href, null);
       return null;
     }
-    const ext = clean.split(".").pop()?.toLowerCase() ?? "";
+    const ext = entry.name.split(".").pop()?.toLowerCase() ?? "";
     const mime = MIME_BY_EXT[ext] ?? "application/octet-stream";
     const buf = await entry.async("arraybuffer");
     const dataUrl = `data:${mime};base64,${arrayBufferToBase64(buf)}`;
@@ -153,14 +280,23 @@ const resolveKmzIcons = async (
     return dataUrl;
   };
 
+  let resolved = 0;
+  let withIcon = 0;
   for (const feature of fc.features) {
     const props = feature.properties as Record<string, unknown> | null;
     const icon = props?.icon;
     if (typeof icon === "string") {
-      const resolved = await resolve(icon);
-      if (resolved) (props as Record<string, unknown>).icon = resolved;
+      withIcon++;
+      const r = await resolve(icon);
+      if (r) {
+        (props as Record<string, unknown>).icon = r;
+        resolved++;
+      }
     }
   }
+  console.info(
+    `[KMZ] iconos: ${resolved}/${withIcon} resueltos · ${entries.length} entradas en zip`,
+  );
 };
 
 export const parseFile = async (file: File): Promise<FeatureCollection> => {
