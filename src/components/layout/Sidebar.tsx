@@ -888,11 +888,9 @@ export const Sidebar = ({
               const target = folderImportTargetIdRef.current;
               e.target.value = "";
               if (!files.length || !onImportFilesIntoFolder) return;
-              setFolderImporting(target);
               try {
                 await onImportFilesIntoFolder(files, target);
               } finally {
-                setFolderImporting(null);
                 folderImportTargetIdRef.current = null;
               }
             }}
