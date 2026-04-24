@@ -4,14 +4,17 @@ import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MapView } from "@/components/map/MapView";
 import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
+import { PoiManagerDialog } from "@/components/panels/PoiManagerDialog";
+import { SavePoisDialog } from "@/components/panels/SavePoisDialog";
 import { Legend } from "@/components/ui-overlays/Legend";
 import { SearchBar } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
 import { useManzanas } from "@/hooks/useManzanas";
 import { useSavedPois } from "@/hooks/useSavedPois";
+import { usePoiFolders } from "@/hooks/usePoiFolders";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
-import { extractPointPois, countPoints } from "@/types/pois";
+import { extractPointPois, countPoints, type PoiInsert } from "@/types/pois";
 import type { NSE } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
 import type { LayerState } from "@/types/layers";
@@ -51,11 +54,22 @@ const Index = () => {
   // POIs guardados
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { pois, addMany, remove: removePoi, clearAll: clearAllPois } = useSavedPois();
+  const {
+    pois,
+    addMany,
+    update: updatePoi,
+    moveMany: movePois,
+    remove: removePoi,
+    removeMany: removePois,
+    clearAll: clearAllPois,
+  } = useSavedPois();
+  const { folders, create: createFolder, rename: renameFolder, remove: deleteFolder } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
 
   const savePoisFromLayer = useCallback(
-    async (layerId: string) => {
+    (layerId: string) => {
       if (!user) {
         toast.error("Inicia sesión para guardar POIs");
         navigate("/auth");
@@ -68,15 +82,32 @@ const Index = () => {
         toast.error("Esta capa no contiene puntos");
         return;
       }
+      setSavePending({ items, defaultName: layer.name });
+    },
+    [user, userLayers, navigate],
+  );
+
+  const confirmSavePois = useCallback(
+    async (
+      folderId: string | null,
+      opts: { newFolderName?: string; parentId?: string | null },
+    ) => {
+      if (!savePending) return;
       try {
-        const n = await addMany(items);
-        toast.success(`${n} POIs guardados desde "${layer.name}"`);
+        let targetFolderId = folderId;
+        if (opts.newFolderName) {
+          const created = await createFolder(opts.newFolderName, opts.parentId ?? null);
+          targetFolderId = created.id;
+        }
+        const n = await addMany(savePending.items, targetFolderId);
+        toast.success(`${n} POIs guardados`);
+        setSavePending(null);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Error";
         toast.error(`No se pudieron guardar: ${msg}`);
       }
     },
-    [user, userLayers, addMany, navigate],
+    [savePending, addMany, createFolder],
   );
 
   const isoColorPalette = [
@@ -207,6 +238,8 @@ const Index = () => {
           onToggleSavedPoisVisible={() => setSavedPoisVisible((v) => !v)}
           onRemoveSavedPoi={removePoi}
           onClearSavedPois={clearAllPois}
+          onOpenPoiManager={() => setManagerOpen(true)}
+          poiFolderCount={folders.length}
         />
 
         <div
@@ -280,6 +313,30 @@ const Index = () => {
           <AnalysisPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
         </div>
       </main>
+
+      <PoiManagerDialog
+        open={managerOpen}
+        onOpenChange={setManagerOpen}
+        pois={pois}
+        folders={folders}
+        onCreateFolder={createFolder}
+        onRenameFolder={renameFolder}
+        onDeleteFolder={deleteFolder}
+        onUpdatePoi={updatePoi}
+        onDeletePois={removePois}
+        onMovePois={movePois}
+      />
+
+      {savePending && (
+        <SavePoisDialog
+          open={!!savePending}
+          onOpenChange={(v) => { if (!v) setSavePending(null); }}
+          defaultName={savePending.defaultName}
+          pointCount={savePending.items.length}
+          folders={folders}
+          onConfirm={confirmSavePois}
+        />
+      )}
     </div>
   );
 };
