@@ -696,7 +696,7 @@ const Index = () => {
             onFitIsochroneDone={handleFitIsoDone}
             isoMode={mode === "isochrone"}
             onMapClick={handleMapClick}
-            savedPois={pois}
+            savedPois={visiblePois}
             savedPoisVisible={savedPoisVisible}
             microzones={microzones}
             microActive={mode === "microzone"}
