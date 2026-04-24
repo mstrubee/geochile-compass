@@ -48,9 +48,10 @@ interface MapViewProps {
   basemap: "dark" | "light" | "satellite";
   onMouseMove: (c: { lat: number; lng: number }) => void;
   layers: import("@/types/layers").LayerState;
+  nseFilter: import("@/data/communes").NSE | null;
 }
 
-export const MapView = ({ basemap, onMouseMove, layers }: MapViewProps) => {
+export const MapView = ({ basemap, onMouseMove, layers, nseFilter }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
     <MapContainer
@@ -70,7 +71,7 @@ export const MapView = ({ basemap, onMouseMove, layers }: MapViewProps) => {
       <MouseTracker onMouseMove={onMouseMove} />
       <InvalidateOnResize />
       <CommuneLayer visible={layers.communes} />
-      <NSELayer visible={layers.nse} />
+      <NSELayer visible={layers.nse} filter={nseFilter} />
       <TrafficLayer visible={layers.traffic} />
     </MapContainer>
   );
