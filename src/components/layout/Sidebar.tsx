@@ -155,14 +155,19 @@ export const Sidebar = ({ basemap, onBasemapChange, mode, layers, onToggleLayer 
         {/* Capas */}
         <SidebarSection title="Capas Territoriales" accent="primary">
           {TERRITORIAL_LAYERS.map((row) => (
-            <LayerItem key={row.name} row={row} />
+            <LayerItem
+              key={row.name}
+              row={row}
+              on={row.key ? layers[row.key] : false}
+              onToggle={row.key ? () => onToggleLayer(row.key!) : undefined}
+            />
           ))}
         </SidebarSection>
 
         {/* POIs */}
         <SidebarSection title="Puntos de Interés" accent="orange">
           {POI_LAYERS.map((row) => (
-            <LayerItem key={row.name} row={row} />
+            <LayerItem key={row.name} row={row} on={true} />
           ))}
         </SidebarSection>
 
