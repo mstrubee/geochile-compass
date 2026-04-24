@@ -1,6 +1,6 @@
 import { useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import type { LayerKey, LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
@@ -44,6 +44,8 @@ interface SidebarProps {
   onToggleSavedPoisVisible: () => void;
   onRemoveSavedPoi: (id: string) => void;
   onClearSavedPois: () => void;
+  onOpenPoiManager: () => void;
+  poiFolderCount: number;
 }
 
 interface LayerRow {
@@ -143,6 +145,8 @@ export const Sidebar = ({
   onToggleSavedPoisVisible,
   onRemoveSavedPoi,
   onClearSavedPois,
+  onOpenPoiManager,
+  poiFolderCount = 0,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -493,12 +497,28 @@ export const Sidebar = ({
             <div className="rounded-lg bg-surface-2/60 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
               Inicia sesión para guardar puntos de forma permanente.
             </div>
-          ) : savedPois.length === 0 ? (
-            <div className="rounded-lg bg-surface-2/60 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
-              Aún no hay POIs. Carga un archivo con puntos y pulsa el icono <BookmarkPlus className="inline h-3 w-3" /> para guardarlos.
-            </div>
+          ) : savedPois.length === 0 && poiFolderCount === 0 ? (
+            <>
+              <div className="mb-2 rounded-lg bg-surface-2/60 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                Aún no hay POIs ni carpetas. Carga un archivo con puntos y pulsa el icono <BookmarkPlus className="inline h-3 w-3" /> para guardarlos.
+              </div>
+              <button
+                onClick={onOpenPoiManager}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+              >
+                <Settings2 className="h-3.5 w-3.5" /> Crear carpeta
+              </button>
+            </>
           ) : (
             <>
+              <button
+                onClick={onOpenPoiManager}
+                className="mb-1.5 flex w-full items-center gap-2 rounded-lg bg-primary/10 px-2.5 py-2 text-left text-primary transition-colors hover:bg-primary/15"
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                <span className="flex-1 text-[12px] font-medium">Administrar POIs</span>
+                <span className="font-mono text-[10px] opacity-75">{poiFolderCount} carp.</span>
+              </button>
               <button
                 onClick={onToggleSavedPoisVisible}
                 className="mb-1.5 flex w-full items-center gap-2 rounded-lg bg-surface-2/60 px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
