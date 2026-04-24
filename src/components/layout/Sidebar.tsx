@@ -1195,15 +1195,27 @@ export const Sidebar = ({
                       !!clipboard &&
                       !(clipboard.kind === "folder" && clipboard.id === f.id) &&
                       !(clipboard.kind === "folder" && descendantsOfFolder(clipboard.id).has(f.id));
+                    const isHidden = hiddenPoiFolders?.has(f.id) ?? false;
                     return (
-                      <div key={f.id}>
+                      <div key={f.id} className="flex w-full items-center gap-1">
+                        <div
+                          className="flex flex-shrink-0 items-center"
+                          style={{ paddingLeft: `${depth * 12 + 2}px` }}
+                        >
+                          <Checkbox
+                            checked={!isHidden}
+                            onCheckedChange={() => togglePoiFolderVisibility(f.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-3.5 w-3.5"
+                            aria-label={isHidden ? "Mostrar carpeta" : "Ocultar carpeta"}
+                          />
+                        </div>
                         <ContextMenu>
                           <ContextMenuTrigger asChild>
                             <button
                               type="button"
                               onClick={() => togglePoiFolder(f.id)}
-                              className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
-                              style={{ paddingLeft: `${depth * 12 + 2}px` }}
+                              className="flex flex-1 items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
                             >
                               {isOpen ? (
                                 <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
