@@ -30,6 +30,13 @@ const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "density", color: "bg-brand-pink", name: "Densidad Población", count: 20 },
 ];
 
+const MANZANA_VARIABLES: { key: ManzanaVariable; label: string }[] = [
+  { key: "density", label: "Densidad Pob." },
+  { key: "nse", label: "NSE" },
+  { key: "income", label: "Ingresos" },
+  { key: "traffic", label: "Tráfico" },
+];
+
 const POI_LAYERS: LayerRow[] = [
   { color: "bg-brand-green", name: "Supermercados", count: 12, sub: "Locales cargados / OSM" },
   { color: "bg-brand-red", name: "Farmacias", count: 15 },
@@ -82,7 +89,17 @@ const LayerItem = ({ row, on, onToggle }: LayerItemProps) => (
   </button>
 );
 
-export const Sidebar = ({ basemap, onBasemapChange, mode, layers, onToggleLayer }: SidebarProps) => {
+export const Sidebar = ({
+  basemap,
+  onBasemapChange,
+  mode,
+  layers,
+  onToggleLayer,
+  manzanaVariable,
+  onManzanaVariableChange,
+  manzanaLoading,
+  manzanaCount,
+}: SidebarProps) => {
   return (
     <aside className="flex w-[272px] flex-shrink-0 flex-col overflow-hidden border-r border-border bg-surface">
       <div className="scrollbar-thin flex-1 overflow-y-auto">
@@ -90,7 +107,7 @@ export const Sidebar = ({ basemap, onBasemapChange, mode, layers, onToggleLayer 
         <SidebarSection title="Resumen" accent="primary">
           <div className="grid grid-cols-2 gap-1.5 pt-1">
             <StatCard value={20} label="Comunas" />
-            <StatCard value={0} label="Manzanas vis." />
+            <StatCard value={manzanaCount} label="Manzanas vis." />
             <StatCard value={0} label="POIs OSM" />
             <StatCard value={0} label="Isócronas" />
           </div>
