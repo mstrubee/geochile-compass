@@ -78,6 +78,8 @@ interface SidebarProps {
   poiFolders: PoiFolder[];
   onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
+  /** Importa archivos KMZ/KML/GeoJSON directamente a una carpeta destino (sin diálogo). */
+  onImportFilesIntoFolder?: (files: File[], folderId: string | null) => Promise<void> | void;
   // Papelera
   trashedPois?: SavedPoi[];
   trashedFolders?: PoiFolder[];
