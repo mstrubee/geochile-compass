@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -124,6 +124,25 @@ const Index = () => {
     refresh: refreshFolders,
   } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
+  const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(new Set());
+  // POIs visibles según las carpetas ocultas (estilo Google Earth: herencia desde ancestros).
+  const visiblePois = useMemo(() => {
+    if (hiddenPoiFolders.size === 0) return pois;
+    const parentMap = new Map<string, string | null>();
+    folders.forEach((f) => parentMap.set(f.id, f.parent_id));
+    const isFolderHidden = (id: string | null): boolean => {
+      let cur = id;
+      while (cur) {
+        if (hiddenPoiFolders.has(cur)) return true;
+        cur = parentMap.get(cur) ?? null;
+      }
+      return false;
+    };
+    return pois.filter((p) => {
+      if (p.folder_id === null) return !hiddenPoiFolders.has("__orphan__");
+      return !isFolderHidden(p.folder_id);
+    });
+  }, [pois, folders, hiddenPoiFolders]);
   const [managerOpen, setManagerOpen] = useState(false);
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
 
@@ -626,6 +645,8 @@ const Index = () => {
           onRestoreFolder={restoreFolder}
           onPurgePois={purgePois}
           onPurgeFolder={purgeFolder}
+          hiddenPoiFolders={hiddenPoiFolders}
+          onHiddenPoiFoldersChange={setHiddenPoiFolders}
           microSubmode={microSubmode}
           onMicroSubmodeChange={setMicroSubmode}
           microBufferRadius={microBufferRadius}
@@ -672,7 +693,7 @@ const Index = () => {
             onFitIsochroneDone={handleFitIsoDone}
             isoMode={mode === "isochrone"}
             onMapClick={handleMapClick}
-            savedPois={pois}
+            savedPois={visiblePois}
             savedPoisVisible={savedPoisVisible}
             microzones={microzones}
             microActive={mode === "microzone"}

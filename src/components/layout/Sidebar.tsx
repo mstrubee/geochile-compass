@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -261,6 +262,36 @@ export const Sidebar = ({
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+
+  // Visibilidad por carpeta (estilo Google Earth). Si el padre no controla el estado,
+  // se mantiene localmente como fallback. Una carpeta está visible si ni ella ni
+  // ninguno de sus ancestros está en `hiddenSet`.
+  const [hiddenPoiFoldersInternal, setHiddenPoiFoldersInternal] = useState<Set<string>>(new Set());
+  const hiddenSet = hiddenPoiFolders ?? hiddenPoiFoldersInternal;
+  const setHiddenSet = (next: Set<string>) => {
+    if (onHiddenPoiFoldersChange) onHiddenPoiFoldersChange(next);
+    else setHiddenPoiFoldersInternal(next);
+  };
+  // Mapa id -> parent_id para resolver herencia de visibilidad rápidamente
+  const folderParentMap = useMemo(() => {
+    const m = new Map<string, string | null>();
+    poiFolders.forEach((f) => m.set(f.id, f.parent_id));
+    return m;
+  }, [poiFolders]);
+  const isFolderEffectivelyHidden = (id: string): boolean => {
+    let cur: string | null | undefined = id;
+    while (cur) {
+      if (hiddenSet.has(cur)) return true;
+      cur = folderParentMap.get(cur) ?? null;
+    }
+    return false;
+  };
+  const toggleFolderVisible = (id: string) => {
+    const next = new Set(hiddenSet);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setHiddenSet(next);
+  };
 
   // Portapapeles para cortar/pegar (carpetas o POIs)
   const [clipboard, setClipboard] = useState<
@@ -1181,23 +1212,35 @@ export const Sidebar = ({
                       <div key={f.id}>
                         <ContextMenu>
                           <ContextMenuTrigger asChild>
-                            <button
-                              type="button"
-                              onClick={() => togglePoiFolder(f.id)}
-                              className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
+                            <div
+                              className="group flex w-full items-center gap-1 rounded-md py-1 pr-1 hover:bg-surface-2/60"
                               style={{ paddingLeft: `${depth * 12 + 2}px` }}
                             >
-                              {isOpen ? (
-                                <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                              ) : (
-                                <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                              )}
-                              <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
-                              <span className="flex-1 truncate text-[11.5px] font-medium text-foreground" title={f.name}>
-                                {f.name}
-                              </span>
-                              <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
-                            </button>
+                              <Checkbox
+                                checked={!isFolderEffectivelyHidden(f.id)}
+                                onCheckedChange={() => toggleFolderVisible(f.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-3 w-3 flex-shrink-0"
+                                aria-label={`Mostrar/ocultar ${f.name}`}
+                                title="Mostrar/ocultar en el mapa"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => togglePoiFolder(f.id)}
+                                className="flex flex-1 items-center gap-1 text-left min-w-0"
+                              >
+                                {isOpen ? (
+                                  <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                )}
+                                <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
+                                <span className="flex-1 truncate text-[11.5px] font-medium text-foreground" title={f.name}>
+                                  {f.name}
+                                </span>
+                                <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
+                              </button>
+                            </div>
                           </ContextMenuTrigger>
                           <ContextMenuContent className="z-[1100]">
                             <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name })}>
@@ -1315,20 +1358,30 @@ export const Sidebar = ({
                         <ContextMenu>
                           <ContextMenuTrigger asChild>
                             <div>
-                              <button
-                                type="button"
-                                onClick={() => togglePoiFolder("__root__")}
-                                className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
-                              >
-                                {orphanOpen ? (
-                                  <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                                ) : (
-                                  <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                                )}
-                                <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                                <span className="flex-1 truncate text-[11.5px] italic text-muted-foreground">Sin carpeta</span>
-                                <span className="font-mono text-[9.5px] text-text-muted">{orphan.length}</span>
-                              </button>
+                              <div className="group flex w-full items-center gap-1 rounded-md py-1 pr-1 hover:bg-surface-2/60">
+                                <Checkbox
+                                  checked={!hiddenSet.has("__orphan__")}
+                                  onCheckedChange={() => toggleFolderVisible("__orphan__")}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-3 w-3 flex-shrink-0"
+                                  aria-label="Mostrar/ocultar POIs sin carpeta"
+                                  title="Mostrar/ocultar en el mapa"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => togglePoiFolder("__root__")}
+                                  className="flex flex-1 items-center gap-1 text-left min-w-0"
+                                >
+                                  {orphanOpen ? (
+                                    <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                  )}
+                                  <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                  <span className="flex-1 truncate text-[11.5px] italic text-muted-foreground">Sin carpeta</span>
+                                  <span className="font-mono text-[9.5px] text-text-muted">{orphan.length}</span>
+                                </button>
+                              </div>
                               {orphanOpen && orphan.map((p) => renderPoi(p, 0))}
                             </div>
                           </ContextMenuTrigger>
