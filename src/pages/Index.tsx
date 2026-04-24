@@ -395,6 +395,18 @@ const Index = () => {
           poiFolders={folders}
           onMoveFolder={moveFolder}
           onMovePois={movePois}
+          microSubmode={microSubmode}
+          onMicroSubmodeChange={setMicroSubmode}
+          microBufferRadius={microBufferRadius}
+          onMicroBufferRadiusChange={setMicroBufferRadius}
+          microActive={mode === "microzone"}
+          onToggleMicroMode={() => setMode((m) => (m === "microzone" ? "none" : "microzone"))}
+          microzones={microzones}
+          onToggleMicrozone={toggleMicrozone}
+          onRemoveMicrozone={removeMicrozone}
+          onClearMicrozones={clearMicrozones}
+          onFocusMicrozone={setFitMicrozoneId}
+          onGenerateVoronoi={generateVoronoi}
         />
 
         <div
