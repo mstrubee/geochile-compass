@@ -348,11 +348,6 @@ export const PoiManagerDialog = ({
 
   const orphanPois = poisByFolder.get(null) ?? [];
   const rootOpen = expanded.has("__root__");
-  const folderPath = (id: string): string => {
-    const f = folders.find((x) => x.id === id);
-    if (!f) return "";
-    return f.parent_id ? `${folderPath(f.parent_id)} › ${f.name}` : f.name;
-  };
   const folderOptions = [
     { id: "__null__", label: "— Sin carpeta (raíz) —" },
     ...folders.map((f) => ({ id: f.id, label: folderPath(f.id) })),
