@@ -43,7 +43,7 @@ const Index = () => {
   const [panelOpen, setPanelOpen] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [layers, setLayers] = useState<LayerState>({
-    communes: true,
+    communes: false,
     nse: false,
     traffic: false,
     density: false,
