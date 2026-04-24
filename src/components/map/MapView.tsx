@@ -111,6 +111,7 @@ export const MapView = ({
       />
       <ZoomControlTopRight />
       <MouseTracker onMouseMove={onMouseMove} />
+      {isoMode && <ClickHandler onClick={onMapClick} />}
       <InvalidateOnResize />
       <ManzanaLayer
         visible={layers.manzanas}
@@ -125,6 +126,11 @@ export const MapView = ({
         layers={userLayers}
         fitId={fitUserLayerId}
         onFitDone={onFitUserLayerDone}
+      />
+      <IsochroneLayer
+        isochrones={isochrones}
+        fitId={fitIsochroneId}
+        onFitDone={onFitIsochroneDone}
       />
     </MapContainer>
   );
