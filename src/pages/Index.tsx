@@ -101,14 +101,27 @@ const Index = () => {
   const { user } = useAuth();
   const {
     pois,
+    trashedPois,
     addMany,
     update: updatePoi,
     moveMany: movePois,
     remove: removePoi,
     removeMany: removePois,
+    restore: restorePois,
+    purgePermanently: purgePois,
     clearAll: clearAllPois,
   } = useSavedPois();
-  const { folders, create: createFolder, rename: renameFolder, remove: deleteFolder, move: moveFolder, refresh: refreshFolders } = usePoiFolders();
+  const {
+    folders,
+    trashedFolders,
+    create: createFolder,
+    rename: renameFolder,
+    remove: deleteFolder,
+    restore: restoreFolder,
+    purgePermanently: purgeFolder,
+    move: moveFolder,
+    refresh: refreshFolders,
+  } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
   const [managerOpen, setManagerOpen] = useState(false);
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
