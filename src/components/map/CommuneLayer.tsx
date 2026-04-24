@@ -22,22 +22,29 @@ const PopupRow = ({ k, v }: { k: string; v: string }) => (
   </div>
 );
 
-const CommunePopup = ({ c }: { c: Commune }) => (
-  <div className="min-w-[180px]">
-    <div className="mb-1.5 font-display text-[12px] font-semibold text-[hsl(199_89%_60%)]">
-      {c.name}
+const CommunePopup = ({ c }: { c: Commune }) => {
+  const hasData = c.pop > 0;
+  return (
+    <div className="min-w-[180px]">
+      <div className="mb-1.5 font-display text-[12px] font-semibold text-[hsl(199_89%_60%)]">
+        {c.name}
+      </div>
+      {hasData ? (
+        <div className="space-y-0.5">
+          <PopupRow k="Población" v={fmtNum(c.pop)} />
+          <PopupRow k="Hogares" v={fmtNum(c.hh)} />
+          <PopupRow k="Área" v={fmtArea(c.area)} />
+          <PopupRow k="Densidad" v={fmtDensity(c.density)} />
+          <PopupRow k="NSE pred." v={NSE_LABELS[c.nse]} />
+          <PopupRow k="Ingreso prom." v={`${fmtCLP(NSE_INCOME[c.nse])}/mes`} />
+          <PopupRow k="Tráfico" v={`${c.traffic}/100`} />
+        </div>
+      ) : (
+        <div className="text-[10px] text-[hsl(215_19%_55%)]">Sin datos demográficos detallados.</div>
+      )}
     </div>
-    <div className="space-y-0.5">
-      <PopupRow k="Población" v={fmtNum(c.pop)} />
-      <PopupRow k="Hogares" v={fmtNum(c.hh)} />
-      <PopupRow k="Área" v={fmtArea(c.area)} />
-      <PopupRow k="Densidad" v={fmtDensity(c.density)} />
-      <PopupRow k="NSE pred." v={NSE_LABELS[c.nse]} />
-      <PopupRow k="Ingreso prom." v={`${fmtCLP(NSE_INCOME[c.nse])}/mes`} />
-      <PopupRow k="Tráfico" v={`${c.traffic}/100`} />
-    </div>
-  </div>
-);
+  );
+};
 
 interface CommuneLayerProps {
   visible?: boolean;
@@ -48,9 +55,9 @@ export const CommuneLayer = ({ visible = true }: CommuneLayerProps) => {
   return (
     <>
       {COMMUNES.map((c) => {
-        const r = radiusForPop(c.pop);
-        // Opacity proportional to relative population
-        const opacity = 0.45 + (c.pop / 650_000) * 0.4;
+        const hasData = c.pop > 0;
+        const r = hasData ? radiusForPop(c.pop) : 4;
+        const opacity = hasData ? 0.45 + (c.pop / 650_000) * 0.4 : 0.5;
         return (
           <CircleMarker
             key={c.name}
@@ -58,7 +65,7 @@ export const CommuneLayer = ({ visible = true }: CommuneLayerProps) => {
             radius={r}
             pathOptions={{
               color: STROKE,
-              weight: 1.75,
+              weight: hasData ? 1.75 : 1,
               opacity: 0.9,
               fillColor: FILL,
               fillOpacity: Math.min(0.85, opacity),
