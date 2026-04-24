@@ -13,6 +13,7 @@ export interface SavedPoi {
   source_layer: string | null;
   folder_id: string | null;
   created_at: string;
+  deleted_at?: string | null;
 }
 
 export interface PoiInsert {
@@ -42,6 +43,7 @@ export interface PoiFolder {
   parent_id: string | null;
   color: string | null;
   created_at: string;
+  deleted_at?: string | null;
 }
 
 export const featureName = (f: Feature, fallback: string): string => {

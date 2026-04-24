@@ -71,12 +71,20 @@ interface SidebarProps {
   savedPoisVisible: boolean;
   onToggleSavedPoisVisible: () => void;
   onRemoveSavedPoi: (id: string) => void;
+  onDeleteFolder?: (id: string) => Promise<void> | void;
   onClearSavedPois: () => void;
   onOpenPoiManager: () => void;
   poiFolderCount: number;
   poiFolders: PoiFolder[];
   onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
+  // Papelera
+  trashedPois?: SavedPoi[];
+  trashedFolders?: PoiFolder[];
+  onRestorePois?: (ids: string[]) => Promise<void> | void;
+  onRestoreFolder?: (id: string) => Promise<void> | void;
+  onPurgePois?: (ids: string[]) => Promise<void> | void;
+  onPurgeFolder?: (id: string) => Promise<void> | void;
   /** IDs de carpetas ocultas (no se muestran en el mapa). */
   hiddenPoiFolders?: Set<string>;
   onHiddenPoiFoldersChange?: (next: Set<string>) => void;
@@ -192,12 +200,19 @@ export const Sidebar = ({
   savedPoisVisible = true,
   onToggleSavedPoisVisible,
   onRemoveSavedPoi,
+  onDeleteFolder,
   onClearSavedPois,
   onOpenPoiManager,
   poiFolderCount = 0,
   poiFolders = [],
   onMoveFolder,
   onMovePois,
+  trashedPois = [],
+  trashedFolders = [],
+  onRestorePois,
+  onRestoreFolder,
+  onPurgePois,
+  onPurgeFolder,
   hiddenPoiFolders,
   onHiddenPoiFoldersChange,
   onLoadOverpass,
@@ -216,34 +231,30 @@ export const Sidebar = ({
       return next;
     });
 
-  // Visibilidad por carpeta — apaga/prende la carpeta y todas sus descendientes en el mapa.
-  const toggleFolderVisible = (id: string) => {
-    if (!onHiddenPoiFoldersChange) return;
-    const current = hiddenPoiFolders ?? new Set<string>();
-    const next = new Set(current);
-    // Calcular descendientes inline (poiChildrenMap aún no definido aquí — usamos poiFolders directo)
-    const collect = (root: string, acc: Set<string>) => {
-      acc.add(root);
-      poiFolders.forEach((f) => {
-        if (f.parent_id === root) collect(f.id, acc);
-      });
-    };
-    const affected = new Set<string>();
-    collect(id, affected);
-    const isHidden = current.has(id);
-    affected.forEach((fid) => {
-      if (isHidden) next.delete(fid);
-      else next.add(fid);
-    });
-    onHiddenPoiFoldersChange(next);
-  };
-
   // Portapapeles para cortar/pegar (carpetas o POIs)
   const [clipboard, setClipboard] = useState<
     | { kind: "folder"; id: string; name: string }
     | { kind: "poi"; id: string; name: string }
     | null
   >(null);
+
+  // Confirmaciones de borrado — todo lo eliminado va a la papelera (30 días).
+  const confirmRemovePoi = (id: string, name: string) => {
+    if (window.confirm(`¿Eliminar "${name}"? Se moverá a la papelera durante 30 días antes de borrarse definitivamente.`)) {
+      onRemoveSavedPoi(id);
+    }
+  };
+  const confirmDeleteFolder = async (id: string, name: string) => {
+    if (!onDeleteFolder) return;
+    if (window.confirm(`¿Eliminar la carpeta "${name}" y todo su contenido (subcarpetas y POIs)? Se moverá a la papelera durante 30 días antes de borrarse definitivamente.`)) {
+      try {
+        await onDeleteFolder(id);
+        toast.success("Movido a papelera");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Error al eliminar");
+      }
+    }
+  };
 
   // Indexación jerárquica
   const poiChildrenMap = useMemo(() => {
@@ -993,9 +1004,10 @@ export const Sidebar = ({
                             {p.name}
                           </span>
                           <button
-                            onClick={() => onRemoveSavedPoi(p.id)}
+                            onClick={() => confirmRemovePoi(p.id, p.name)}
                             className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 transition-colors hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
                             aria-label={`Eliminar ${p.name}`}
+                            title="Mover a papelera (30 días)"
                           >
                             <Trash2 className="h-3 w-3" />
                           </button>
@@ -1006,8 +1018,8 @@ export const Sidebar = ({
                           <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar
                         </ContextMenuItem>
                         <ContextMenuSeparator />
-                        <ContextMenuItem onSelect={() => onRemoveSavedPoi(p.id)} className="text-destructive focus:text-destructive">
-                          <Trash2 className="mr-2 h-3.5 w-3.5" /> Eliminar
+                        <ContextMenuItem onSelect={() => confirmRemovePoi(p.id, p.name)} className="text-destructive focus:text-destructive">
+                          <Trash2 className="mr-2 h-3.5 w-3.5" /> Mover a papelera
                         </ContextMenuItem>
                       </ContextMenuContent>
                     </ContextMenu>
@@ -1022,58 +1034,29 @@ export const Sidebar = ({
                       !!clipboard &&
                       !(clipboard.kind === "folder" && clipboard.id === f.id) &&
                       !(clipboard.kind === "folder" && descendantsOfFolder(clipboard.id).has(f.id));
-                    const isVisible = !(hiddenPoiFolders?.has(f.id) ?? false);
                     return (
                       <div key={f.id}>
                         <ContextMenu>
                           <ContextMenuTrigger asChild>
-                            <div
-                              className="flex w-full items-center gap-1 rounded-md py-1 pr-1 hover:bg-surface-2/60"
+                            <button
+                              type="button"
+                              onClick={() => togglePoiFolder(f.id)}
+                              className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
                               style={{ paddingLeft: `${depth * 12 + 2}px` }}
                             >
-                              <button
-                                type="button"
-                                onClick={() => togglePoiFolder(f.id)}
-                                className="flex flex-1 items-center gap-1 text-left"
-                              >
-                                {isOpen ? (
-                                  <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                                ) : (
-                                  <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                                )}
-                                <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
-                                <span
-                                  className={[
-                                    "flex-1 truncate text-[11.5px] font-medium",
-                                    isVisible ? "text-foreground" : "text-muted-foreground line-through opacity-60",
-                                  ].join(" ")}
-                                  title={f.name}
-                                >
-                                  {f.name}
-                                </span>
-                                <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
-                              </button>
-                              {onHiddenPoiFoldersChange && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleFolderVisible(f.id);
-                                  }}
-                                  className="flex-shrink-0"
-                                  aria-label={isVisible ? `Ocultar ${f.name}` : `Mostrar ${f.name}`}
-                                  title={isVisible ? "Ocultar en mapa" : "Mostrar en mapa"}
-                                >
-                                  <IOSSwitch on={isVisible} />
-                                </button>
+                              {isOpen ? (
+                                <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                               )}
-                            </div>
+                              <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
+                              <span className="flex-1 truncate text-[11.5px] font-medium text-foreground" title={f.name}>
+                                {f.name}
+                              </span>
+                              <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
+                            </button>
                           </ContextMenuTrigger>
                           <ContextMenuContent className="z-[1100]">
-                            <ContextMenuItem onSelect={() => toggleFolderVisible(f.id)}>
-                              {isVisible ? "Ocultar en mapa" : "Mostrar en mapa"}
-                            </ContextMenuItem>
-                            <ContextMenuSeparator />
                             <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name })}>
                               <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar carpeta
                             </ContextMenuItem>
@@ -1089,6 +1072,17 @@ export const Sidebar = ({
                                 <ContextMenuSeparator />
                                 <ContextMenuItem onSelect={() => setClipboard(null)}>
                                   <X className="mr-2 h-3.5 w-3.5" /> Cancelar corte
+                                </ContextMenuItem>
+                              </>
+                            )}
+                            {onDeleteFolder && (
+                              <>
+                                <ContextMenuSeparator />
+                                <ContextMenuItem
+                                  onSelect={() => confirmDeleteFolder(f.id, f.name)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Mover carpeta a papelera
                                 </ContextMenuItem>
                               </>
                             )}
@@ -1157,21 +1151,126 @@ export const Sidebar = ({
                     toast.info("No hay POIs para borrar");
                     return;
                   }
-                  if (!window.confirm(`¿Borrar TODOS los POIs guardados? Se eliminarán ${total} puntos. Esta acción no se puede deshacer.`)) return;
-                  const txt = window.prompt(`Confirmación final: escribe BORRAR para eliminar los ${total} POIs.`);
-                  if (txt?.trim().toUpperCase() !== "BORRAR") {
-                    toast.info("Borrado cancelado");
-                    return;
-                  }
+                  if (!window.confirm(`¿Mover TODOS los ${total} POIs a la papelera? Podrás recuperarlos durante 30 días.`)) return;
                   onClearSavedPois();
                 }}
                 className="mt-1.5 w-full rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
               >
-                Borrar todos
+                Mover todos a papelera
               </button>
             </>
           )}
         </SidebarSection>
+
+        {(trashedPois.length > 0 || trashedFolders.length > 0) && (
+          <SidebarSection title={`Papelera · 30 días (${trashedPois.length + trashedFolders.length})`}>
+            <p className="mb-1.5 px-1 text-[10px] leading-relaxed text-text-muted">
+              Los elementos eliminados se borran definitivamente a los 30 días.
+            </p>
+            <div className="scrollbar-thin max-h-56 space-y-0.5 overflow-y-auto">
+              {trashedFolders.map((f) => {
+                const days = f.deleted_at
+                  ? Math.max(0, 30 - Math.floor((Date.now() - new Date(f.deleted_at).getTime()) / 86400000))
+                  : 30;
+                return (
+                  <div key={f.id} className="group flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-surface-2/60">
+                    <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                    <span className="flex-1 truncate text-[11.5px] text-muted-foreground line-through" title={f.name}>
+                      {f.name}
+                    </span>
+                    <span className="font-mono text-[9.5px] text-text-muted">{days}d</span>
+                    {onRestoreFolder && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await onRestoreFolder(f.id);
+                            toast.success(`"${f.name}" restaurada`);
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Error");
+                          }
+                        }}
+                        className="rounded px-1.5 py-0.5 text-[10px] text-primary opacity-0 hover:bg-primary/10 group-hover:opacity-100"
+                        title="Restaurar"
+                      >
+                        Restaurar
+                      </button>
+                    )}
+                    {onPurgeFolder && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm(`Eliminar "${f.name}" definitivamente? Esta acción no se puede deshacer.`)) return;
+                          try {
+                            await onPurgeFolder(f.id);
+                            toast.success("Eliminado definitivamente");
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Error");
+                          }
+                        }}
+                        className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                        aria-label="Borrar definitivamente"
+                        title="Borrar definitivamente"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {trashedPois.map((p) => {
+                const days = p.deleted_at
+                  ? Math.max(0, 30 - Math.floor((Date.now() - new Date(p.deleted_at).getTime()) / 86400000))
+                  : 30;
+                return (
+                  <div key={p.id} className="group flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-surface-2/60">
+                    <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: p.color || "#34D399" }} />
+                    <span className="flex-1 truncate text-[11.5px] text-muted-foreground line-through" title={p.name}>
+                      {p.name}
+                    </span>
+                    <span className="font-mono text-[9.5px] text-text-muted">{days}d</span>
+                    {onRestorePois && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await onRestorePois([p.id]);
+                            toast.success(`"${p.name}" restaurado`);
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Error");
+                          }
+                        }}
+                        className="rounded px-1.5 py-0.5 text-[10px] text-primary opacity-0 hover:bg-primary/10 group-hover:opacity-100"
+                        title="Restaurar"
+                      >
+                        Restaurar
+                      </button>
+                    )}
+                    {onPurgePois && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm(`Eliminar "${p.name}" definitivamente? Esta acción no se puede deshacer.`)) return;
+                          try {
+                            await onPurgePois([p.id]);
+                            toast.success("Eliminado definitivamente");
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Error");
+                          }
+                        }}
+                        className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                        aria-label="Borrar definitivamente"
+                        title="Borrar definitivamente"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </SidebarSection>
+        )}
 
         <SidebarSection title="Mapa base">
           <div className="flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">

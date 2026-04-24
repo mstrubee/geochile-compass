@@ -101,23 +101,30 @@ const Index = () => {
   const { user } = useAuth();
   const {
     pois,
+    trashedPois,
     addMany,
     update: updatePoi,
     moveMany: movePois,
     remove: removePoi,
     removeMany: removePois,
+    restore: restorePois,
+    purgePermanently: purgePois,
     clearAll: clearAllPois,
   } = useSavedPois();
-  const { folders, create: createFolder, rename: renameFolder, remove: deleteFolder, move: moveFolder, refresh: refreshFolders } = usePoiFolders();
+  const {
+    folders,
+    trashedFolders,
+    create: createFolder,
+    rename: renameFolder,
+    remove: deleteFolder,
+    restore: restoreFolder,
+    purgePermanently: purgeFolder,
+    move: moveFolder,
+    refresh: refreshFolders,
+  } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
   const [managerOpen, setManagerOpen] = useState(false);
-  const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(new Set());
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
-
-  // POIs visibles en mapa: excluye los que están en carpetas ocultas.
-  const visiblePois = hiddenPoiFolders.size
-    ? pois.filter((p) => !p.folder_id || !hiddenPoiFolders.has(p.folder_id))
-    : pois;
 
   const savePoisFromLayer = useCallback(
     (layerId: string) => {
@@ -536,8 +543,13 @@ const Index = () => {
           poiFolders={folders}
           onMoveFolder={moveFolder}
           onMovePois={movePois}
-          hiddenPoiFolders={hiddenPoiFolders}
-          onHiddenPoiFoldersChange={setHiddenPoiFolders}
+          onDeleteFolder={deleteFolder}
+          trashedPois={trashedPois}
+          trashedFolders={trashedFolders}
+          onRestorePois={restorePois}
+          onRestoreFolder={restoreFolder}
+          onPurgePois={purgePois}
+          onPurgeFolder={purgeFolder}
           microSubmode={microSubmode}
           onMicroSubmodeChange={setMicroSubmode}
           microBufferRadius={microBufferRadius}
@@ -584,7 +596,7 @@ const Index = () => {
             onFitIsochroneDone={handleFitIsoDone}
             isoMode={mode === "isochrone"}
             onMapClick={handleMapClick}
-            savedPois={visiblePois}
+            savedPois={pois}
             savedPoisVisible={savedPoisVisible}
             microzones={microzones}
             microActive={mode === "microzone"}

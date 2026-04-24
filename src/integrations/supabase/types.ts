@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           color: string | null
           created_at: string
+          deleted_at: string | null
           id: string
           name: string
           parent_id: string | null
@@ -27,6 +28,7 @@ export type Database = {
         Insert: {
           color?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           name: string
           parent_id?: string | null
@@ -36,6 +38,7 @@ export type Database = {
         Update: {
           color?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           name?: string
           parent_id?: string | null
@@ -57,6 +60,7 @@ export type Database = {
           category: string | null
           color: string | null
           created_at: string
+          deleted_at: string | null
           description: string | null
           folder_id: string | null
           icon: string | null
@@ -73,6 +77,7 @@ export type Database = {
           category?: string | null
           color?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           folder_id?: string | null
           icon?: string | null
@@ -89,6 +94,7 @@ export type Database = {
           category?: string | null
           color?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           folder_id?: string | null
           icon?: string | null
@@ -116,7 +122,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      purge_deleted_pois: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
