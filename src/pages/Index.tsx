@@ -49,7 +49,7 @@ const Index = () => {
   });
   const [nseFilter, setNseFilter] = useState<NSE | null>(null);
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
-  const [manzanaVariable, setManzanaVariable] = useState<ManzanaVariable>("density");
+  const [manzanaVariable, setManzanaVariable] = useState<ManzanaVariable>("nse");
   const [viewport, setViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
   // Capa GSE por manzana (Censo 2012)
   const [gseVariable, setGseVariable] = useState<GseVariable>("gse");
