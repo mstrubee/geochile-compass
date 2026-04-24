@@ -97,7 +97,7 @@
 }
 
 /* Leaflet popup theme overrides — tied to design tokens */
-.leaflet-container { background: hsl(var(--background)); }
+.leaflet-container { background: hsl(0 0% 100%); }
 .leaflet-popup-content-wrapper {
   background: hsl(var(--surface)) !important;
   border: 1px solid hsl(var(--border)) !important;
