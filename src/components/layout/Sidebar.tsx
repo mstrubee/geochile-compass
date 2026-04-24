@@ -38,6 +38,7 @@ interface SidebarProps {
   onClearIsochrones: () => void;
   onFocusIsochrone: (id: string) => void;
   isoLoading: boolean;
+  onToggleIsoMode: () => void;
   // Saved POIs
   savedPois: SavedPoi[];
   savedPoisVisible: boolean;
