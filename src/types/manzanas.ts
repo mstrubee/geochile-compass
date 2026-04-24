@@ -32,7 +32,9 @@ export interface ManzanaMetadata {
   source: ManzanaSource;
 }
 
-export interface ManzanaFeatureCollection extends FeatureCollection<Polygon, ManzanaProperties> {
+export interface ManzanaFeatureCollection {
+  type: "FeatureCollection";
+  features: ManzanaFeature[];
   metadata: ManzanaMetadata;
 }
 
