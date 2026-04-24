@@ -80,6 +80,16 @@ interface MapViewProps {
   onMapClick: (c: { lat: number; lng: number }) => void;
   savedPois: SavedPoi[];
   savedPoisVisible: boolean;
+  // Microzonas
+  microzones: Microzone[];
+  microActive: boolean;
+  microSubmode: MicrozoneSubmode;
+  microDraftVertices: Array<{ lat: number; lng: number }>;
+  onMicroAddVertex: (c: { lat: number; lng: number }) => void;
+  onMicroClosePolygon: () => void;
+  onMicroBufferClick: (c: { lat: number; lng: number }) => void;
+  fitMicrozoneId: string | null;
+  onFitMicrozoneDone: () => void;
 }
 
 export const MapView = ({
