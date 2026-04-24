@@ -18,7 +18,7 @@ import type { IsoMode, Isochrone } from "@/types/isochrones";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
 import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
 import { ISO_MODE_LABEL } from "@/types/isochrones";
-import { parseFile, getExtension } from "@/utils/fileParsers";
+import { parseFile, getExtension, splitByFolderPath } from "@/utils/fileParsers";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite";
@@ -295,6 +295,7 @@ export const Sidebar = ({
     const arr = Array.from(files);
     if (!arr.length) return;
     setBusy(true);
+    let layerOffset = userLayers.length;
     for (const file of arr) {
       try {
         if (!getExtension(file.name)) {
@@ -306,16 +307,39 @@ export const Sidebar = ({
           toast.error(`${file.name}: sin features válidas`);
           continue;
         }
-        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const color = colorPalette[(userLayers.length) % colorPalette.length];
-        onAddUserLayer({
-          id,
-          name: file.name.replace(/\.(geojson|json|kml|kmz)$/i, ""),
-          color,
-          visible: true,
-          data,
-        });
-        toast.success(`${file.name} cargado (${data.features.length} features)`);
+        const baseName = file.name.replace(/\.(geojson|json|kml|kmz)$/i, "");
+        const buckets = splitByFolderPath(data);
+        const hasHierarchy = buckets.some((b) => b.path.length > 0);
+
+        if (!hasHierarchy) {
+          const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          const color = colorPalette[layerOffset++ % colorPalette.length];
+          onAddUserLayer({ id, name: baseName, color, visible: true, data });
+          toast.success(`${file.name} cargado (${data.features.length} features)`);
+        } else {
+          // Una capa por carpeta hoja del KMZ/KML
+          let total = 0;
+          buckets.forEach((bucket, idx) => {
+            const id = `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 5)}`;
+            const color = colorPalette[layerOffset++ % colorPalette.length];
+            const suffix = bucket.path.length ? bucket.path.join(" / ") : "(raíz)";
+            const fc = {
+              type: "FeatureCollection" as const,
+              features: bucket.features,
+            };
+            onAddUserLayer({
+              id,
+              name: `${baseName} · ${suffix}`,
+              color,
+              visible: true,
+              data: fc,
+            });
+            total += bucket.features.length;
+          });
+          toast.success(
+            `${file.name} cargado (${total} features en ${buckets.length} carpetas)`,
+          );
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Error desconocido";
         toast.error(`${file.name}: ${msg}`);
