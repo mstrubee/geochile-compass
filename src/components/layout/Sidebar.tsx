@@ -216,6 +216,28 @@ export const Sidebar = ({
       return next;
     });
 
+  // Visibilidad por carpeta — apaga/prende la carpeta y todas sus descendientes en el mapa.
+  const toggleFolderVisible = (id: string) => {
+    if (!onHiddenPoiFoldersChange) return;
+    const current = hiddenPoiFolders ?? new Set<string>();
+    const next = new Set(current);
+    // Calcular descendientes inline (poiChildrenMap aún no definido aquí — usamos poiFolders directo)
+    const collect = (root: string, acc: Set<string>) => {
+      acc.add(root);
+      poiFolders.forEach((f) => {
+        if (f.parent_id === root) collect(f.id, acc);
+      });
+    };
+    const affected = new Set<string>();
+    collect(id, affected);
+    const isHidden = current.has(id);
+    affected.forEach((fid) => {
+      if (isHidden) next.delete(fid);
+      else next.add(fid);
+    });
+    onHiddenPoiFoldersChange(next);
+  };
+
   // Portapapeles para cortar/pegar (carpetas o POIs)
   const [clipboard, setClipboard] = useState<
     | { kind: "folder"; id: string; name: string }
