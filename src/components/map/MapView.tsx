@@ -90,6 +90,12 @@ interface MapViewProps {
   onMicroBufferClick: (c: { lat: number; lng: number }) => void;
   fitMicrozoneId: string | null;
   onFitMicrozoneDone: () => void;
+  flyTarget: {
+    id: number;
+    lat: number;
+    lng: number;
+    bbox: [number, number, number, number] | null;
+  } | null;
 }
 
 export const MapView = ({
