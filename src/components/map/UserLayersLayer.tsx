@@ -22,24 +22,47 @@ export const UserLayersLayer = ({ layers, fitId, onFitDone }: Props) => {
       let group = groups.get(ul.id);
       if (!group) {
         group = L.geoJSON(ul.data, {
-          style: () => ({
-            color: ul.color,
-            weight: 2,
-            fillColor: ul.color,
-            fillOpacity: 0.25,
-          }),
-          pointToLayer: (_f, latlng) =>
-            L.circleMarker(latlng, {
+          style: (feature) => {
+            const p = (feature?.properties ?? {}) as Record<string, unknown>;
+            const stroke = (p.stroke as string) || (p["stroke-color"] as string) || ul.color;
+            const fill = (p.fill as string) || stroke;
+            const weight = typeof p["stroke-width"] === "number" ? (p["stroke-width"] as number) : 2;
+            const fillOpacity =
+              typeof p["fill-opacity"] === "number" ? (p["fill-opacity"] as number) : 0.25;
+            const strokeOpacity =
+              typeof p["stroke-opacity"] === "number" ? (p["stroke-opacity"] as number) : 1;
+            return { color: stroke, weight, opacity: strokeOpacity, fillColor: fill, fillOpacity };
+          },
+          pointToLayer: (feature, latlng) => {
+            const p = (feature?.properties ?? {}) as Record<string, unknown>;
+            const iconUrl = (p.icon as string) || (p["marker-symbol"] as string);
+            if (typeof iconUrl === "string" && /^(https?:|data:)/i.test(iconUrl)) {
+              const scale = typeof p["icon-scale"] === "number" ? (p["icon-scale"] as number) : 1;
+              const size = Math.max(16, Math.round(32 * scale));
+              const icon = L.icon({
+                iconUrl,
+                iconSize: [size, size],
+                iconAnchor: [size / 2, size / 2],
+                popupAnchor: [0, -size / 2],
+                className: "user-layer-icon",
+              });
+              return L.marker(latlng, { icon });
+            }
+            return L.circleMarker(latlng, {
               radius: 5,
               color: ul.color,
               weight: 2,
               fillColor: ul.color,
               fillOpacity: 0.7,
-            }),
+            });
+          },
           onEachFeature: (feature, layer) => {
             const props = feature.properties ?? {};
             const name = props.name || props.Name || props.NAME || ul.name;
-            layer.bindPopup(`<strong>${name}</strong>`);
+            const desc = props.description || props.Description || "";
+            layer.bindPopup(
+              `<strong>${name}</strong>${desc ? `<br/><span style="font-size:11px;opacity:.8">${desc}</span>` : ""}`
+            );
           },
         });
         groups.set(ul.id, group);
