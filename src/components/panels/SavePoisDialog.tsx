@@ -23,7 +23,7 @@ export const SavePoisDialog = ({ open, onOpenChange, defaultName, pointCount, fo
   const [busy, setBusy] = useState(false);
 
   // Re-init when opening
-  useMemo(() => {
+  useEffect(() => {
     if (open) {
       setNewName(defaultName);
       setMode("new");
