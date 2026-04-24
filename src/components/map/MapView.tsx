@@ -5,7 +5,9 @@ import { CommuneLayer } from "./CommuneLayer";
 import { TrafficLayer } from "./TrafficLayer";
 import { NSELayer } from "./NSELayer";
 import { ManzanaLayer } from "./ManzanaLayer";
+import { UserLayersLayer } from "./UserLayersLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
+import type { UserLayer } from "@/types/userLayers";
 
 // Fix default Leaflet marker icon paths (when bundled)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -55,6 +57,9 @@ interface MapViewProps {
   manzanaData: ManzanaFeatureCollection | null;
   manzanaVariable: ManzanaVariable;
   onManzanaViewportChange: (bbox: [number, number, number, number], zoom: number) => void;
+  userLayers: UserLayer[];
+  fitUserLayerId: string | null;
+  onFitUserLayerDone: () => void;
 }
 
 export const MapView = ({
@@ -66,6 +71,9 @@ export const MapView = ({
   manzanaData,
   manzanaVariable,
   onManzanaViewportChange,
+  userLayers,
+  fitUserLayerId,
+  onFitUserLayerDone,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -94,6 +102,11 @@ export const MapView = ({
       <CommuneLayer visible={layers.communes} />
       <NSELayer visible={layers.nse} nseFilter={nseFilter} trafficFilter={trafficFilter} />
       <TrafficLayer visible={layers.traffic} nseFilter={nseFilter} trafficFilter={trafficFilter} />
+      <UserLayersLayer
+        layers={userLayers}
+        fitId={fitUserLayerId}
+        onFitDone={onFitUserLayerDone}
+      />
     </MapContainer>
   );
 };

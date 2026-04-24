@@ -1,7 +1,11 @@
+import { useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import type { LayerKey, LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
+import type { UserLayer } from "@/types/userLayers";
+import { parseFile, getExtension } from "@/utils/fileParsers";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite";
@@ -13,6 +17,10 @@ interface SidebarProps {
   onManzanaVariableChange: (v: ManzanaVariable) => void;
   manzanaLoading: boolean;
   manzanaCount: number;
+  userLayers: UserLayer[];
+  onAddUserLayer: (layer: UserLayer) => void;
+  onToggleUserLayer: (id: string) => void;
+  onRemoveUserLayer: (id: string) => void;
 }
 
 interface LayerRow {
@@ -90,7 +98,59 @@ export const Sidebar = ({
   manzanaVariable,
   onManzanaVariableChange,
   manzanaCount,
+  userLayers,
+  onAddUserLayer,
+  onToggleUserLayer,
+  onRemoveUserLayer,
 }: SidebarProps) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const colorPalette = [
+    "#34D399", "#F472B6", "#FBBF24", "#60A5FA",
+    "#A78BFA", "#FB7185", "#22D3EE", "#FB923C",
+  ];
+
+  const handleFiles = async (files: FileList | File[]) => {
+    const arr = Array.from(files);
+    if (!arr.length) return;
+    setBusy(true);
+    for (const file of arr) {
+      try {
+        if (!getExtension(file.name)) {
+          toast.error(`${file.name}: formato no soportado`);
+          continue;
+        }
+        const data = await parseFile(file);
+        if (!data.features?.length) {
+          toast.error(`${file.name}: sin features válidas`);
+          continue;
+        }
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const color = colorPalette[(userLayers.length) % colorPalette.length];
+        onAddUserLayer({
+          id,
+          name: file.name.replace(/\.(geojson|json|kml|kmz)$/i, ""),
+          color,
+          visible: true,
+          data,
+        });
+        toast.success(`${file.name} cargado (${data.features.length} features)`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Error desconocido";
+        toast.error(`${file.name}: ${msg}`);
+      }
+    }
+    setBusy(false);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files);
+  };
+
   const variables: { key: ManzanaVariable; label: string }[] = [
     { key: "density", label: "Densidad" },
     { key: "nse", label: "NSE" },
@@ -230,14 +290,83 @@ export const Sidebar = ({
         </SidebarSection>
 
         <SidebarSection title="Archivos">
-          <div className="cursor-pointer rounded-xl border border-dashed border-border-2 px-2 py-4 text-center transition-colors hover:border-primary/60 hover:bg-primary/5">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".geojson,.json,.kml,.kmz,application/geo+json,application/json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) handleFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={handleDrop}
+            className={[
+              "cursor-pointer rounded-xl border border-dashed px-2 py-4 text-center transition-colors",
+              dragActive
+                ? "border-primary bg-primary/10"
+                : "border-border-2 hover:border-primary/60 hover:bg-primary/5",
+            ].join(" ")}
+          >
             <FolderOpen className="mx-auto h-5 w-5 text-muted-foreground" />
             <p className="mt-2 text-[12px] leading-tight text-muted-foreground">
-              <strong className="text-foreground">Arrastra o haz clic</strong>
+              <strong className="text-foreground">
+                {busy ? "Procesando..." : "Arrastra o haz clic"}
+              </strong>
               <br />
-              <span className="text-text-muted">KMZ · KML · GeoJSON</span>
+              <span className="text-text-muted">KMZ · KML · GeoJSON · máx 20MB</span>
             </p>
           </div>
+
+          {userLayers.length > 0 && (
+            <div className="mt-2.5 space-y-0.5">
+              {userLayers.map((ul) => (
+                <div
+                  key={ul.id}
+                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2/60"
+                >
+                  <button
+                    onClick={() => onToggleUserLayer(ul.id)}
+                    className="flex flex-1 items-center gap-2 text-left"
+                    aria-pressed={ul.visible}
+                  >
+                    <span
+                      className="h-2 w-2 flex-shrink-0 rounded-full"
+                      style={{ backgroundColor: ul.color }}
+                    />
+                    <span
+                      className={[
+                        "flex-1 truncate text-[12px]",
+                        ul.visible ? "text-foreground" : "text-muted-foreground",
+                      ].join(" ")}
+                      title={ul.name}
+                    >
+                      {ul.name}
+                    </span>
+                    <span className="font-mono text-[10px] text-text-muted">
+                      {ul.data.features.length}
+                    </span>
+                    <IOSSwitch on={ul.visible} />
+                  </button>
+                  <button
+                    onClick={() => onRemoveUserLayer(ul.id)}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
+                    aria-label={`Eliminar ${ul.name}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </SidebarSection>
 
         <SidebarSection title="Mapa base">
