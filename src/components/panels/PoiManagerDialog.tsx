@@ -252,16 +252,14 @@ export const PoiManagerDialog = ({
             <>
               <span className="flex-1 text-xs font-medium">{f.name}</span>
               <span className="font-mono text-[10px] text-muted-foreground">{myPois.length}</span>
-              {depth === 0 && (
-                <button
-                  onClick={() => { setCreatingIn(f.id); setNewFolderName(""); }}
-                  className="hidden h-6 w-6 items-center justify-center rounded hover:bg-primary/10 hover:text-primary group-hover:flex"
-                  aria-label="Nueva subcarpeta"
-                  title="Nueva subcarpeta"
-                >
-                  <FolderPlus className="h-3 w-3" />
-                </button>
-              )}
+              <button
+                onClick={() => { setCreatingIn(f.id); setNewFolderName(""); setExpanded((p) => new Set(p).add(f.id)); }}
+                className="hidden h-6 w-6 items-center justify-center rounded hover:bg-primary/10 hover:text-primary group-hover:flex"
+                aria-label="Nueva subcarpeta"
+                title="Nueva subcarpeta"
+              >
+                <FolderPlus className="h-3 w-3" />
+              </button>
               <button
                 onClick={() => { setEditingFolderId(f.id); setFolderDraft(f.name); }}
                 className="hidden h-6 w-6 items-center justify-center rounded hover:bg-primary/10 hover:text-primary group-hover:flex"
@@ -318,12 +316,14 @@ export const PoiManagerDialog = ({
 
   const orphanPois = poisByFolder.get(null) ?? [];
   const rootOpen = expanded.has("__root__");
+  const folderPath = (id: string): string => {
+    const f = folders.find((x) => x.id === id);
+    if (!f) return "";
+    return f.parent_id ? `${folderPath(f.parent_id)} › ${f.name}` : f.name;
+  };
   const folderOptions = [
     { id: "__null__", label: "— Sin carpeta (raíz) —" },
-    ...folders.map((f) => {
-      const parent = folders.find((p) => p.id === f.parent_id);
-      return { id: f.id, label: parent ? `${parent.name} › ${f.name}` : f.name };
-    }),
+    ...folders.map((f) => ({ id: f.id, label: folderPath(f.id) })),
   ];
 
   return (
