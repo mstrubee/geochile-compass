@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -78,6 +78,8 @@ interface SidebarProps {
   poiFolders: PoiFolder[];
   onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
+  /** Importa archivos KMZ/KML/GeoJSON directamente a una carpeta destino (sin diálogo). */
+  onImportFilesIntoFolder?: (files: File[], folderId: string | null) => Promise<void> | void;
   // Papelera
   trashedPois?: SavedPoi[];
   trashedFolders?: PoiFolder[];
@@ -207,6 +209,7 @@ export const Sidebar = ({
   poiFolders = [],
   onMoveFolder,
   onMovePois,
+  onImportFilesIntoFolder,
   trashedPois = [],
   trashedFolders = [],
   onRestorePois,
@@ -218,6 +221,9 @@ export const Sidebar = ({
   onLoadOverpass,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Input separado para "Cargar KMZ a esta carpeta" (clic derecho sobre carpeta POI)
+  const folderImportInputRef = useRef<HTMLInputElement>(null);
+  const folderImportTargetIdRef = useRef<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [osmText, setOsmText] = useState("");
@@ -870,6 +876,25 @@ export const Sidebar = ({
               e.target.value = "";
             }}
           />
+          {/* Input oculto para "cargar a esta carpeta" desde clic derecho en árbol POI */}
+          <input
+            ref={folderImportInputRef}
+            type="file"
+            accept=".geojson,.json,.kml,.kmz,application/geo+json,application/json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
+            multiple
+            className="hidden"
+            onChange={async (e) => {
+              const files = e.target.files ? Array.from(e.target.files) : [];
+              const target = folderImportTargetIdRef.current;
+              e.target.value = "";
+              if (!files.length || !onImportFilesIntoFolder) return;
+              try {
+                await onImportFilesIntoFolder(files, target);
+              } finally {
+                folderImportTargetIdRef.current = null;
+              }
+            }}
+          />
           <div
             onClick={() => fileInputRef.current?.click()}
             onDragOver={(e) => {
@@ -1182,6 +1207,17 @@ export const Sidebar = ({
                               <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
                               {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
                             </ContextMenuItem>
+                            {onImportFilesIntoFolder && (
+                              <ContextMenuItem
+                                onSelect={() => {
+                                  folderImportTargetIdRef.current = f.id;
+                                  folderImportInputRef.current?.click();
+                                }}
+                              >
+                                <Upload className="mr-2 h-3.5 w-3.5" />
+                                Cargar KMZ/KML/GeoJSON a esta carpeta…
+                              </ContextMenuItem>
+                            )}
                             {(() => {
                               const parent = poiFolders.find((x) => x.id === f.parent_id);
                               const grandparentId = parent?.parent_id ?? null;

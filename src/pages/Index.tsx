@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
 import { fetchOverpassPreset, fetchOverpassFreeText, bboxAreaDegSq } from "@/services/overpassService";
 import { extractPointPois, countPoints, type PoiInsert } from "@/types/pois";
+import { parseFile, getExtension } from "@/utils/fileParsers";
 import type { NSE } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
 import type { LayerState } from "@/types/layers";
@@ -152,45 +153,60 @@ const Index = () => {
     [user, userLayers, navigate],
   );
 
+  /**
+   * Guarda items con `_folderPath` opcional, replicando subcarpetas dentro
+   * de `folderId` (carpeta destino raíz; null = sin carpeta). Devuelve
+   * { inserted, foldersCreated }.
+   */
+  const savePoiItemsToFolder = useCallback(
+    async (
+      items: PoiInsert[],
+      folderId: string | null,
+    ): Promise<{ inserted: number; foldersCreated: number }> => {
+      const FOLDER_PATH_KEY = "_folderPath";
+      const cache = new Map<string, string | null>();
+      cache.set("", folderId);
+
+      const ensureFolder = async (path: string[]): Promise<string | null> => {
+        if (!path.length) return folderId;
+        const key = path.join("\u0000");
+        if (cache.has(key)) return cache.get(key)!;
+        const parent = await ensureFolder(path.slice(0, -1));
+        const name = path[path.length - 1];
+        const f = await createFolder(name, parent, null);
+        cache.set(key, f.id);
+        return f.id;
+      };
+
+      const itemsWithFolders: PoiInsert[] = [];
+      for (const item of items) {
+        const props = (item.properties ?? {}) as Record<string, unknown>;
+        const raw = props[FOLDER_PATH_KEY];
+        const path = Array.isArray(raw)
+          ? (raw.filter((x) => typeof x === "string") as string[])
+          : [];
+        const targetFolder = await ensureFolder(path);
+        itemsWithFolders.push({ ...item, folder_id: targetFolder });
+      }
+
+      const inserted = await addMany(itemsWithFolders, folderId);
+      return { inserted, foldersCreated: cache.size - 1 };
+    },
+    [addMany, createFolder],
+  );
+
   const confirmSavePois = useCallback(
     async (folderId: string | null) => {
       if (!savePending) return;
       try {
-        // Replicar las carpetas/subcarpetas detectadas en el archivo (KMZ/KML).
-        // Cada PoiInsert puede llevar properties._folderPath = ["Padre", "Hijo"].
-        // Las carpetas se crean bajo `folderId` (destino elegido por el usuario).
-        const FOLDER_PATH_KEY = "_folderPath";
-        const cache = new Map<string, string | null>(); // "a\u0000b" -> folderId
-        cache.set("", folderId);
-
-        const ensureFolder = async (path: string[]): Promise<string | null> => {
-          if (!path.length) return folderId;
-          const key = path.join("\u0000");
-          if (cache.has(key)) return cache.get(key)!;
-          const parent = await ensureFolder(path.slice(0, -1));
-          const name = path[path.length - 1];
-          const f = await createFolder(name, parent, null);
-          cache.set(key, f.id);
-          return f.id;
-        };
-
-        const itemsWithFolders: PoiInsert[] = [];
-        for (const item of savePending.items) {
-          const props = (item.properties ?? {}) as Record<string, unknown>;
-          const raw = props[FOLDER_PATH_KEY];
-          const path = Array.isArray(raw)
-            ? (raw.filter((x) => typeof x === "string") as string[])
-            : [];
-          const targetFolder = await ensureFolder(path);
-          itemsWithFolders.push({ ...item, folder_id: targetFolder });
-        }
-
-        const n = await addMany(itemsWithFolders, folderId);
-        const createdFolders = cache.size - 1; // descontamos la entrada raíz
+        const { inserted, foldersCreated } = await savePoiItemsToFolder(
+          savePending.items,
+          folderId,
+        );
         toast.success(
-          createdFolders > 0
-            ? `${n} POIs guardados · ${createdFolders} carpetas creadas`
-            : `${n} POIs guardados`,
+          foldersCreated > 0
+            ? `${inserted} POIs guardados · ${foldersCreated} carpetas creadas`
+            : `${inserted} POIs guardados`,
         );
         setSavePending(null);
       } catch (err) {
@@ -198,7 +214,58 @@ const Index = () => {
         toast.error(`No se pudieron guardar: ${msg}`);
       }
     },
-    [savePending, addMany, createFolder],
+    [savePending, savePoiItemsToFolder],
+  );
+
+  /**
+   * Importa archivos KMZ/KML/GeoJSON directamente a una carpeta destino,
+   * sin pasar por el diálogo de selección de carpeta.
+   */
+  const importFilesIntoFolder = useCallback(
+    async (files: File[], folderId: string | null) => {
+      if (!user) {
+        toast.error("Inicia sesión para guardar POIs");
+        navigate("/auth");
+        return;
+      }
+      if (!files.length) return;
+      let totalInserted = 0;
+      let totalFolders = 0;
+      let totalFiles = 0;
+      for (const file of files) {
+        try {
+          if (!getExtension(file.name)) {
+            toast.error(`${file.name}: formato no soportado`);
+            continue;
+          }
+          const data = await parseFile(file);
+          const baseName = file.name.replace(/\.(geojson|json|kml|kmz)$/i, "");
+          const items = extractPointPois(data, baseName);
+          if (!items.length) {
+            toast.error(`${file.name}: sin puntos para guardar`);
+            continue;
+          }
+          const { inserted, foldersCreated } = await savePoiItemsToFolder(
+            items,
+            folderId,
+          );
+          totalInserted += inserted;
+          totalFolders += foldersCreated;
+          totalFiles += 1;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Error";
+          toast.error(`${file.name}: ${msg}`);
+        }
+      }
+      if (totalInserted > 0) {
+        toast.success(
+          totalFolders > 0
+            ? `${totalInserted} POIs guardados desde ${totalFiles} archivo(s) · ${totalFolders} subcarpetas creadas`
+            : `${totalInserted} POIs guardados desde ${totalFiles} archivo(s)`,
+        );
+      }
+    },
+    [user, navigate, savePoiItemsToFolder],
   );
 
   const isoColorPalette = [
@@ -550,6 +617,7 @@ const Index = () => {
           poiFolders={folders}
           onMoveFolder={moveFolder}
           onMovePois={movePois}
+          onImportFilesIntoFolder={importFilesIntoFolder}
           onDeleteFolder={deleteFolder}
           trashedPois={trashedPois}
           trashedFolders={trashedFolders}
