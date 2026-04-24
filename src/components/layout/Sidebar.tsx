@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -10,6 +9,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { LayerKey, LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
 import type { GseVariable } from "@/types/gse";
@@ -263,36 +263,6 @@ export const Sidebar = ({
       return next;
     });
 
-  // Visibilidad por carpeta (estilo Google Earth). Si el padre no controla el estado,
-  // se mantiene localmente como fallback. Una carpeta está visible si ni ella ni
-  // ninguno de sus ancestros está en `hiddenSet`.
-  const [hiddenPoiFoldersInternal, setHiddenPoiFoldersInternal] = useState<Set<string>>(new Set());
-  const hiddenSet = hiddenPoiFolders ?? hiddenPoiFoldersInternal;
-  const setHiddenSet = (next: Set<string>) => {
-    if (onHiddenPoiFoldersChange) onHiddenPoiFoldersChange(next);
-    else setHiddenPoiFoldersInternal(next);
-  };
-  // Mapa id -> parent_id para resolver herencia de visibilidad rápidamente
-  const folderParentMap = useMemo(() => {
-    const m = new Map<string, string | null>();
-    poiFolders.forEach((f) => m.set(f.id, f.parent_id));
-    return m;
-  }, [poiFolders]);
-  const isFolderEffectivelyHidden = (id: string): boolean => {
-    let cur: string | null | undefined = id;
-    while (cur) {
-      if (hiddenSet.has(cur)) return true;
-      cur = folderParentMap.get(cur) ?? null;
-    }
-    return false;
-  };
-  const toggleFolderVisible = (id: string) => {
-    const next = new Set(hiddenSet);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setHiddenSet(next);
-  };
-
   // Portapapeles para cortar/pegar (carpetas o POIs)
   const [clipboard, setClipboard] = useState<
     | { kind: "folder"; id: string; name: string }
@@ -366,6 +336,23 @@ export const Sidebar = ({
     };
     walk(id);
     return out;
+  };
+
+  // Toggle de visibilidad de carpeta con propagación a TODAS las subcarpetas (estilo Google Earth):
+  // al ocultar una carpeta, sus descendientes se marcan como ocultas; al mostrarla, se desocultan.
+  const togglePoiFolderVisibility = (id: string) => {
+    if (!onHiddenPoiFoldersChange) return;
+    const current = hiddenPoiFolders ?? new Set<string>();
+    const next = new Set(current);
+    const willHide = !next.has(id);
+    const affected = id === "__orphan__" ? new Set<string>() : descendantsOfFolder(id);
+    affected.add(id);
+    if (willHide) {
+      affected.forEach((x) => next.add(x));
+    } else {
+      affected.forEach((x) => next.delete(x));
+    }
+    onHiddenPoiFoldersChange(next);
   };
 
   const handlePaste = async (targetFolderId: string | null) => {
@@ -1208,26 +1195,28 @@ export const Sidebar = ({
                       !!clipboard &&
                       !(clipboard.kind === "folder" && clipboard.id === f.id) &&
                       !(clipboard.kind === "folder" && descendantsOfFolder(clipboard.id).has(f.id));
+                    const isHidden = hiddenPoiFolders?.has(f.id) ?? false;
                     return (
                       <div key={f.id}>
-                        <ContextMenu>
-                          <ContextMenuTrigger asChild>
-                            <div
-                              className="group flex w-full items-center gap-1 rounded-md py-1 pr-1 hover:bg-surface-2/60"
-                              style={{ paddingLeft: `${depth * 12 + 2}px` }}
-                            >
-                              <Checkbox
-                                checked={!isFolderEffectivelyHidden(f.id)}
-                                onCheckedChange={() => toggleFolderVisible(f.id)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="h-3 w-3 flex-shrink-0"
-                                aria-label={`Mostrar/ocultar ${f.name}`}
-                                title="Mostrar/ocultar en el mapa"
-                              />
+                        <div className="flex w-full items-center gap-1">
+                          <div
+                            className="flex flex-shrink-0 items-center"
+                            style={{ paddingLeft: `${depth * 12 + 2}px` }}
+                          >
+                            <Checkbox
+                              checked={!isHidden}
+                              onCheckedChange={() => togglePoiFolderVisibility(f.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-3.5 w-3.5"
+                              aria-label={isHidden ? "Mostrar carpeta" : "Ocultar carpeta"}
+                            />
+                          </div>
+                          <ContextMenu>
+                            <ContextMenuTrigger asChild>
                               <button
                                 type="button"
                                 onClick={() => togglePoiFolder(f.id)}
-                                className="flex flex-1 items-center gap-1 text-left min-w-0"
+                                className="flex flex-1 items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
                               >
                                 {isOpen ? (
                                   <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
@@ -1240,103 +1229,102 @@ export const Sidebar = ({
                                 </span>
                                 <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
                               </button>
-                            </div>
-                          </ContextMenuTrigger>
-                          <ContextMenuContent className="z-[1100]">
-                            <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name })}>
-                              <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar carpeta
-                            </ContextMenuItem>
-                            <ContextMenuItem
-                              disabled={!canPasteHere}
-                              onSelect={() => handlePaste(f.id)}
-                            >
-                              <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
-                              {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
-                            </ContextMenuItem>
-                            {onCreateFolder && (
-                              <ContextMenuItem
-                                onSelect={async () => {
-                                  const name = window.prompt(
-                                    `Nombre de la nueva subcarpeta dentro de "${f.name}":`,
-                                    "",
-                                  );
-                                  if (!name?.trim()) return;
-                                  try {
-                                    await onCreateFolder(name.trim(), f.id);
-                                    // Asegurar que la carpeta padre quede expandida para ver la nueva
-                                    setExpandedPoiFolders((prev) => {
-                                      const next = new Set(prev);
-                                      next.add(f.id);
-                                      return next;
-                                    });
-                                    toast.success(`Subcarpeta "${name.trim()}" creada`);
-                                  } catch (err) {
-                                    toast.error(err instanceof Error ? err.message : "Error al crear");
-                                  }
-                                }}
-                              >
-                                <FolderPlus className="mr-2 h-3.5 w-3.5" />
-                                Crear subcarpeta…
+                            </ContextMenuTrigger>
+                            <ContextMenuContent className="z-[1100]">
+                              <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name })}>
+                                <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar carpeta
                               </ContextMenuItem>
-                            )}
-                            {onImportFilesIntoFolder && (
                               <ContextMenuItem
-                                onSelect={() => {
-                                  folderImportTargetIdRef.current = f.id;
-                                  folderImportInputRef.current?.click();
-                                }}
+                                disabled={!canPasteHere}
+                                onSelect={() => handlePaste(f.id)}
                               >
-                                <Upload className="mr-2 h-3.5 w-3.5" />
-                                Cargar KMZ/KML/GeoJSON a esta carpeta…
+                                <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
+                                {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
                               </ContextMenuItem>
-                            )}
-                            {(() => {
-                              const parent = poiFolders.find((x) => x.id === f.parent_id);
-                              const grandparentId = parent?.parent_id ?? null;
-                              const isRoot = f.parent_id === null;
-                              return (
+                              {onCreateFolder && (
                                 <ContextMenuItem
-                                  disabled={isRoot}
                                   onSelect={async () => {
-                                    if (isRoot) return;
+                                    const name = window.prompt(
+                                      `Nombre de la nueva subcarpeta dentro de "${f.name}":`,
+                                      "",
+                                    );
+                                    if (!name?.trim()) return;
                                     try {
-                                      await onMoveFolder(f.id, grandparentId);
-                                      toast.success(
-                                        grandparentId === null
-                                          ? `"${f.name}" movida a la raíz`
-                                          : `"${f.name}" subida un nivel`,
-                                      );
+                                      await onCreateFolder(name.trim(), f.id);
+                                      setExpandedPoiFolders((prev) => {
+                                        const next = new Set(prev);
+                                        next.add(f.id);
+                                        return next;
+                                      });
+                                      toast.success(`Subcarpeta "${name.trim()}" creada`);
                                     } catch (err) {
-                                      toast.error(err instanceof Error ? err.message : "Error al mover");
+                                      toast.error(err instanceof Error ? err.message : "Error al crear");
                                     }
                                   }}
                                 >
-                                  <CornerLeftUp className="mr-2 h-3.5 w-3.5" />
-                                  Subir un nivel{isRoot ? " (ya está en raíz)" : ""}
+                                  <FolderPlus className="mr-2 h-3.5 w-3.5" />
+                                  Crear subcarpeta…
                                 </ContextMenuItem>
-                              );
-                            })()}
-                            {clipboard && (
-                              <>
-                                <ContextMenuSeparator />
-                                <ContextMenuItem onSelect={() => setClipboard(null)}>
-                                  <X className="mr-2 h-3.5 w-3.5" /> Cancelar corte
-                                </ContextMenuItem>
-                              </>
-                            )}
-                            {onDeleteFolder && (
-                              <>
-                                <ContextMenuSeparator />
+                              )}
+                              {onImportFilesIntoFolder && (
                                 <ContextMenuItem
-                                  onSelect={() => confirmDeleteFolder(f.id, f.name)}
-                                  className="text-destructive focus:text-destructive"
+                                  onSelect={() => {
+                                    folderImportTargetIdRef.current = f.id;
+                                    folderImportInputRef.current?.click();
+                                  }}
                                 >
-                                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Mover carpeta a papelera
+                                  <Upload className="mr-2 h-3.5 w-3.5" />
+                                  Cargar KMZ/KML/GeoJSON a esta carpeta…
                                 </ContextMenuItem>
-                              </>
-                            )}
-                          </ContextMenuContent>
-                        </ContextMenu>
+                              )}
+                              {(() => {
+                                const parent = poiFolders.find((x) => x.id === f.parent_id);
+                                const grandparentId = parent?.parent_id ?? null;
+                                const isRoot = f.parent_id === null;
+                                return (
+                                  <ContextMenuItem
+                                    disabled={isRoot}
+                                    onSelect={async () => {
+                                      if (isRoot) return;
+                                      try {
+                                        await onMoveFolder(f.id, grandparentId);
+                                        toast.success(
+                                          grandparentId === null
+                                            ? `"${f.name}" movida a la raíz`
+                                            : `"${f.name}" subida un nivel`,
+                                        );
+                                      } catch (err) {
+                                        toast.error(err instanceof Error ? err.message : "Error al mover");
+                                      }
+                                    }}
+                                  >
+                                    <CornerLeftUp className="mr-2 h-3.5 w-3.5" />
+                                    Subir un nivel{isRoot ? " (ya está en raíz)" : ""}
+                                  </ContextMenuItem>
+                                );
+                              })()}
+                              {clipboard && (
+                                <>
+                                  <ContextMenuSeparator />
+                                  <ContextMenuItem onSelect={() => setClipboard(null)}>
+                                    <X className="mr-2 h-3.5 w-3.5" /> Cancelar corte
+                                  </ContextMenuItem>
+                                </>
+                              )}
+                              {onDeleteFolder && (
+                                <>
+                                  <ContextMenuSeparator />
+                                  <ContextMenuItem
+                                    onSelect={() => confirmDeleteFolder(f.id, f.name)}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Mover carpeta a papelera
+                                  </ContextMenuItem>
+                                </>
+                              )}
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        </div>
                         {isOpen && (
                           <div>
                             {subs.map((s) => renderFolder(s, depth + 1))}
@@ -1358,19 +1346,20 @@ export const Sidebar = ({
                         <ContextMenu>
                           <ContextMenuTrigger asChild>
                             <div>
-                              <div className="group flex w-full items-center gap-1 rounded-md py-1 pr-1 hover:bg-surface-2/60">
-                                <Checkbox
-                                  checked={!hiddenSet.has("__orphan__")}
-                                  onCheckedChange={() => toggleFolderVisible("__orphan__")}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="h-3 w-3 flex-shrink-0"
-                                  aria-label="Mostrar/ocultar POIs sin carpeta"
-                                  title="Mostrar/ocultar en el mapa"
-                                />
+                              <div className="flex w-full items-center gap-1">
+                                <div className="flex flex-shrink-0 items-center pl-[2px]">
+                                  <Checkbox
+                                    checked={!(hiddenPoiFolders?.has("__orphan__") ?? false)}
+                                    onCheckedChange={() => togglePoiFolderVisibility("__orphan__")}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="h-3.5 w-3.5"
+                                    aria-label="Mostrar/ocultar POIs sin carpeta"
+                                  />
+                                </div>
                                 <button
                                   type="button"
                                   onClick={() => togglePoiFolder("__root__")}
-                                  className="flex flex-1 items-center gap-1 text-left min-w-0"
+                                  className="flex flex-1 items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
                                 >
                                   {orphanOpen ? (
                                     <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
