@@ -456,7 +456,11 @@ const Index = () => {
             onFitMicrozoneDone={() => setFitMicrozoneId(null)}
           />
 
-          <SearchBar />
+          <SearchBar
+            onSelect={(r: SearchResult) =>
+              setFlyTarget({ id: Date.now(), lat: r.lat, lng: r.lng, bbox: r.bbox })
+            }
+          />
           <Legend
             shifted={panelOpen}
             layers={layers}
