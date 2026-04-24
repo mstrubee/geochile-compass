@@ -124,6 +124,28 @@ const Index = () => {
     refresh: refreshFolders,
   } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
+  const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(new Set());
+
+  // Filtra POIs visibles según la jerarquía: si una carpeta padre está oculta,
+  // todos sus descendientes también lo están. La clave "__orphan__" controla los POIs sin carpeta.
+  const visiblePois = useMemo(() => {
+    if (hiddenPoiFolders.size === 0) return pois;
+    const parentMap = new Map(folders.map((f) => [f.id, f.parent_id]));
+    const isFolderHidden = (id: string | null): boolean => {
+      let cur: string | null = id;
+      while (cur) {
+        if (hiddenPoiFolders.has(cur)) return true;
+        cur = parentMap.get(cur) ?? null;
+      }
+      return false;
+    };
+    return pois.filter((p) =>
+      p.folder_id === null
+        ? !hiddenPoiFolders.has("__orphan__")
+        : !isFolderHidden(p.folder_id),
+    );
+  }, [pois, folders, hiddenPoiFolders]);
+
   const [managerOpen, setManagerOpen] = useState(false);
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
 
