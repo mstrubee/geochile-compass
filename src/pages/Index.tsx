@@ -233,6 +233,7 @@ const Index = () => {
           onClearIsochrones={clearIsochrones}
           onFocusIsochrone={setFitIsoId}
           isoLoading={isoLoading}
+          onToggleIsoMode={() => setMode((m) => (m === "isochrone" ? "none" : "isochrone"))}
           savedPois={pois}
           savedPoisVisible={savedPoisVisible}
           onToggleSavedPoisVisible={() => setSavedPoisVisible((v) => !v)}
