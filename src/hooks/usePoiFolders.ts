@@ -123,11 +123,45 @@ export const usePoiFolders = () => {
 
   const purgePermanently = useCallback(
     async (id: string) => {
-      const { error } = await supabase.from("poi_folders").delete().eq("id", id);
-      if (error) throw new Error(error.message);
+      if (!user) throw new Error("Debes iniciar sesión");
+      // Recoger TODOS los descendientes (incluyendo carpetas en papelera)
+      // para eliminarlos en orden hijos→padres y evitar violaciones de FK.
+      const { data: allFolders } = await supabase
+        .from("poi_folders")
+        .select("id,parent_id")
+        .eq("user_id", user.id);
+      const all = (allFolders ?? []) as { id: string; parent_id: string | null }[];
+      const order: string[] = [];
+      const visit = (pid: string) => {
+        for (const c of all.filter((f) => f.parent_id === pid)) {
+          visit(c.id);
+        }
+        order.push(pid);
+      };
+      visit(id);
+
+      // Primero, soltar/borrar POIs asociados a estas carpetas en lotes.
+      const CHUNK = 100;
+      for (let i = 0; i < order.length; i += CHUNK) {
+        const slice = order.slice(i, i + CHUNK);
+        const { error: pErr } = await supabase
+          .from("pois")
+          .delete()
+          .in("folder_id", slice);
+        if (pErr) {
+          console.error("[purgeFolder] borrar POIs falló", pErr);
+          throw new Error(pErr.message);
+        }
+      }
+
+      // Luego borrar carpetas hijas→padre.
+      for (const fid of order) {
+        const { error } = await supabase.from("poi_folders").delete().eq("id", fid);
+        if (error) throw new Error(error.message);
+      }
       await refresh();
     },
-    [refresh],
+    [user, refresh],
   );
 
   const move = useCallback(
