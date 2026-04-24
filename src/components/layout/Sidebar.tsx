@@ -413,17 +413,72 @@ export const Sidebar = ({
         <SidebarSection title="Datos OpenStreetMap">
           <div className="mb-2 flex items-center gap-2 rounded-lg bg-surface-2/60 px-2.5 py-1.5 text-[11px]">
             <span className="h-1.5 w-1.5 animate-blink rounded-full bg-brand-green" />
-            <span className="flex-1 text-muted-foreground">OSM Overpass API</span>
+            <span className="flex-1 text-muted-foreground">OSM Overpass · área visible</span>
             <span className="font-medium text-brand-green">activo</span>
           </div>
-          <button className="mb-1.5 flex w-full items-center gap-2 rounded-lg bg-surface-2/60 px-2.5 py-2 text-[12px] text-foreground transition-all hover:bg-surface-2">
-            <Wifi className="h-3.5 w-3.5 text-muted-foreground" /> Cargar POIs del área visible
-          </button>
-          <button className="flex w-full items-center gap-2 rounded-lg bg-surface-2/60 px-2.5 py-2 text-[12px] text-foreground transition-all hover:bg-surface-2">
-            <Building2 className="h-3.5 w-3.5 text-muted-foreground" /> Cargar edificios / manzanas
-          </button>
+
+          {/* Presets */}
+          <div className="mb-2 grid grid-cols-2 gap-1.5">
+            {OVERPASS_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                disabled={osmLoading}
+                onClick={async () => {
+                  setOsmLoading(true);
+                  try {
+                    await onLoadOverpass({ type: "preset", presetId: p.id, label: p.label });
+                  } finally {
+                    setOsmLoading(false);
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-lg bg-surface-2/60 px-2 py-2 text-left text-[11.5px] leading-tight text-foreground transition-all hover:bg-surface-2 disabled:opacity-50"
+              >
+                {osmLoading ? (
+                  <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin text-muted-foreground" />
+                ) : (
+                  <MapPin className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                )}
+                <span className="truncate">{p.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Búsqueda libre */}
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const q = osmText.trim();
+              if (!q) return;
+              setOsmLoading(true);
+              try {
+                await onLoadOverpass({ type: "text", text: q });
+              } finally {
+                setOsmLoading(false);
+              }
+            }}
+            className="flex items-center gap-1.5 rounded-lg bg-surface-2/60 px-2 py-1.5"
+          >
+            <Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+            <input
+              type="text"
+              value={osmText}
+              onChange={(e) => setOsmText(e.target.value)}
+              placeholder="Otro comercio (ej: bicicletería)"
+              disabled={osmLoading}
+              className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-text-muted outline-none disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={osmLoading || !osmText.trim()}
+              className="rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            >
+              {osmLoading ? "…" : "Cargar"}
+            </button>
+          </form>
+
           <p className="mt-2.5 px-1 text-[10px] leading-relaxed text-text-muted">
-            Fuente: openstreetmap.org · Overpass API
+            Acerca el mapa al área de interés antes de cargar. Cada consulta crea una capa.
           </p>
         </SidebarSection>
 
