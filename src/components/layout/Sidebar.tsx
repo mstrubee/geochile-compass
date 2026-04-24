@@ -222,6 +222,28 @@ export const Sidebar = ({
   const [busy, setBusy] = useState(false);
   const [osmText, setOsmText] = useState("");
   const [osmLoading, setOsmLoading] = useState(false);
+  // Selección múltiple de capas de archivo (sección "Archivos")
+  const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(new Set());
+  const toggleLayerSelected = (id: string) =>
+    setSelectedLayerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  // Limpiar selección de capas que dejaron de existir
+  useEffect(() => {
+    setSelectedLayerIds((prev) => {
+      const valid = new Set(userLayers.map((l) => l.id));
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (valid.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [userLayers]);
   // Carpetas expandidas en el árbol de POIs guardados (por defecto: todas las raíz + "sin carpeta")
   const [expandedPoiFolders, setExpandedPoiFolders] = useState<Set<string>>(new Set(["__root__"]));
   const togglePoiFolder = (id: string) =>
