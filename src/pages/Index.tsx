@@ -588,6 +588,7 @@ const Index = () => {
             fitMicrozoneId={fitMicrozoneId}
             onFitMicrozoneDone={() => setFitMicrozoneId(null)}
             flyTarget={flyTarget}
+            onViewportChange={handleMapViewportChange}
           />
 
           <SearchBar
