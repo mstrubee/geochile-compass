@@ -304,6 +304,7 @@ export const Sidebar = ({
     if (!arr.length) return;
     setBusy(true);
     let layerOffset = userLayers.length;
+    const addedLayerIds: string[] = [];
     for (const file of arr) {
       try {
         if (!getExtension(file.name)) {
@@ -323,6 +324,7 @@ export const Sidebar = ({
           const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
           const color = colorPalette[layerOffset++ % colorPalette.length];
           onAddUserLayer({ id, name: baseName, color, visible: true, data });
+          addedLayerIds.push(id);
           toast.success(`${file.name} cargado (${data.features.length} features)`);
         } else {
           // Una capa por carpeta hoja del KMZ/KML
@@ -342,6 +344,7 @@ export const Sidebar = ({
               visible: true,
               data: fc,
             });
+            addedLayerIds.push(id);
             total += bucket.features.length;
           });
           toast.success(
@@ -354,6 +357,15 @@ export const Sidebar = ({
       }
     }
     setBusy(false);
+
+    // Si hay sesión, ofrecer guardar como POIs eligiendo carpeta destino.
+    // Encolamos un diálogo por cada capa cargada con puntos.
+    if (isAuthenticated && addedLayerIds.length) {
+      // Esperar al próximo tick para que userLayers ya esté actualizado en el padre.
+      setTimeout(() => {
+        addedLayerIds.forEach((id) => onSavePoisFromLayer(id));
+      }, 0);
+    }
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
