@@ -8,10 +8,12 @@ import { ManzanaLayer } from "./ManzanaLayer";
 import { UserLayersLayer } from "./UserLayersLayer";
 import { IsochroneLayer } from "./IsochroneLayer";
 import { SavedPoisLayer } from "./SavedPoisLayer";
+import { MicrozoneLayer } from "./MicrozoneLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { UserLayer } from "@/types/userLayers";
 import type { Isochrone } from "@/types/isochrones";
 import type { SavedPoi } from "@/types/pois";
+import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
 
 // Fix default Leaflet marker icon paths (when bundled)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
