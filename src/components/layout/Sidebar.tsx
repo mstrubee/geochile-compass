@@ -338,6 +338,23 @@ export const Sidebar = ({
     return out;
   };
 
+  // Toggle de visibilidad de carpeta con propagación a TODAS las subcarpetas (estilo Google Earth):
+  // al ocultar una carpeta, sus descendientes se marcan como ocultas; al mostrarla, se desocultan.
+  const togglePoiFolderVisibility = (id: string) => {
+    if (!onHiddenPoiFoldersChange) return;
+    const current = hiddenPoiFolders ?? new Set<string>();
+    const next = new Set(current);
+    const willHide = !next.has(id);
+    const affected = id === "__orphan__" ? new Set<string>() : descendantsOfFolder(id);
+    affected.add(id);
+    if (willHide) {
+      affected.forEach((x) => next.add(x));
+    } else {
+      affected.forEach((x) => next.delete(x));
+    }
+    onHiddenPoiFoldersChange(next);
+  };
+
   const handlePaste = async (targetFolderId: string | null) => {
     if (!clipboard) return;
     try {
