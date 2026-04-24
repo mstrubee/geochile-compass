@@ -19,6 +19,7 @@ import type { PoiFolder, SavedPoi } from "@/types/pois";
 import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
 import { ISO_MODE_LABEL } from "@/types/isochrones";
 import { parseFile, getExtension, splitByFolderPath } from "@/utils/fileParsers";
+import { OVERPASS_PRESETS } from "@/services/overpassService";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite";
@@ -76,6 +77,10 @@ interface SidebarProps {
   poiFolders: PoiFolder[];
   onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
+  // OpenStreetMap (Overpass)
+  onLoadOverpass: (
+    kind: { type: "preset"; presetId: string; label: string } | { type: "text"; text: string },
+  ) => Promise<void>;
 }
 
 interface LayerRow {
@@ -190,10 +195,13 @@ export const Sidebar = ({
   poiFolders = [],
   onMoveFolder,
   onMovePois,
+  onLoadOverpass,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [osmText, setOsmText] = useState("");
+  const [osmLoading, setOsmLoading] = useState(false);
   // Carpetas expandidas en el árbol de POIs guardados (por defecto: todas las raíz + "sin carpeta")
   const [expandedPoiFolders, setExpandedPoiFolders] = useState<Set<string>>(new Set(["__root__"]));
   const togglePoiFolder = (id: string) =>
