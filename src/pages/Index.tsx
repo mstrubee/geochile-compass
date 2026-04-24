@@ -125,6 +125,24 @@ const Index = () => {
   } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
   const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(new Set());
+  // POIs visibles según las carpetas ocultas (estilo Google Earth: herencia desde ancestros).
+  const visiblePois = useMemo(() => {
+    if (hiddenPoiFolders.size === 0) return pois;
+    const parentMap = new Map<string, string | null>();
+    folders.forEach((f) => parentMap.set(f.id, f.parent_id));
+    const isFolderHidden = (id: string | null): boolean => {
+      let cur = id;
+      while (cur) {
+        if (hiddenPoiFolders.has(cur)) return true;
+        cur = parentMap.get(cur) ?? null;
+      }
+      return false;
+    };
+    return pois.filter((p) => {
+      if (p.folder_id === null) return !hiddenPoiFolders.has("__orphan__");
+      return !isFolderHidden(p.folder_id);
+    });
+  }, [pois, folders, hiddenPoiFolders]);
   const [managerOpen, setManagerOpen] = useState(false);
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
 
