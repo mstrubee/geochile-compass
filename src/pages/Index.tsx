@@ -542,6 +542,7 @@ const Index = () => {
           onClearMicrozones={clearMicrozones}
           onFocusMicrozone={setFitMicrozoneId}
           onGenerateVoronoi={generateVoronoi}
+          onLoadOverpass={loadOverpass}
         />
 
         <div
