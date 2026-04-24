@@ -55,7 +55,7 @@ export const SavePoisDialog = ({ open, onOpenChange, defaultName, pointCount, fo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="z-[1000] max-w-md">
         <DialogHeader>
           <DialogTitle>Guardar {pointCount} POIs</DialogTitle>
         </DialogHeader>
