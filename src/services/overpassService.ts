@@ -194,20 +194,36 @@ function normalizeBrand(s: string): string {
     .trim();
 }
 
-function brandLogoUrl(tags: Record<string, string>): string | null {
+function logosForDomain(domain: string): string[] {
+  // Múltiples proveedores como fallback en cascada
+  return [
+    `https://logo.clearbit.com/${domain}`,
+    `https://icons.duckduckgo.com/ip3/${domain}.ico`,
+    `https://www.google.com/s2/favicons?sz=64&domain=${domain}`,
+  ];
+}
+
+function brandLogoUrls(tags: Record<string, string>): string[] {
   const candidates = [tags.brand, tags["brand:en"], tags.name, tags["name:es"], tags.operator];
   for (const c of candidates) {
     if (!c) continue;
     const norm = normalizeBrand(c);
-    // exact match
-    if (BRAND_DOMAINS[norm]) return `https://logo.clearbit.com/${BRAND_DOMAINS[norm]}`;
-    // partial match (eg "Farmacia Cruz Verde Centro")
+    if (BRAND_DOMAINS[norm]) return logosForDomain(BRAND_DOMAINS[norm]);
     for (const key of Object.keys(BRAND_DOMAINS)) {
-      if (norm.includes(key)) return `https://logo.clearbit.com/${BRAND_DOMAINS[key]}`;
+      if (norm.includes(key)) return logosForDomain(BRAND_DOMAINS[key]);
     }
   }
-  // wikidata logo via brand:wikidata? skip — keep simple
-  return null;
+  // Si OSM trae website/contact:website, derivar dominio y probar favicon
+  const site = tags.website || tags["contact:website"] || tags.url;
+  if (site) {
+    try {
+      const u = new URL(site.startsWith("http") ? site : `https://${site}`);
+      return logosForDomain(u.hostname.replace(/^www\./, ""));
+    } catch {
+      /* ignore */
+    }
+  }
+  return [];
 }
 
 function elementsToFeatureCollection(
