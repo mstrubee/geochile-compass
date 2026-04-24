@@ -543,6 +543,13 @@ const Index = () => {
           poiFolders={folders}
           onMoveFolder={moveFolder}
           onMovePois={movePois}
+          onDeleteFolder={deleteFolder}
+          trashedPois={trashedPois}
+          trashedFolders={trashedFolders}
+          onRestorePois={restorePois}
+          onRestoreFolder={restoreFolder}
+          onPurgePois={purgePois}
+          onPurgeFolder={purgeFolder}
           microSubmode={microSubmode}
           onMicroSubmodeChange={setMicroSubmode}
           microBufferRadius={microBufferRadius}
