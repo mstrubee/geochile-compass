@@ -171,6 +171,7 @@ export const MapView = ({
       <MouseTracker onMouseMove={onMouseMove} />
       {isoMode && <ClickHandler onClick={onMapClick} />}
       <InvalidateOnResize />
+      <FlyToTarget target={flyTarget} />
       <ManzanaLayer
         visible={layers.manzanas}
         data={manzanaData}
