@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -80,6 +80,8 @@ interface SidebarProps {
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
   /** Importa archivos KMZ/KML/GeoJSON directamente a una carpeta destino (sin diálogo). */
   onImportFilesIntoFolder?: (files: File[], folderId: string | null) => Promise<void> | void;
+  /** Crea una carpeta nueva (opcionalmente como subcarpeta de `parentId`). */
+  onCreateFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | void> | void;
   // Papelera
   trashedPois?: SavedPoi[];
   trashedFolders?: PoiFolder[];
@@ -210,6 +212,7 @@ export const Sidebar = ({
   onMoveFolder,
   onMovePois,
   onImportFilesIntoFolder,
+  onCreateFolder,
   trashedPois = [],
   trashedFolders = [],
   onRestorePois,
@@ -1207,6 +1210,32 @@ export const Sidebar = ({
                               <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
                               {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
                             </ContextMenuItem>
+                            {onCreateFolder && (
+                              <ContextMenuItem
+                                onSelect={async () => {
+                                  const name = window.prompt(
+                                    `Nombre de la nueva subcarpeta dentro de "${f.name}":`,
+                                    "",
+                                  );
+                                  if (!name?.trim()) return;
+                                  try {
+                                    await onCreateFolder(name.trim(), f.id);
+                                    // Asegurar que la carpeta padre quede expandida para ver la nueva
+                                    setExpandedPoiFolders((prev) => {
+                                      const next = new Set(prev);
+                                      next.add(f.id);
+                                      return next;
+                                    });
+                                    toast.success(`Subcarpeta "${name.trim()}" creada`);
+                                  } catch (err) {
+                                    toast.error(err instanceof Error ? err.message : "Error al crear");
+                                  }
+                                }}
+                              >
+                                <FolderPlus className="mr-2 h-3.5 w-3.5" />
+                                Crear subcarpeta…
+                              </ContextMenuItem>
+                            )}
                             {onImportFilesIntoFolder && (
                               <ContextMenuItem
                                 onSelect={() => {
