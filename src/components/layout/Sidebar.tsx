@@ -1207,6 +1207,43 @@ export const Sidebar = ({
                               <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
                               {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
                             </ContextMenuItem>
+                            {onImportFilesIntoFolder && (
+                              <ContextMenuItem
+                                onSelect={() => {
+                                  folderImportTargetIdRef.current = f.id;
+                                  folderImportInputRef.current?.click();
+                                }}
+                              >
+                                <Upload className="mr-2 h-3.5 w-3.5" />
+                                Cargar KMZ/KML/GeoJSON a esta carpeta…
+                              </ContextMenuItem>
+                            )}
+                            {(() => {
+                              const parent = poiFolders.find((x) => x.id === f.parent_id);
+                              const grandparentId = parent?.parent_id ?? null;
+                              const isRoot = f.parent_id === null;
+                              return (
+                                <ContextMenuItem
+                                  disabled={isRoot}
+                                  onSelect={async () => {
+                                    if (isRoot) return;
+                                    try {
+                                      await onMoveFolder(f.id, grandparentId);
+                                      toast.success(
+                                        grandparentId === null
+                                          ? `"${f.name}" movida a la raíz`
+                                          : `"${f.name}" subida un nivel`,
+                                      );
+                                    } catch (err) {
+                                      toast.error(err instanceof Error ? err.message : "Error al mover");
+                                    }
+                                  }}
+                                >
+                                  <CornerLeftUp className="mr-2 h-3.5 w-3.5" />
+                                  Subir un nivel{isRoot ? " (ya está en raíz)" : ""}
+                                </ContextMenuItem>
+                              );
+                            })()}
                             {clipboard && (
                               <>
                                 <ContextMenuSeparator />
