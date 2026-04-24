@@ -331,7 +331,6 @@ export const Sidebar = ({
   };
 
   const variables: { key: ManzanaVariable; label: string }[] = [
-    { key: "density", label: "Densidad" },
     { key: "nse", label: "NSE" },
     { key: "income", label: "Ingresos" },
     { key: "traffic", label: "Tráfico" },
