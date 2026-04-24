@@ -48,18 +48,51 @@ export const useSavedPois = () => {
     async (items: PoiInsert[], folder_id: string | null = null) => {
       if (!user) throw new Error("Debes iniciar sesión");
       if (!items.length) return 0;
-      const rows = items.map((p) => ({
-        ...p,
-        folder_id: p.folder_id ?? folder_id,
-        properties: (p.properties ?? {}) as never,
-        user_id: user.id,
-      }));
-      const { error, count } = await supabase
-        .from("pois")
-        .insert(rows, { count: "exact" });
-      if (error) throw new Error(error.message);
+
+      // Limpieza preventiva: si el icon es un data URL grande (KMZ con logos
+      // embebidos), evitamos duplicarlo dentro de `properties` y descartamos
+      // claves internas que no aportan a la BD para reducir el payload.
+      const sanitize = (p: PoiInsert) => {
+        const props = { ...((p.properties ?? {}) as Record<string, unknown>) };
+        // Quitar copias del icon dentro de properties (queda en la columna `icon`).
+        delete props.icon;
+        // Quitar el path interno usado solo durante el import.
+        delete props._folderPath;
+        return {
+          ...p,
+          folder_id: p.folder_id ?? folder_id,
+          properties: props as never,
+          user_id: user.id,
+        };
+      };
+
+      const rows = items.map(sanitize);
+
+      // Insertar por lotes para evitar payloads gigantes (KMZ con muchos puntos
+      // o logos como data URLs) que pueden hacer fallar todo el batch.
+      const CHUNK_SIZE = 200;
+      let totalInserted = 0;
+      const errors: string[] = [];
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const slice = rows.slice(i, i + CHUNK_SIZE);
+        const { error, count } = await supabase
+          .from("pois")
+          .insert(slice, { count: "exact" });
+        if (error) {
+          console.error(
+            `[addMany] chunk ${i}-${i + slice.length} falló:`,
+            error,
+          );
+          errors.push(error.message);
+          continue;
+        }
+        totalInserted += count ?? slice.length;
+      }
       await refresh();
-      return count ?? rows.length;
+      if (totalInserted === 0 && errors.length) {
+        throw new Error(errors[0]);
+      }
+      return totalInserted;
     },
     [user, refresh],
   );
