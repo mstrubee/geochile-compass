@@ -368,8 +368,51 @@ export const Sidebar = ({
     { key: "traffic", label: "Tráfico" },
   ];
 
+  // Ancho redimensionable (arrastrable). Persistido en localStorage.
+  const MIN_W = 240;
+  const MAX_W = 560;
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 288;
+    const v = Number(window.localStorage.getItem("sidebar.width"));
+    return Number.isFinite(v) && v >= MIN_W && v <= MAX_W ? v : 288;
+  });
+  const resizingRef = useRef(false);
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const next = Math.min(MAX_W, Math.max(MIN_W, e.clientX));
+      setSidebarWidth(next);
+    };
+    const onUp = () => {
+      if (!resizingRef.current) return;
+      resizingRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      try {
+        window.localStorage.setItem("sidebar.width", String(sidebarWidth));
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [sidebarWidth]);
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    resizingRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
   return (
-    <aside className="flex w-[288px] flex-shrink-0 flex-col overflow-hidden border-r border-border/60 bg-surface/95">
+    <aside
+      className="relative flex flex-shrink-0 flex-col overflow-hidden border-r border-border/60 bg-surface/95"
+      style={{ width: sidebarWidth }}
+    >
       <div className="scrollbar-thin flex-1 overflow-y-auto">
         <SidebarSection title="Resumen">
           <div className="grid grid-cols-2 gap-2 pt-1">
