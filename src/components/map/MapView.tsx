@@ -7,9 +7,11 @@ import { NSELayer } from "./NSELayer";
 import { ManzanaLayer } from "./ManzanaLayer";
 import { UserLayersLayer } from "./UserLayersLayer";
 import { IsochroneLayer } from "./IsochroneLayer";
+import { SavedPoisLayer } from "./SavedPoisLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { UserLayer } from "@/types/userLayers";
 import type { Isochrone } from "@/types/isochrones";
+import type { SavedPoi } from "@/types/pois";
 
 // Fix default Leaflet marker icon paths (when bundled)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -74,6 +76,8 @@ interface MapViewProps {
   onFitIsochroneDone: () => void;
   isoMode: boolean;
   onMapClick: (c: { lat: number; lng: number }) => void;
+  savedPois: SavedPoi[];
+  savedPoisVisible: boolean;
 }
 
 export const MapView = ({
@@ -93,6 +97,8 @@ export const MapView = ({
   onFitIsochroneDone,
   isoMode,
   onMapClick,
+  savedPois,
+  savedPoisVisible,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
