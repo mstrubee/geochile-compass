@@ -271,46 +271,112 @@ export const Sidebar = ({
 
         <SidebarSection title="Isócronas">
           <div className="mb-2 flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
-            {[
-              { label: "Caminata", on: true },
-              { label: "Vehículo" },
-              { label: "Bici" },
-            ].map((t) => (
+            {(["foot-walking", "driving-car", "cycling-regular"] as const).map((m) => (
               <button
-                key={t.label}
+                key={m}
+                onClick={() => onIsoModeChange(m)}
                 className={[
                   "flex-1 rounded-md px-1 py-1 text-[11px] font-medium transition-all",
-                  t.on
+                  isoMode === m
                     ? "bg-surface-3 text-foreground shadow-apple-sm"
                     : "text-muted-foreground hover:text-foreground",
                 ].join(" ")}
               >
-                {t.label}
+                {ISO_MODE_LABEL[m]}
               </button>
             ))}
           </div>
           <div className="mb-2 text-[11px] text-muted-foreground">Minutos</div>
           <div className="mb-2 flex gap-1.5">
-            {[5, 10, 15].map((n) => (
+            {[0, 1, 2].map((idx) => (
               <input
-                key={n}
+                key={idx}
                 type="number"
-                defaultValue={n}
+                min={1}
+                max={60}
+                value={isoMinutes[idx] ?? ""}
+                onChange={(e) => {
+                  const next = [...isoMinutes];
+                  const v = parseInt(e.target.value, 10);
+                  next[idx] = Number.isFinite(v) ? v : 0;
+                  onIsoMinutesChange(next.filter((n) => n > 0));
+                }}
                 className="w-0 flex-1 rounded-lg border border-border/60 bg-surface-2/60 px-2 py-1.5 text-center font-mono text-[12px] text-foreground outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
               />
             ))}
           </div>
           <div
             className={[
-              "rounded-lg px-2.5 py-2 text-[11px] leading-relaxed",
+              "mb-2 rounded-lg px-2.5 py-2 text-[11px] leading-relaxed",
               mode === "isochrone"
                 ? "bg-iso-1/15 text-iso-1"
                 : "bg-surface-2/60 text-muted-foreground",
             ].join(" ")}
           >
-            Activa <b>Isócronas</b> en la barra superior y haz clic en el mapa.
+            {isoLoading ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" /> Calculando isócrona…
+              </span>
+            ) : mode === "isochrone" ? (
+              <>Haz clic en el mapa para añadir una isócrona.</>
+            ) : (
+              <>Activa <b>Isócronas</b> en la barra superior y haz clic en el mapa.</>
+            )}
           </div>
+
+          {isochrones.length > 0 && (
+            <div className="space-y-0.5">
+              {isochrones.map((iso) => (
+                <div
+                  key={iso.id}
+                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2/60"
+                >
+                  <button
+                    onClick={() => onToggleIsochrone(iso.id)}
+                    className="flex flex-1 items-center gap-2 text-left"
+                    aria-pressed={iso.visible}
+                  >
+                    <span
+                      className="h-2 w-2 flex-shrink-0 rounded-full"
+                      style={{ backgroundColor: iso.color }}
+                    />
+                    <span
+                      className={[
+                        "flex-1 truncate text-[12px]",
+                        iso.visible ? "text-foreground" : "text-muted-foreground",
+                      ].join(" ")}
+                      title={`${ISO_MODE_LABEL[iso.mode]} · ${iso.minutes.join("/")} min`}
+                    >
+                      {ISO_MODE_LABEL[iso.mode]} · {iso.minutes.join("/")}′
+                    </span>
+                    <IOSSwitch on={iso.visible} />
+                  </button>
+                  <button
+                    onClick={() => onFocusIsochrone(iso.id)}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-primary/15 hover:text-primary"
+                    aria-label="Centrar"
+                  >
+                    <Crosshair className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onRemoveIsochrone(iso.id)}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
+                    aria-label="Eliminar"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={onClearIsochrones}
+                className="mt-1 w-full rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              >
+                Borrar todas
+              </button>
+            </div>
+          )}
         </SidebarSection>
+
 
         <SidebarSection title="Archivos">
           <input
