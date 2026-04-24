@@ -895,59 +895,152 @@ export const Sidebar = ({
             </p>
           </div>
 
-          {userLayers.length > 0 && (
-            <div className="mt-2.5 space-y-0.5">
-              {userLayers.map((ul) => (
-                <div
-                  key={ul.id}
-                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2/60"
-                >
+          {userLayers.length > 0 && (() => {
+            const allIds = userLayers.map((l) => l.id);
+            const selCount = allIds.filter((id) => selectedLayerIds.has(id)).length;
+            const allSelected = selCount === allIds.length && allIds.length > 0;
+            const someSelected = selCount > 0 && !allSelected;
+            const selectedWithPoints = allIds.filter(
+              (id) => selectedLayerIds.has(id) && getLayerPointCount(id) > 0,
+            );
+            return (
+              <div className="mt-2.5 space-y-0.5">
+                {/* Cabecera con seleccionar todo + acciones bulk */}
+                <div className="flex items-center gap-2 px-2 py-1">
                   <button
-                    onClick={() => onToggleUserLayer(ul.id)}
-                    className="flex flex-1 items-center gap-2 text-left"
-                    aria-pressed={ul.visible}
+                    onClick={() => {
+                      if (allSelected) setSelectedLayerIds(new Set());
+                      else setSelectedLayerIds(new Set(allIds));
+                    }}
+                    className="flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[11px] text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+                    title={allSelected ? "Deseleccionar todo" : "Seleccionar todo"}
                   >
-                    <span
-                      className="h-2 w-2 flex-shrink-0 rounded-full"
-                      style={{ backgroundColor: ul.color }}
-                    />
-                    <span
-                      className={[
-                        "flex-1 truncate text-[12px]",
-                        ul.visible ? "text-foreground" : "text-muted-foreground",
-                      ].join(" ")}
-                      title={ul.name}
-                    >
-                      {ul.name}
+                    {allSelected ? (
+                      <CheckSquare className="h-3.5 w-3.5 text-primary" />
+                    ) : someSelected ? (
+                      <MinusSquare className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <Square className="h-3.5 w-3.5" />
+                    )}
+                    <span>
+                      {selCount > 0
+                        ? `${selCount} de ${allIds.length} seleccionada${allIds.length === 1 ? "" : "s"}`
+                        : `${allIds.length} capa${allIds.length === 1 ? "" : "s"}`}
                     </span>
-                    <span className="font-mono text-[10px] text-text-muted">
-                      {ul.data.features.length}
-                    </span>
-                    <IOSSwitch on={ul.visible} />
                   </button>
-                  {getLayerPointCount(ul.id) > 0 && (
-                    <button
-                      onClick={() => onSavePoisFromLayer(ul.id)}
-                      className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-brand-green/15 hover:text-brand-green"
-                      aria-label={`Guardar como POIs ${ul.name}`}
-                      title={isAuthenticated
-                        ? `Guardar ${getLayerPointCount(ul.id)} puntos como POIs`
-                        : "Inicia sesión para guardar"}
-                    >
-                      <BookmarkPlus className="h-3.5 w-3.5" />
-                    </button>
+                  {selCount > 0 && (
+                    <div className="ml-auto flex items-center gap-1">
+                      {selectedWithPoints.length > 0 && (
+                        <button
+                          onClick={() => {
+                            onSavePoisFromLayer(selectedWithPoints);
+                            setSelectedLayerIds(new Set());
+                          }}
+                          className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-text-muted transition-colors hover:bg-brand-green/15 hover:text-brand-green"
+                          title={isAuthenticated
+                            ? `Guardar ${selectedWithPoints.length} capa(s) como POIs`
+                            : "Inicia sesión para guardar"}
+                        >
+                          <BookmarkPlus className="h-3.5 w-3.5" />
+                          <span>Guardar</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              `¿Eliminar ${selCount} capa${selCount === 1 ? "" : "s"} de archivo?`,
+                            )
+                          )
+                            return;
+                          allIds
+                            .filter((id) => selectedLayerIds.has(id))
+                            .forEach((id) => onRemoveUserLayer(id));
+                          setSelectedLayerIds(new Set());
+                        }}
+                        className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
+                        title={`Eliminar ${selCount} capa(s)`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Eliminar</span>
+                      </button>
+                    </div>
                   )}
-                  <button
-                    onClick={() => onRemoveUserLayer(ul.id)}
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
-                    aria-label={`Eliminar ${ul.name}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
                 </div>
-              ))}
-            </div>
-          )}
+
+                {userLayers.map((ul) => {
+                  const checked = selectedLayerIds.has(ul.id);
+                  return (
+                    <div
+                      key={ul.id}
+                      className={[
+                        "flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors",
+                        checked ? "bg-primary/10" : "hover:bg-surface-2/60",
+                      ].join(" ")}
+                    >
+                      <button
+                        onClick={() => toggleLayerSelected(ul.id)}
+                        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-text-muted hover:text-primary"
+                        aria-label={checked ? "Deseleccionar" : "Seleccionar"}
+                        aria-pressed={checked}
+                      >
+                        {checked ? (
+                          <CheckSquare className="h-3.5 w-3.5 text-primary" />
+                        ) : (
+                          <Square className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => onToggleUserLayer(ul.id)}
+                        className="flex flex-1 items-center gap-2 text-left"
+                        aria-pressed={ul.visible}
+                      >
+                        <span
+                          className="h-2 w-2 flex-shrink-0 rounded-full"
+                          style={{ backgroundColor: ul.color }}
+                        />
+                        <span
+                          className={[
+                            "flex-1 truncate text-[12px]",
+                            ul.visible ? "text-foreground" : "text-muted-foreground",
+                          ].join(" ")}
+                          title={ul.name}
+                        >
+                          {ul.name}
+                        </span>
+                        <span className="font-mono text-[10px] text-text-muted">
+                          {ul.data.features.length}
+                        </span>
+                        <IOSSwitch on={ul.visible} />
+                      </button>
+                      {getLayerPointCount(ul.id) > 0 && (
+                        <button
+                          onClick={() => onSavePoisFromLayer(ul.id)}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-brand-green/15 hover:text-brand-green"
+                          aria-label={`Guardar como POIs ${ul.name}`}
+                          title={isAuthenticated
+                            ? `Guardar ${getLayerPointCount(ul.id)} puntos como POIs`
+                            : "Inicia sesión para guardar"}
+                        >
+                          <BookmarkPlus className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          if (!window.confirm(`¿Eliminar la capa "${ul.name}"?`)) return;
+                          onRemoveUserLayer(ul.id);
+                        }}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
+                        aria-label={`Eliminar ${ul.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </SidebarSection>
 
         <SidebarSection title="Puntos de interés">
