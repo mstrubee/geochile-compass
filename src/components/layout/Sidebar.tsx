@@ -296,10 +296,10 @@ export const Sidebar = ({
                 max={60}
                 value={isoMinutes[idx] ?? ""}
                 onChange={(e) => {
-                  const next = [...isoMinutes];
+                  const next = [isoMinutes[0] ?? 0, isoMinutes[1] ?? 0, isoMinutes[2] ?? 0];
                   const v = parseInt(e.target.value, 10);
                   next[idx] = Number.isFinite(v) ? v : 0;
-                  onIsoMinutesChange(next.filter((n) => n > 0));
+                  onIsoMinutesChange(next);
                 }}
                 className="w-0 flex-1 rounded-lg border border-border/60 bg-surface-2/60 px-2 py-1.5 text-center font-mono text-[12px] text-foreground outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
               />
