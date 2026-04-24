@@ -7,7 +7,7 @@ import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
 import { PoiManagerDialog } from "@/components/panels/PoiManagerDialog";
 import { SavePoisDialog } from "@/components/panels/SavePoisDialog";
 import { Legend } from "@/components/ui-overlays/Legend";
-import { SearchBar } from "@/components/ui-overlays/SearchBar";
+import { SearchBar, type SearchResult } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
 import { useManzanas } from "@/hooks/useManzanas";
 import { useSavedPois } from "@/hooks/useSavedPois";
@@ -58,6 +58,14 @@ const Index = () => {
   const [isochrones, setIsochrones] = useState<Isochrone[]>([]);
   const [fitIsoId, setFitIsoId] = useState<string | null>(null);
   const [isoLoading, setIsoLoading] = useState(false);
+
+  // Búsqueda de direcciones (centra el mapa)
+  const [flyTarget, setFlyTarget] = useState<{
+    id: number;
+    lat: number;
+    lng: number;
+    bbox: [number, number, number, number] | null;
+  } | null>(null);
 
   // Microzonas
   const [microSubmode, setMicroSubmode] = useState<MicrozoneSubmode>("polygon");
@@ -446,9 +454,14 @@ const Index = () => {
             onMicroBufferClick={handleMicroBufferClick}
             fitMicrozoneId={fitMicrozoneId}
             onFitMicrozoneDone={() => setFitMicrozoneId(null)}
+            flyTarget={flyTarget}
           />
 
-          <SearchBar />
+          <SearchBar
+            onSelect={(r: SearchResult) =>
+              setFlyTarget({ id: Date.now(), lat: r.lat, lng: r.lng, bbox: r.bbox })
+            }
+          />
           <Legend
             shifted={panelOpen}
             layers={layers}

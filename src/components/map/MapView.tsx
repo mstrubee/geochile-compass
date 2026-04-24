@@ -61,6 +61,30 @@ const InvalidateOnResize = () => {
   return null;
 };
 
+const FlyToTarget = ({
+  target,
+}: {
+  target: { id: number; lat: number; lng: number; bbox: [number, number, number, number] | null } | null;
+}) => {
+  const map = useMap();
+  useEffect(() => {
+    if (!target) return;
+    if (target.bbox) {
+      const [south, north, west, east] = target.bbox;
+      map.fitBounds(
+        [
+          [south, west],
+          [north, east],
+        ],
+        { padding: [40, 40], maxZoom: 17 },
+      );
+    } else {
+      map.flyTo([target.lat, target.lng], Math.max(map.getZoom(), 16), { duration: 0.8 });
+    }
+  }, [target, map]);
+  return null;
+};
+
 interface MapViewProps {
   basemap: "dark" | "light" | "satellite";
   onMouseMove: (c: { lat: number; lng: number }) => void;
@@ -90,6 +114,12 @@ interface MapViewProps {
   onMicroBufferClick: (c: { lat: number; lng: number }) => void;
   fitMicrozoneId: string | null;
   onFitMicrozoneDone: () => void;
+  flyTarget: {
+    id: number;
+    lat: number;
+    lng: number;
+    bbox: [number, number, number, number] | null;
+  } | null;
 }
 
 export const MapView = ({
@@ -120,6 +150,7 @@ export const MapView = ({
   onMicroBufferClick,
   fitMicrozoneId,
   onFitMicrozoneDone,
+  flyTarget,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -140,6 +171,7 @@ export const MapView = ({
       <MouseTracker onMouseMove={onMouseMove} />
       {isoMode && <ClickHandler onClick={onMapClick} />}
       <InvalidateOnResize />
+      <FlyToTarget target={flyTarget} />
       <ManzanaLayer
         visible={layers.manzanas}
         data={manzanaData}
