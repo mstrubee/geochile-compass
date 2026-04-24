@@ -38,7 +38,7 @@ interface SidebarProps {
   onAddUserLayer: (layer: UserLayer) => void;
   onToggleUserLayer: (id: string) => void;
   onRemoveUserLayer: (id: string) => void;
-  onSavePoisFromLayer: (id: string) => void;
+  onSavePoisFromLayer: (id: string | string[]) => void;
   getLayerPointCount: (id: string) => number;
   isAuthenticated: boolean;
   // Isochrones
