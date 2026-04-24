@@ -234,6 +234,8 @@ const Index = () => {
           onOpenPoiManager={() => setManagerOpen(true)}
           poiFolderCount={folders.length}
           poiFolders={folders}
+          onMoveFolder={moveFolder}
+          onMovePois={movePois}
         />
 
         <div

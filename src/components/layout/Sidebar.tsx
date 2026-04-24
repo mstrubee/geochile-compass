@@ -1,7 +1,14 @@
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X } from "lucide-react";
 import { toast } from "sonner";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import type { LayerKey, LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
 import type { UserLayer } from "@/types/userLayers";
@@ -48,6 +55,8 @@ interface SidebarProps {
   onOpenPoiManager: () => void;
   poiFolderCount: number;
   poiFolders: PoiFolder[];
+  onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
+  onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
 }
 
 interface LayerRow {
@@ -151,6 +160,8 @@ export const Sidebar = ({
   onOpenPoiManager,
   poiFolderCount = 0,
   poiFolders = [],
+  onMoveFolder,
+  onMovePois,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -163,6 +174,13 @@ export const Sidebar = ({
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+
+  // Portapapeles para cortar/pegar (carpetas o POIs)
+  const [clipboard, setClipboard] = useState<
+    | { kind: "folder"; id: string; name: string }
+    | { kind: "poi"; id: string; name: string }
+    | null
+  >(null);
 
   // Indexación jerárquica
   const poiChildrenMap = useMemo(() => {
@@ -198,6 +216,47 @@ export const Sidebar = ({
     (poiChildrenMap.get(null) ?? []).forEach((f) => visit(f.id));
     return counts;
   }, [poiChildrenMap, poisByFolderMap]);
+
+  // Descendientes de una carpeta (para evitar pegar en sí misma o sus hijas)
+  const descendantsOfFolder = (id: string): Set<string> => {
+    const out = new Set<string>();
+    const walk = (pid: string) => {
+      (poiChildrenMap.get(pid) ?? []).forEach((c) => {
+        if (!out.has(c.id)) {
+          out.add(c.id);
+          walk(c.id);
+        }
+      });
+    };
+    walk(id);
+    return out;
+  };
+
+  const handlePaste = async (targetFolderId: string | null) => {
+    if (!clipboard) return;
+    try {
+      if (clipboard.kind === "folder") {
+        if (clipboard.id === targetFolderId) {
+          toast.error("No puedes pegar la carpeta dentro de sí misma");
+          return;
+        }
+        if (targetFolderId && descendantsOfFolder(clipboard.id).has(targetFolderId)) {
+          toast.error("No puedes pegar una carpeta dentro de su descendiente");
+          return;
+        }
+        await onMoveFolder(clipboard.id, targetFolderId);
+      } else {
+        await onMovePois([clipboard.id], targetFolderId);
+      }
+      toast.success(`"${clipboard.name}" movido`);
+      if (targetFolderId) {
+        setExpandedPoiFolders((p) => new Set(p).add(targetFolderId));
+      }
+      setClipboard(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al pegar");
+    }
+  };
 
   const colorPalette = [
     "#34D399", "#F472B6", "#FBBF24", "#60A5FA",
@@ -578,29 +637,63 @@ export const Sidebar = ({
                 <span className="font-mono text-[10px] text-text-muted">{savedPois.length}</span>
                 <IOSSwitch on={savedPoisVisible} />
               </button>
+              {clipboard && (
+                <div className="mb-1 flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-[10.5px] text-primary">
+                  <Scissors className="h-3 w-3" />
+                  <span className="flex-1 truncate" title={clipboard.name}>
+                    Cortado: <strong>{clipboard.name}</strong>
+                  </span>
+                  <button
+                    onClick={() => handlePaste(null)}
+                    className="rounded px-1.5 py-0.5 hover:bg-primary/15"
+                    title="Pegar en raíz"
+                  >
+                    Pegar raíz
+                  </button>
+                  <button
+                    onClick={() => setClipboard(null)}
+                    className="rounded p-0.5 hover:bg-primary/15"
+                    aria-label="Cancelar"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
               <div className="scrollbar-thin max-h-72 space-y-0.5 overflow-y-auto">
                 {(() => {
                   const renderPoi = (p: SavedPoi, depth: number) => (
-                    <div
-                      key={p.id}
-                      className="group flex items-center gap-2 rounded-md py-0.5 pr-1 hover:bg-surface-2/60"
-                      style={{ paddingLeft: `${depth * 12 + 8}px` }}
-                    >
-                      <span
-                        className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
-                        style={{ backgroundColor: p.color || "#34D399" }}
-                      />
-                      <span className="flex-1 truncate text-[11.5px] text-foreground" title={p.name}>
-                        {p.name}
-                      </span>
-                      <button
-                        onClick={() => onRemoveSavedPoi(p.id)}
-                        className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 transition-colors hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
-                        aria-label={`Eliminar ${p.name}`}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
+                    <ContextMenu key={p.id}>
+                      <ContextMenuTrigger asChild>
+                        <div
+                          className="group flex items-center gap-2 rounded-md py-0.5 pr-1 hover:bg-surface-2/60"
+                          style={{ paddingLeft: `${depth * 12 + 8}px` }}
+                        >
+                          <span
+                            className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                            style={{ backgroundColor: p.color || "#34D399" }}
+                          />
+                          <span className="flex-1 truncate text-[11.5px] text-foreground" title={p.name}>
+                            {p.name}
+                          </span>
+                          <button
+                            onClick={() => onRemoveSavedPoi(p.id)}
+                            className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 transition-colors hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                            aria-label={`Eliminar ${p.name}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent className="z-[1100]">
+                        <ContextMenuItem onSelect={() => setClipboard({ kind: "poi", id: p.id, name: p.name })}>
+                          <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem onSelect={() => onRemoveSavedPoi(p.id)} className="text-destructive focus:text-destructive">
+                          <Trash2 className="mr-2 h-3.5 w-3.5" /> Eliminar
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
                   );
 
                   const renderFolder = (f: PoiFolder, depth: number): JSX.Element => {
@@ -608,25 +701,53 @@ export const Sidebar = ({
                     const subs = poiChildrenMap.get(f.id) ?? [];
                     const own = poisByFolderMap.get(f.id) ?? [];
                     const total = totalCounts.get(f.id) ?? 0;
+                    const canPasteHere =
+                      !!clipboard &&
+                      !(clipboard.kind === "folder" && clipboard.id === f.id) &&
+                      !(clipboard.kind === "folder" && descendantsOfFolder(clipboard.id).has(f.id));
                     return (
                       <div key={f.id}>
-                        <button
-                          type="button"
-                          onClick={() => togglePoiFolder(f.id)}
-                          className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
-                          style={{ paddingLeft: `${depth * 12 + 2}px` }}
-                        >
-                          {isOpen ? (
-                            <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                          )}
-                          <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
-                          <span className="flex-1 truncate text-[11.5px] font-medium text-foreground" title={f.name}>
-                            {f.name}
-                          </span>
-                          <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
-                        </button>
+                        <ContextMenu>
+                          <ContextMenuTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => togglePoiFolder(f.id)}
+                              className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
+                              style={{ paddingLeft: `${depth * 12 + 2}px` }}
+                            >
+                              {isOpen ? (
+                                <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                              )}
+                              <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
+                              <span className="flex-1 truncate text-[11.5px] font-medium text-foreground" title={f.name}>
+                                {f.name}
+                              </span>
+                              <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
+                            </button>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent className="z-[1100]">
+                            <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name })}>
+                              <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar carpeta
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                              disabled={!canPasteHere}
+                              onSelect={() => handlePaste(f.id)}
+                            >
+                              <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
+                              {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
+                            </ContextMenuItem>
+                            {clipboard && (
+                              <>
+                                <ContextMenuSeparator />
+                                <ContextMenuItem onSelect={() => setClipboard(null)}>
+                                  <X className="mr-2 h-3.5 w-3.5" /> Cancelar corte
+                                </ContextMenuItem>
+                              </>
+                            )}
+                          </ContextMenuContent>
+                        </ContextMenu>
                         {isOpen && (
                           <div>
                             {subs.map((s) => renderFolder(s, depth + 1))}
@@ -645,23 +766,36 @@ export const Sidebar = ({
                     <>
                       {rootFolders.map((f) => renderFolder(f, 0))}
                       {orphan.length > 0 && (
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() => togglePoiFolder("__root__")}
-                            className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
-                          >
-                            {orphanOpen ? (
-                              <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                            ) : (
-                              <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                            )}
-                            <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                            <span className="flex-1 truncate text-[11.5px] italic text-muted-foreground">Sin carpeta</span>
-                            <span className="font-mono text-[9.5px] text-text-muted">{orphan.length}</span>
-                          </button>
-                          {orphanOpen && orphan.map((p) => renderPoi(p, 0))}
-                        </div>
+                        <ContextMenu>
+                          <ContextMenuTrigger asChild>
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => togglePoiFolder("__root__")}
+                                className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
+                              >
+                                {orphanOpen ? (
+                                  <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                )}
+                                <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                <span className="flex-1 truncate text-[11.5px] italic text-muted-foreground">Sin carpeta</span>
+                                <span className="font-mono text-[9.5px] text-text-muted">{orphan.length}</span>
+                              </button>
+                              {orphanOpen && orphan.map((p) => renderPoi(p, 0))}
+                            </div>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent className="z-[1100]">
+                            <ContextMenuItem
+                              disabled={!clipboard}
+                              onSelect={() => handlePaste(null)}
+                            >
+                              <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
+                              {clipboard ? `Pegar "${clipboard.name}" en raíz` : "Pegar en raíz"}
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
                       )}
                       {rootFolders.length === 0 && orphan.length === 0 && (
                         <div className="px-2 py-1 text-[11px] text-muted-foreground">Sin POIs.</div>
