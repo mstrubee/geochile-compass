@@ -256,6 +256,7 @@ export const Sidebar = ({
   }, [userLayers]);
   // Carpetas expandidas en el árbol de POIs guardados (por defecto: todas las raíz + "sin carpeta")
   const [expandedPoiFolders, setExpandedPoiFolders] = useState<Set<string>>(new Set(["__root__"]));
+  const [trashSearch, setTrashSearch] = useState("");
   const togglePoiFolder = (id: string) =>
     setExpandedPoiFolders((prev) => {
       const next = new Set(prev);
@@ -1410,115 +1411,192 @@ export const Sidebar = ({
           )}
         </SidebarSection>
 
-        {(trashedPois.length > 0 || trashedFolders.length > 0) && (
-          <SidebarSection title={`Papelera · 30 días (${trashedPois.length + trashedFolders.length})`}>
-            <p className="mb-1.5 px-1 text-[10px] leading-relaxed text-text-muted">
-              Los elementos eliminados se borran definitivamente a los 30 días.
-            </p>
-            <div className="scrollbar-thin max-h-56 space-y-0.5 overflow-y-auto">
-              {trashedFolders.map((f) => {
-                const days = f.deleted_at
-                  ? Math.max(0, 30 - Math.floor((Date.now() - new Date(f.deleted_at).getTime()) / 86400000))
-                  : 30;
-                return (
-                  <div key={f.id} className="group flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-surface-2/60">
-                    <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                    <span className="flex-1 truncate text-[11.5px] text-muted-foreground line-through" title={f.name}>
-                      {f.name}
-                    </span>
-                    <span className="font-mono text-[9.5px] text-text-muted">{days}d</span>
-                    {onRestoreFolder && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            await onRestoreFolder(f.id);
-                            toast.success(`"${f.name}" restaurada`);
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : "Error");
-                          }
-                        }}
-                        className="rounded px-1.5 py-0.5 text-[10px] text-primary opacity-0 hover:bg-primary/10 group-hover:opacity-100"
-                        title="Restaurar"
-                      >
-                        Restaurar
-                      </button>
-                    )}
-                    {onPurgeFolder && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!window.confirm(`Eliminar "${f.name}" definitivamente? Esta acción no se puede deshacer.`)) return;
-                          try {
-                            await onPurgeFolder(f.id);
-                            toast.success("Eliminado definitivamente");
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : "Error");
-                          }
-                        }}
-                        className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
-                        aria-label="Borrar definitivamente"
-                        title="Borrar definitivamente"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-              {trashedPois.map((p) => {
-                const days = p.deleted_at
-                  ? Math.max(0, 30 - Math.floor((Date.now() - new Date(p.deleted_at).getTime()) / 86400000))
-                  : 30;
-                return (
-                  <div key={p.id} className="group flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-surface-2/60">
-                    <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: p.color || "#34D399" }} />
-                    <span className="flex-1 truncate text-[11.5px] text-muted-foreground line-through" title={p.name}>
-                      {p.name}
-                    </span>
-                    <span className="font-mono text-[9.5px] text-text-muted">{days}d</span>
-                    {onRestorePois && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            await onRestorePois([p.id]);
-                            toast.success(`"${p.name}" restaurado`);
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : "Error");
-                          }
-                        }}
-                        className="rounded px-1.5 py-0.5 text-[10px] text-primary opacity-0 hover:bg-primary/10 group-hover:opacity-100"
-                        title="Restaurar"
-                      >
-                        Restaurar
-                      </button>
-                    )}
-                    {onPurgePois && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!window.confirm(`Eliminar "${p.name}" definitivamente? Esta acción no se puede deshacer.`)) return;
-                          try {
-                            await onPurgePois([p.id]);
-                            toast.success("Eliminado definitivamente");
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : "Error");
-                          }
-                        }}
-                        className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
-                        aria-label="Borrar definitivamente"
-                        title="Borrar definitivamente"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </SidebarSection>
-        )}
+        {(trashedPois.length > 0 || trashedFolders.length > 0) && (() => {
+          const q = trashSearch.trim().toLowerCase();
+          const visibleFolders = q
+            ? trashedFolders.filter((f) => f.name.toLowerCase().includes(q))
+            : trashedFolders;
+          const visiblePois = q
+            ? trashedPois.filter((p) => p.name.toLowerCase().includes(q))
+            : trashedPois;
+          const visibleCount = visibleFolders.length + visiblePois.length;
+          const totalCount = trashedFolders.length + trashedPois.length;
+
+          const purgeAllVisible = async () => {
+            const label = q
+              ? `Eliminar definitivamente ${visibleCount} elemento(s) que coinciden con "${trashSearch.trim()}"? Esta acción no se puede deshacer.`
+              : `Vaciar la papelera por completo (${totalCount} elemento(s))? Esta acción no se puede deshacer.`;
+            if (visibleCount === 0) return;
+            if (!window.confirm(label)) return;
+            try {
+              if (visiblePois.length && onPurgePois) {
+                await onPurgePois(visiblePois.map((p) => p.id));
+              }
+              if (visibleFolders.length && onPurgeFolder) {
+                // Borrado en serie para respetar dependencias padre→hijo.
+                for (const f of visibleFolders) {
+                  await onPurgeFolder(f.id);
+                }
+              }
+              toast.success(
+                q
+                  ? `${visibleCount} elemento(s) eliminados`
+                  : "Papelera vaciada",
+              );
+              if (q) setTrashSearch("");
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Error al vaciar");
+            }
+          };
+
+          return (
+            <SidebarSection title={`Papelera · 30 días (${totalCount})`}>
+              <p className="mb-1.5 px-1 text-[10px] leading-relaxed text-text-muted">
+                Los elementos eliminados se borran definitivamente a los 30 días.
+              </p>
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-text-muted" />
+                  <input
+                    type="text"
+                    value={trashSearch}
+                    onChange={(e) => setTrashSearch(e.target.value)}
+                    placeholder="Buscar en papelera…"
+                    className="h-6 w-full rounded-md border border-border/60 bg-surface-2/60 pl-6 pr-6 text-[11px] text-foreground placeholder:text-text-muted focus:border-primary/60 focus:outline-none"
+                  />
+                  {trashSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setTrashSearch("")}
+                      className="absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded text-text-muted hover:bg-surface-2 hover:text-foreground"
+                      aria-label="Limpiar búsqueda"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={purgeAllVisible}
+                  disabled={visibleCount === 0}
+                  className="flex h-6 items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-1.5 text-[10px] font-medium text-destructive hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  title={q ? "Borrar resultados filtrados" : "Vaciar papelera"}
+                >
+                  <Trash2 className="h-3 w-3" />
+                  {q ? `Borrar ${visibleCount}` : "Vaciar"}
+                </button>
+              </div>
+              {visibleCount === 0 ? (
+                <p className="px-2 py-3 text-center text-[11px] text-text-muted">
+                  Sin coincidencias para "{trashSearch.trim()}".
+                </p>
+              ) : (
+                <div className="scrollbar-thin max-h-56 space-y-0.5 overflow-y-auto">
+                  {visibleFolders.map((f) => {
+                    const days = f.deleted_at
+                      ? Math.max(0, 30 - Math.floor((Date.now() - new Date(f.deleted_at).getTime()) / 86400000))
+                      : 30;
+                    return (
+                      <div key={f.id} className="group flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-surface-2/60">
+                        <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                        <span className="flex-1 truncate text-[11.5px] text-muted-foreground line-through" title={f.name}>
+                          {f.name}
+                        </span>
+                        <span className="font-mono text-[9.5px] text-text-muted">{days}d</span>
+                        {onRestoreFolder && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await onRestoreFolder(f.id);
+                                toast.success(`"${f.name}" restaurada`);
+                              } catch (e) {
+                                toast.error(e instanceof Error ? e.message : "Error");
+                              }
+                            }}
+                            className="rounded px-1.5 py-0.5 text-[10px] text-primary opacity-0 hover:bg-primary/10 group-hover:opacity-100"
+                            title="Restaurar"
+                          >
+                            Restaurar
+                          </button>
+                        )}
+                        {onPurgeFolder && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm(`Eliminar "${f.name}" definitivamente? Esta acción no se puede deshacer.`)) return;
+                              try {
+                                await onPurgeFolder(f.id);
+                                toast.success("Eliminado definitivamente");
+                              } catch (e) {
+                                toast.error(e instanceof Error ? e.message : "Error");
+                              }
+                            }}
+                            className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                            aria-label="Borrar definitivamente"
+                            title="Borrar definitivamente"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {visiblePois.map((p) => {
+                    const days = p.deleted_at
+                      ? Math.max(0, 30 - Math.floor((Date.now() - new Date(p.deleted_at).getTime()) / 86400000))
+                      : 30;
+                    return (
+                      <div key={p.id} className="group flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-surface-2/60">
+                        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: p.color || "#34D399" }} />
+                        <span className="flex-1 truncate text-[11.5px] text-muted-foreground line-through" title={p.name}>
+                          {p.name}
+                        </span>
+                        <span className="font-mono text-[9.5px] text-text-muted">{days}d</span>
+                        {onRestorePois && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await onRestorePois([p.id]);
+                                toast.success(`"${p.name}" restaurado`);
+                              } catch (e) {
+                                toast.error(e instanceof Error ? e.message : "Error");
+                              }
+                            }}
+                            className="rounded px-1.5 py-0.5 text-[10px] text-primary opacity-0 hover:bg-primary/10 group-hover:opacity-100"
+                            title="Restaurar"
+                          >
+                            Restaurar
+                          </button>
+                        )}
+                        {onPurgePois && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm(`Eliminar "${p.name}" definitivamente? Esta acción no se puede deshacer.`)) return;
+                              try {
+                                await onPurgePois([p.id]);
+                                toast.success("Eliminado definitivamente");
+                              } catch (e) {
+                                toast.error(e instanceof Error ? e.message : "Error");
+                              }
+                            }}
+                            className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                            aria-label="Borrar definitivamente"
+                            title="Borrar definitivamente"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </SidebarSection>
+          );
+        })()}
 
         <SidebarSection title="Mapa base">
           <div className="flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
