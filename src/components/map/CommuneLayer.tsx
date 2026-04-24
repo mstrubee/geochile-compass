@@ -11,8 +11,9 @@ const radiusForPop = (pop: number): number => {
   return Math.max(min, Math.min(max, r));
 };
 
-// Use design-system primary as base color (sky / #38bdf8)
-const FILL = "hsl(199 89% 60%)";
+// Fill: design-system primary (sky). Stroke darker for contrast on light basemaps.
+const FILL = "hsl(199 89% 50%)";
+const STROKE = "hsl(199 89% 30%)";
 
 const PopupRow = ({ k, v }: { k: string; v: string }) => (
   <div className="flex justify-between gap-3">
@@ -49,17 +50,18 @@ export const CommuneLayer = ({ visible = true }: CommuneLayerProps) => {
       {COMMUNES.map((c) => {
         const r = radiusForPop(c.pop);
         // Opacity proportional to relative population
-        const opacity = 0.35 + (c.pop / 650_000) * 0.4;
+        const opacity = 0.45 + (c.pop / 650_000) * 0.4;
         return (
           <CircleMarker
             key={c.name}
             center={[c.lat, c.lng]}
             radius={r}
             pathOptions={{
-              color: FILL,
-              weight: 1.5,
+              color: STROKE,
+              weight: 1.75,
+              opacity: 0.9,
               fillColor: FILL,
-              fillOpacity: Math.min(0.75, opacity),
+              fillOpacity: Math.min(0.85, opacity),
             }}
           >
             <Popup>

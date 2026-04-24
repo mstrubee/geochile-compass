@@ -58,10 +58,10 @@ export const ManzanaLayer = ({ visible, data, variable, onViewportChange }: Manz
     if (!p) return {};
     const color = colorForManzana(variable, p);
     return {
-      color,
-      weight: 0.4,
+      color: "hsl(222 38% 18%)",
+      weight: 0.5,
       fillColor: color,
-      fillOpacity: 0.55,
+      fillOpacity: 0.7,
     };
   };
 
