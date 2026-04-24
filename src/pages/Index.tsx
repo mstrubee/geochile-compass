@@ -200,6 +200,21 @@ const Index = () => {
     minZoom: 12,
   });
 
+  const { data: gseData, error: gseError } = useGseManzanas({
+    enabled: layers.nse,
+    bbox: gseViewport?.bbox ?? null,
+    zoom: gseViewport?.zoom ?? 12,
+    variable: gseVariable,
+    minZoom: 11,
+  });
+
+  const handleGseViewportChange = useCallback(
+    (bbox: [number, number, number, number], zoom: number) => {
+      setGseViewport({ bbox, zoom });
+    },
+    [],
+  );
+
   // ---------- Microzonas ----------
   const addMicrozone = useCallback(
     (
