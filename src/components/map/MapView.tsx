@@ -8,10 +8,12 @@ import { ManzanaLayer } from "./ManzanaLayer";
 import { UserLayersLayer } from "./UserLayersLayer";
 import { IsochroneLayer } from "./IsochroneLayer";
 import { SavedPoisLayer } from "./SavedPoisLayer";
+import { MicrozoneLayer } from "./MicrozoneLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { UserLayer } from "@/types/userLayers";
 import type { Isochrone } from "@/types/isochrones";
 import type { SavedPoi } from "@/types/pois";
+import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
 
 // Fix default Leaflet marker icon paths (when bundled)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -78,6 +80,16 @@ interface MapViewProps {
   onMapClick: (c: { lat: number; lng: number }) => void;
   savedPois: SavedPoi[];
   savedPoisVisible: boolean;
+  // Microzonas
+  microzones: Microzone[];
+  microActive: boolean;
+  microSubmode: MicrozoneSubmode;
+  microDraftVertices: Array<{ lat: number; lng: number }>;
+  onMicroAddVertex: (c: { lat: number; lng: number }) => void;
+  onMicroClosePolygon: () => void;
+  onMicroBufferClick: (c: { lat: number; lng: number }) => void;
+  fitMicrozoneId: string | null;
+  onFitMicrozoneDone: () => void;
 }
 
 export const MapView = ({
@@ -99,6 +111,15 @@ export const MapView = ({
   onMapClick,
   savedPois,
   savedPoisVisible,
+  microzones,
+  microActive,
+  microSubmode,
+  microDraftVertices,
+  onMicroAddVertex,
+  onMicroClosePolygon,
+  onMicroBufferClick,
+  fitMicrozoneId,
+  onFitMicrozoneDone,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -139,6 +160,17 @@ export const MapView = ({
         onFitDone={onFitIsochroneDone}
       />
       <SavedPoisLayer pois={savedPois} visible={savedPoisVisible} />
+      <MicrozoneLayer
+        microzones={microzones}
+        active={microActive}
+        submode={microSubmode}
+        draftVertices={microDraftVertices}
+        onAddVertex={onMicroAddVertex}
+        onClosePolygon={onMicroClosePolygon}
+        onBufferClick={onMicroBufferClick}
+        fitId={fitMicrozoneId}
+        onFitDone={onFitMicrozoneDone}
+      />
     </MapContainer>
   );
 };
