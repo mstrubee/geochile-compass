@@ -447,6 +447,9 @@ const Index = () => {
             manzanaData={manzanaData}
             manzanaVariable={manzanaVariable}
             onManzanaViewportChange={handleViewportChange}
+            gseData={gseData}
+            gseVariable={gseVariable}
+            onGseViewportChange={handleGseViewportChange}
             userLayers={userLayers}
             fitUserLayerId={fitId}
             onFitUserLayerDone={handleFitDone}
@@ -479,6 +482,9 @@ const Index = () => {
             manzanaVariable={manzanaVariable}
             manzanaSource={manzanaData?.metadata.source ?? null}
             manzanaError={manzanaError}
+            gseVariable={gseVariable}
+            gseError={gseError}
+            gseCount={gseData?.features.length ?? 0}
           />
           <CoordsBar coords={coords} />
 
