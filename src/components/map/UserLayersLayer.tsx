@@ -9,6 +9,24 @@ interface Props {
   onFitDone: () => void;
 }
 
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+function makeBadgeIcon(name: string, color: string): L.DivIcon {
+  const label = escapeHtml(name).slice(0, 18);
+  const initial = escapeHtml(name.trim().charAt(0).toUpperCase() || "?");
+  return L.divIcon({
+    className: "user-layer-badge",
+    html: `<div style="display:flex;align-items:center;gap:4px;padding:2px 6px 2px 2px;border-radius:999px;background:rgba(15,23,42,.85);color:#fff;font:500 11px/1 ui-sans-serif,system-ui;box-shadow:0 1px 4px rgba(0,0,0,.4);white-space:nowrap;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:${color};color:#fff;font-weight:700;font-size:10px;">${initial}</span>
+      <span>${label}</span>
+    </div>`,
+    iconSize: [120, 22],
+    iconAnchor: [12, 11],
+    popupAnchor: [0, -12],
+  });
+}
+
 export const UserLayersLayer = ({ layers, fitId, onFitDone }: Props) => {
   const map = useMap();
   const groupsRef = useRef<Map<string, L.GeoJSON>>(new Map());
