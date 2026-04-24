@@ -46,6 +46,19 @@ interface SidebarProps {
   onFocusIsochrone: (id: string) => void;
   isoLoading: boolean;
   onToggleIsoMode: () => void;
+  // Microzonas
+  microSubmode: MicrozoneSubmode;
+  onMicroSubmodeChange: (s: MicrozoneSubmode) => void;
+  microBufferRadius: number;
+  onMicroBufferRadiusChange: (m: number) => void;
+  microActive: boolean;
+  onToggleMicroMode: () => void;
+  microzones: Microzone[];
+  onToggleMicrozone: (id: string) => void;
+  onRemoveMicrozone: (id: string) => void;
+  onClearMicrozones: () => void;
+  onFocusMicrozone: (id: string) => void;
+  onGenerateVoronoi: () => void;
   // Saved POIs
   savedPois: SavedPoi[];
   savedPoisVisible: boolean;
