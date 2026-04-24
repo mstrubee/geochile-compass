@@ -463,6 +463,18 @@ export const Sidebar = ({
                     </span>
                     <IOSSwitch on={ul.visible} />
                   </button>
+                  {getLayerPointCount(ul.id) > 0 && (
+                    <button
+                      onClick={() => onSavePoisFromLayer(ul.id)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-brand-green/15 hover:text-brand-green"
+                      aria-label={`Guardar como POIs ${ul.name}`}
+                      title={isAuthenticated
+                        ? `Guardar ${getLayerPointCount(ul.id)} puntos como POIs`
+                        : "Inicia sesión para guardar"}
+                    >
+                      <BookmarkPlus className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => onRemoveUserLayer(ul.id)}
                     className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
@@ -473,6 +485,65 @@ export const Sidebar = ({
                 </div>
               ))}
             </div>
+          )}
+        </SidebarSection>
+
+        <SidebarSection title="POIs guardados">
+          {!isAuthenticated ? (
+            <div className="rounded-lg bg-surface-2/60 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              Inicia sesión para guardar puntos de forma permanente.
+            </div>
+          ) : savedPois.length === 0 ? (
+            <div className="rounded-lg bg-surface-2/60 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              Aún no hay POIs. Carga un archivo con puntos y pulsa el icono <BookmarkPlus className="inline h-3 w-3" /> para guardarlos.
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={onToggleSavedPoisVisible}
+                className="mb-1.5 flex w-full items-center gap-2 rounded-lg bg-surface-2/60 px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                aria-pressed={savedPoisVisible}
+              >
+                <MapPin className="h-3.5 w-3.5 text-brand-green" />
+                <span className="flex-1 text-[12px] text-foreground">Mostrar en mapa</span>
+                <span className="font-mono text-[10px] text-text-muted">{savedPois.length}</span>
+                <IOSSwitch on={savedPoisVisible} />
+              </button>
+              <div className="scrollbar-thin max-h-48 space-y-0.5 overflow-y-auto">
+                {savedPois.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-surface-2/60"
+                  >
+                    <span
+                      className="h-2 w-2 flex-shrink-0 rounded-full"
+                      style={{ backgroundColor: p.color || "#34D399" }}
+                    />
+                    <span className="flex-1 truncate text-[12px] text-foreground" title={p.name}>
+                      {p.name}
+                    </span>
+                    {p.source_layer && (
+                      <span className="max-w-[80px] truncate font-mono text-[9px] text-text-muted" title={p.source_layer}>
+                        {p.source_layer}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => onRemoveSavedPoi(p.id)}
+                      className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
+                      aria-label={`Eliminar ${p.name}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={onClearSavedPois}
+                className="mt-1.5 w-full rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              >
+                Borrar todos
+              </button>
+            </>
           )}
         </SidebarSection>
 
