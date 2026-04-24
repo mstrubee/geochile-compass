@@ -43,6 +43,77 @@ const parseKmlStringWithFolders = (text: string): FeatureCollection => {
   const root = doc.documentElement;
   if (!root) throw new Error("KML vacío");
 
+  // ── Pre-extracción de iconos definidos en <Style> y <StyleMap> ─────────────
+  // Construye mapas "#styleId" → href para asociarlos a cada Placemark vía
+  // su <styleUrl>. togeojson a veces no rellena properties.icon, así que lo
+  // hacemos nosotros como fallback.
+  const styleIconMap = new Map<string, string>();
+  const styleMapPairs = new Map<string, string>();
+
+  const getIconHrefFromStyle = (styleEl: Element): string | null => {
+    // Busca <Icon><href> y también <gx:Icon><href> (extensión Google).
+    // getElementsByTagNameNS("*", "Icon") cubre ambos casos.
+    const iconStyles = styleEl.getElementsByTagName("IconStyle");
+    for (let i = 0; i < iconStyles.length; i++) {
+      const icons = iconStyles[i].getElementsByTagNameNS("*", "Icon");
+      for (let j = 0; j < icons.length; j++) {
+        const hrefs = icons[j].getElementsByTagNameNS("*", "href");
+        if (hrefs.length && hrefs[0].textContent) {
+          return hrefs[0].textContent.trim();
+        }
+      }
+    }
+    return null;
+  };
+
+  const styles = root.getElementsByTagName("Style");
+  for (let i = 0; i < styles.length; i++) {
+    const s = styles[i];
+    const id = s.getAttribute("id");
+    if (!id) continue;
+    const href = getIconHrefFromStyle(s);
+    if (href) styleIconMap.set(`#${id}`, href);
+  }
+
+  const styleMaps = root.getElementsByTagName("StyleMap");
+  for (let i = 0; i < styleMaps.length; i++) {
+    const sm = styleMaps[i];
+    const id = sm.getAttribute("id");
+    if (!id) continue;
+    const pairs = sm.getElementsByTagName("Pair");
+    let chosen: string | null = null;
+    let firstUrl: string | null = null;
+    for (let j = 0; j < pairs.length; j++) {
+      const p = pairs[j];
+      const keyEl = p.getElementsByTagName("key")[0];
+      const urlEl = p.getElementsByTagName("styleUrl")[0];
+      if (!urlEl?.textContent) continue;
+      const url = urlEl.textContent.trim();
+      if (!firstUrl) firstUrl = url;
+      if (keyEl?.textContent?.trim() === "normal") {
+        chosen = url;
+        break;
+      }
+    }
+    const target = chosen ?? firstUrl;
+    if (target) styleMapPairs.set(`#${id}`, target);
+  }
+
+  const resolveStyleUrlToIcon = (styleUrl: string): string | null => {
+    const seen = new Set<string>();
+    let cur = styleUrl.startsWith("#") ? styleUrl : `#${styleUrl}`;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      if (styleIconMap.has(cur)) return styleIconMap.get(cur)!;
+      if (styleMapPairs.has(cur)) {
+        cur = styleMapPairs.get(cur)!;
+        continue;
+      }
+      break;
+    }
+    return null;
+  };
+
   const features: Feature[] = [];
 
   // Build a tiny KML wrapper around a single Placemark so togeojson can convert it.
@@ -54,8 +125,27 @@ const parseKmlStringWithFolders = (text: string): FeatureCollection => {
     return fc.features ?? [];
   };
 
+  const getPlacemarkIcon = (placemark: Element): string | null => {
+    // 1) Style inline directamente dentro del Placemark
+    for (let i = 0; i < placemark.children.length; i++) {
+      const c = placemark.children[i];
+      if (c.tagName === "Style") {
+        const href = getIconHrefFromStyle(c);
+        if (href) return href;
+      }
+    }
+    // 2) styleUrl → mapa global
+    for (let i = 0; i < placemark.children.length; i++) {
+      const c = placemark.children[i];
+      if (c.tagName === "styleUrl" && c.textContent) {
+        const href = resolveStyleUrlToIcon(c.textContent.trim());
+        if (href) return href;
+      }
+    }
+    return null;
+  };
+
   const folderName = (folder: Element): string => {
-    // Direct child <name>, not nested ones from inner Placemarks.
     for (let i = 0; i < folder.children.length; i++) {
       const c = folder.children[i];
       if (c.tagName === "name") return (c.textContent ?? "").trim() || "Sin nombre";
@@ -64,21 +154,23 @@ const parseKmlStringWithFolders = (text: string): FeatureCollection => {
   };
 
   const walk = (node: Element, path: string[]) => {
-    // Only iterate direct children to preserve the hierarchy.
     for (let i = 0; i < node.children.length; i++) {
       const child = node.children[i];
       const tag = child.tagName;
       if (tag === "Folder" || tag === "Document") {
         const name = folderName(child);
-        // <Document> at the root contributes no folder level.
         const isRootDocument = tag === "Document" && path.length === 0 && node === root;
         const nextPath = isRootDocument ? path : [...path, name];
         walk(child, nextPath);
       } else if (tag === "Placemark") {
         const converted = convertPlacemark(child);
+        const iconHref = getPlacemarkIcon(child);
         for (const f of converted) {
           const props = (f.properties ?? {}) as Record<string, unknown>;
           props[FOLDER_PATH_KEY] = path;
+          if (iconHref && typeof props.icon !== "string") {
+            props.icon = iconHref;
+          }
           f.properties = props;
           features.push(f);
         }
@@ -88,11 +180,14 @@ const parseKmlStringWithFolders = (text: string): FeatureCollection => {
 
   walk(root, []);
 
-  // Fallback: if we found nothing (unusual KML structure), use plain togeojson.
   if (features.length === 0) {
     const fc = kml(doc) as FeatureCollection;
     return fc;
   }
+
+  console.info(
+    `[KML] ${features.length} features · ${styleIconMap.size} estilos con icono · ${styleMapPairs.size} StyleMaps`,
+  );
 
   return { type: "FeatureCollection", features };
 };
