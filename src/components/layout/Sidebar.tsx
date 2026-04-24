@@ -71,12 +71,23 @@ interface SidebarProps {
   savedPoisVisible: boolean;
   onToggleSavedPoisVisible: () => void;
   onRemoveSavedPoi: (id: string) => void;
+  onDeleteFolder?: (id: string) => Promise<void> | void;
   onClearSavedPois: () => void;
   onOpenPoiManager: () => void;
   poiFolderCount: number;
   poiFolders: PoiFolder[];
   onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
+  // Papelera
+  trashedPois?: SavedPoi[];
+  trashedFolders?: PoiFolder[];
+  onRestorePois?: (ids: string[]) => Promise<void> | void;
+  onRestoreFolder?: (id: string) => Promise<void> | void;
+  onPurgePois?: (ids: string[]) => Promise<void> | void;
+  onPurgeFolder?: (id: string) => Promise<void> | void;
+  /** IDs de carpetas ocultas (no se muestran en el mapa). */
+  hiddenPoiFolders?: Set<string>;
+  onHiddenPoiFoldersChange?: (next: Set<string>) => void;
   // OpenStreetMap (Overpass)
   onLoadOverpass: (
     kind: { type: "preset"; presetId: string; label: string } | { type: "text"; text: string },
