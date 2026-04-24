@@ -1,10 +1,12 @@
 import { useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2 } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair } from "lucide-react";
 import { toast } from "sonner";
 import type { LayerKey, LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
 import type { UserLayer } from "@/types/userLayers";
+import type { IsoMode, Isochrone } from "@/types/isochrones";
+import { ISO_MODE_LABEL } from "@/types/isochrones";
 import { parseFile, getExtension } from "@/utils/fileParsers";
 
 interface SidebarProps {
@@ -21,6 +23,17 @@ interface SidebarProps {
   onAddUserLayer: (layer: UserLayer) => void;
   onToggleUserLayer: (id: string) => void;
   onRemoveUserLayer: (id: string) => void;
+  // Isochrones
+  isoMode: IsoMode;
+  onIsoModeChange: (m: IsoMode) => void;
+  isoMinutes: number[];
+  onIsoMinutesChange: (m: number[]) => void;
+  isochrones: Isochrone[];
+  onToggleIsochrone: (id: string) => void;
+  onRemoveIsochrone: (id: string) => void;
+  onClearIsochrones: () => void;
+  onFocusIsochrone: (id: string) => void;
+  isoLoading: boolean;
 }
 
 interface LayerRow {
@@ -102,6 +115,16 @@ export const Sidebar = ({
   onAddUserLayer,
   onToggleUserLayer,
   onRemoveUserLayer,
+  isoMode,
+  onIsoModeChange,
+  isoMinutes,
+  onIsoMinutesChange,
+  isochrones,
+  onToggleIsochrone,
+  onRemoveIsochrone,
+  onClearIsochrones,
+  onFocusIsochrone,
+  isoLoading,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
