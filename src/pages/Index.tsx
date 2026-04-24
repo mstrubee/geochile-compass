@@ -127,15 +127,49 @@ const Index = () => {
     async (folderId: string | null) => {
       if (!savePending) return;
       try {
-        const n = await addMany(savePending.items, folderId);
-        toast.success(`${n} POIs guardados`);
+        // Replicar las carpetas/subcarpetas detectadas en el archivo (KMZ/KML).
+        // Cada PoiInsert puede llevar properties._folderPath = ["Padre", "Hijo"].
+        // Las carpetas se crean bajo `folderId` (destino elegido por el usuario).
+        const FOLDER_PATH_KEY = "_folderPath";
+        const cache = new Map<string, string | null>(); // "a\u0000b" -> folderId
+        cache.set("", folderId);
+
+        const ensureFolder = async (path: string[]): Promise<string | null> => {
+          if (!path.length) return folderId;
+          const key = path.join("\u0000");
+          if (cache.has(key)) return cache.get(key)!;
+          const parent = await ensureFolder(path.slice(0, -1));
+          const name = path[path.length - 1];
+          const f = await createFolder(name, parent, null);
+          cache.set(key, f.id);
+          return f.id;
+        };
+
+        const itemsWithFolders: PoiInsert[] = [];
+        for (const item of savePending.items) {
+          const props = (item.properties ?? {}) as Record<string, unknown>;
+          const raw = props[FOLDER_PATH_KEY];
+          const path = Array.isArray(raw)
+            ? (raw.filter((x) => typeof x === "string") as string[])
+            : [];
+          const targetFolder = await ensureFolder(path);
+          itemsWithFolders.push({ ...item, folder_id: targetFolder });
+        }
+
+        const n = await addMany(itemsWithFolders, folderId);
+        const createdFolders = cache.size - 1; // descontamos la entrada raíz
+        toast.success(
+          createdFolders > 0
+            ? `${n} POIs guardados · ${createdFolders} carpetas creadas`
+            : `${n} POIs guardados`,
+        );
         setSavePending(null);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Error";
         toast.error(`No se pudieron guardar: ${msg}`);
       }
     },
-    [savePending, addMany],
+    [savePending, addMany, createFolder],
   );
 
   const isoColorPalette = [
