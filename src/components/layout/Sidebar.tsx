@@ -48,6 +48,8 @@ interface SidebarProps {
   onOpenPoiManager: () => void;
   poiFolderCount: number;
   poiFolders: PoiFolder[];
+  onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
+  onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
 }
 
 interface LayerRow {
