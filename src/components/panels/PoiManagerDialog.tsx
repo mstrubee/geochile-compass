@@ -28,6 +28,7 @@ interface Props {
   onCreateFolder: (name: string, parentId: string | null) => Promise<PoiFolder>;
   onRenameFolder: (id: string, name: string) => Promise<void>;
   onDeleteFolder: (id: string) => Promise<void>;
+  onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
   onUpdatePoi: (id: string, patch: PoiUpdate) => Promise<void>;
   onDeletePois: (ids: string[]) => Promise<void>;
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
@@ -46,6 +47,7 @@ export const PoiManagerDialog = ({
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
+  onMoveFolder,
   onUpdatePoi,
   onDeletePois,
   onMovePois,
@@ -175,6 +177,30 @@ export const PoiManagerDialog = ({
     }
   };
 
+  const descendantsOf = (id: string): Set<string> => {
+    const out = new Set<string>();
+    const walk = (pid: string) => {
+      (childrenOf.get(pid) ?? []).forEach((c) => {
+        if (!out.has(c.id)) {
+          out.add(c.id);
+          walk(c.id);
+        }
+      });
+    };
+    walk(id);
+    return out;
+  };
+
+  const handleMoveFolder = async (folderId: string, parentId: string | null) => {
+    try {
+      await onMoveFolder(folderId, parentId);
+      toast.success("Carpeta movida");
+      if (parentId) setExpanded((p) => new Set(p).add(parentId));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error");
+    }
+  };
+
   const renderPoiRow = (p: SavedPoi, depth: number) => (
     <div
       key={p.id}
@@ -213,6 +239,12 @@ export const PoiManagerDialog = ({
       </button>
     </div>
   );
+
+  const folderPath = (id: string): string => {
+    const f = folders.find((x) => x.id === id);
+    if (!f) return "";
+    return f.parent_id ? `${folderPath(f.parent_id)} › ${f.name}` : f.name;
+  };
 
   const renderFolder = (f: PoiFolder, depth: number) => {
     const isOpen = expanded.has(f.id);
@@ -267,6 +299,32 @@ export const PoiManagerDialog = ({
               >
                 <Pencil className="h-3 w-3" />
               </button>
+              <Select
+                value={f.parent_id ?? "__null__"}
+                onValueChange={(v) => handleMoveFolder(f.id, v === "__null__" ? null : v)}
+              >
+                <SelectTrigger
+                  className="hidden h-6 w-6 items-center justify-center rounded border-0 bg-transparent p-0 hover:bg-primary/10 hover:text-primary group-hover:flex [&>svg:last-child]:hidden"
+                  aria-label="Mover carpeta"
+                  title="Convertir en hija de…"
+                >
+                  <Move className="h-3 w-3" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__null__">— Raíz (sin padre) —</SelectItem>
+                  {folders
+                    .filter((opt) => {
+                      if (opt.id === f.id) return false;
+                      const desc = descendantsOf(f.id);
+                      return !desc.has(opt.id);
+                    })
+                    .map((opt) => (
+                      <SelectItem key={opt.id} value={opt.id}>
+                        {folderPath(opt.id)}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
               <button
                 onClick={() => handleDeleteFolderPois(f.id)}
                 disabled={!myPois.length}
@@ -316,11 +374,6 @@ export const PoiManagerDialog = ({
 
   const orphanPois = poisByFolder.get(null) ?? [];
   const rootOpen = expanded.has("__root__");
-  const folderPath = (id: string): string => {
-    const f = folders.find((x) => x.id === id);
-    if (!f) return "";
-    return f.parent_id ? `${folderPath(f.parent_id)} › ${f.name}` : f.name;
-  };
   const folderOptions = [
     { id: "__null__", label: "— Sin carpeta (raíz) —" },
     ...folders.map((f) => ({ id: f.id, label: folderPath(f.id) })),
