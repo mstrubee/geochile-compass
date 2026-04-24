@@ -155,6 +155,49 @@ export const Sidebar = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Carpetas expandidas en el árbol de POIs guardados (por defecto: todas las raíz + "sin carpeta")
+  const [expandedPoiFolders, setExpandedPoiFolders] = useState<Set<string>>(new Set(["__root__"]));
+  const togglePoiFolder = (id: string) =>
+    setExpandedPoiFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  // Indexación jerárquica
+  const poiChildrenMap = useMemo(() => {
+    const m = new Map<string | null, PoiFolder[]>();
+    poiFolders.forEach((f) => {
+      const k = f.parent_id;
+      const arr = m.get(k) ?? [];
+      arr.push(f);
+      m.set(k, arr);
+    });
+    return m;
+  }, [poiFolders]);
+  const poisByFolderMap = useMemo(() => {
+    const m = new Map<string | null, SavedPoi[]>();
+    savedPois.forEach((p) => {
+      const k = p.folder_id;
+      const arr = m.get(k) ?? [];
+      arr.push(p);
+      m.set(k, arr);
+    });
+    return m;
+  }, [savedPois]);
+  // Recuento total (incluye descendientes)
+  const totalCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    const visit = (id: string): number => {
+      const own = (poisByFolderMap.get(id) ?? []).length;
+      const subs = poiChildrenMap.get(id) ?? [];
+      const total = own + subs.reduce((acc, s) => acc + visit(s.id), 0);
+      counts.set(id, total);
+      return total;
+    };
+    (poiChildrenMap.get(null) ?? []).forEach((f) => visit(f.id));
+    return counts;
+  }, [poiChildrenMap, poisByFolderMap]);
 
   const colorPalette = [
     "#34D399", "#F472B6", "#FBBF24", "#60A5FA",
