@@ -53,6 +53,31 @@ const ClickHandler = ({ onClick }: { onClick: (c: { lat: number; lng: number }) 
   return null;
 };
 
+const ViewportTracker = ({
+  onChange,
+}: {
+  onChange: (bbox: [number, number, number, number], zoom: number) => void;
+}) => {
+  const map = useMap();
+  useEffect(() => {
+    const emit = () => {
+      const b = map.getBounds();
+      onChange(
+        [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()],
+        map.getZoom(),
+      );
+    };
+    emit();
+    map.on("moveend", emit);
+    map.on("zoomend", emit);
+    return () => {
+      map.off("moveend", emit);
+      map.off("zoomend", emit);
+    };
+  }, [map, onChange]);
+  return null;
+};
+
 const InvalidateOnResize = () => {
   const map = useMap();
   useEffect(() => {
@@ -126,6 +151,7 @@ interface MapViewProps {
     lng: number;
     bbox: [number, number, number, number] | null;
   } | null;
+  onViewportChange?: (bbox: [number, number, number, number], zoom: number) => void;
 }
 
 export const MapView = ({
@@ -162,6 +188,7 @@ export const MapView = ({
   fitMicrozoneId,
   onFitMicrozoneDone,
   flyTarget,
+  onViewportChange,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -183,6 +210,7 @@ export const MapView = ({
       {isoMode && <ClickHandler onClick={onMapClick} />}
       <InvalidateOnResize />
       <FlyToTarget target={flyTarget} />
+      {onViewportChange && <ViewportTracker onChange={onViewportChange} />}
       <ManzanaLayer
         visible={layers.manzanas}
         data={manzanaData}
