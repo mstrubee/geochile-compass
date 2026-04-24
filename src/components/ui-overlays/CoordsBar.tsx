@@ -4,7 +4,7 @@ interface CoordsBarProps {
 
 export const CoordsBar = ({ coords }: CoordsBarProps) => {
   return (
-    <div className="pointer-events-none absolute bottom-1.5 left-1/2 z-[500] -translate-x-1/2 rounded-sm border border-border bg-background/80 px-3 py-0.5 font-mono text-[9px] text-text-muted">
+    <div className="pointer-events-none absolute bottom-2 left-1/2 z-[500] -translate-x-1/2 rounded-full border border-border/60 bg-surface/70 px-3 py-1 font-mono text-[10px] text-muted-foreground shadow-apple-sm backdrop-blur-2xl backdrop-saturate-150">
       LAT {coords ? coords.lat.toFixed(5) : "—"} · LNG {coords ? coords.lng.toFixed(5) : "—"}
     </div>
   );

@@ -2,77 +2,74 @@
 @tailwind components;
 @tailwind utilities;
 
-/* GeoChile SIG — Design System
+/* GeoChile SIG — Apple-inspired design system
    All colors MUST be HSL. Define tokens here, never inline in components.
 */
 
 @layer base {
   :root {
-    /* Surfaces (dark by default — this is a GIS app) */
-    --background: 222 38% 5%;          /* #07090f */
-    --foreground: 210 40% 90%;         /* #e2e8f0 */
+    /* Cool neutral surfaces (dark GIS) */
+    --background: 220 18% 7%;
+    --foreground: 210 20% 96%;
 
-    --surface: 222 35% 9%;             /* #0e1320 */
-    --surface-2: 222 35% 13%;          /* #141d2e */
-    --surface-3: 222 35% 16%;          /* #1a2438 */
+    --surface: 220 16% 10%;
+    --surface-2: 220 14% 14%;
+    --surface-3: 220 13% 18%;
 
-    --card: 222 35% 9%;
-    --card-foreground: 210 40% 90%;
+    --card: 220 16% 10%;
+    --card-foreground: 210 20% 96%;
 
-    --popover: 222 35% 8%;
-    --popover-foreground: 210 40% 90%;
+    --popover: 220 16% 9%;
+    --popover-foreground: 210 20% 96%;
 
-    /* Brand */
-    --primary: 199 89% 60%;            /* #38bdf8 sky */
-    --primary-foreground: 222 38% 5%;
-    --primary-dim: 199 89% 60% / 0.12;
+    /* Apple-ish system blue */
+    --primary: 211 100% 60%;
+    --primary-foreground: 220 18% 7%;
+    --primary-dim: 211 100% 60% / 0.12;
 
-    --secondary: 222 35% 13%;
-    --secondary-foreground: 210 40% 90%;
+    --secondary: 220 14% 14%;
+    --secondary-foreground: 210 20% 96%;
 
-    --muted: 222 35% 13%;
-    --muted-foreground: 215 20% 65%;   /* #94a3b8 */
-    --text-muted: 215 19% 35%;         /* #475569 */
+    --muted: 220 14% 14%;
+    --muted-foreground: 220 9% 65%;
+    --text-muted: 220 8% 48%;
 
-    --accent: 199 89% 60%;
-    --accent-foreground: 222 38% 5%;
+    --accent: 211 100% 60%;
+    --accent-foreground: 220 18% 7%;
 
-    --destructive: 0 84% 60%;          /* #ef4444 */
+    --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 219 37% 19%;             /* #1e2a42 */
-    --border-2: 219 33% 25%;           /* #2a3a56 */
-    --input: 219 37% 19%;
-    --ring: 199 89% 60%;
+    --border: 220 12% 20%;
+    --border-2: 220 11% 28%;
+    --input: 220 12% 20%;
+    --ring: 211 100% 60%;
 
-    --radius: 6px;
+    --radius: 12px;
 
-    /* Semantic territorial palette */
-    --orange: 24 95% 53%;              /* #f97316 */
-    --green: 142 71% 45%;              /* #22c55e */
+    /* Saturated data palette (only for map data, not chrome) */
+    --orange: 24 95% 53%;
+    --green: 142 71% 45%;
     --red: 0 84% 60%;
-    --yellow: 47 95% 53%;              /* #eab308 */
-    --purple: 271 91% 65%;             /* #a855f7 */
-    --pink: 330 81% 60%;               /* #ec4899 */
-    --teal: 173 80% 40%;               /* #14b8a6 */
+    --yellow: 47 95% 53%;
+    --purple: 271 91% 65%;
+    --pink: 330 81% 60%;
+    --teal: 173 80% 40%;
 
-    /* Isochrone rings */
-    --iso-1: 38 92% 50%;               /* #f59e0b */
-    --iso-2: 24 95% 53%;               /* #f97316 */
-    --iso-3: 0 84% 60%;                /* #ef4444 */
+    --iso-1: 38 92% 50%;
+    --iso-2: 24 95% 53%;
+    --iso-3: 0 84% 60%;
 
-    /* Sidebar (kept for shadcn compat) */
-    --sidebar-background: 222 35% 9%;
-    --sidebar-foreground: 210 40% 90%;
-    --sidebar-primary: 199 89% 60%;
-    --sidebar-primary-foreground: 222 38% 5%;
-    --sidebar-accent: 222 35% 13%;
-    --sidebar-accent-foreground: 210 40% 90%;
-    --sidebar-border: 219 37% 19%;
-    --sidebar-ring: 199 89% 60%;
+    --sidebar-background: 220 16% 10%;
+    --sidebar-foreground: 210 20% 96%;
+    --sidebar-primary: 211 100% 60%;
+    --sidebar-primary-foreground: 220 18% 7%;
+    --sidebar-accent: 220 14% 14%;
+    --sidebar-accent-foreground: 210 20% 96%;
+    --sidebar-border: 220 12% 20%;
+    --sidebar-ring: 211 100% 60%;
   }
 
-  /* Force dark — this is a GIS console */
   html { color-scheme: dark; }
 }
 
@@ -80,50 +77,71 @@
   * { @apply border-border; }
   html, body, #root { height: 100%; }
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Outfit', system-ui, sans-serif;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
     overflow: hidden;
   }
 }
 
 @layer utilities {
-  .font-display { font-family: 'Syne', system-ui, sans-serif; }
-  .font-mono { font-family: 'DM Mono', ui-monospace, monospace; }
-  .font-body { font-family: 'Outfit', system-ui, sans-serif; }
+  .font-display { font-family: 'Inter', system-ui, sans-serif; letter-spacing: -0.02em; }
+  .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .font-body { font-family: 'Inter', system-ui, sans-serif; }
 
-  .scrollbar-thin::-webkit-scrollbar { width: 3px; height: 3px; }
-  .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); }
+  .glass {
+    background: hsl(var(--surface) / 0.72);
+    backdrop-filter: saturate(160%) blur(24px);
+    -webkit-backdrop-filter: saturate(160%) blur(24px);
+    border: 1px solid hsl(var(--border) / 0.6);
+  }
+
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border-2)); border-radius: 6px; }
   .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 }
 
-/* Leaflet popup theme overrides — tied to design tokens */
+/* Leaflet — glass overrides */
 .leaflet-container { background: hsl(0 0% 100%); }
 .leaflet-popup-content-wrapper {
-  background: hsl(var(--surface)) !important;
-  border: 1px solid hsl(var(--border)) !important;
-  border-radius: 8px !important;
-  box-shadow: 0 4px 20px hsl(0 0% 0% / 0.7) !important;
+  background: hsl(var(--surface) / 0.92) !important;
+  backdrop-filter: saturate(160%) blur(20px);
+  -webkit-backdrop-filter: saturate(160%) blur(20px);
+  border: 1px solid hsl(var(--border) / 0.6) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 2px 4px hsl(0 0% 0% / 0.22), 0 24px 48px hsl(0 0% 0% / 0.4) !important;
   padding: 0 !important;
   color: hsl(var(--foreground));
 }
-.leaflet-popup-content { margin: 10px 13px !important; color: hsl(var(--foreground)); }
-.leaflet-popup-tip { background: hsl(var(--surface)) !important; border: 1px solid hsl(var(--border)) !important; }
-.leaflet-popup-close-button { color: hsl(var(--text-muted)) !important; top: 7px !important; right: 7px !important; }
+.leaflet-popup-content { margin: 12px 14px !important; color: hsl(var(--foreground)); font-family: 'Inter', sans-serif; }
+.leaflet-popup-tip { background: hsl(var(--surface) / 0.92) !important; border: 1px solid hsl(var(--border) / 0.6) !important; }
+.leaflet-popup-close-button { color: hsl(var(--text-muted)) !important; top: 8px !important; right: 8px !important; }
 .leaflet-popup-close-button:hover { color: hsl(var(--primary)) !important; }
+.leaflet-control-zoom {
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 1px 2px hsl(0 0% 0% / 0.18), 0 8px 24px hsl(0 0% 0% / 0.32) !important;
+}
 .leaflet-control-zoom a {
-  background: hsl(var(--surface)) !important;
-  border-color: hsl(var(--border)) !important;
-  color: hsl(var(--muted-foreground)) !important;
+  background: hsl(var(--surface) / 0.78) !important;
+  backdrop-filter: saturate(160%) blur(20px);
+  -webkit-backdrop-filter: saturate(160%) blur(20px);
+  border-color: hsl(var(--border) / 0.6) !important;
+  color: hsl(var(--foreground)) !important;
+  font-weight: 500 !important;
 }
 .leaflet-control-zoom a:hover {
-  background: hsl(var(--surface-2)) !important;
+  background: hsl(var(--surface-2) / 0.92) !important;
   color: hsl(var(--primary)) !important;
 }
-.leaflet-bar { border: 1px solid hsl(var(--border)) !important; box-shadow: none !important; }
+.leaflet-bar { border: none !important; box-shadow: none !important; }
 .leaflet-control-attribution {
-  background: hsl(var(--surface) / 0.8) !important;
+  background: hsl(var(--surface) / 0.7) !important;
+  backdrop-filter: blur(12px);
   color: hsl(var(--text-muted)) !important;
-  font-family: 'DM Mono', monospace !important;
+  font-family: 'JetBrains Mono', monospace !important;
   font-size: 9px !important;
+  border-radius: 6px !important;
 }
 .leaflet-control-attribution a { color: hsl(var(--primary)) !important; }

@@ -110,7 +110,7 @@ const Index = () => {
           {mode !== "none" && (
             <div
               className={[
-                "pointer-events-none absolute left-1/2 top-[60px] z-[700] -translate-x-1/2 rounded-full px-4 py-1.5 font-mono text-[11px] backdrop-blur",
+                "pointer-events-none absolute left-1/2 top-[68px] z-[700] -translate-x-1/2 rounded-full px-4 py-1.5 text-[12px] font-medium shadow-apple backdrop-blur-2xl",
                 mode === "isochrone"
                   ? "bg-iso-1/90 text-background"
                   : "bg-brand-purple/90 text-background",
@@ -124,9 +124,10 @@ const Index = () => {
 
           <button
             onClick={() => setPanelOpen(true)}
-            className="absolute bottom-12 right-4 z-[500] rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+            aria-label="Abrir panel de análisis"
+            className="absolute bottom-14 right-4 z-[500] flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-apple-lg transition-transform hover:scale-105 active:scale-95"
           >
-            Vista previa del panel ▸
+            <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M13 6l6 6-6 6"/></svg>
           </button>
 
           <AnalysisPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
