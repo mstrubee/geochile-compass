@@ -57,21 +57,21 @@ const Swatch = ({ item }: { item: LegendItem }) =>
   );
 
 export const Legend = ({ shifted, layers }: LegendProps) => {
-  // Determine context: NSE > Traffic > Default. Predominant single layer wins.
+  // Determine context: NSE > Traffic > Default
   const showNSE = layers.nse;
   const showTraffic = !showNSE && layers.traffic;
 
   let title = "Leyenda";
   let footer = "Activa una capa para ver detalle";
   let items: LegendItem[];
-  let predominant: { label: string; pct: number } | null = null;
+  let topLabel: string | null = null;
 
   if (showNSE) {
     title = "NSE — Distribución";
     const nseItems = computeNSEDistribution();
     items = nseItems;
     const top = [...nseItems].sort((a, b) => b.pct - a.pct)[0];
-    predominant = { label: top.label, pct: top.pct };
+    topLabel = top.label;
     footer = `Predominante: ${top.label} · ${top.pct.toFixed(0)}%`;
   } else if (showTraffic) {
     title = "Tráfico Vehicular";
@@ -100,13 +100,10 @@ export const Legend = ({ shifted, layers }: LegendProps) => {
             {i.meta && (
               <span className="font-mono text-[9px] text-text-muted">{i.meta}</span>
             )}
-            {showNSE && predominant?.label === i.label && (
+            {topLabel === i.label && (
               <span
-                className="rounded-sm px-1 py-px font-mono text-[8px] uppercase"
-                style={{
-                  color: "hsl(var(--background))",
-                  background: `hsl(${NSE_COLOR_HSL[(items as Array<{ nse: NSE }>)[items.findIndex((x) => x.label === i.label)].nse]})`,
-                }}
+                className="rounded-sm px-1 py-px font-mono text-[8px] uppercase text-background"
+                style={{ background: typeof i.swatch === "string" && i.inline ? i.swatch : "hsl(var(--primary))" }}
               >
                 top
               </span>
