@@ -1210,6 +1210,32 @@ export const Sidebar = ({
                               <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
                               {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
                             </ContextMenuItem>
+                            {onCreateFolder && (
+                              <ContextMenuItem
+                                onSelect={async () => {
+                                  const name = window.prompt(
+                                    `Nombre de la nueva subcarpeta dentro de "${f.name}":`,
+                                    "",
+                                  );
+                                  if (!name?.trim()) return;
+                                  try {
+                                    await onCreateFolder(name.trim(), f.id);
+                                    // Asegurar que la carpeta padre quede expandida para ver la nueva
+                                    setExpandedPoiFolders((prev) => {
+                                      const next = new Set(prev);
+                                      next.add(f.id);
+                                      return next;
+                                    });
+                                    toast.success(`Subcarpeta "${name.trim()}" creada`);
+                                  } catch (err) {
+                                    toast.error(err instanceof Error ? err.message : "Error al crear");
+                                  }
+                                }}
+                              >
+                                <FolderPlus className="mr-2 h-3.5 w-3.5" />
+                                Crear subcarpeta…
+                              </ContextMenuItem>
+                            )}
                             {onImportFilesIntoFolder && (
                               <ContextMenuItem
                                 onSelect={() => {
