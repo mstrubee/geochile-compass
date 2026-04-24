@@ -15,6 +15,7 @@ import { useSavedPois } from "@/hooks/useSavedPois";
 import { usePoiFolders } from "@/hooks/usePoiFolders";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
+import { fetchOverpassPreset, fetchOverpassFreeText, bboxAreaDegSq } from "@/services/overpassService";
 import { extractPointPois, countPoints, type PoiInsert } from "@/types/pois";
 import type { NSE } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
