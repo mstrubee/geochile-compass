@@ -63,7 +63,7 @@ const Index = () => {
     removeMany: removePois,
     clearAll: clearAllPois,
   } = useSavedPois();
-  const { folders, create: createFolder, rename: renameFolder, remove: deleteFolder, refresh: refreshFolders } = usePoiFolders();
+  const { folders, create: createFolder, rename: renameFolder, remove: deleteFolder, move: moveFolder, refresh: refreshFolders } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
   const [managerOpen, setManagerOpen] = useState(false);
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
