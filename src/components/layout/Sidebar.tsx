@@ -391,11 +391,6 @@ export const Sidebar = ({
           ))}
         </SidebarSection>
 
-        <SidebarSection title="Puntos de interés">
-          {POI_LAYERS.map((row) => (
-            <LayerItem key={row.name} row={row} on={true} />
-          ))}
-        </SidebarSection>
 
         <SidebarSection title="Isócronas">
           <div className="mb-2 flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
