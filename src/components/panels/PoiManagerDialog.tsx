@@ -47,6 +47,7 @@ export const PoiManagerDialog = ({
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
+  onMoveFolder,
   onUpdatePoi,
   onDeletePois,
   onMovePois,
