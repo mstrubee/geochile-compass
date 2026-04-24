@@ -97,6 +97,4 @@ export const ManzanaLayer = ({ visible, data, variable, onViewportChange }: Manz
     />
   );
 
-  // Suppress unused
-  void Popup;
 };
