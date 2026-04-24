@@ -389,15 +389,115 @@ export const Sidebar = ({
         </SidebarSection>
 
         <SidebarSection title="Microzonas personalizadas">
-          <p className="mb-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
-            Dibuja polígonos para analizar zonas que cruzan comunas.
-          </p>
-          <div className="mb-2 rounded-lg border border-dashed border-border-2 px-2 py-3 text-center text-[11px] text-text-muted">
-            Sin microzonas dibujadas
+          <div className="mb-2 flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
+            {(["polygon", "buffer", "voronoi"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => onMicroSubmodeChange(s)}
+                className={[
+                  "flex-1 rounded-md px-1 py-1 text-[11px] font-medium transition-all",
+                  microSubmode === s
+                    ? "bg-surface-3 text-foreground shadow-apple-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                ].join(" ")}
+              >
+                {s === "polygon" ? "Polígono" : s === "buffer" ? "Buffer" : "Voronoi"}
+              </button>
+            ))}
           </div>
-          <button className="w-full rounded-lg bg-surface-2/60 px-2 py-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive">
-            Limpiar microzonas
-          </button>
+          {microSubmode === "buffer" && (
+            <div className="mb-2 flex items-center gap-1.5">
+              <span className="text-[11px] text-muted-foreground">Radio</span>
+              <input
+                type="number"
+                min={50}
+                max={10000}
+                step={50}
+                value={microBufferRadius}
+                onChange={(e) => onMicroBufferRadiusChange(Math.max(50, parseInt(e.target.value, 10) || 500))}
+                className="w-20 rounded-lg border border-border/60 bg-surface-2/60 px-2 py-1 text-center font-mono text-[11px] text-foreground outline-none focus:border-primary/60"
+              />
+              <span className="text-[11px] text-muted-foreground">m</span>
+            </div>
+          )}
+          {microSubmode === "voronoi" ? (
+            <button
+              onClick={onGenerateVoronoi}
+              className="mb-2 w-full rounded-lg bg-brand-purple px-2.5 py-2 text-[12px] font-medium text-background shadow-apple-sm hover:opacity-90"
+            >
+              Generar Voronoi de POIs visibles
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onToggleMicroMode}
+              className={[
+                "mb-2 w-full rounded-lg px-2.5 py-2 text-[12px] font-medium transition-all",
+                microActive
+                  ? "bg-brand-purple text-background shadow-apple-sm"
+                  : "bg-primary text-primary-foreground hover:opacity-90",
+              ].join(" ")}
+            >
+              {microActive
+                ? "● Modo activo · clic en el mapa (clic aquí para desactivar)"
+                : "Activar modo microzona"}
+            </button>
+          )}
+          {microzones.length === 0 ? (
+            <div className="mb-1 rounded-lg border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-text-muted">
+              Sin microzonas
+            </div>
+          ) : (
+            <div className="mb-1 space-y-0.5">
+              {microzones.map((mz) => (
+                <div key={mz.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2/60">
+                  <button
+                    onClick={() => onToggleMicrozone(mz.id)}
+                    className="flex flex-1 items-center gap-2 text-left"
+                    aria-pressed={mz.visible}
+                  >
+                    <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: mz.color }} />
+                    <span className={["flex-1 truncate text-[12px]", mz.visible ? "text-foreground" : "text-muted-foreground"].join(" ")} title={mz.name}>
+                      {mz.name}
+                    </span>
+                    {mz.stats && (
+                      <span className="font-mono text-[9.5px] text-text-muted" title={`${mz.stats.area_km2.toFixed(2)} km² · ${mz.stats.pop.toLocaleString("es-CL")} hab`}>
+                        {mz.stats.area_km2.toFixed(1)}km² · {mz.stats.pop > 999 ? `${(mz.stats.pop / 1000).toFixed(1)}k` : mz.stats.pop} hab
+                      </span>
+                    )}
+                    <IOSSwitch on={mz.visible} />
+                  </button>
+                  <button
+                    onClick={() => onFocusMicrozone(mz.id)}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted hover:bg-primary/15 hover:text-primary"
+                    aria-label="Centrar"
+                  >
+                    <Crosshair className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onRemoveMicrozone(mz.id)}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted hover:bg-destructive/15 hover:text-destructive"
+                    aria-label="Eliminar"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {microzones.length > 0 && (
+            <button
+              onClick={onClearMicrozones}
+              className="w-full rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            >
+              Limpiar microzonas
+            </button>
+          )}
+          {!layers.manzanas && (
+            <p className="mt-2 px-1 text-[10px] leading-relaxed text-text-muted">
+              Activa la capa <strong>Manzanas</strong> para obtener análisis demográfico (población, NSE).
+            </p>
+          )}
         </SidebarSection>
 
         <SidebarSection title="Capas territoriales">
