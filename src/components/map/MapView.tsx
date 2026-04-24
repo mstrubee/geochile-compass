@@ -95,6 +95,8 @@ interface MapViewProps {
   manzanaData: ManzanaFeatureCollection | null;
   manzanaVariable: ManzanaVariable;
   onManzanaViewportChange: (bbox: [number, number, number, number], zoom: number) => void;
+  densityData: ManzanaFeatureCollection | null;
+  onDensityViewportChange: (bbox: [number, number, number, number], zoom: number) => void;
   gseData: GseFeatureCollection | null;
   gseVariable: GseVariable;
   onGseViewportChange: (bbox: [number, number, number, number], zoom: number) => void;
@@ -135,6 +137,8 @@ export const MapView = ({
   manzanaData,
   manzanaVariable,
   onManzanaViewportChange,
+  densityData,
+  onDensityViewportChange,
   gseData,
   gseVariable,
   onGseViewportChange,
@@ -184,6 +188,12 @@ export const MapView = ({
         data={manzanaData}
         variable={manzanaVariable}
         onViewportChange={onManzanaViewportChange}
+      />
+      <ManzanaLayer
+        visible={layers.density}
+        data={densityData}
+        variable="density"
+        onViewportChange={onDensityViewportChange}
       />
       <CommuneLayer visible={layers.communes} />
       <GseLayer
