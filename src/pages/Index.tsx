@@ -21,6 +21,14 @@ import type { LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
 import type { UserLayer } from "@/types/userLayers";
 import type { IsoMode, Isochrone } from "@/types/isochrones";
+import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
+import { MICRO_PALETTE } from "@/types/microzones";
+import {
+  polygonFromLatLngs,
+  bufferAroundPoint,
+  voronoiFromPois,
+  computeMicrozoneStats,
+} from "@/utils/microzones";
 import { useNavigate } from "react-router-dom";
 
 type Mode = "none" | "isochrone" | "microzone";
