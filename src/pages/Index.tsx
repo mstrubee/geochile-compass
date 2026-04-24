@@ -15,6 +15,7 @@ import { useSavedPois } from "@/hooks/useSavedPois";
 import { usePoiFolders } from "@/hooks/usePoiFolders";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
+import { fetchOverpassPreset, fetchOverpassFreeText, bboxAreaDegSq } from "@/services/overpassService";
 import { extractPointPois, countPoints, type PoiInsert } from "@/types/pois";
 import type { NSE } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
@@ -51,6 +52,14 @@ const Index = () => {
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
   const [manzanaVariable, setManzanaVariable] = useState<ManzanaVariable>("nse");
   const [viewport, setViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
+  // Viewport general (siempre activo) para cargar POIs OSM aunque no haya capa de manzanas activa
+  const [mapViewport, setMapViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
+  const handleMapViewportChange = useCallback(
+    (bbox: [number, number, number, number], zoom: number) => {
+      setMapViewport({ bbox, zoom });
+    },
+    [],
+  );
   // Capa de densidad poblacional (manzanas coloreadas por densidad), controlada desde "Capas territoriales"
   const [densityViewport, setDensityViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
   const handleDensityViewportChange = useCallback(
@@ -188,6 +197,51 @@ const Index = () => {
     setUserLayers((prev) => prev.filter((l) => l.id !== id));
   }, []);
   const handleFitDone = useCallback(() => setFitId(null), []);
+
+  // Cargar POIs desde Overpass (OSM) en el área visible
+  const loadOverpass = useCallback(
+    async (kind: { type: "preset"; presetId: string; label: string } | { type: "text"; text: string }) => {
+      if (!mapViewport) {
+        toast.error("Mapa aún no listo");
+        return;
+      }
+      const [south, west, north, east] = mapViewport.bbox;
+      const bbox = { south, west, north, east };
+      const area = bboxAreaDegSq(bbox);
+      // ~0.25 deg² ≈ 50x50 km a la latitud de Santiago — suficiente; mayor = lento o rechazado
+      if (area > 0.25) {
+        toast.error("Acerca el mapa: el área visible es demasiado grande para OSM");
+        return;
+      }
+      const tId = toast.loading("Consultando OpenStreetMap…");
+      try {
+        const fc =
+          kind.type === "preset"
+            ? await fetchOverpassPreset(kind.presetId, bbox)
+            : await fetchOverpassFreeText(kind.text, bbox);
+        if (!fc.features.length) {
+          toast.error("Sin resultados en el área visible", { id: tId });
+          return;
+        }
+        const label = kind.type === "preset" ? kind.label : kind.text;
+        const id = `osm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const palette = ["#34D399", "#F472B6", "#FBBF24", "#60A5FA", "#A78BFA", "#FB7185", "#22D3EE", "#FB923C"];
+        const color = palette[userLayers.length % palette.length];
+        addUserLayer({
+          id,
+          name: `OSM · ${label}`,
+          color,
+          visible: true,
+          data: fc,
+        });
+        toast.success(`${fc.features.length} POIs cargados (${label})`, { id: tId });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Error";
+        toast.error(`Overpass falló: ${msg}`, { id: tId });
+      }
+    },
+    [mapViewport, userLayers.length, addUserLayer],
+  );
 
   const toggleIsochrone = useCallback((id: string) => {
     setIsochrones((prev) => prev.map((i) => (i.id === id ? { ...i, visible: !i.visible } : i)));
@@ -488,6 +542,7 @@ const Index = () => {
           onClearMicrozones={clearMicrozones}
           onFocusMicrozone={setFitMicrozoneId}
           onGenerateVoronoi={generateVoronoi}
+          onLoadOverpass={loadOverpass}
         />
 
         <div
@@ -533,6 +588,7 @@ const Index = () => {
             fitMicrozoneId={fitMicrozoneId}
             onFitMicrozoneDone={() => setFitMicrozoneId(null)}
             flyTarget={flyTarget}
+            onViewportChange={handleMapViewportChange}
           />
 
           <SearchBar
