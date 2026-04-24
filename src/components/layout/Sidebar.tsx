@@ -1212,23 +1212,35 @@ export const Sidebar = ({
                       <div key={f.id}>
                         <ContextMenu>
                           <ContextMenuTrigger asChild>
-                            <button
-                              type="button"
-                              onClick={() => togglePoiFolder(f.id)}
-                              className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
+                            <div
+                              className="group flex w-full items-center gap-1 rounded-md py-1 pr-1 hover:bg-surface-2/60"
                               style={{ paddingLeft: `${depth * 12 + 2}px` }}
                             >
-                              {isOpen ? (
-                                <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                              ) : (
-                                <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                              )}
-                              <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
-                              <span className="flex-1 truncate text-[11.5px] font-medium text-foreground" title={f.name}>
-                                {f.name}
-                              </span>
-                              <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
-                            </button>
+                              <Checkbox
+                                checked={!isFolderEffectivelyHidden(f.id)}
+                                onCheckedChange={() => toggleFolderVisible(f.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-3 w-3 flex-shrink-0"
+                                aria-label={`Mostrar/ocultar ${f.name}`}
+                                title="Mostrar/ocultar en el mapa"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => togglePoiFolder(f.id)}
+                                className="flex flex-1 items-center gap-1 text-left min-w-0"
+                              >
+                                {isOpen ? (
+                                  <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                )}
+                                <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
+                                <span className="flex-1 truncate text-[11.5px] font-medium text-foreground" title={f.name}>
+                                  {f.name}
+                                </span>
+                                <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
+                              </button>
+                            </div>
                           </ContextMenuTrigger>
                           <ContextMenuContent className="z-[1100]">
                             <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name })}>
