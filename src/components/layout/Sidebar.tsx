@@ -1,13 +1,17 @@
 import { SidebarSection } from "./SidebarSection";
 import { Search, Building2, Wifi, FolderOpen } from "lucide-react";
+import type { LayerKey, LayerState } from "@/types/layers";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite";
   onBasemapChange: (b: "dark" | "light" | "satellite") => void;
   mode: "none" | "isochrone" | "microzone";
+  layers: LayerState;
+  onToggleLayer: (key: LayerKey) => void;
 }
 
 interface LayerRow {
+  key: LayerKey;
   color: string;
   name: string;
   count: number;
@@ -15,10 +19,10 @@ interface LayerRow {
 }
 
 const TERRITORIAL_LAYERS: LayerRow[] = [
-  { color: "bg-primary", name: "Demografía Comunal", count: 20, sub: "Centroides comunales" },
-  { color: "bg-brand-purple", name: "Grupo Socioeconómico", count: 20, sub: "ABC1 · C2 · C3 · D · E" },
-  { color: "bg-brand-orange", name: "Tráfico Vehicular", count: 20 },
-  { color: "bg-brand-pink", name: "Densidad Población", count: 20 },
+  { key: "communes", color: "bg-primary", name: "Demografía Comunal", count: 20, sub: "Centroides comunales" },
+  { key: "nse", color: "bg-brand-purple", name: "Grupo Socioeconómico", count: 20, sub: "ABC1 · C2 · C3 · D · E" },
+  { key: "traffic", color: "bg-brand-orange", name: "Tráfico Vehicular", count: 20 },
+  { key: "density", color: "bg-brand-pink", name: "Densidad Población", count: 20 },
 ];
 
 const POI_LAYERS: LayerRow[] = [
@@ -34,12 +38,22 @@ const StatCard = ({ value, label }: { value: string | number; label: string }) =
   </div>
 );
 
-const LayerItem = ({ row, on = true }: { row: LayerRow; on?: boolean }) => (
-  <div
+interface LayerItemProps {
+  row: LayerRow;
+  on: boolean;
+  onToggle?: () => void;
+}
+
+const LayerItem = ({ row, on, onToggle }: LayerItemProps) => (
+  <button
+    type="button"
+    onClick={onToggle}
     className={[
-      "mb-0.5 flex cursor-pointer items-center gap-2 rounded border px-1.5 py-1 transition-colors",
+      "mb-0.5 flex w-full cursor-pointer items-center gap-2 rounded border px-1.5 py-1 text-left transition-colors",
       on ? "border-primary/20 bg-primary/10" : "border-transparent hover:bg-surface-2",
     ].join(" ")}
+    aria-pressed={on}
+    aria-label={`Capa ${row.name}`}
   >
     {/* Toggle */}
     <div
@@ -60,10 +74,10 @@ const LayerItem = ({ row, on = true }: { row: LayerRow; on?: boolean }) => (
       {row.name}
     </span>
     <span className="font-mono text-[9px] text-text-muted">{row.count}</span>
-  </div>
+  </button>
 );
 
-export const Sidebar = ({ basemap, onBasemapChange, mode }: SidebarProps) => {
+export const Sidebar = ({ basemap, onBasemapChange, mode, layers, onToggleLayer }: SidebarProps) => {
   return (
     <aside className="flex w-[272px] flex-shrink-0 flex-col overflow-hidden border-r border-border bg-surface">
       <div className="scrollbar-thin flex-1 overflow-y-auto">
