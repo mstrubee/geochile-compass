@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -1182,6 +1182,32 @@ export const Sidebar = ({
                               <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
                               {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
                             </ContextMenuItem>
+                            {(() => {
+                              const parent = poiFolders.find((x) => x.id === f.parent_id);
+                              const grandparentId = parent?.parent_id ?? null;
+                              const isRoot = f.parent_id === null;
+                              return (
+                                <ContextMenuItem
+                                  disabled={isRoot}
+                                  onSelect={async () => {
+                                    if (isRoot) return;
+                                    try {
+                                      await onMoveFolder(f.id, grandparentId);
+                                      toast.success(
+                                        grandparentId === null
+                                          ? `"${f.name}" movida a la raíz`
+                                          : `"${f.name}" subida un nivel`,
+                                      );
+                                    } catch (err) {
+                                      toast.error(err instanceof Error ? err.message : "Error al mover");
+                                    }
+                                  }}
+                                >
+                                  <CornerLeftUp className="mr-2 h-3.5 w-3.5" />
+                                  Subir un nivel{isRoot ? " (ya está en raíz)" : ""}
+                                </ContextMenuItem>
+                              );
+                            })()}
                             {clipboard && (
                               <>
                                 <ContextMenuSeparator />
