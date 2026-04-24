@@ -45,9 +45,10 @@ const InvalidateOnResize = () => {
 interface MapViewProps {
   basemap: "dark" | "light" | "satellite";
   onMouseMove: (c: { lat: number; lng: number }) => void;
+  layers: import("@/types/layers").LayerState;
 }
 
-export const MapView = ({ basemap, onMouseMove }: MapViewProps) => {
+export const MapView = ({ basemap, onMouseMove, layers }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
     <MapContainer
@@ -66,7 +67,7 @@ export const MapView = ({ basemap, onMouseMove }: MapViewProps) => {
       <ZoomControlTopRight />
       <MouseTracker onMouseMove={onMouseMove} />
       <InvalidateOnResize />
-      <CommuneLayer />
+      <CommuneLayer visible={layers.communes} />
     </MapContainer>
   );
 };

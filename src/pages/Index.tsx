@@ -14,6 +14,15 @@ const Index = () => {
   const [basemap, setBasemap] = useState<"dark" | "light" | "satellite">("dark");
   const [panelOpen, setPanelOpen] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [layers, setLayers] = useState({
+    communes: true,
+    nse: false,
+    traffic: false,
+    density: false,
+  });
+
+  const toggleLayer = (key: keyof typeof layers) =>
+    setLayers((l) => ({ ...l, [key]: !l[key] }));
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
@@ -24,7 +33,13 @@ const Index = () => {
       />
 
       <main className="flex flex-1 overflow-hidden">
-        <Sidebar basemap={basemap} onBasemapChange={setBasemap} mode={mode} />
+        <Sidebar
+          basemap={basemap}
+          onBasemapChange={setBasemap}
+          mode={mode}
+          layers={layers}
+          onToggleLayer={toggleLayer}
+        />
 
         <div
           className={[
@@ -35,7 +50,7 @@ const Index = () => {
             .filter(Boolean)
             .join(" ")}
         >
-          <MapView basemap={basemap} onMouseMove={setCoords} />
+          <MapView basemap={basemap} onMouseMove={setCoords} layers={layers} />
 
           <SearchBar />
           <Legend shifted={panelOpen} />
