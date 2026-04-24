@@ -189,7 +189,7 @@ export const Sidebar = ({
             <StatCard value={20} label="Comunas" />
             <StatCard value={manzanaCount} label="Manzanas vis." />
             <StatCard value={0} label="POIs OSM" />
-            <StatCard value={0} label="Isócronas" />
+            <StatCard value={isochrones.length} label="Isócronas" />
           </div>
         </SidebarSection>
 
