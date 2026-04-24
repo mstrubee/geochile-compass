@@ -45,6 +45,7 @@
         "@turf/centroid": "^7.3.5",
         "@turf/helpers": "^7.3.5",
         "@turf/length": "^7.3.5",
+        "@turf/polygon-to-line": "^7.3.5",
         "@turf/simplify": "^7.3.5",
         "@turf/voronoi": "^7.3.5",
         "@types/geojson": "^7946.0.16",
