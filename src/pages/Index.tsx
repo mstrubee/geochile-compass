@@ -186,6 +186,12 @@ const Index = () => {
           onAddUserLayer={addUserLayer}
           onToggleUserLayer={toggleUserLayer}
           onRemoveUserLayer={removeUserLayer}
+          onSavePoisFromLayer={savePoisFromLayer}
+          getLayerPointCount={(id) => {
+            const l = userLayers.find((x) => x.id === id);
+            return l ? countPoints(l.data) : 0;
+          }}
+          isAuthenticated={!!user}
           isoMode={isoMode}
           onIsoModeChange={setIsoMode}
           isoMinutes={isoMinutes}
@@ -196,6 +202,11 @@ const Index = () => {
           onClearIsochrones={clearIsochrones}
           onFocusIsochrone={setFitIsoId}
           isoLoading={isoLoading}
+          savedPois={pois}
+          savedPoisVisible={savedPoisVisible}
+          onToggleSavedPoisVisible={() => setSavedPoisVisible((v) => !v)}
+          onRemoveSavedPoi={removePoi}
+          onClearSavedPois={clearAllPois}
         />
 
         <div
@@ -224,6 +235,8 @@ const Index = () => {
             onFitIsochroneDone={handleFitIsoDone}
             isoMode={mode === "isochrone"}
             onMapClick={handleMapClick}
+            savedPois={pois}
+            savedPoisVisible={savedPoisVisible}
           />
 
           <SearchBar />
