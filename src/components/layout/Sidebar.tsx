@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/context-menu";
 import type { LayerKey, LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
+import type { GseVariable } from "@/types/gse";
+import { GSE_VARIABLE_LABEL } from "@/utils/gseScales";
 import type { UserLayer } from "@/types/userLayers";
 import type { IsoMode, Isochrone } from "@/types/isochrones";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
@@ -28,6 +30,9 @@ interface SidebarProps {
   onManzanaVariableChange: (v: ManzanaVariable) => void;
   manzanaLoading: boolean;
   manzanaCount: number;
+  gseVariable: GseVariable;
+  onGseVariableChange: (v: GseVariable) => void;
+  gseCount: number;
   userLayers: UserLayer[];
   onAddUserLayer: (layer: UserLayer) => void;
   onToggleUserLayer: (id: string) => void;
@@ -83,7 +88,7 @@ interface LayerRow {
 
 const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "communes", color: "bg-primary", name: "Demografía comunal", count: 20, sub: "Centroides comunales" },
-  { key: "nse", color: "bg-brand-purple", name: "Grupo socioeconómico", count: 20, sub: "ABC1 · C2 · C3 · D · E" },
+  { key: "nse", color: "bg-brand-purple", name: "GSE por manzana", count: 36, sub: "Censo 2012 — AMS" },
   { key: "traffic", color: "bg-brand-orange", name: "Tráfico vehicular", count: 20 },
   { key: "density", color: "bg-brand-pink", name: "Densidad población", count: 20 },
 ];
@@ -142,6 +147,9 @@ export const Sidebar = ({
   manzanaVariable,
   onManzanaVariableChange,
   manzanaCount,
+  gseVariable,
+  onGseVariableChange,
+  gseCount,
   userLayers = [],
   onAddUserLayer,
   onToggleUserLayer,
