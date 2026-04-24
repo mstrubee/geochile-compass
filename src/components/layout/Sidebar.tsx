@@ -221,6 +221,10 @@ export const Sidebar = ({
   onLoadOverpass,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Input separado para "Cargar KMZ a esta carpeta" (clic derecho sobre carpeta POI)
+  const folderImportInputRef = useRef<HTMLInputElement>(null);
+  const folderImportTargetIdRef = useRef<string | null>(null);
+  const [folderImporting, setFolderImporting] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [osmText, setOsmText] = useState("");
