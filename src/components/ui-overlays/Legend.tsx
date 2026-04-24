@@ -126,10 +126,14 @@ export const Legend = ({
   onNseFilterChange,
   trafficFilter,
   onTrafficFilterChange,
+  manzanaVariable,
+  manzanaSource,
+  manzanaError,
 }: LegendProps) => {
   const showNSE = layers.nse;
   const showTraffic = layers.traffic;
-  const showAny = showNSE || showTraffic;
+  const showManzanas = layers.manzanas;
+  const showAny = showNSE || showTraffic || showManzanas;
 
   // Count combined matches when both filters could apply
   const matched = COMMUNES.filter(
@@ -138,10 +142,12 @@ export const Legend = ({
       (trafficFilter === null || trafficLevelOf(c.traffic) === trafficFilter)
   ).length;
 
+  const manzanaScale = showManzanas ? scaleForVariable(manzanaVariable) : [];
+
   return (
     <div
       className={[
-        "absolute bottom-[22px] z-[500] w-[220px] rounded-lg border border-border bg-surface/95 p-3 backdrop-blur transition-[right] duration-300",
+        "absolute bottom-[22px] z-[500] w-[230px] rounded-lg border border-border bg-surface/95 p-3 backdrop-blur transition-[right] duration-300",
         shifted ? "right-[374px]" : "right-3.5",
       ].join(" ")}
     >
