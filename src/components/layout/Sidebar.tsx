@@ -77,6 +77,9 @@ interface SidebarProps {
   poiFolders: PoiFolder[];
   onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
+  /** IDs de carpetas ocultas (no se muestran en el mapa). */
+  hiddenPoiFolders?: Set<string>;
+  onHiddenPoiFoldersChange?: (next: Set<string>) => void;
   // OpenStreetMap (Overpass)
   onLoadOverpass: (
     kind: { type: "preset"; presetId: string; label: string } | { type: "text"; text: string },
@@ -195,6 +198,8 @@ export const Sidebar = ({
   poiFolders = [],
   onMoveFolder,
   onMovePois,
+  hiddenPoiFolders,
+  onHiddenPoiFoldersChange,
   onLoadOverpass,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
