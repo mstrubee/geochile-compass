@@ -238,6 +238,24 @@ export const Sidebar = ({
     | null
   >(null);
 
+  // Confirmaciones de borrado — todo lo eliminado va a la papelera (30 días).
+  const confirmRemovePoi = (id: string, name: string) => {
+    if (window.confirm(`¿Eliminar "${name}"? Se moverá a la papelera durante 30 días antes de borrarse definitivamente.`)) {
+      onRemoveSavedPoi(id);
+    }
+  };
+  const confirmDeleteFolder = async (id: string, name: string) => {
+    if (!onDeleteFolder) return;
+    if (window.confirm(`¿Eliminar la carpeta "${name}" y todo su contenido (subcarpetas y POIs)? Se moverá a la papelera durante 30 días antes de borrarse definitivamente.`)) {
+      try {
+        await onDeleteFolder(id);
+        toast.success("Movido a papelera");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Error al eliminar");
+      }
+    }
+  };
+
   // Indexación jerárquica
   const poiChildrenMap = useMemo(() => {
     const m = new Map<string | null, PoiFolder[]>();
