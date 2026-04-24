@@ -877,6 +877,27 @@ export const Sidebar = ({
               e.target.value = "";
             }}
           />
+          {/* Input oculto para "cargar a esta carpeta" desde clic derecho en árbol POI */}
+          <input
+            ref={folderImportInputRef}
+            type="file"
+            accept=".geojson,.json,.kml,.kmz,application/geo+json,application/json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
+            multiple
+            className="hidden"
+            onChange={async (e) => {
+              const files = e.target.files ? Array.from(e.target.files) : [];
+              const target = folderImportTargetIdRef.current;
+              e.target.value = "";
+              if (!files.length || !onImportFilesIntoFolder) return;
+              setFolderImporting(target);
+              try {
+                await onImportFilesIntoFolder(files, target);
+              } finally {
+                setFolderImporting(null);
+                folderImportTargetIdRef.current = null;
+              }
+            }}
+          />
           <div
             onClick={() => fileInputRef.current?.click()}
             onDragOver={(e) => {
