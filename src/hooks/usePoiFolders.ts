@@ -63,5 +63,17 @@ export const usePoiFolders = () => {
     [refresh],
   );
 
-  return { folders, loading, create, rename, remove, refresh };
+  const move = useCallback(
+    async (id: string, parent_id: string | null) => {
+      const { error } = await supabase
+        .from("poi_folders")
+        .update({ parent_id })
+        .eq("id", id);
+      if (error) throw new Error(error.message);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return { folders, loading, create, rename, remove, move, refresh };
 };
