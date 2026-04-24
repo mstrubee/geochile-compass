@@ -154,7 +154,7 @@ export const Sidebar = ({
           <button className="flex w-full items-center gap-1.5 rounded border border-border bg-surface-2 px-2.5 py-1.5 font-body text-[11px] text-muted-foreground transition-all hover:border-brand-teal hover:bg-brand-teal/5 hover:text-foreground">
             <Building2 className="h-3 w-3" /> Cargar edificios / manzanas
           </button>
-          <p className="mt-2 font-mono text-[9px] leading-relaxed text-text-muted">
+          <p className="mt-2 font-mono text-[9px] leading-relaxed text-foreground">
             Fuente: openstreetmap.org · Overpass API
             <br />
             Migración: Google Maps API disponible
