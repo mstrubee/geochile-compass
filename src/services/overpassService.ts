@@ -242,7 +242,7 @@ function elementsToFeatureCollection(
       tags["name:es"] ||
       tags.operator ||
       `${category} #${el.id}`;
-    const logo = brandLogoUrl(tags);
+    const logos = brandLogoUrls(tags);
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: [lon, lat] },
@@ -252,7 +252,7 @@ function elementsToFeatureCollection(
         osm_type: el.type,
         osm_id: el.id,
         category,
-        ...(logo ? { icon: logo, "icon-scale": 0.9 } : {}),
+        ...(logos.length ? { icon: logos[0], iconCandidates: logos, "icon-scale": 0.9 } : {}),
       },
     });
   }
