@@ -63,3 +63,10 @@ const escapeHtml = (s: string) =>
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+
+const isImageUrl = (v: string | null | undefined): string | null => {
+  if (!v) return null;
+  if (v.startsWith("data:image/")) return v;
+  if (/^https?:\/\//i.test(v) && /\.(png|jpe?g|gif|svg|webp)(\?.*)?$/i.test(v)) return v;
+  return null;
+};
