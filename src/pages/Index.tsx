@@ -11,6 +11,7 @@ import type { NSE } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
 import type { LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
+import type { UserLayer } from "@/types/userLayers";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -30,6 +31,20 @@ const Index = () => {
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
   const [manzanaVariable, setManzanaVariable] = useState<ManzanaVariable>("density");
   const [viewport, setViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
+  const [userLayers, setUserLayers] = useState<UserLayer[]>([]);
+  const [fitId, setFitId] = useState<string | null>(null);
+
+  const addUserLayer = useCallback((layer: UserLayer) => {
+    setUserLayers((prev) => [...prev, layer]);
+    setFitId(layer.id);
+  }, []);
+  const toggleUserLayer = useCallback((id: string) => {
+    setUserLayers((prev) => prev.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)));
+  }, []);
+  const removeUserLayer = useCallback((id: string) => {
+    setUserLayers((prev) => prev.filter((l) => l.id !== id));
+  }, []);
+  const handleFitDone = useCallback(() => setFitId(null), []);
 
   const handleViewportChange = useCallback(
     (bbox: [number, number, number, number], zoom: number) => {
@@ -71,6 +86,10 @@ const Index = () => {
           onManzanaVariableChange={setManzanaVariable}
           manzanaLoading={manzanaLoading}
           manzanaCount={manzanaData?.features.length ?? 0}
+          userLayers={userLayers}
+          onAddUserLayer={addUserLayer}
+          onToggleUserLayer={toggleUserLayer}
+          onRemoveUserLayer={removeUserLayer}
         />
 
         <div
