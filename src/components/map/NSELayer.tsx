@@ -48,16 +48,16 @@ export const NSELayer = ({ visible = true, nseFilter = null, trafficFilter = nul
         const matchTraffic = trafficFilter === null || trafficLevelOf(c.traffic) === trafficFilter;
         const isMatch = matchNse && matchTraffic;
         const radius = anyFilter && isMatch ? 18 : 14;
-        const fillOpacity = !anyFilter ? 0.6 : isMatch ? 0.7 : 0.06;
-        const strokeOpacity = !anyFilter ? 1 : isMatch ? 1 : 0.18;
-        const weight = anyFilter && isMatch ? 2.5 : 1.5;
+        const fillOpacity = !anyFilter ? 0.75 : isMatch ? 0.85 : 0.1;
+        const strokeOpacity = !anyFilter ? 1 : isMatch ? 1 : 0.25;
+        const weight = anyFilter && isMatch ? 2.5 : 1.75;
         return (
           <CircleMarker
             key={`nse-${c.name}`}
             center={[c.lat, c.lng]}
             radius={radius}
             pathOptions={{
-              color,
+              color: "hsl(222 38% 12%)",
               weight,
               opacity: strokeOpacity,
               fillColor: color,
