@@ -51,6 +51,13 @@ const Index = () => {
   const [fitIsoId, setFitIsoId] = useState<string | null>(null);
   const [isoLoading, setIsoLoading] = useState(false);
 
+  // Microzonas
+  const [microSubmode, setMicroSubmode] = useState<MicrozoneSubmode>("polygon");
+  const [microBufferRadius, setMicroBufferRadius] = useState<number>(500); // metros
+  const [microzones, setMicrozones] = useState<Microzone[]>([]);
+  const [microDraft, setMicroDraft] = useState<Array<{ lat: number; lng: number }>>([]);
+  const [fitMicrozoneId, setFitMicrozoneId] = useState<string | null>(null);
+
   // POIs guardados
   const navigate = useNavigate();
   const { user } = useAuth();
