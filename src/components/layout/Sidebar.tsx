@@ -1004,9 +1004,10 @@ export const Sidebar = ({
                             {p.name}
                           </span>
                           <button
-                            onClick={() => onRemoveSavedPoi(p.id)}
+                            onClick={() => confirmRemovePoi(p.id, p.name)}
                             className="flex h-5 w-5 items-center justify-center rounded-md text-text-muted opacity-0 transition-colors hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
                             aria-label={`Eliminar ${p.name}`}
+                            title="Mover a papelera (30 días)"
                           >
                             <Trash2 className="h-3 w-3" />
                           </button>
@@ -1017,8 +1018,8 @@ export const Sidebar = ({
                           <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar
                         </ContextMenuItem>
                         <ContextMenuSeparator />
-                        <ContextMenuItem onSelect={() => onRemoveSavedPoi(p.id)} className="text-destructive focus:text-destructive">
-                          <Trash2 className="mr-2 h-3.5 w-3.5" /> Eliminar
+                        <ContextMenuItem onSelect={() => confirmRemovePoi(p.id, p.name)} className="text-destructive focus:text-destructive">
+                          <Trash2 className="mr-2 h-3.5 w-3.5" /> Mover a papelera
                         </ContextMenuItem>
                       </ContextMenuContent>
                     </ContextMenu>
