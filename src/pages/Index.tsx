@@ -617,6 +617,7 @@ const Index = () => {
           poiFolders={folders}
           onMoveFolder={moveFolder}
           onMovePois={movePois}
+          onImportFilesIntoFolder={importFilesIntoFolder}
           onDeleteFolder={deleteFolder}
           trashedPois={trashedPois}
           trashedFolders={trashedFolders}
