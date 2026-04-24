@@ -7,6 +7,7 @@ import { Legend } from "@/components/ui-overlays/Legend";
 import { SearchBar } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
 import type { NSE } from "@/data/communes";
+import type { TrafficLevel } from "@/utils/traffic";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -22,14 +23,12 @@ const Index = () => {
     density: false,
   });
   const [nseFilter, setNseFilter] = useState<NSE | null>(null);
+  const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
 
   const toggleLayer = (key: keyof typeof layers) => {
-    setLayers((l) => {
-      const next = { ...l, [key]: !l[key] };
-      return next;
-    });
-    // Clear NSE filter when NSE layer is turned off
+    setLayers((l) => ({ ...l, [key]: !l[key] }));
     if (key === "nse" && layers.nse) setNseFilter(null);
+    if (key === "traffic" && layers.traffic) setTrafficFilter(null);
   };
 
   return (
@@ -58,7 +57,13 @@ const Index = () => {
             .filter(Boolean)
             .join(" ")}
         >
-          <MapView basemap={basemap} onMouseMove={setCoords} layers={layers} nseFilter={nseFilter} />
+          <MapView
+            basemap={basemap}
+            onMouseMove={setCoords}
+            layers={layers}
+            nseFilter={nseFilter}
+            trafficFilter={trafficFilter}
+          />
 
           <SearchBar />
           <Legend
@@ -66,6 +71,8 @@ const Index = () => {
             layers={layers}
             nseFilter={nseFilter}
             onNseFilterChange={setNseFilter}
+            trafficFilter={trafficFilter}
+            onTrafficFilterChange={setTrafficFilter}
           />
           <CoordsBar coords={coords} />
 

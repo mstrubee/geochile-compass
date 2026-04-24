@@ -1,6 +1,7 @@
 import { CircleMarker, Popup } from "react-leaflet";
-import { COMMUNES, NSE_LABELS, NSE_INCOME, NSE_COLOR_HSL, type Commune } from "@/data/communes";
+import { COMMUNES, NSE_LABELS, NSE_INCOME, NSE_COLOR_HSL, type Commune, type NSE } from "@/data/communes";
 import { fmtNum, fmtCLP } from "@/utils/formatters";
+import { trafficLevelOf, type TrafficLevel } from "@/utils/traffic";
 
 const PopupRow = ({ k, v }: { k: string; v: string }) => (
   <div className="flex justify-between gap-3">
@@ -21,6 +22,7 @@ const NSEPopup = ({ c }: { c: Commune }) => {
         <PopupRow k="Ingreso prom." v={`${fmtCLP(NSE_INCOME[c.nse])}/mes`} />
         <PopupRow k="Población" v={fmtNum(c.pop)} />
         <PopupRow k="Hogares" v={fmtNum(c.hh)} />
+        <PopupRow k="Tráfico" v={`${c.traffic}/100`} />
       </div>
       <div className="mt-1.5 font-mono text-[9px] text-[hsl(215_19%_35%)]">
         Fuente: CASEN 2022 (estimado)
@@ -31,20 +33,24 @@ const NSEPopup = ({ c }: { c: Commune }) => {
 
 interface NSELayerProps {
   visible?: boolean;
-  filter?: import("@/data/communes").NSE | null;
+  nseFilter?: NSE | null;
+  trafficFilter?: TrafficLevel | null;
 }
 
-export const NSELayer = ({ visible = true, filter = null }: NSELayerProps) => {
+export const NSELayer = ({ visible = true, nseFilter = null, trafficFilter = null }: NSELayerProps) => {
   if (!visible) return null;
+  const anyFilter = nseFilter !== null || trafficFilter !== null;
   return (
     <>
       {COMMUNES.map((c) => {
         const color = `hsl(${NSE_COLOR_HSL[c.nse]})`;
-        const isMatch = filter == null || c.nse === filter;
-        const radius = filter != null && isMatch ? 18 : 14;
-        const fillOpacity = isMatch ? 0.65 : 0.08;
-        const strokeOpacity = isMatch ? 1 : 0.2;
-        const weight = filter != null && isMatch ? 2.5 : 1.5;
+        const matchNse = nseFilter === null || c.nse === nseFilter;
+        const matchTraffic = trafficFilter === null || trafficLevelOf(c.traffic) === trafficFilter;
+        const isMatch = matchNse && matchTraffic;
+        const radius = anyFilter && isMatch ? 18 : 14;
+        const fillOpacity = !anyFilter ? 0.6 : isMatch ? 0.7 : 0.06;
+        const strokeOpacity = !anyFilter ? 1 : isMatch ? 1 : 0.18;
+        const weight = anyFilter && isMatch ? 2.5 : 1.5;
         return (
           <CircleMarker
             key={`nse-${c.name}`}

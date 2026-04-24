@@ -1,15 +1,8 @@
 import { CircleMarker, Popup } from "react-leaflet";
-import { COMMUNES, type Commune } from "@/data/communes";
+import { COMMUNES, NSE_LABELS, type Commune, type NSE } from "@/data/communes";
 import { fmtNum } from "@/utils/formatters";
+import { trafficLevelOf, TRAFFIC_LEVELS, type TrafficLevel } from "@/utils/traffic";
 
-// Traffic thresholds: <50 fluido (verde) · 50-72 moderado (amarillo) · >72 alto (rojo)
-const trafficColor = (t: number): { hsl: string; label: string } => {
-  if (t < 50) return { hsl: "hsl(142 71% 45%)", label: "Fluido" };
-  if (t <= 72) return { hsl: "hsl(47 95% 53%)", label: "Moderado" };
-  return { hsl: "hsl(0 84% 60%)", label: "Alto" };
-};
-
-// Radius scales with traffic intensity: 6 → 18px
 const radiusForTraffic = (t: number): number => 6 + (t / 100) * 12;
 
 const PopupRow = ({ k, v }: { k: string; v: string }) => (
@@ -20,7 +13,8 @@ const PopupRow = ({ k, v }: { k: string; v: string }) => (
 );
 
 const TrafficPopup = ({ c }: { c: Commune }) => {
-  const tc = trafficColor(c.traffic);
+  const lvl = trafficLevelOf(c.traffic);
+  const tc = TRAFFIC_LEVELS[lvl];
   return (
     <div className="min-w-[180px]">
       <div className="mb-1.5 font-display text-[12px] font-semibold" style={{ color: tc.hsl }}>
@@ -30,6 +24,7 @@ const TrafficPopup = ({ c }: { c: Commune }) => {
         <PopupRow k="Índice tráfico" v={`${c.traffic}/100`} />
         <PopupRow k="Categoría" v={tc.label} />
         <PopupRow k="Población" v={fmtNum(c.pop)} />
+        <PopupRow k="NSE pred." v={NSE_LABELS[c.nse]} />
         <PopupRow k="Hora punta est." v={c.traffic > 72 ? "07:30 / 18:30" : c.traffic > 50 ? "08:00 / 19:00" : "—"} />
       </div>
     </div>
@@ -38,24 +33,37 @@ const TrafficPopup = ({ c }: { c: Commune }) => {
 
 interface TrafficLayerProps {
   visible?: boolean;
+  nseFilter?: NSE | null;
+  trafficFilter?: TrafficLevel | null;
 }
 
-export const TrafficLayer = ({ visible = true }: TrafficLayerProps) => {
+export const TrafficLayer = ({ visible = true, nseFilter = null, trafficFilter = null }: TrafficLayerProps) => {
   if (!visible) return null;
+  const anyFilter = nseFilter !== null || trafficFilter !== null;
   return (
     <>
       {COMMUNES.map((c) => {
-        const tc = trafficColor(c.traffic);
+        const lvl = trafficLevelOf(c.traffic);
+        const tc = TRAFFIC_LEVELS[lvl];
+        const matchNse = nseFilter === null || c.nse === nseFilter;
+        const matchTraffic = trafficFilter === null || lvl === trafficFilter;
+        const isMatch = matchNse && matchTraffic;
+        const baseR = radiusForTraffic(c.traffic);
+        const radius = anyFilter && isMatch ? baseR + 4 : baseR;
+        const fillOpacity = !anyFilter ? 0.55 : isMatch ? 0.7 : 0.06;
+        const strokeOpacity = !anyFilter ? 1 : isMatch ? 1 : 0.18;
+        const weight = anyFilter && isMatch ? 2.5 : 1.5;
         return (
           <CircleMarker
             key={`tr-${c.name}`}
             center={[c.lat, c.lng]}
-            radius={radiusForTraffic(c.traffic)}
+            radius={radius}
             pathOptions={{
               color: tc.hsl,
-              weight: 1.5,
+              weight,
+              opacity: strokeOpacity,
               fillColor: tc.hsl,
-              fillOpacity: 0.55,
+              fillOpacity,
             }}
           >
             <Popup>
