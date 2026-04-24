@@ -536,6 +536,8 @@ const Index = () => {
           poiFolders={folders}
           onMoveFolder={moveFolder}
           onMovePois={movePois}
+          hiddenPoiFolders={hiddenPoiFolders}
+          onHiddenPoiFoldersChange={setHiddenPoiFolders}
           microSubmode={microSubmode}
           onMicroSubmodeChange={setMicroSubmode}
           microBufferRadius={microBufferRadius}
