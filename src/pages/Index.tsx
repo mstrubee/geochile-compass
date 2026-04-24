@@ -52,6 +52,14 @@ const Index = () => {
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
   const [manzanaVariable, setManzanaVariable] = useState<ManzanaVariable>("nse");
   const [viewport, setViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
+  // Viewport general (siempre activo) para cargar POIs OSM aunque no haya capa de manzanas activa
+  const [mapViewport, setMapViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
+  const handleMapViewportChange = useCallback(
+    (bbox: [number, number, number, number], zoom: number) => {
+      setMapViewport({ bbox, zoom });
+    },
+    [],
+  );
   // Capa de densidad poblacional (manzanas coloreadas por densidad), controlada desde "Capas territoriales"
   const [densityViewport, setDensityViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
   const handleDensityViewportChange = useCallback(
