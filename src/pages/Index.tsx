@@ -454,6 +454,7 @@ const Index = () => {
             onMicroBufferClick={handleMicroBufferClick}
             fitMicrozoneId={fitMicrozoneId}
             onFitMicrozoneDone={() => setFitMicrozoneId(null)}
+            flyTarget={flyTarget}
           />
 
           <SearchBar
