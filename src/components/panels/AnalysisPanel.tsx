@@ -34,10 +34,10 @@ const NSE_BARS = [
 
 export const AnalysisPanel = ({ open, onClose }: AnalysisPanelProps) => {
   const [tab, setTab] = useState(0);
-  const tabs = [
-    { label: "5 min", color: "iso-1" },
-    { label: "10 min", color: "iso-2" },
-    { label: "15 min", color: "iso-3" },
+  const tabs: Array<{ label: string; active: string; idle: string }> = [
+    { label: "5 min", active: "border-iso-1 bg-iso-1/10 text-iso-1", idle: "border-border bg-surface-2 text-text-muted" },
+    { label: "10 min", active: "border-iso-2 bg-iso-2/10 text-iso-2", idle: "border-border bg-surface-2 text-text-muted" },
+    { label: "15 min", active: "border-iso-3 bg-iso-3/10 text-iso-3", idle: "border-border bg-surface-2 text-text-muted" },
   ];
 
   return (
@@ -76,9 +76,7 @@ export const AnalysisPanel = ({ open, onClose }: AnalysisPanelProps) => {
               onClick={() => setTab(i)}
               className={[
                 "flex-1 rounded border px-1 py-1.5 text-center font-mono text-[10px] transition-colors",
-                tab === i
-                  ? `border-${t.color} bg-${t.color}/10 text-${t.color}`
-                  : "border-border bg-surface-2 text-text-muted",
+                tab === i ? t.active : t.idle,
               ].join(" ")}
             >
               {t.label}
