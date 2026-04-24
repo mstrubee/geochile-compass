@@ -141,6 +141,7 @@ export const Sidebar = ({
   onClearIsochrones,
   onFocusIsochrone,
   isoLoading = false,
+  onToggleIsoMode,
   savedPois = [],
   savedPoisVisible = true,
   onToggleSavedPoisVisible,
