@@ -130,22 +130,54 @@ const resolveKmzIcons = async (
 ): Promise<void> => {
   const cache = new Map<string, string | null>();
 
+  // Construye un índice rápido name → entry y otro basename → entry para
+  // soportar referencias relativas con o sin prefijo de carpeta.
+  const entries = Object.values(zip.files).filter((f) => !f.dir);
+  const byLower = new Map<string, typeof entries[number]>();
+  const byBasenameLower = new Map<string, typeof entries[number]>();
+  for (const e of entries) {
+    const lower = e.name.toLowerCase();
+    byLower.set(lower, e);
+    const base = lower.split("/").pop() || lower;
+    if (!byBasenameLower.has(base)) byBasenameLower.set(base, e);
+  }
+
   const resolve = async (href: string): Promise<string | null> => {
     if (!href) return null;
     if (/^(https?:|data:)/i.test(href)) return href;
     if (cache.has(href)) return cache.get(href)!;
     const clean = href.replace(/^\.\//, "").split(/[?#]/)[0];
-    const entry =
-      zip.file(clean) ||
-      zip.file(decodeURIComponent(clean)) ||
-      Object.values(zip.files).find(
-        (f) => f.name.toLowerCase() === clean.toLowerCase()
-      );
+    const candidates = [
+      clean,
+      decodeURIComponent(clean),
+      clean.toLowerCase(),
+      decodeURIComponent(clean).toLowerCase(),
+    ];
+    let entry: typeof entries[number] | undefined;
+    for (const c of candidates) {
+      const direct = zip.file(c);
+      if (direct) {
+        entry = direct;
+        break;
+      }
+      const lower = c.toLowerCase();
+      const m = byLower.get(lower);
+      if (m) {
+        entry = m;
+        break;
+      }
+    }
+    // Fallback por basename (KMZ con prefijo de carpeta como "files/...")
     if (!entry) {
+      const base = clean.toLowerCase().split("/").pop();
+      if (base) entry = byBasenameLower.get(base);
+    }
+    if (!entry) {
+      console.warn("[KMZ] icon no encontrado en zip:", href);
       cache.set(href, null);
       return null;
     }
-    const ext = clean.split(".").pop()?.toLowerCase() ?? "";
+    const ext = entry.name.split(".").pop()?.toLowerCase() ?? "";
     const mime = MIME_BY_EXT[ext] ?? "application/octet-stream";
     const buf = await entry.async("arraybuffer");
     const dataUrl = `data:${mime};base64,${arrayBufferToBase64(buf)}`;
@@ -153,14 +185,23 @@ const resolveKmzIcons = async (
     return dataUrl;
   };
 
+  let resolved = 0;
+  let withIcon = 0;
   for (const feature of fc.features) {
     const props = feature.properties as Record<string, unknown> | null;
     const icon = props?.icon;
     if (typeof icon === "string") {
-      const resolved = await resolve(icon);
-      if (resolved) (props as Record<string, unknown>).icon = resolved;
+      withIcon++;
+      const r = await resolve(icon);
+      if (r) {
+        (props as Record<string, unknown>).icon = r;
+        resolved++;
+      }
     }
   }
+  console.info(
+    `[KMZ] iconos: ${resolved}/${withIcon} resueltos · ${entries.length} entradas en zip`,
+  );
 };
 
 export const parseFile = async (file: File): Promise<FeatureCollection> => {
