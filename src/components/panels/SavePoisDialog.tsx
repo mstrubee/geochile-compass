@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,7 @@ export const SavePoisDialog = ({ open, onOpenChange, defaultName, pointCount, fo
   const [busy, setBusy] = useState(false);
 
   // Re-init when opening
-  useMemo(() => {
+  useEffect(() => {
     if (open) {
       setNewName(defaultName);
       setMode("new");
@@ -55,7 +55,7 @@ export const SavePoisDialog = ({ open, onOpenChange, defaultName, pointCount, fo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="z-[1000] max-w-md">
         <DialogHeader>
           <DialogTitle>Guardar {pointCount} POIs</DialogTitle>
         </DialogHeader>
