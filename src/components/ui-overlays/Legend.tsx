@@ -173,6 +173,37 @@ export const Legend = ({
         </>
       )}
 
+      {showManzanas && (
+        <>
+          <div className="mb-1.5 mt-1 flex items-center gap-2">
+            <div className="flex-1 font-mono text-[9px] uppercase tracking-[2px] text-text-muted">
+              Manzanas · {VARIABLE_LABEL[manzanaVariable]}
+            </div>
+            {manzanaSource === "mock" && (
+              <span className="rounded-sm border border-brand-orange/40 bg-brand-orange/10 px-1.5 py-0.5 font-mono text-[8px] uppercase text-brand-orange">
+                Simulado
+              </span>
+            )}
+            {manzanaSource === "INE Censo 2017" && (
+              <span className="rounded-sm border border-brand-green/40 bg-brand-green/10 px-1.5 py-0.5 font-mono text-[8px] uppercase text-brand-green">
+                INE 2017
+              </span>
+            )}
+          </div>
+          <div className="space-y-0.5">
+            {manzanaScale.map((s) => (
+              <div key={s.label} className="flex items-center gap-2 px-1.5 py-0.5 text-[11px] text-foreground">
+                <span className="h-2 w-[18px] flex-shrink-0 rounded-sm" style={{ background: s.color }} />
+                <span className="flex-1">{s.label}</span>
+              </div>
+            ))}
+          </div>
+          {manzanaError && (
+            <div className="mt-1.5 font-mono text-[9px] text-brand-red">{manzanaError}</div>
+          )}
+        </>
+      )}
+
       {showNSE && (
         <>
           <SectionTitle title="NSE" hasFilter={nseFilter !== null} onClear={() => onNseFilterChange(null)} />
