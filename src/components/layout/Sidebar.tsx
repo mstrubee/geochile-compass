@@ -517,6 +517,32 @@ export const Sidebar = ({
               onToggle={row.key ? () => onToggleLayer(row.key!) : undefined}
             />
           ))}
+          {layers.nse && (
+            <div className="mt-2 rounded-lg bg-surface-2/40 p-2">
+              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-text-muted">
+                Variable GSE · {gseCount} manzanas
+              </div>
+              <div className="flex flex-wrap gap-0.5 rounded-md bg-surface-2/60 p-0.5">
+                {(Object.keys(GSE_VARIABLE_LABEL) as GseVariable[]).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => onGseVariableChange(v)}
+                    className={[
+                      "flex-1 rounded px-1.5 py-1 text-[10px] font-medium transition-all",
+                      gseVariable === v
+                        ? "bg-surface-3 text-foreground shadow-apple-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    ].join(" ")}
+                  >
+                    {GSE_VARIABLE_LABEL[v]}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[10px] leading-relaxed text-text-muted">
+                Censo 2012 — comunas sin datos muestran círculo estimado.
+              </p>
+            </div>
+          )}
         </SidebarSection>
 
 
