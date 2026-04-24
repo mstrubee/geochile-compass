@@ -637,6 +637,28 @@ export const Sidebar = ({
                 <span className="font-mono text-[10px] text-text-muted">{savedPois.length}</span>
                 <IOSSwitch on={savedPoisVisible} />
               </button>
+              {clipboard && (
+                <div className="mb-1 flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-[10.5px] text-primary">
+                  <Scissors className="h-3 w-3" />
+                  <span className="flex-1 truncate" title={clipboard.name}>
+                    Cortado: <strong>{clipboard.name}</strong>
+                  </span>
+                  <button
+                    onClick={() => handlePaste(null)}
+                    className="rounded px-1.5 py-0.5 hover:bg-primary/15"
+                    title="Pegar en raíz"
+                  >
+                    Pegar raíz
+                  </button>
+                  <button
+                    onClick={() => setClipboard(null)}
+                    className="rounded p-0.5 hover:bg-primary/15"
+                    aria-label="Cancelar"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
               <div className="scrollbar-thin max-h-72 space-y-0.5 overflow-y-auto">
                 {(() => {
                   const renderPoi = (p: SavedPoi, depth: number) => (
