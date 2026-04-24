@@ -77,6 +77,9 @@ interface SidebarProps {
   poiFolders: PoiFolder[];
   onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
+  /** IDs de carpetas ocultas (no se muestran en el mapa). */
+  hiddenPoiFolders?: Set<string>;
+  onHiddenPoiFoldersChange?: (next: Set<string>) => void;
   // OpenStreetMap (Overpass)
   onLoadOverpass: (
     kind: { type: "preset"; presetId: string; label: string } | { type: "text"; text: string },
@@ -195,6 +198,8 @@ export const Sidebar = ({
   poiFolders = [],
   onMoveFolder,
   onMovePois,
+  hiddenPoiFolders,
+  onHiddenPoiFoldersChange,
   onLoadOverpass,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -210,6 +215,28 @@ export const Sidebar = ({
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+
+  // Visibilidad por carpeta — apaga/prende la carpeta y todas sus descendientes en el mapa.
+  const toggleFolderVisible = (id: string) => {
+    if (!onHiddenPoiFoldersChange) return;
+    const current = hiddenPoiFolders ?? new Set<string>();
+    const next = new Set(current);
+    // Calcular descendientes inline (poiChildrenMap aún no definido aquí — usamos poiFolders directo)
+    const collect = (root: string, acc: Set<string>) => {
+      acc.add(root);
+      poiFolders.forEach((f) => {
+        if (f.parent_id === root) collect(f.id, acc);
+      });
+    };
+    const affected = new Set<string>();
+    collect(id, affected);
+    const isHidden = current.has(id);
+    affected.forEach((fid) => {
+      if (isHidden) next.delete(fid);
+      else next.add(fid);
+    });
+    onHiddenPoiFoldersChange(next);
+  };
 
   // Portapapeles para cortar/pegar (carpetas o POIs)
   const [clipboard, setClipboard] = useState<
@@ -995,29 +1022,58 @@ export const Sidebar = ({
                       !!clipboard &&
                       !(clipboard.kind === "folder" && clipboard.id === f.id) &&
                       !(clipboard.kind === "folder" && descendantsOfFolder(clipboard.id).has(f.id));
+                    const isVisible = !(hiddenPoiFolders?.has(f.id) ?? false);
                     return (
                       <div key={f.id}>
                         <ContextMenu>
                           <ContextMenuTrigger asChild>
-                            <button
-                              type="button"
-                              onClick={() => togglePoiFolder(f.id)}
-                              className="flex w-full items-center gap-1 rounded-md py-1 pr-1 text-left hover:bg-surface-2/60"
+                            <div
+                              className="flex w-full items-center gap-1 rounded-md py-1 pr-1 hover:bg-surface-2/60"
                               style={{ paddingLeft: `${depth * 12 + 2}px` }}
                             >
-                              {isOpen ? (
-                                <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                              ) : (
-                                <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                              <button
+                                type="button"
+                                onClick={() => togglePoiFolder(f.id)}
+                                className="flex flex-1 items-center gap-1 text-left"
+                              >
+                                {isOpen ? (
+                                  <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                                )}
+                                <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
+                                <span
+                                  className={[
+                                    "flex-1 truncate text-[11.5px] font-medium",
+                                    isVisible ? "text-foreground" : "text-muted-foreground line-through opacity-60",
+                                  ].join(" ")}
+                                  title={f.name}
+                                >
+                                  {f.name}
+                                </span>
+                                <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
+                              </button>
+                              {onHiddenPoiFoldersChange && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleFolderVisible(f.id);
+                                  }}
+                                  className="flex-shrink-0"
+                                  aria-label={isVisible ? `Ocultar ${f.name}` : `Mostrar ${f.name}`}
+                                  title={isVisible ? "Ocultar en mapa" : "Mostrar en mapa"}
+                                >
+                                  <IOSSwitch on={isVisible} />
+                                </button>
                               )}
-                              <Folder className="h-3 w-3 flex-shrink-0" style={{ color: f.color || "#FBBF24" }} />
-                              <span className="flex-1 truncate text-[11.5px] font-medium text-foreground" title={f.name}>
-                                {f.name}
-                              </span>
-                              <span className="font-mono text-[9.5px] text-text-muted">{total}</span>
-                            </button>
+                            </div>
                           </ContextMenuTrigger>
                           <ContextMenuContent className="z-[1100]">
+                            <ContextMenuItem onSelect={() => toggleFolderVisible(f.id)}>
+                              {isVisible ? "Ocultar en mapa" : "Mostrar en mapa"}
+                            </ContextMenuItem>
+                            <ContextMenuSeparator />
                             <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name })}>
                               <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar carpeta
                             </ContextMenuItem>
