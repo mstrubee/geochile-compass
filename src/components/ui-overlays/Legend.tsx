@@ -1,6 +1,8 @@
 import type { LayerState } from "@/types/layers";
 import { COMMUNES, NSE_LABELS, NSE_COLOR_HSL, type NSE } from "@/data/communes";
 import { TRAFFIC_LEVELS, trafficLevelOf, type TrafficLevel } from "@/utils/traffic";
+import type { ManzanaSource, ManzanaVariable } from "@/types/manzanas";
+import { scaleForVariable, VARIABLE_LABEL } from "@/utils/colorScales";
 
 interface LegendProps {
   shifted: boolean;
@@ -9,6 +11,9 @@ interface LegendProps {
   onNseFilterChange: (n: NSE | null) => void;
   trafficFilter: TrafficLevel | null;
   onTrafficFilterChange: (t: TrafficLevel | null) => void;
+  manzanaVariable: ManzanaVariable;
+  manzanaSource: ManzanaSource | null;
+  manzanaError: string | null;
 }
 
 interface NSERow {
