@@ -7,6 +7,7 @@ import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
 import { PoiManagerDialog } from "@/components/panels/PoiManagerDialog";
 import { SavePoisDialog } from "@/components/panels/SavePoisDialog";
 import { CommuneSearchResultsDialog } from "@/components/panels/CommuneSearchResultsDialog";
+import { CommuneCompareDialog } from "@/components/panels/CommuneCompareDialog";
 import { Legend } from "@/components/ui-overlays/Legend";
 import { SearchBar, type SearchResult } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
@@ -113,6 +114,25 @@ const Index = () => {
     },
     [],
   );
+
+  // Comparador de comunas
+  const [compareCommunes, setCompareCommunes] = useState<Commune[]>([]);
+  const [compareDialogOpen, setCompareDialogOpen] = useState(false);
+  const handleAddCommuneToCompare = useCallback((c: Commune) => {
+    setCompareCommunes((prev) => {
+      if (prev.some((x) => x.name === c.name)) {
+        toast.info(`${c.name} ya está en el comparador`);
+        return prev;
+      }
+      toast.success(`${c.name} añadida al comparador`, {
+        description: `Total: ${prev.length + 1}`,
+      });
+      return [...prev, c];
+    });
+  }, []);
+  const handleRemoveCommuneFromCompare = useCallback((name: string) => {
+    setCompareCommunes((prev) => prev.filter((c) => c.name !== name));
+  }, []);
 
   // Microzonas
   const [microSubmode, setMicroSubmode] = useState<MicrozoneSubmode>("polygon");
