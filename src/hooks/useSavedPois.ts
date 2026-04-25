@@ -24,35 +24,66 @@ export const useSavedPois = () => {
     const PAGE = 1000;
     const fetchAllPaged = async (deleted: boolean): Promise<SavedPoi[]> => {
       const all: SavedPoi[] = [];
+      const seen = new Set<string>();
       let from = 0;
       // Loop hasta que un page devuelva menos de PAGE filas.
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        let q = supabase
-          .from("pois")
-          .select(SELECT_COLS)
-          .order(deleted ? "deleted_at" : "created_at", { ascending: false })
-          .range(from, from + PAGE - 1);
-        q = deleted ? q.not("deleted_at", "is", null) : q.is("deleted_at", null);
-        const { data, error } = await q;
-        if (error) {
-          console.error("load pois failed", error);
-          break;
+        // Reintentamos cada página hasta 3 veces para tolerar fallos
+        // transitorios de red — antes una sola página fallida dejaba
+        // cargada solo una parte de los POIs sin avisar al usuario.
+        let lastError: unknown = null;
+        let data: SavedPoi[] | null = null;
+        for (let attempt = 0; attempt < 3 && data === null; attempt++) {
+          let q = supabase
+            .from("pois")
+            .select(SELECT_COLS)
+            // Orden estable: agregamos `id` como tie-breaker para evitar
+            // duplicados / saltos cuando varios POIs comparten timestamp.
+            .order(deleted ? "deleted_at" : "created_at", { ascending: false })
+            .order("id", { ascending: true })
+            .range(from, from + PAGE - 1);
+          q = deleted ? q.not("deleted_at", "is", null) : q.is("deleted_at", null);
+          const res = await q;
+          if (res.error) {
+            lastError = res.error;
+            await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+            continue;
+          }
+          data = (res.data ?? []) as SavedPoi[];
         }
-        const batch = (data ?? []) as SavedPoi[];
-        all.push(...batch);
-        if (batch.length < PAGE) break;
+        if (data === null) {
+          console.error("load pois failed (after retries)", lastError);
+          throw new Error(
+            lastError instanceof Error
+              ? lastError.message
+              : "No se pudieron cargar todos los POIs",
+          );
+        }
+        // Deduplicación defensiva por id.
+        for (const row of data) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id);
+            all.push(row);
+          }
+        }
+        if (data.length < PAGE) break;
         from += PAGE;
       }
       return all;
     };
-    const [active, trashed] = await Promise.all([
-      fetchAllPaged(false),
-      fetchAllPaged(true),
-    ]);
-    setLoading(false);
-    setPois(active);
-    setTrashedPois(trashed);
+    try {
+      const [active, trashed] = await Promise.all([
+        fetchAllPaged(false),
+        fetchAllPaged(true),
+      ]);
+      setPois(active);
+      setTrashedPois(trashed);
+    } catch (err) {
+      console.error("[useSavedPois.refresh] error", err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {

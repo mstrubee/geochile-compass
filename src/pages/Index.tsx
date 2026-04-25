@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -124,7 +124,29 @@ const Index = () => {
     refresh: refreshFolders,
   } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
-  const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(new Set());
+  // Por defecto TODAS las carpetas (y los POIs huérfanos) arrancan ocultas:
+  // el usuario decide qué activar. Marcamos también las carpetas nuevas que
+  // aparezcan después como ocultas, sin tocar las que el usuario ya cambió.
+  const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(
+    () => new Set(["__orphan__"]),
+  );
+  const seenFolderIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const seen = seenFolderIdsRef.current;
+    const newOnes: string[] = [];
+    for (const f of folders) {
+      if (!seen.has(f.id)) {
+        seen.add(f.id);
+        newOnes.push(f.id);
+      }
+    }
+    if (newOnes.length === 0) return;
+    setHiddenPoiFolders((prev) => {
+      const next = new Set(prev);
+      for (const id of newOnes) next.add(id);
+      return next;
+    });
+  }, [folders]);
 
   // Filtra POIs visibles según la jerarquía: si una carpeta padre está oculta,
   // todos sus descendientes también lo están. La clave "__orphan__" controla los POIs sin carpeta.
