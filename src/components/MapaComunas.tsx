@@ -51,17 +51,17 @@ const MapaComunas = ({ valoresPorComuna, onComunaClick }: MapaComunasProps) => {
           const line = lines[i];
           if (!line || !line.trim()) continue;
           const cols = line.split(",");
-          if (cols.length < 2) {
-            malformadas.push({ linea: i + 1, contenido: line, motivo: "menos de 2 columnas" });
+          if (cols.length < 6) {
+            malformadas.push({ linea: i + 1, contenido: line, motivo: "menos de 6 columnas" });
             continue;
           }
-          const codigo = cols[0]?.trim();
-          const nombre = cols[1]?.trim();
+          const codigo = cols[4]?.trim();
+          const nombre = cols[5]?.trim();
           if (!codigo || !nombre) {
             malformadas.push({
               linea: i + 1,
               contenido: line,
-              motivo: !codigo ? "código vacío" : "nombre vacío",
+              motivo: !codigo ? "commune_id vacío" : "commune_name vacío",
             });
             continue;
           }
