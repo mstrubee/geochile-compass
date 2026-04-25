@@ -39,7 +39,7 @@ type Mode = "none" | "isochrone" | "microzone";
 
 const Index = () => {
   const [mode, setMode] = useState<Mode>("none");
-  const [basemap, setBasemap] = useState<"dark" | "light" | "satellite">("dark");
+  const [basemap, setBasemap] = useState<"dark" | "light" | "satellite" | "hybrid">("satellite");
   const [panelOpen, setPanelOpen] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [layers, setLayers] = useState<LayerState>({
