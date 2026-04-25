@@ -85,6 +85,8 @@ interface SidebarProps {
   onCreateFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | void> | void;
   /** Renombra una carpeta existente. */
   onRenameFolder?: (id: string, name: string) => Promise<void> | void;
+  /** Centra el mapa sobre un POI (doble click sobre el item). */
+  onFocusPoi?: (poi: SavedPoi) => void;
   // Papelera
   trashedPois?: SavedPoi[];
   trashedFolders?: PoiFolder[];
@@ -216,6 +218,7 @@ export const Sidebar = ({
   onImportFilesIntoFolder,
   onCreateFolder,
   onRenameFolder,
+  onFocusPoi,
   trashedPois = [],
   trashedFolders = [],
   onRestorePois,
@@ -1157,8 +1160,10 @@ export const Sidebar = ({
                     <ContextMenu key={p.id}>
                       <ContextMenuTrigger asChild>
                         <div
-                          className="group flex items-center gap-2 rounded-md py-0.5 pr-1 hover:bg-surface-2/60"
+                          className="group flex items-center gap-2 rounded-md py-0.5 pr-1 hover:bg-surface-2/60 cursor-pointer"
                           style={{ paddingLeft: `${depth * 12 + 8}px` }}
+                          onDoubleClick={() => onFocusPoi?.(p)}
+                          title="Doble click para centrar en el mapa"
                         >
                           <span
                             className="h-1.5 w-1.5 flex-shrink-0 rounded-full"

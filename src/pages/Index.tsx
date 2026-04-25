@@ -630,6 +630,9 @@ const Index = () => {
           isoLoading={isoLoading}
           onToggleIsoMode={() => setMode((m) => (m === "isochrone" ? "none" : "isochrone"))}
           savedPois={pois}
+          onFocusPoi={(p) =>
+            setFlyTarget({ id: Date.now(), lat: p.lat, lng: p.lng, bbox: null })
+          }
           savedPoisVisible={savedPoisVisible}
           onToggleSavedPoisVisible={() => setSavedPoisVisible((v) => !v)}
           onRemoveSavedPoi={removePoi}
