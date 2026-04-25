@@ -121,7 +121,7 @@ const FlyToTarget = ({
 };
 
 interface MapViewProps {
-  basemap: "dark" | "light" | "satellite";
+  basemap: "dark" | "light" | "satellite" | "hybrid";
   onMouseMove: (c: { lat: number; lng: number }) => void;
   layers: import("@/types/layers").LayerState;
   nseFilter: import("@/data/communes").NSE | null;
