@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import L from "leaflet";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import { normalizeCommuneName } from "@/services/communeDataService";
 import { loadIneIndex, type IneIndex } from "@/services/ineService";
