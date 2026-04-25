@@ -85,6 +85,8 @@ interface SidebarProps {
   onCreateFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | void> | void;
   /** Renombra una carpeta existente. */
   onRenameFolder?: (id: string, name: string) => Promise<void> | void;
+  /** Centra el mapa sobre un POI (doble click sobre el item). */
+  onFocusPoi?: (poi: SavedPoi) => void;
   // Papelera
   trashedPois?: SavedPoi[];
   trashedFolders?: PoiFolder[];
