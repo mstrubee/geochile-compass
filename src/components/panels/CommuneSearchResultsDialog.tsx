@@ -54,8 +54,8 @@ export const CommuneSearchResultsDialog = ({
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const sorted = useMemo(() => {
-    if (sortKey) return sortByKey(results, sortKey, sortDir);
-    if (preset) return sortByPreset(results, preset);
+    if (sortKey) return sortCommunesByKey(results, sortKey, sortDir);
+    if (preset) return sortCommunesByPreset(results, preset);
     return results;
   }, [results, preset, sortKey, sortDir]);
 
