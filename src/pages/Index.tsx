@@ -25,6 +25,7 @@ import type { TrafficLevel } from "@/utils/traffic";
 import type { LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
 import type { GseVariable } from "@/types/gse";
+import type { IneVariable } from "@/utils/ineScales";
 import type { UserLayer } from "@/types/userLayers";
 import type { IsoMode, Isochrone } from "@/types/isochrones";
 import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
@@ -74,6 +75,7 @@ const Index = () => {
   );
   // Capa GSE por manzana (Censo 2012)
   const [gseVariable, setGseVariable] = useState<GseVariable>("gse");
+  const [chileCommunesVariable, setChileCommunesVariable] = useState<IneVariable>("poblacion");
   const [gseViewport, setGseViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
   const [userLayers, setUserLayers] = useState<UserLayer[]>([]);
   const [fitId, setFitId] = useState<string | null>(null);
@@ -692,6 +694,8 @@ const Index = () => {
           gseVariable={gseVariable}
           onGseVariableChange={setGseVariable}
           gseCount={gseData?.features.length ?? 0}
+          chileCommunesVariable={chileCommunesVariable}
+          onChileCommunesVariableChange={setChileCommunesVariable}
           userLayers={userLayers}
           onAddUserLayer={addUserLayer}
           onToggleUserLayer={toggleUserLayer}
@@ -780,6 +784,7 @@ const Index = () => {
             gseData={gseData}
             gseVariable={gseVariable}
             onGseViewportChange={handleGseViewportChange}
+            chileCommunesVariable={chileCommunesVariable}
             userLayers={userLayers}
             fitUserLayerId={fitId}
             onFitUserLayerDone={handleFitDone}
@@ -826,6 +831,8 @@ const Index = () => {
             gseVariable={gseVariable}
             gseError={gseError}
             gseCount={gseData?.features.length ?? 0}
+            chileCommunesActive={layers.communesGeo}
+            chileCommunesVariable={chileCommunesVariable}
           />
           <CoordsBar coords={coords} />
 

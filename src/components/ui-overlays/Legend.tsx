@@ -5,6 +5,7 @@ import type { ManzanaSource, ManzanaVariable } from "@/types/manzanas";
 import type { GseVariable } from "@/types/gse";
 import { scaleForVariable, VARIABLE_LABEL } from "@/utils/colorScales";
 import { GSE_VARIABLE_LABEL, scaleForGseVariable } from "@/utils/gseScales";
+import { INE_VARIABLE_LABEL, scaleForIneVariable, type IneVariable } from "@/utils/ineScales";
 
 interface LegendProps {
   shifted: boolean;
@@ -19,6 +20,8 @@ interface LegendProps {
   gseVariable: GseVariable;
   gseError: string | null;
   gseCount: number;
+  chileCommunesActive: boolean;
+  chileCommunesVariable: IneVariable;
 }
 
 interface NSERow {
@@ -137,11 +140,14 @@ export const Legend = ({
   gseVariable,
   gseError,
   gseCount,
+  chileCommunesActive,
+  chileCommunesVariable,
 }: LegendProps) => {
   const showNSE = layers.nse;
   const showTraffic = layers.traffic;
   const showManzanas = layers.manzanas;
-  const showAny = showNSE || showTraffic || showManzanas;
+  const showChileCommunes = chileCommunesActive;
+  const showAny = showNSE || showTraffic || showManzanas || showChileCommunes;
 
   // Count combined matches when both filters could apply
   const matched = COMMUNES.filter(
@@ -209,6 +215,31 @@ export const Legend = ({
           {manzanaError && (
             <div className="mt-1.5 font-mono text-[9px] text-brand-red">{manzanaError}</div>
           )}
+        </>
+      )}
+
+      {showChileCommunes && (
+        <>
+          <div className="mb-1.5 mt-1 flex items-center gap-2">
+            <div className="flex-1 font-mono text-[9px] uppercase tracking-[2px] text-text-muted">
+              Comunas · {INE_VARIABLE_LABEL[chileCommunesVariable]}
+            </div>
+            <span className="rounded-sm border border-brand-teal/40 bg-brand-teal/10 px-1.5 py-0.5 font-mono text-[8px] uppercase text-brand-teal">
+              INE
+            </span>
+          </div>
+          <div className="space-y-0.5">
+            {scaleForIneVariable(chileCommunesVariable).map((s) => (
+              <div key={s.label} className="flex items-center gap-2 px-1.5 py-0.5 text-[11px] text-foreground">
+                <span className="h-2 w-[18px] flex-shrink-0 rounded-sm" style={{ background: s.color }} />
+                <span className="flex-1">{s.label}</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-2 px-1.5 py-0.5 text-[11px] text-foreground">
+              <span className="h-2 w-[18px] flex-shrink-0 rounded-sm" style={{ background: "#3f3f46" }} />
+              <span className="flex-1 text-text-muted">Sin dato</span>
+            </div>
+          </div>
         </>
       )}
 

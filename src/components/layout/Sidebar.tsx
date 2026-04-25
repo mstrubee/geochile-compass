@@ -14,6 +14,7 @@ import type { LayerKey, LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
 import type { GseVariable } from "@/types/gse";
 import { GSE_VARIABLE_LABEL } from "@/utils/gseScales";
+import { INE_VARIABLE_LABEL, type IneVariable } from "@/utils/ineScales";
 import type { UserLayer } from "@/types/userLayers";
 import type { IsoMode, Isochrone } from "@/types/isochrones";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
@@ -36,6 +37,8 @@ interface SidebarProps {
   gseVariable: GseVariable;
   onGseVariableChange: (v: GseVariable) => void;
   gseCount: number;
+  chileCommunesVariable: IneVariable;
+  onChileCommunesVariableChange: (v: IneVariable) => void;
   userLayers: UserLayer[];
   onAddUserLayer: (layer: UserLayer) => void;
   onToggleUserLayer: (id: string) => void;
@@ -187,6 +190,8 @@ export const Sidebar = ({
   gseVariable,
   onGseVariableChange,
   gseCount,
+  chileCommunesVariable,
+  onChileCommunesVariableChange,
   userLayers = [],
   onAddUserLayer,
   onToggleUserLayer,
@@ -826,6 +831,32 @@ export const Sidebar = ({
               onToggle={row.key ? () => onToggleLayer(row.key!) : undefined}
             />
           ))}
+          {layers.communesGeo && (
+            <div className="mt-2 rounded-lg bg-surface-2/40 p-2">
+              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-text-muted">
+                Variable INE · 346 comunas
+              </div>
+              <div className="flex flex-wrap gap-0.5 rounded-md bg-surface-2/60 p-0.5">
+                {(Object.keys(INE_VARIABLE_LABEL) as IneVariable[]).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => onChileCommunesVariableChange(v)}
+                    className={[
+                      "flex-1 rounded px-1.5 py-1 text-[10px] font-medium transition-all",
+                      chileCommunesVariable === v
+                        ? "bg-surface-3 text-foreground shadow-apple-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    ].join(" ")}
+                  >
+                    {INE_VARIABLE_LABEL[v]}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[10px] leading-relaxed text-text-muted">
+                Sin CSV INE, solo 52 comunas RM tienen datos. Sube <code>/ine_communes.csv</code> para cobertura nacional.
+              </p>
+            </div>
+          )}
           {layers.nse && (
             <div className="mt-2 rounded-lg bg-surface-2/40 p-2">
               <div className="mb-1.5 text-[10px] uppercase tracking-wider text-text-muted">

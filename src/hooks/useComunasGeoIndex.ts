@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import { normalizeCommuneName } from "@/services/communeDataService";
+import { loadIneIndex, type IneIndex } from "@/services/ineService";
+import type { IneCommuneStats } from "@/utils/ineScales";
 
 export interface ComunaProps {
   codigo_comuna?: string;
@@ -17,6 +19,8 @@ interface ComunasIndex {
   byName: Map<string, ComunaFeature>;
   /** mapa código de comuna → nombre oficial (desde el CSV) */
   nombresPorCodigo: Record<string, string>;
+  /** índice INE (poblacion, densidad, ingreso, NSE) por código y nombre */
+  ine: IneIndex;
 }
 
 let cache: ComunasIndex | null = null;
@@ -28,9 +32,10 @@ const loadOnce = async (): Promise<ComunasIndex> => {
   if (inflight) return inflight;
 
   inflight = (async () => {
-    const [geoRes, csvRes] = await Promise.all([
+    const [geoRes, csvRes, ine] = await Promise.all([
       fetch("/comunas.geojson"),
       fetch("/codigos_territoriales.csv"),
+      loadIneIndex(),
     ]);
 
     const ct = geoRes.headers.get("content-type") ?? "";
@@ -59,7 +64,7 @@ const loadOnce = async (): Promise<ComunasIndex> => {
       if (nombre) byName.set(normalizeCommuneName(nombre), f);
     }
 
-    cache = { fc, byName, nombresPorCodigo };
+    cache = { fc, byName, nombresPorCodigo, ine };
     inflight = null;
     subscribers.forEach((cb) => cb(cache!));
     return cache;
@@ -105,11 +110,21 @@ export const useComunasGeoIndex = (enabled: boolean = true) => {
     return index.byName.get(normalizeCommuneName(name)) ?? null;
   };
 
+  const getIneStats = (codigo: string, nombre?: string): IneCommuneStats | null => {
+    if (!index) return null;
+    const byCode = index.ine.byCode.get(codigo);
+    if (byCode) return byCode;
+    const officialName = nombre ?? index.nombresPorCodigo[codigo];
+    if (!officialName) return null;
+    return index.ine.byName.get(normalizeCommuneName(officialName)) ?? null;
+  };
+
   return {
     ready: !!index,
     fc: index?.fc ?? null,
     nombresPorCodigo: index?.nombresPorCodigo ?? {},
     getFeatureByName,
+    getIneStats,
     error,
   };
 };

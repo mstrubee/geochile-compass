@@ -17,6 +17,7 @@ import type { UserLayer } from "@/types/userLayers";
 import type { Isochrone } from "@/types/isochrones";
 import type { SavedPoi } from "@/types/pois";
 import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
+import type { IneVariable } from "@/utils/ineScales";
 
 // Fix default Leaflet marker icon paths (when bundled)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -136,6 +137,7 @@ interface MapViewProps {
   gseData: GseFeatureCollection | null;
   gseVariable: GseVariable;
   onGseViewportChange: (bbox: [number, number, number, number], zoom: number) => void;
+  chileCommunesVariable: IneVariable;
   userLayers: UserLayer[];
   fitUserLayerId: string | null;
   onFitUserLayerDone: () => void;
@@ -184,6 +186,7 @@ export const MapView = ({
   gseData,
   gseVariable,
   onGseViewportChange,
+  chileCommunesVariable,
   userLayers,
   fitUserLayerId,
   onFitUserLayerDone,
@@ -258,7 +261,7 @@ export const MapView = ({
         onPopupOpened={onCommunePopupOpened}
         onAddToCompare={onAddCommuneToCompare}
       />
-      <ChileCommunesLayer visible={layers.communesGeo} />
+      <ChileCommunesLayer visible={layers.communesGeo} variable={chileCommunesVariable} />
       <CommuneOutlineLayer
         names={outlinedCommuneNames}
         highlightName={highlightedCommuneName}
