@@ -108,13 +108,28 @@ const Index = () => {
   const [outlinedCommuneNames, setOutlinedCommuneNames] = useState<string[]>([]);
   const [highlightedCommuneName, setHighlightedCommuneName] = useState<string | null>(null);
 
-  const handleFlyToCommune = useCallback((c: Commune) => {
-    setLayers((prev) => (prev.communes ? prev : { ...prev, communes: true }));
-    setFlyTarget({ id: Date.now(), lat: c.lat, lng: c.lng, bbox: null });
-    setPopupCommune(c.name);
-    setOutlinedCommuneNames([c.name]);
-    setHighlightedCommuneName(c.name);
-  }, []);
+  // Comunas buscadas por nombre (acumulada hasta que el usuario las borre)
+  const [searchedCommunes, setSearchedCommunes] = useState<Commune[]>([]);
+
+  const { getBboxByName } = useComunasGeoIndex(true);
+
+  const handleFlyToCommune = useCallback(
+    (c: Commune) => {
+      // Centrar el perímetro real del polígono si tenemos el geojson cargado;
+      // si no, caer al punto del centroide.
+      const bbox = getBboxByName(c.name);
+      setFlyTarget({
+        id: Date.now(),
+        lat: c.lat,
+        lng: c.lng,
+        bbox,
+      });
+      setHighlightedCommuneName(c.name);
+      // No fijamos outlinedCommuneNames aquí: cada call site decide qué lista mostrar.
+      // No abrimos el popup demográfico (setPopupCommune) — la búsqueda solo centra y resalta.
+    },
+    [getBboxByName],
+  );
 
   const handleOpenCommuneRangeResults = useCallback(
     (rows: Commune[], min: number, max: number | null) => {
