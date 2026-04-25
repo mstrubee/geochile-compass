@@ -161,6 +161,8 @@ interface MapViewProps {
     bbox: [number, number, number, number] | null;
   } | null;
   onViewportChange?: (bbox: [number, number, number, number], zoom: number) => void;
+  openCommunePopupFor?: string | null;
+  onCommunePopupOpened?: () => void;
 }
 
 export const MapView = ({
@@ -198,6 +200,8 @@ export const MapView = ({
   onFitMicrozoneDone,
   flyTarget,
   onViewportChange,
+  openCommunePopupFor,
+  onCommunePopupOpened,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -240,7 +244,11 @@ export const MapView = ({
         variable="density"
         onViewportChange={onDensityViewportChange}
       />
-      <CommuneLayer visible={layers.communes} />
+      <CommuneLayer
+        visible={layers.communes}
+        openPopupFor={openCommunePopupFor}
+        onPopupOpened={onCommunePopupOpened}
+      />
       <GseLayer
         visible={layers.nse}
         data={gseData}
