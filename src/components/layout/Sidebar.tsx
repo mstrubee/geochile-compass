@@ -1244,6 +1244,23 @@ export const Sidebar = ({
                                 <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
                                 {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
                               </ContextMenuItem>
+                              {onRenameFolder && (
+                                <ContextMenuItem
+                                  onSelect={async () => {
+                                    const next = window.prompt(`Nuevo nombre para "${f.name}":`, f.name);
+                                    if (!next || !next.trim() || next.trim() === f.name) return;
+                                    try {
+                                      await onRenameFolder(f.id, next.trim());
+                                      toast.success(`Carpeta renombrada a "${next.trim()}"`);
+                                    } catch (err) {
+                                      toast.error(err instanceof Error ? err.message : "Error al renombrar");
+                                    }
+                                  }}
+                                >
+                                  <Pencil className="mr-2 h-3.5 w-3.5" />
+                                  Renombrar carpeta…
+                                </ContextMenuItem>
+                              )}
                               {onCreateFolder && (
                                 <ContextMenuItem
                                   onSelect={async () => {
