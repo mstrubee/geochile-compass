@@ -19,25 +19,40 @@ export const useSavedPois = () => {
       return;
     }
     setLoading(true);
+    // Supabase limita a 1000 filas por consulta por defecto. Paginamos en
+    // bloques para traer absolutamente todos los POIs del usuario sin tope.
+    const PAGE = 1000;
+    const fetchAllPaged = async (deleted: boolean): Promise<SavedPoi[]> => {
+      const all: SavedPoi[] = [];
+      let from = 0;
+      // Loop hasta que un page devuelva menos de PAGE filas.
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        let q = supabase
+          .from("pois")
+          .select(SELECT_COLS)
+          .order(deleted ? "deleted_at" : "created_at", { ascending: false })
+          .range(from, from + PAGE - 1);
+        q = deleted ? q.not("deleted_at", "is", null) : q.is("deleted_at", null);
+        const { data, error } = await q;
+        if (error) {
+          console.error("load pois failed", error);
+          break;
+        }
+        const batch = (data ?? []) as SavedPoi[];
+        all.push(...batch);
+        if (batch.length < PAGE) break;
+        from += PAGE;
+      }
+      return all;
+    };
     const [active, trashed] = await Promise.all([
-      supabase
-        .from("pois")
-        .select(SELECT_COLS)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("pois")
-        .select(SELECT_COLS)
-        .not("deleted_at", "is", null)
-        .order("deleted_at", { ascending: false }),
+      fetchAllPaged(false),
+      fetchAllPaged(true),
     ]);
     setLoading(false);
-    if (active.error) {
-      console.error("load pois failed", active.error);
-      return;
-    }
-    setPois((active.data ?? []) as SavedPoi[]);
-    setTrashedPois((trashed.data ?? []) as SavedPoi[]);
+    setPois(active);
+    setTrashedPois(trashed);
   }, [user]);
 
   useEffect(() => {
