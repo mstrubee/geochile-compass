@@ -1,98 +1,51 @@
+## Objetivo
 
-## Plan: Búsqueda de comunas en el Sidebar
+Crear un mapa interactivo simple de Chile con las 346 comunas usando react-leaflet, accesible en una nueva ruta `/comunas`, sin tocar la app principal existente.
 
-Agrego un buscador de comunas dentro del Sidebar con dos modos: **por texto** (centra mapa + abre popup) y **por rango/mínimo de población** (abre ventana con tabla, exportable y ordenable).
+## Supuesto
 
----
+El archivo `public/comunas.geojson` lo subes tú manualmente. El componente lo consumirá vía `fetch("/comunas.geojson")`. Si aún no existe, se mostrará un mensaje de carga indefinido (puedo agregar manejo de error si lo prefieres).
 
-### 1. Nuevo componente `src/components/layout/CommuneSearch.tsx`
+## Archivos
 
-Bloque dentro del Sidebar con dos pestañas (Tabs) o dos secciones colapsables:
+### 1. Crear `src/components/MapaComunas.tsx`
 
-**Modo "Texto":**
-- `Input` con autocompletado contra `COMMUNES` (match insensible a mayúsculas/acentos, reusando `normalizeKey` que ya existe en `communeDataService.ts` — lo exporto).
-- Lista desplegable de hasta 8 sugerencias (estilo `Command` de cmdk, ya disponible en `src/components/ui/command.tsx`).
-- Al hacer Enter o click en una sugerencia → llama callback `onFlyToCommune(commune)`.
+Componente con:
 
-**Modo "Rango de población":**
-- Dos `Input type="number"`: "Mínimo" y "Máximo" (máximo opcional → solo mínimo).
-- Botón "Buscar" → filtra `COMMUNES` por `pop >= min && (max == null || pop <= max)` y abre el dialog de resultados.
+- `import "leaflet/dist/leaflet.css"` al inicio.
+- Interfaz `ComunaProps { cod_comuna: string; nom_comuna: string }`.
+- Tipos importados: `Feature, FeatureCollection, Geometry` de `"geojson"`, `Layer` de `"leaflet"`.
+- `useState<FeatureCollection<Geometry, ComunaProps> | null>(null)` para el GeoJSON.
+- `useEffect` con `fetch("/comunas.geojson").then(r => r.json()).then(setData)`.
+- Contenedor raíz: `<div className="w-full h-full min-h-[500px]">`.
+- `<MapContainer center={[-35.5, -71.0]} zoom={5} style={{ width: "100%", height: "100%" }}>`.
+- `<TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' />`.
+- `<GeoJSON data={data} style={() => ({ fillColor: "#3b82f6", fillOpacity: 0.45, color: "#1e3a8a", weight: 0.6 })} onEachFeature={(feature, layer) => layer.bindPopup(...)} />` renderizado solo cuando `data` exista.
+- Popup con HTML: `<strong>{nom_comuna}</strong><br/>Código: {cod_comuna}`.
 
----
+### 2. Crear `src/pages/MapaComunasPage.tsx`
 
-### 2. Nuevo componente `src/components/panels/CommuneSearchResultsDialog.tsx`
+Página wrapper:
+```tsx
+<div className="h-screen w-screen">
+  <MapaComunas />
+</div>
+```
 
-`Dialog` (shadcn) con tabla de resultados:
+### 3. Editar `src/App.tsx`
 
-**Columnas:** Comuna, Población, Hogares, NSE (mostrado como etiqueta `ABC1/C2/C3/D/E` vía `NSE_LABELS`), Densidad, Área, Tráfico, Latitud.
+Agregar la ruta **antes** del catch-all `*`:
+```tsx
+<Route path="/comunas" element={<MapaComunasPage />} />
+```
 
-**Ordenamiento:** Header de cada columna clickeable (toggle asc/desc). Además un selector dedicado:
-- Norte → Sur (asc por `lat` descendente, ya que Chile va de norte=lat menos negativa a sur=más negativa) y Sur → Norte.
-- Alfabético A–Z / Z–A.
-- Por GSE (orden ABC1 → E o E → ABC1, mapeando vía `nse` numérico).
-- Por cualquier criterio numérico asc/desc (click en header).
+## No se hará
 
-**Acciones:**
-- Botón "Exportar a Excel" → reutiliza `xlsx` (ya instalado por `communeDataService`). Genera archivo con las mismas columnas que el export global pero solo de los resultados filtrados. Lo añado como helper `exportCommunesSubsetToExcel(rows, filename)` en `communeDataService.ts`.
-- Click en una fila → cierra el dialog y centra el mapa en esa comuna (mismo flujo que el modo texto).
+- No instalar dependencias (`leaflet`, `react-leaflet` ya están; los tipos `geojson` vienen vía `@types/geojson` transitivo).
+- No tocar `Index.tsx`, `MapView.tsx` ni la app existente.
+- No agregar hover, coloreado dinámico, búsqueda, ni props.
+- No crear el archivo `comunas.geojson` (lo subes tú).
 
-Notas:
-- Si no hay resultados, mensaje vacío amable.
-- Si una comuna no tiene datos demográficos (`pop === 0`), se muestra igual con guiones, pero se excluye automáticamente cuando el filtro mínimo > 0 (porque su `pop` es 0).
+## Verificación
 
----
-
-### 3. Integración en `src/components/layout/Sidebar.tsx`
-
-- Importar `CommuneSearch` y montarlo arriba de la sección "Capas territoriales" (o dentro de una nueva `SidebarSection` titulada "Buscar comuna").
-- Recibe dos props nuevas desde `Index.tsx`:
-  - `onFlyToCommune(commune)` — para centrar y abrir popup.
-  - `onOpenRangeResults(results)` — para abrir el dialog de rangos.
-
----
-
-### 4. Cambios en `src/pages/Index.tsx`
-
-- Estado nuevo: `rangeResults: Commune[] | null` y `rangeDialogOpen: boolean`.
-- Estado nuevo: `popupCommune: string | null` (nombre de la comuna cuyo popup queremos abrir tras volar).
-- Handler `handleFlyToCommune(c)`:
-  1. Activa la capa `layers.communes = true` si está desactivada (para que el `CircleMarker` sea visible).
-  2. `setFlyTarget({ id: Date.now(), lat: c.lat, lng: c.lng, bbox: null })` — reusa el mecanismo existente.
-  3. `setPopupCommune(c.name)` — para que el `CommuneLayer` abra su popup.
-- Pasa `popupCommune` (y un `onPopupOpened` para limpiarlo) al `MapView` → `CommuneLayer`.
-
----
-
-### 5. Cambios en `src/components/map/CommuneLayer.tsx`
-
-- Acepta props `openPopupFor?: string | null` y `onPopupOpened?: () => void`.
-- Mantengo un `Map<string, L.CircleMarker>` con refs (vía `ref` callback en `CircleMarker`).
-- `useEffect` que cuando `openPopupFor` cambia, llama `marker.openPopup()` sobre el ref correspondiente y luego invoca `onPopupOpened()` (con un pequeño `setTimeout` para asegurar que el `flyTo` ya posicionó el mapa, ~900 ms ya que el flyTo dura 0.8s).
-
----
-
-### 6. Helper expuesto en `communeDataService.ts`
-
-Agregar y exportar:
-- `normalizeCommuneName(name)` — wrapper público de `normalizeKey` para usarlo desde el buscador.
-- `exportCommunesSubsetToExcel(rows: Commune[], filename?: string)` — misma estructura que `exportCommunesToExcel` pero recibe el subset.
-
----
-
-### Detalles UX
-- El buscador está siempre visible, no requiere que la capa "Demografía comunal" esté activada — se activa automáticamente cuando seleccionas una comuna.
-- El input de texto soporta navegación con flechas ↑↓ y Enter para seleccionar la sugerencia resaltada (gracias a `cmdk`).
-- El dialog de resultados es responsivo, con scroll vertical si hay muchas comunas y muestra el conteo total ("123 comunas encontradas").
-
----
-
-### Archivos a modificar / crear
-- **Crear:** `src/components/layout/CommuneSearch.tsx`
-- **Crear:** `src/components/panels/CommuneSearchResultsDialog.tsx`
-- **Modificar:** `src/components/layout/Sidebar.tsx` (montar componente + 2 props)
-- **Modificar:** `src/pages/Index.tsx` (estado + handlers + props al MapView)
-- **Modificar:** `src/components/map/MapView.tsx` (pasar props al CommuneLayer)
-- **Modificar:** `src/components/map/CommuneLayer.tsx` (refs + apertura programática de popup)
-- **Modificar:** `src/services/communeDataService.ts` (exportar helpers)
-
-Sin nuevas dependencias — `cmdk`, `xlsx`, `Dialog` y `Tabs` ya están instalados.
+Tras aplicar los cambios y subir el `comunas.geojson`, abrir `/comunas` en el preview debe mostrar Chile completo con polígonos azules semitransparentes y popup al hacer click en cada comuna.
