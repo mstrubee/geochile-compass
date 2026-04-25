@@ -46,13 +46,37 @@ const MapaComunas = ({ valoresPorComuna, onComunaClick }: MapaComunasProps) => {
       .then((text) => {
         const lines = text.split(/\r?\n/);
         const map: Record<string, string> = {};
+        const malformadas: { linea: number; contenido: string; motivo: string }[] = [];
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i];
-          if (!line) continue;
+          if (!line || !line.trim()) continue;
           const cols = line.split(",");
+          if (cols.length < 2) {
+            malformadas.push({ linea: i + 1, contenido: line, motivo: "menos de 2 columnas" });
+            continue;
+          }
           const codigo = cols[0]?.trim();
           const nombre = cols[1]?.trim();
-          if (codigo && nombre) map[codigo] = nombre;
+          if (!codigo || !nombre) {
+            malformadas.push({
+              linea: i + 1,
+              contenido: line,
+              motivo: !codigo ? "código vacío" : "nombre vacío",
+            });
+            continue;
+          }
+          map[codigo] = nombre;
+        }
+        if (malformadas.length > 0) {
+          console.warn(
+            `[codigos_territoriales.csv] ${malformadas.length} fila(s) mal formada(s):`,
+            malformadas,
+          );
+        }
+        if (Object.keys(map).length === 0) {
+          console.error(
+            "[codigos_territoriales.csv] No se pudo parsear ninguna fila válida. Revisa el formato del archivo (se esperan al menos 2 columnas separadas por coma).",
+          );
         }
         setNombresPorCodigo(map);
       })
