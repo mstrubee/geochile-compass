@@ -76,8 +76,8 @@ const Index = () => {
   const [fitId, setFitId] = useState<string | null>(null);
 
   // Isócronas
-  const [isoMode, setIsoMode] = useState<IsoMode>("foot-walking");
-  const [isoMinutes, setIsoMinutes] = useState<number[]>([5, 10, 15]);
+  const [isoMode, setIsoMode] = useState<IsoMode>("driving-car");
+  const [isoMinutes, setIsoMinutes] = useState<number[]>([5, 7, 10]);
   const [isochrones, setIsochrones] = useState<Isochrone[]>([]);
   const [fitIsoId, setFitIsoId] = useState<string | null>(null);
   const [isoLoading, setIsoLoading] = useState(false);
