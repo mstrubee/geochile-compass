@@ -49,7 +49,7 @@ const applyOverrides = (overrides: Overrides): number => {
       if (typeof v === "number" && Number.isFinite(v)) {
         // Mutación intencional: COMMUNES es la fuente única consumida por
         // toda la app, así que actualizamos sus valores en sitio.
-        (c as Record<string, unknown>)[field] = clampNse(field, v);
+        (c as unknown as Record<string, unknown>)[field] = clampNse(field, v);
       }
     }
     applied++;
