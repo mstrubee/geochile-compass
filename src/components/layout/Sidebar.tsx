@@ -125,7 +125,7 @@ interface LayerRow {
 
 const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "communes", color: "bg-primary", name: "Demografía comunal", count: 345, sub: "Centroides comunales · Chile" },
-  { key: "communesGeo", color: "bg-brand-cyan", name: "Comunas de Chile", count: 346, sub: "Polígonos · INE" },
+  { key: "communesGeo", color: "bg-brand-teal", name: "Comunas de Chile", count: 346, sub: "Polígonos · INE" },
   { key: "nse", color: "bg-brand-purple", name: "GSE por manzana", count: 36, sub: "Censo 2012 — AMS" },
   { key: "density", color: "bg-brand-pink", name: "Densidad población", count: 20 },
 ];
