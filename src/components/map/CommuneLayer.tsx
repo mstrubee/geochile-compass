@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { CircleMarker, Popup, useMap } from "react-leaflet";
 import type { CircleMarker as LCircleMarker, LeafletMouseEvent } from "leaflet";
 import { COMMUNES, NSE_LABELS, NSE_INCOME, type Commune } from "@/data/communes";
+import { colorForPopulation } from "@/utils/colorScales";
 import { fmtNum, fmtCLP, fmtArea, fmtDensity } from "@/utils/formatters";
 import {
   loadCommuneOverrides,
