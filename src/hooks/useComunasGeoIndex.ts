@@ -64,7 +64,7 @@ const loadOnce = async (): Promise<ComunasIndex> => {
       if (nombre) byName.set(normalizeCommuneName(nombre), f);
     }
 
-    cache = { fc, byName, nombresPorCodigo };
+    cache = { fc, byName, nombresPorCodigo, ine };
     inflight = null;
     subscribers.forEach((cb) => cb(cache!));
     return cache;
