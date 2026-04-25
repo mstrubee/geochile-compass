@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { CommuneLayer } from "./CommuneLayer";
+import { ChileCommunesLayer } from "./ChileCommunesLayer";
 import { TrafficLayer } from "./TrafficLayer";
 import { GseLayer } from "./GseLayer";
 import { ManzanaLayer } from "./ManzanaLayer";
@@ -252,6 +253,7 @@ export const MapView = ({
         onPopupOpened={onCommunePopupOpened}
         onAddToCompare={onAddCommuneToCompare}
       />
+      <ChileCommunesLayer visible={layers.communesGeo} />
       <GseLayer
         visible={layers.nse}
         data={gseData}

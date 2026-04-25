@@ -46,6 +46,7 @@ const Index = () => {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [layers, setLayers] = useState<LayerState>({
     communes: false,
+    communesGeo: false,
     nse: false,
     traffic: false,
     density: false,
