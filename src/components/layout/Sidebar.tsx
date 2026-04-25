@@ -24,7 +24,7 @@ import { OVERPASS_PRESETS } from "@/services/overpassService";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
-  onBasemapChange: (b: "dark" | "light" | "satellite") => void;
+  onBasemapChange: (b: "dark" | "light" | "satellite" | "hybrid") => void;
   mode: "none" | "isochrone" | "microzone";
   layers: LayerState;
   onToggleLayer: (key: LayerKey) => void;
