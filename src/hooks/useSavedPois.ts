@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
+import { loadPoiCache, savePoiCache } from "@/services/poiCache";
 import type { PoiInsert, PoiUpdate, SavedPoi } from "@/types/pois";
 
 const SELECT_COLS =
