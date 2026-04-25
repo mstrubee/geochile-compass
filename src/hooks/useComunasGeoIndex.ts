@@ -19,6 +19,8 @@ interface ComunasIndex {
   byName: Map<string, ComunaFeature>;
   /** mapa código de comuna → nombre oficial (desde el CSV) */
   nombresPorCodigo: Record<string, string>;
+  /** índice INE (poblacion, densidad, ingreso, NSE) por código y nombre */
+  ine: IneIndex;
 }
 
 let cache: ComunasIndex | null = null;
