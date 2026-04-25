@@ -18,17 +18,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { type Commune, NSE_LABELS } from "@/data/communes";
 import { exportCommunesSubsetToExcel } from "@/services/communeDataService";
 import { fmtNum, fmtArea, fmtDensity } from "@/utils/formatters";
+import {
+  sortCommunesByPreset,
+  sortCommunesByKey,
+  type CommunePreset as Preset,
+  type CommuneSortKey,
+  type SortDir,
+} from "@/utils/communeSorting";
 import { toast } from "sonner";
 
-type SortKey = "name" | "pop" | "hh" | "nse" | "density" | "area" | "traffic" | "lat";
-type SortDir = "asc" | "desc";
-type Preset =
-  | "north-south"
-  | "south-north"
-  | "alpha-asc"
-  | "alpha-desc"
-  | "gse-high"
-  | "gse-low";
+type SortKey = Extract<
+  CommuneSortKey,
+  "name" | "pop" | "hh" | "nse" | "density" | "area" | "traffic" | "lat"
+>;
 
 interface CommuneSearchResultsDialogProps {
   open: boolean;
@@ -38,39 +40,6 @@ interface CommuneSearchResultsDialogProps {
   max: number | null;
   onFlyToCommune: (c: Commune) => void;
 }
-
-const sortByPreset = (rows: Commune[], preset: Preset): Commune[] => {
-  const arr = [...rows];
-  switch (preset) {
-    case "north-south":
-      // Norte de Chile = lat menos negativa (mayor) → desc
-      return arr.sort((a, b) => b.lat - a.lat);
-    case "south-north":
-      return arr.sort((a, b) => a.lat - b.lat);
-    case "alpha-asc":
-      return arr.sort((a, b) => a.name.localeCompare(b.name, "es"));
-    case "alpha-desc":
-      return arr.sort((a, b) => b.name.localeCompare(a.name, "es"));
-    case "gse-high":
-      // ABC1 (5) → E (1)
-      return arr.sort((a, b) => b.nse - a.nse);
-    case "gse-low":
-      return arr.sort((a, b) => a.nse - b.nse);
-  }
-};
-
-const sortByKey = (rows: Commune[], key: SortKey, dir: SortDir): Commune[] => {
-  const arr = [...rows];
-  arr.sort((a, b) => {
-    const av = a[key];
-    const bv = b[key];
-    if (typeof av === "string" && typeof bv === "string") {
-      return dir === "asc" ? av.localeCompare(bv, "es") : bv.localeCompare(av, "es");
-    }
-    return dir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
-  });
-  return arr;
-};
 
 export const CommuneSearchResultsDialog = ({
   open,
