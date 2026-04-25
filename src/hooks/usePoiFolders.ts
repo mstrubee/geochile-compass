@@ -36,8 +36,28 @@ export const usePoiFolders = () => {
       console.error("load folders failed", active.error);
       return;
     }
-    setFolders((active.data ?? []) as PoiFolder[]);
+    const fresh = (active.data ?? []) as PoiFolder[];
+    setFolders(fresh);
     setTrashedFolders((trashed.data ?? []) as PoiFolder[]);
+    void saveFoldersCache(user.id, fresh);
+  }, [user]);
+
+  // Hidratación inmediata desde caché local (offline / arranque rápido).
+  useEffect(() => {
+    if (!user) {
+      setFolders([]);
+      setTrashedFolders([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const cached = await loadFoldersCache(user.id);
+      if (cancelled) return;
+      if (cached) setFolders(cached.folders);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   useEffect(() => {
