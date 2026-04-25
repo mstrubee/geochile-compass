@@ -1,177 +1,130 @@
-import "leaflet/dist/leaflet.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
+import L, { Layer, PathOptions } from "leaflet";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
-import type { Layer, PathOptions, GeoJSON as LeafletGeoJSON, LeafletMouseEvent } from "leaflet";
+import "leaflet/dist/leaflet.css";
 
-interface ComunaProps {
-  codigo_comuna: string;
-  cod_comuna?: string;
-  nom_comuna?: string;
-}
-
-interface MapaComunasProps {
+interface Props {
   valoresPorComuna?: Record<string, number>;
   onComunaClick?: (codComuna: string, nombre: string) => void;
 }
 
-const MIN_COLOR = [219, 234, 254]; // #dbeafe
-const MAX_COLOR = [30, 58, 138];   // #1e3a8a
+interface ComunaProps {
+  codigo_comuna: string;
+}
 
-const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
-
-const interpolateColor = (t: number): string => {
-  const clamped = Math.max(0, Math.min(1, t));
-  const r = lerp(MIN_COLOR[0], MAX_COLOR[0], clamped);
-  const g = lerp(MIN_COLOR[1], MAX_COLOR[1], clamped);
-  const b = lerp(MIN_COLOR[2], MAX_COLOR[2], clamped);
-  return `rgb(${r}, ${g}, ${b})`;
-};
-
-const MapaComunas = ({ valoresPorComuna, onComunaClick }: MapaComunasProps) => {
-  const [data, setData] = useState<FeatureCollection<Geometry, ComunaProps> | null>(null);
+export default function MapaComunas({ valoresPorComuna, onComunaClick }: Props) {
+  const [geojson, setGeojson] = useState<FeatureCollection | null>(null);
   const [nombresPorCodigo, setNombresPorCodigo] = useState<Record<string, string>>({});
-  const geoJsonRef = useRef<LeafletGeoJSON | null>(null);
+  const geoJsonRef = useRef<L.GeoJSON | null>(null);
 
+  // Cargar GeoJSON
   useEffect(() => {
     fetch("/comunas.geojson")
       .then((r) => r.json())
-      .then((json: FeatureCollection<Geometry, ComunaProps>) => setData(json))
-      .catch((err) => console.error("Error cargando comunas.geojson:", err));
+      .then((data) => {
+        console.log("[DEBUG] GeoJSON cargado:", data.features?.length, "features");
+        console.log("[DEBUG] Primer feature properties:", data.features?.[0]?.properties);
+        setGeojson(data);
+      })
+      .catch((e) => console.error("Error cargando GeoJSON:", e));
   }, []);
 
+  // Cargar CSV de nombres
   useEffect(() => {
     fetch("/codigos_territoriales.csv")
       .then((r) => r.text())
-      .then((text) => {
-        const lines = text.split(/\r?\n/);
-        const map: Record<string, string> = {};
-        const malformadas: { linea: number; contenido: string; motivo: string }[] = [];
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line || !line.trim()) continue;
-          const cols = line.split(",");
-          if (cols.length < 6) {
-            malformadas.push({ linea: i + 1, contenido: line, motivo: "menos de 6 columnas" });
-            continue;
-          }
-          const codigo = cols[4]?.trim();
-          const nombre = cols[5]?.trim();
-          if (!codigo || !nombre) {
-            malformadas.push({
-              linea: i + 1,
-              contenido: line,
-              motivo: !codigo ? "commune_id vacío" : "commune_name vacío",
-            });
-            continue;
-          }
-          map[codigo] = nombre;
+      .then((csv) => {
+        const lineas = csv.trim().split("\n");
+        const mapa: Record<string, string> = {};
+        // Saltar header (primera línea)
+        for (let i = 1; i < lineas.length; i++) {
+          const cols = lineas[i].split(",");
+          const codigo = cols[0]?.trim();
+          const nombre = cols[1]?.trim();
+          if (codigo && nombre) mapa[codigo] = nombre;
         }
-        if (malformadas.length > 0) {
-          console.warn(
-            `[codigos_territoriales.csv] ${malformadas.length} fila(s) mal formada(s):`,
-            malformadas,
-          );
-        }
-        if (Object.keys(map).length === 0) {
-          console.error(
-            "[codigos_territoriales.csv] No se pudo parsear ninguna fila válida. Revisa el formato del archivo (se esperan al menos 2 columnas separadas por coma).",
-          );
-        }
-        setNombresPorCodigo(map);
+        console.log("[DEBUG] CSV cargado:", Object.keys(mapa).length, "códigos");
+        setNombresPorCodigo(mapa);
       })
-      .catch((err) => console.error("Error cargando codigos_territoriales.csv:", err));
+      .catch((e) => console.error("Error cargando CSV:", e));
   }, []);
 
-  const maxValor = valoresPorComuna
-    ? Math.max(0, ...Object.values(valoresPorComuna))
-    : 0;
+  // Escala de color
+  const max = useMemo(() => {
+    if (!valoresPorComuna) return 1;
+    return Math.max(...Object.values(valoresPorComuna), 1);
+  }, [valoresPorComuna]);
 
-  const styleFor = (feature?: Feature<Geometry, ComunaProps>): PathOptions => {
-    if (!feature) {
-      return { fillColor: "#3b82f6", fillOpacity: 0.45, color: "#1e3a8a", weight: 0.6 };
-    }
-    if (!valoresPorComuna || maxValor <= 0) {
-      return { fillColor: "#3b82f6", fillOpacity: 0.45, color: "#1e3a8a", weight: 0.6 };
-    }
-    const codigo = feature.properties.codigo_comuna ?? feature.properties.cod_comuna ?? "";
-    const valor = valoresPorComuna[codigo];
-    const t = valor === undefined ? 0 : valor / maxValor;
-    return {
-      fillColor: interpolateColor(t),
-      fillOpacity: 0.7,
-      color: "#1e3a8a",
-      weight: 0.6,
-    };
+  const colorPara = (cod: string): string => {
+    if (!valoresPorComuna) return "#3b82f6";
+    const v = valoresPorComuna[cod] ?? 0;
+    const t = v / max;
+    const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
+    return `rgb(${lerp(219, 30)}, ${lerp(234, 58)}, ${lerp(254, 138)})`;
   };
 
-  // Re-style when valoresPorComuna changes, without recreating the map
+  const styleFeature = (f?: Feature<Geometry, ComunaProps>): PathOptions => ({
+    fillColor: colorPara(f?.properties?.codigo_comuna ?? ""),
+    fillOpacity: 0.45,
+    color: "#1e3a8a",
+    weight: 0.6,
+  });
+
+  // Re-pintar al cambiar valores
   useEffect(() => {
-    const layer = geoJsonRef.current;
-    if (!layer) return;
-    layer.eachLayer((l) => {
-      const feature = (l as unknown as { feature?: Feature<Geometry, ComunaProps> }).feature;
-      if (feature) {
-        (l as unknown as { setStyle: (s: PathOptions) => void }).setStyle(styleFor(feature));
-      }
-    });
+    geoJsonRef.current?.setStyle(styleFeature as L.StyleFunction);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valoresPorComuna, data]);
+  }, [valoresPorComuna]);
 
   const onEachFeature = (feature: Feature<Geometry, ComunaProps>, layer: Layer) => {
-    const codigo = feature.properties.codigo_comuna ?? feature.properties.cod_comuna ?? "";
-    const nombre = nombresPorCodigo[codigo] ?? "Comuna desconocida";
-    layer.bindPopup(`<strong>${nombre}</strong><br/>Código: ${codigo}`);
+    const codigo = feature.properties.codigo_comuna;
+
+    // bindPopup con función → se evalúa al abrir, no al renderizar
+    layer.bindPopup(() => {
+      const nombre = nombresPorCodigo[codigo] ?? "Sin nombre";
+      return `<strong>${nombre}</strong><br/>Código: ${codigo}`;
+    });
 
     layer.on({
-      mouseover: (e: LeafletMouseEvent) => {
-        const target = e.target as unknown as {
-          setStyle: (s: PathOptions) => void;
-          bringToFront: () => void;
-        };
-        target.setStyle({ weight: 2, color: "#1d4ed8", fillOpacity: 0.65 });
-        target.bringToFront();
+      mouseover: (e) => {
+        const l = e.target as L.Path;
+        l.setStyle({ weight: 2, color: "#1d4ed8", fillOpacity: 0.65 });
+        l.bringToFront();
       },
-      mouseout: () => {
-        geoJsonRef.current?.resetStyle(layer as never);
+      mouseout: (e) => {
+        geoJsonRef.current?.resetStyle(e.target);
       },
       click: () => {
+        const nombre = nombresPorCodigo[codigo] ?? "Sin nombre";
         onComunaClick?.(codigo, nombre);
       },
     });
   };
 
-  const ready = data && Object.keys(nombresPorCodigo).length > 0;
+  // Renderizar GeoJSON SOLO cuando ambos archivos están listos
+  const todoListo = geojson && Object.keys(nombresPorCodigo).length > 0;
 
   return (
-    <div className="w-full h-full min-h-[500px] relative">
-      {!ready && (
-        <div className="absolute inset-0 z-[500] flex items-center justify-center bg-background/60 text-sm text-muted-foreground">
-          Cargando comunas...
-        </div>
-      )}
+    <div className="w-full h-full min-h-[500px]">
       <MapContainer
         center={[-35.5, -71.0]}
         zoom={5}
         style={{ height: "100%", width: "100%" }}
       >
         <TileLayer
+          attribution='&copy; OpenStreetMap &copy; CARTO'
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
         />
-        {ready && (
+        {todoListo && (
           <GeoJSON
-            ref={(r) => {
-              geoJsonRef.current = r as unknown as LeafletGeoJSON | null;
-            }}
-            data={data}
-            style={styleFor as never}
+            ref={geoJsonRef}
+            data={geojson!}
+            style={styleFeature as L.StyleFunction}
             onEachFeature={onEachFeature}
           />
         )}
       </MapContainer>
     </div>
   );
-};
-
-export default MapaComunas;
+}
