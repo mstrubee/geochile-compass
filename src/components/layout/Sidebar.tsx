@@ -233,6 +233,7 @@ export const Sidebar = ({
   // Input separado para "Cargar KMZ a esta carpeta" (clic derecho sobre carpeta POI)
   const folderImportInputRef = useRef<HTMLInputElement>(null);
   const folderImportTargetIdRef = useRef<string | null>(null);
+  const communeImportInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [osmText, setOsmText] = useState("");
@@ -556,6 +557,60 @@ export const Sidebar = ({
             <IOSSwitch on={layers.manzanas} />
           </button>
           <div className="mt-1.5 px-1 text-[10px] text-text-muted">Grilla adaptativa al zoom</div>
+        </SidebarSection>
+
+        <SidebarSection title="Datos demográficos (Excel)">
+          <p className="mb-2 text-[10.5px] leading-relaxed text-muted-foreground">
+            Exporta el listado completo de comunas a Excel, edítalo y vuelve a cargarlo para completar comunas sin datos o corregir valores.
+          </p>
+          <div className="flex gap-1.5">
+            <button
+              onClick={async () => {
+                const { exportCommunesToExcel } = await import("@/services/communeDataService");
+                exportCommunesToExcel();
+                toast.success("Excel descargado");
+              }}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-foreground transition-colors hover:bg-surface-2"
+            >
+              <Upload className="h-3.5 w-3.5 rotate-180" />
+              Descargar
+            </button>
+            <button
+              onClick={() => communeImportInputRef.current?.click()}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/15 px-2 py-1.5 text-[11px] text-primary transition-colors hover:bg-primary/25"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Cargar
+            </button>
+          </div>
+          <input
+            ref={communeImportInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              const tId = toast.loading("Procesando Excel…");
+              try {
+                const { importCommunesFromExcel } = await import("@/services/communeDataService");
+                const res = await importCommunesFromExcel(file);
+                toast.success(
+                  `Actualizadas ${res.matched} comunas${res.unknown.length ? ` · ${res.unknown.length} no reconocidas` : ""}`,
+                  { id: tId },
+                );
+                if (res.unknown.length) {
+                  console.warn("Comunas no reconocidas:", res.unknown);
+                }
+                // Forzamos un reload suave para que todos los componentes
+                // que ya leyeron COMMUNES re-rendericen con los valores nuevos.
+                setTimeout(() => window.location.reload(), 600);
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Error al importar", { id: tId });
+              }
+            }}
+          />
         </SidebarSection>
 
         <SidebarSection title="Datos OpenStreetMap">
