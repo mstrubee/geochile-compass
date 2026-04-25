@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 interface SidebarSectionProps {
@@ -8,8 +8,32 @@ interface SidebarSectionProps {
   children: ReactNode;
 }
 
+const STORAGE_KEY = "sidebar_sections_collapsed_v1";
+
+const readMap = (): Record<string, boolean> => {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+};
+
 export const SidebarSection = ({ title, defaultOpen = true, children }: SidebarSectionProps) => {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState<boolean>(() => {
+    const map = readMap();
+    return typeof map[title] === "boolean" ? map[title] : defaultOpen;
+  });
+
+  useEffect(() => {
+    try {
+      const map = readMap();
+      map[title] = open;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    } catch {
+      // ignore
+    }
+  }, [open, title]);
+
   return (
     <section className="border-b border-border/40">
       <button
