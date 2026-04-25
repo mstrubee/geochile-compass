@@ -23,7 +23,7 @@ import { parseFile, getExtension, splitByFolderPath } from "@/utils/fileParsers"
 import { OVERPASS_PRESETS } from "@/services/overpassService";
 
 interface SidebarProps {
-  basemap: "dark" | "light" | "satellite";
+  basemap: "dark" | "light" | "satellite" | "hybrid";
   onBasemapChange: (b: "dark" | "light" | "satellite") => void;
   mode: "none" | "isochrone" | "microzone";
   layers: LayerState;
