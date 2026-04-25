@@ -143,6 +143,15 @@ const Index = () => {
     setCompareCommunes((prev) => prev.filter((c) => c.name !== name));
   }, []);
 
+  // Mientras el diálogo del comparador esté abierto, dibujar el perímetro
+  // de todas las comunas en él. Al cerrar, restaurar al estado previo.
+  useEffect(() => {
+    if (!compareDialogOpen) return;
+    if (compareCommunes.length === 0) return;
+    setOutlinedCommuneNames(compareCommunes.map((c) => c.name));
+    setHighlightedCommuneName(null);
+  }, [compareDialogOpen, compareCommunes]);
+
   // Microzonas
   const [microSubmode, setMicroSubmode] = useState<MicrozoneSubmode>("polygon");
   const [microBufferRadius, setMicroBufferRadius] = useState<number>(500); // metros
@@ -795,6 +804,8 @@ const Index = () => {
             openCommunePopupFor={popupCommune}
             onCommunePopupOpened={() => setPopupCommune(null)}
             onAddCommuneToCompare={handleAddCommuneToCompare}
+            outlinedCommuneNames={outlinedCommuneNames}
+            highlightedCommuneName={highlightedCommuneName}
           />
 
           <SearchBar
