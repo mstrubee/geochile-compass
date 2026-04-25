@@ -27,11 +27,22 @@ export const ChileCommunesLayer = ({ visible }: ChileCommunesLayerProps) => {
     if (!visible || geojson) return;
     let cancelled = false;
     fetch("/comunas.geojson")
-      .then((r) => r.json())
-      .then((data: FeatureCollection<Geometry, ComunaProps>) => {
-        if (!cancelled) setGeojson(data);
+      .then(async (r) => {
+        const ct = r.headers.get("content-type") ?? "";
+        if (!r.ok || ct.includes("text/html")) {
+          throw new Error(
+            `No se encontró /comunas.geojson en public/. El servidor devolvió ${r.status} (${ct}). Sube el archivo a public/comunas.geojson.`,
+          );
+        }
+        return r.json() as Promise<FeatureCollection<Geometry, ComunaProps>>;
       })
-      .catch((e) => console.error("[ChileCommunesLayer] GeoJSON:", e));
+      .then((data) => {
+        if (!cancelled) {
+          console.log("[ChileCommunesLayer] GeoJSON cargado:", data.features?.length, "comunas");
+          setGeojson(data);
+        }
+      })
+      .catch((e) => console.error("[ChileCommunesLayer]", e instanceof Error ? e.message : e));
     return () => {
       cancelled = true;
     };
