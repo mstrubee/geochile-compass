@@ -1160,8 +1160,10 @@ export const Sidebar = ({
                     <ContextMenu key={p.id}>
                       <ContextMenuTrigger asChild>
                         <div
-                          className="group flex items-center gap-2 rounded-md py-0.5 pr-1 hover:bg-surface-2/60"
+                          className="group flex items-center gap-2 rounded-md py-0.5 pr-1 hover:bg-surface-2/60 cursor-pointer"
                           style={{ paddingLeft: `${depth * 12 + 8}px` }}
+                          onDoubleClick={() => onFocusPoi?.(p)}
+                          title="Doble click para centrar en el mapa"
                         >
                           <span
                             className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
