@@ -163,6 +163,7 @@ interface MapViewProps {
   onViewportChange?: (bbox: [number, number, number, number], zoom: number) => void;
   openCommunePopupFor?: string | null;
   onCommunePopupOpened?: () => void;
+  onAddCommuneToCompare?: (c: import("@/data/communes").Commune) => void;
 }
 
 export const MapView = ({
@@ -202,6 +203,7 @@ export const MapView = ({
   onViewportChange,
   openCommunePopupFor,
   onCommunePopupOpened,
+  onAddCommuneToCompare,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -248,6 +250,7 @@ export const MapView = ({
         visible={layers.communes}
         openPopupFor={openCommunePopupFor}
         onPopupOpened={onCommunePopupOpened}
+        onAddToCompare={onAddCommuneToCompare}
       />
       <GseLayer
         visible={layers.nse}
