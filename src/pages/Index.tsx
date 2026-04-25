@@ -102,16 +102,24 @@ const Index = () => {
   } | null>(null);
   const [communeRangeOpen, setCommuneRangeOpen] = useState(false);
 
+  // Perímetros de comunas a dibujar (search/range/compare)
+  const [outlinedCommuneNames, setOutlinedCommuneNames] = useState<string[]>([]);
+  const [highlightedCommuneName, setHighlightedCommuneName] = useState<string | null>(null);
+
   const handleFlyToCommune = useCallback((c: Commune) => {
     setLayers((prev) => (prev.communes ? prev : { ...prev, communes: true }));
     setFlyTarget({ id: Date.now(), lat: c.lat, lng: c.lng, bbox: null });
     setPopupCommune(c.name);
+    setOutlinedCommuneNames([c.name]);
+    setHighlightedCommuneName(c.name);
   }, []);
 
   const handleOpenCommuneRangeResults = useCallback(
     (rows: Commune[], min: number, max: number | null) => {
       setCommuneRangeResults({ rows, min, max });
       setCommuneRangeOpen(true);
+      setOutlinedCommuneNames(rows.map((r) => r.name));
+      setHighlightedCommuneName(null);
     },
     [],
   );
