@@ -13,6 +13,7 @@ import { SearchBar, type SearchResult } from "@/components/ui-overlays/SearchBar
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
 import { useManzanas } from "@/hooks/useManzanas";
 import { useGseManzanas } from "@/hooks/useGseManzanas";
+import { useComunasGeoIndex } from "@/hooks/useComunasGeoIndex";
 import { useSavedPois } from "@/hooks/useSavedPois";
 import { usePoiFolders } from "@/hooks/usePoiFolders";
 import { useAuth } from "@/hooks/useAuth";
