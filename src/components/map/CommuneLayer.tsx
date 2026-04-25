@@ -170,6 +170,7 @@ export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: Co
         const r = hasData ? radiusForPop(c.pop) : 4;
         const opacity = hasData ? 0.45 + (c.pop / 650_000) * 0.4 : 0.5;
         const isDragging = draggingName === c.name;
+        const popColor = colorForPopulation(c.pop);
         return (
           <CircleMarker
             key={c.name}
@@ -180,10 +181,10 @@ export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: Co
               else markersRef.current.delete(c.name);
             }}
             pathOptions={{
-              color: isDragging ? STROKE_DRAG : STROKE,
+              color: isDragging ? STROKE_DRAG : popColor,
               weight: hasData ? 1.75 : 1,
               opacity: 0.9,
-              fillColor: isDragging ? FILL_DRAG : FILL,
+              fillColor: isDragging ? FILL_DRAG : popColor,
               fillOpacity: Math.min(0.85, opacity),
             }}
             eventHandlers={{
