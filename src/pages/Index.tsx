@@ -734,6 +734,9 @@ const Index = () => {
           onLoadOverpass={loadOverpass}
           onFlyToCommune={handleFlyToCommune}
           onOpenCommuneRangeResults={handleOpenCommuneRangeResults}
+          compareCommunes={compareCommunes}
+          onCompareCommunesChange={setCompareCommunes}
+          onOpenCompareDialog={() => setCompareDialogOpen(true)}
         />
 
         <div
@@ -782,6 +785,7 @@ const Index = () => {
             onViewportChange={handleMapViewportChange}
             openCommunePopupFor={popupCommune}
             onCommunePopupOpened={() => setPopupCommune(null)}
+            onAddCommuneToCompare={handleAddCommuneToCompare}
           />
 
           <SearchBar
@@ -874,6 +878,14 @@ const Index = () => {
           onFlyToCommune={handleFlyToCommune}
         />
       )}
+
+      <CommuneCompareDialog
+        open={compareDialogOpen}
+        onOpenChange={setCompareDialogOpen}
+        communes={compareCommunes}
+        onRemove={handleRemoveCommuneFromCompare}
+        onFlyToCommune={handleFlyToCommune}
+      />
     </div>
   );
 };
