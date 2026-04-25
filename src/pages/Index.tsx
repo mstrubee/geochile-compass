@@ -712,6 +712,8 @@ const Index = () => {
           onFocusMicrozone={setFitMicrozoneId}
           onGenerateVoronoi={generateVoronoi}
           onLoadOverpass={loadOverpass}
+          onFlyToCommune={handleFlyToCommune}
+          onOpenCommuneRangeResults={handleOpenCommuneRangeResults}
         />
 
         <div
@@ -758,6 +760,8 @@ const Index = () => {
             onFitMicrozoneDone={() => setFitMicrozoneId(null)}
             flyTarget={flyTarget}
             onViewportChange={handleMapViewportChange}
+            openCommunePopupFor={popupCommune}
+            onCommunePopupOpened={() => setPopupCommune(null)}
           />
 
           <SearchBar
