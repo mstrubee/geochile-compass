@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
+import { loadPoiCache, savePoiCache } from "@/services/poiCache";
 import type { PoiInsert, PoiUpdate, SavedPoi } from "@/types/pois";
 
 const SELECT_COLS =
@@ -79,11 +80,36 @@ export const useSavedPois = () => {
       ]);
       setPois(active);
       setTrashedPois(trashed);
+      // Persistimos en IndexedDB para que la próxima carga sea instantánea
+      // y para soportar lectura offline.
+      void savePoiCache(user.id, active, trashed);
     } catch (err) {
       console.error("[useSavedPois.refresh] error", err);
     } finally {
       setLoading(false);
     }
+  }, [user]);
+
+  // Al iniciar sesión: hidratar inmediatamente con caché local (modo offline /
+  // arranque rápido) y luego refrescar contra la BD en segundo plano.
+  useEffect(() => {
+    if (!user) {
+      setPois([]);
+      setTrashedPois([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const cached = await loadPoiCache(user.id);
+      if (cancelled) return;
+      if (cached) {
+        setPois(cached.pois);
+        setTrashedPois(cached.trashedPois);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   useEffect(() => {
