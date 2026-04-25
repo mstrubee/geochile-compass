@@ -78,13 +78,22 @@ export const IsochroneLayer = ({
 
       orderedFeatures.forEach((feature, idx) => {
         const minutes = Math.round((feature.properties?.value ?? 0) / 60);
+        // orderedFeatures está ordenado de MAYOR a MENOR minutos, así que la
+        // banda más interna (menos minutos) es la última. Invertimos el índice
+        // para que el verde caiga en la banda corta y el rojo en la larga.
+        const bandIdx = orderedFeatures.length - 1 - idx;
+        const { color, fillColor, fillOpacity } = styleForBand(
+          bandIdx,
+          orderedFeatures.length,
+          iso.color,
+        );
         const layer = L.geoJSON(feature as never, {
           style: {
-            color: iso.color,
-            weight: 1.5,
-            opacity: 0.9,
-            fillColor: iso.color,
-            fillOpacity: opacityForIndex(idx, orderedFeatures.length),
+            color,
+            weight: 1.8,
+            opacity: 0.95,
+            fillColor,
+            fillOpacity,
           },
           onEachFeature: (_feat, childLayer) => {
             childLayer.bindPopup(
