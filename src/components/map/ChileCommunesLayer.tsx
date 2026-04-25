@@ -1,13 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { GeoJSON } from "react-leaflet";
-import type { Feature, FeatureCollection, Geometry } from "geojson";
+import type { Feature, Geometry } from "geojson";
 import type { GeoJSON as LeafletGeoJSON, Layer, PathOptions } from "leaflet";
-
-interface ComunaProps {
-  codigo_comuna?: string;
-  cod_comuna?: string;
-  nom_comuna?: string;
-}
+import { useComunasGeoIndex, type ComunaProps } from "@/hooks/useComunasGeoIndex";
 
 interface ChileCommunesLayerProps {
   visible: boolean;
@@ -15,66 +10,13 @@ interface ChileCommunesLayerProps {
 
 /**
  * Polígonos de las 346 comunas de Chile (GeoJSON estático en /public).
- * Popup muestra nombre + código, mapeando el código por /codigos_territoriales.csv.
+ * Popup muestra nombre + código.
  */
 export const ChileCommunesLayer = ({ visible }: ChileCommunesLayerProps) => {
-  const [geojson, setGeojson] = useState<FeatureCollection<Geometry, ComunaProps> | null>(null);
-  const [nombresPorCodigo, setNombresPorCodigo] = useState<Record<string, string>>({});
+  const { ready, fc, nombresPorCodigo } = useComunasGeoIndex(visible);
   const geoJsonRef = useRef<LeafletGeoJSON | null>(null);
 
-  // Cargar GeoJSON una sola vez (al activar la capa por primera vez)
-  useEffect(() => {
-    if (!visible || geojson) return;
-    let cancelled = false;
-    fetch("/comunas.geojson")
-      .then(async (r) => {
-        const ct = r.headers.get("content-type") ?? "";
-        if (!r.ok || ct.includes("text/html")) {
-          throw new Error(
-            `No se encontró /comunas.geojson en public/. El servidor devolvió ${r.status} (${ct}). Sube el archivo a public/comunas.geojson.`,
-          );
-        }
-        return r.json() as Promise<FeatureCollection<Geometry, ComunaProps>>;
-      })
-      .then((data) => {
-        if (!cancelled) {
-          console.log("[ChileCommunesLayer] GeoJSON cargado:", data.features?.length, "comunas");
-          setGeojson(data);
-        }
-      })
-      .catch((e) => console.error("[ChileCommunesLayer]", e instanceof Error ? e.message : e));
-    return () => {
-      cancelled = true;
-    };
-  }, [visible, geojson]);
-
-  // Cargar CSV de nombres una sola vez
-  useEffect(() => {
-    if (!visible || Object.keys(nombresPorCodigo).length > 0) return;
-    let cancelled = false;
-    fetch("/codigos_territoriales.csv")
-      .then((r) => r.text())
-      .then((csv) => {
-        const lineas = csv.trim().split(/\r?\n/);
-        const mapa: Record<string, string> = {};
-        for (let i = 1; i < lineas.length; i++) {
-          const cols = lineas[i].split(",");
-          if (cols.length < 6) continue;
-          const codigo = cols[4]?.trim();
-          const nombre = cols[5]?.trim();
-          if (codigo && nombre) mapa[codigo] = nombre;
-        }
-        if (!cancelled) setNombresPorCodigo(mapa);
-      })
-      .catch((e) => console.error("[ChileCommunesLayer] CSV:", e));
-    return () => {
-      cancelled = true;
-    };
-  }, [visible, nombresPorCodigo]);
-
-  if (!visible) return null;
-  const ready = geojson && Object.keys(nombresPorCodigo).length > 0;
-  if (!ready) return null;
+  if (!visible || !ready || !fc) return null;
 
   const style = (): PathOptions => ({
     fillColor: "hsl(199 89% 60%)",
@@ -108,7 +50,7 @@ export const ChileCommunesLayer = ({ visible }: ChileCommunesLayerProps) => {
       ref={(r) => {
         geoJsonRef.current = r as unknown as LeafletGeoJSON | null;
       }}
-      data={geojson}
+      data={fc}
       style={style}
       onEachFeature={onEachFeature}
     />

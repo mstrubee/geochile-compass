@@ -102,16 +102,24 @@ const Index = () => {
   } | null>(null);
   const [communeRangeOpen, setCommuneRangeOpen] = useState(false);
 
+  // Perímetros de comunas a dibujar (search/range/compare)
+  const [outlinedCommuneNames, setOutlinedCommuneNames] = useState<string[]>([]);
+  const [highlightedCommuneName, setHighlightedCommuneName] = useState<string | null>(null);
+
   const handleFlyToCommune = useCallback((c: Commune) => {
     setLayers((prev) => (prev.communes ? prev : { ...prev, communes: true }));
     setFlyTarget({ id: Date.now(), lat: c.lat, lng: c.lng, bbox: null });
     setPopupCommune(c.name);
+    setOutlinedCommuneNames([c.name]);
+    setHighlightedCommuneName(c.name);
   }, []);
 
   const handleOpenCommuneRangeResults = useCallback(
     (rows: Commune[], min: number, max: number | null) => {
       setCommuneRangeResults({ rows, min, max });
       setCommuneRangeOpen(true);
+      setOutlinedCommuneNames(rows.map((r) => r.name));
+      setHighlightedCommuneName(null);
     },
     [],
   );
@@ -134,6 +142,15 @@ const Index = () => {
   const handleRemoveCommuneFromCompare = useCallback((name: string) => {
     setCompareCommunes((prev) => prev.filter((c) => c.name !== name));
   }, []);
+
+  // Mientras el diálogo del comparador esté abierto, dibujar el perímetro
+  // de todas las comunas en él. Al cerrar, restaurar al estado previo.
+  useEffect(() => {
+    if (!compareDialogOpen) return;
+    if (compareCommunes.length === 0) return;
+    setOutlinedCommuneNames(compareCommunes.map((c) => c.name));
+    setHighlightedCommuneName(null);
+  }, [compareDialogOpen, compareCommunes]);
 
   // Microzonas
   const [microSubmode, setMicroSubmode] = useState<MicrozoneSubmode>("polygon");
@@ -787,6 +804,8 @@ const Index = () => {
             openCommunePopupFor={popupCommune}
             onCommunePopupOpened={() => setPopupCommune(null)}
             onAddCommuneToCompare={handleAddCommuneToCompare}
+            outlinedCommuneNames={outlinedCommuneNames}
+            highlightedCommuneName={highlightedCommuneName}
           />
 
           <SearchBar
@@ -877,6 +896,7 @@ const Index = () => {
           min={communeRangeResults.min}
           max={communeRangeResults.max}
           onFlyToCommune={handleFlyToCommune}
+          onHighlightCommune={setHighlightedCommuneName}
         />
       )}
 
