@@ -6,6 +6,7 @@ import { MapView } from "@/components/map/MapView";
 import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
 import { PoiManagerDialog } from "@/components/panels/PoiManagerDialog";
 import { SavePoisDialog } from "@/components/panels/SavePoisDialog";
+import { CommuneSearchResultsDialog } from "@/components/panels/CommuneSearchResultsDialog";
 import { Legend } from "@/components/ui-overlays/Legend";
 import { SearchBar, type SearchResult } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
@@ -18,7 +19,7 @@ import { fetchIsochrone } from "@/services/isochroneService";
 import { fetchOverpassPreset, fetchOverpassFreeText, bboxAreaDegSq } from "@/services/overpassService";
 import { extractPointPois, countPoints, type PoiInsert } from "@/types/pois";
 import { parseFile, getExtension } from "@/utils/fileParsers";
-import type { NSE } from "@/data/communes";
+import type { NSE, Commune } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
 import type { LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
@@ -89,6 +90,29 @@ const Index = () => {
     lng: number;
     bbox: [number, number, number, number] | null;
   } | null>(null);
+
+  // Búsqueda de comunas
+  const [popupCommune, setPopupCommune] = useState<string | null>(null);
+  const [communeRangeResults, setCommuneRangeResults] = useState<{
+    rows: Commune[];
+    min: number;
+    max: number | null;
+  } | null>(null);
+  const [communeRangeOpen, setCommuneRangeOpen] = useState(false);
+
+  const handleFlyToCommune = useCallback((c: Commune) => {
+    setLayers((prev) => (prev.communes ? prev : { ...prev, communes: true }));
+    setFlyTarget({ id: Date.now(), lat: c.lat, lng: c.lng, bbox: null });
+    setPopupCommune(c.name);
+  }, []);
+
+  const handleOpenCommuneRangeResults = useCallback(
+    (rows: Commune[], min: number, max: number | null) => {
+      setCommuneRangeResults({ rows, min, max });
+      setCommuneRangeOpen(true);
+    },
+    [],
+  );
 
   // Microzonas
   const [microSubmode, setMicroSubmode] = useState<MicrozoneSubmode>("polygon");
@@ -688,6 +712,8 @@ const Index = () => {
           onFocusMicrozone={setFitMicrozoneId}
           onGenerateVoronoi={generateVoronoi}
           onLoadOverpass={loadOverpass}
+          onFlyToCommune={handleFlyToCommune}
+          onOpenCommuneRangeResults={handleOpenCommuneRangeResults}
         />
 
         <div
@@ -734,6 +760,8 @@ const Index = () => {
             onFitMicrozoneDone={() => setFitMicrozoneId(null)}
             flyTarget={flyTarget}
             onViewportChange={handleMapViewportChange}
+            openCommunePopupFor={popupCommune}
+            onCommunePopupOpened={() => setPopupCommune(null)}
           />
 
           <SearchBar
@@ -813,6 +841,17 @@ const Index = () => {
           onCreateFolder={createFolder}
           onRefreshFolders={refreshFolders}
           onConfirm={confirmSavePois}
+        />
+      )}
+
+      {communeRangeResults && (
+        <CommuneSearchResultsDialog
+          open={communeRangeOpen}
+          onOpenChange={setCommuneRangeOpen}
+          results={communeRangeResults.rows}
+          min={communeRangeResults.min}
+          max={communeRangeResults.max}
+          onFlyToCommune={handleFlyToCommune}
         />
       )}
     </div>

@@ -66,6 +66,35 @@ const clampNse = (field: keyof Commune, v: number): number => {
 const normalizeKey = (name: string) =>
   name.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
+/** Normaliza un nombre de comuna para búsquedas (insensible a mayúsculas y acentos). */
+export const normalizeCommuneName = (name: string) => normalizeKey(name);
+
+/** Genera un Excel con un subconjunto arbitrario de comunas. */
+export const exportCommunesSubsetToExcel = (
+  rows: Commune[],
+  filename = "comunas-busqueda.xlsx",
+) => {
+  const data = rows.map((c) => ({
+    Comuna: c.name,
+    Latitud: c.lat,
+    Longitud: c.lng,
+    Población: c.pop,
+    "NSE (1=E,5=ABC1)": c.nse,
+    "Tráfico (0-100)": c.traffic,
+    "Densidad (hab/km²)": c.density,
+    "Área (km²)": c.area,
+    Hogares: c.hh,
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws["!cols"] = [
+    { wch: 28 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
+    { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 12 },
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Comunas");
+  XLSX.writeFile(wb, filename);
+};
+
 /** Genera y descarga un Excel con el snapshot completo de COMMUNES. */
 export const exportCommunesToExcel = (filename = "comunas-demografia.xlsx") => {
   const rows = COMMUNES.map((c) => ({

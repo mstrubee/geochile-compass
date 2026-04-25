@@ -1,4 +1,6 @@
+import { useEffect, useRef } from "react";
 import { CircleMarker, Popup } from "react-leaflet";
+import type { CircleMarker as LCircleMarker } from "leaflet";
 import { COMMUNES, NSE_LABELS, NSE_INCOME, type Commune } from "@/data/communes";
 import { fmtNum, fmtCLP, fmtArea, fmtDensity } from "@/utils/formatters";
 
@@ -48,9 +50,25 @@ const CommunePopup = ({ c }: { c: Commune }) => {
 
 interface CommuneLayerProps {
   visible?: boolean;
+  openPopupFor?: string | null;
+  onPopupOpened?: () => void;
 }
 
-export const CommuneLayer = ({ visible = true }: CommuneLayerProps) => {
+export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: CommuneLayerProps) => {
+  const markersRef = useRef<Map<string, LCircleMarker>>(new Map());
+
+  useEffect(() => {
+    if (!visible || !openPopupFor) return;
+    const marker = markersRef.current.get(openPopupFor);
+    if (!marker) return;
+    // Esperar al flyTo (0.8s) antes de abrir el popup
+    const t = setTimeout(() => {
+      marker.openPopup();
+      onPopupOpened?.();
+    }, 850);
+    return () => clearTimeout(t);
+  }, [openPopupFor, visible, onPopupOpened]);
+
   if (!visible) return null;
   return (
     <>
@@ -63,6 +81,10 @@ export const CommuneLayer = ({ visible = true }: CommuneLayerProps) => {
             key={c.name}
             center={[c.lat, c.lng]}
             radius={r}
+            ref={(instance) => {
+              if (instance) markersRef.current.set(c.name, instance);
+              else markersRef.current.delete(c.name);
+            }}
             pathOptions={{
               color: STROKE,
               weight: hasData ? 1.75 : 1,

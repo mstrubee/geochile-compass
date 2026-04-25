@@ -21,6 +21,7 @@ import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
 import { ISO_MODE_LABEL } from "@/types/isochrones";
 import { parseFile, getExtension, splitByFolderPath } from "@/utils/fileParsers";
 import { OVERPASS_PRESETS } from "@/services/overpassService";
+import { CommuneSearch } from "./CommuneSearch";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
@@ -101,6 +102,13 @@ interface SidebarProps {
   onLoadOverpass: (
     kind: { type: "preset"; presetId: string; label: string } | { type: "text"; text: string },
   ) => Promise<void>;
+  // Búsqueda de comunas
+  onFlyToCommune: (c: import("@/data/communes").Commune) => void;
+  onOpenCommuneRangeResults: (
+    results: import("@/data/communes").Commune[],
+    min: number,
+    max: number | null,
+  ) => void;
 }
 
 interface LayerRow {
@@ -228,6 +236,8 @@ export const Sidebar = ({
   hiddenPoiFolders,
   onHiddenPoiFoldersChange,
   onLoadOverpass,
+  onFlyToCommune,
+  onOpenCommuneRangeResults,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Input separado para "Cargar KMZ a esta carpeta" (clic derecho sobre carpeta POI)
@@ -527,6 +537,13 @@ export const Sidebar = ({
             <StatCard value={0} label="POIs OSM" />
             <StatCard value={isochrones.length} label="Isócronas" />
           </div>
+        </SidebarSection>
+
+        <SidebarSection title="Buscar comuna">
+          <CommuneSearch
+            onFlyToCommune={onFlyToCommune}
+            onOpenRangeResults={onOpenCommuneRangeResults}
+          />
         </SidebarSection>
 
         <SidebarSection title="Comunas RM — Visualización">
