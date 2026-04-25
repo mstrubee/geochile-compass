@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import { normalizeCommuneName } from "@/services/communeDataService";
+import { loadIneIndex, type IneIndex } from "@/services/ineService";
+import type { IneCommuneStats } from "@/utils/ineScales";
 
 export interface ComunaProps {
   codigo_comuna?: string;
