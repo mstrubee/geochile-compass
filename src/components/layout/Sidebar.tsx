@@ -567,34 +567,6 @@ export const Sidebar = ({
             searchedList={searchedCommunes}
             onSearchedListChange={onSearchedCommunesChange}
           />
-
-          <div className="mt-3 mb-2 text-[11px] text-muted-foreground">Variable a visualizar</div>
-          <div className="mb-3 flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
-            {variables.map((v) => (
-              <button
-                key={v.key}
-                onClick={() => onManzanaVariableChange(v.key)}
-                className={[
-                  "flex-1 rounded-md px-1 py-1 text-[11px] font-medium transition-all",
-                  manzanaVariable === v.key
-                    ? "bg-surface-3 text-foreground shadow-apple-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                ].join(" ")}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => onToggleLayer("manzanas")}
-            className="flex w-full items-center gap-2.5 rounded-lg bg-surface-2/60 px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
-          >
-            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-brand-teal" />
-            <span className="flex-1 text-[12px] text-foreground">Manzanas (hexágonos)</span>
-            <IOSSwitch on={layers.manzanas} />
-          </button>
-          <div className="mt-1.5 px-1 text-[10px] text-text-muted">Grilla adaptativa al zoom</div>
-
           <div className="mt-3 flex gap-1.5">
             <button
               onClick={async () => {
