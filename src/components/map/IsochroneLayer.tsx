@@ -12,10 +12,24 @@ interface Props {
 
 type IsoFeature = Feature<Polygon | MultiPolygon, { value: number }>;
 
-const opacityForIndex = (idx: number, total: number) => {
-  const base = 0.55;
-  const step = 0.18;
-  return Math.max(0.18, base - (idx * step) / Math.max(1, total - 1) * (total - 1));
+// Paleta tipo "semáforo" para diferenciar las bandas de tiempo:
+// banda más cercana (índice 0, menos minutos) = verde intenso,
+// banda intermedia = ámbar, banda más lejana = rojo. Esto da
+// mucho más contraste visual entre las 3 capas que solo variar opacidad.
+const BAND_COLORS = ["#10B981", "#F59E0B", "#EF4444", "#7C3AED", "#0EA5E9"];
+
+const styleForBand = (idx: number, total: number, baseColor: string) => {
+  // Si hay una sola banda, respetamos el color de la isócrona.
+  if (total <= 1) {
+    return { fillColor: baseColor, color: baseColor, fillOpacity: 0.5 };
+  }
+  // idx 0 = banda más interna (menos minutos) → primer color de la paleta.
+  const fillColor = BAND_COLORS[idx % BAND_COLORS.length];
+  // Opacidades bien separadas para que aún se note la jerarquía dentro
+  // de cada color: interna más opaca, externa más translúcida.
+  const opacities = [0.65, 0.5, 0.38, 0.3, 0.25];
+  const fillOpacity = opacities[Math.min(idx, opacities.length - 1)];
+  return { fillColor, color: fillColor, fillOpacity };
 };
 
 const modeLabel = (mode: Isochrone["mode"]) => {
