@@ -109,6 +109,10 @@ interface SidebarProps {
     min: number,
     max: number | null,
   ) => void;
+  // Comparador de comunas
+  compareCommunes: import("@/data/communes").Commune[];
+  onCompareCommunesChange: (list: import("@/data/communes").Commune[]) => void;
+  onOpenCompareDialog: () => void;
 }
 
 interface LayerRow {
@@ -238,6 +242,9 @@ export const Sidebar = ({
   onLoadOverpass,
   onFlyToCommune,
   onOpenCommuneRangeResults,
+  compareCommunes,
+  onCompareCommunesChange,
+  onOpenCompareDialog,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Input separado para "Cargar KMZ a esta carpeta" (clic derecho sobre carpeta POI)
@@ -543,6 +550,9 @@ export const Sidebar = ({
           <CommuneSearch
             onFlyToCommune={onFlyToCommune}
             onOpenRangeResults={onOpenCommuneRangeResults}
+            compareList={compareCommunes}
+            onCompareListChange={onCompareCommunesChange}
+            onOpenCompare={onOpenCompareDialog}
           />
 
           <div className="mt-3 mb-2 text-[11px] text-muted-foreground">Variable a visualizar</div>

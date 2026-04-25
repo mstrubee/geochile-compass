@@ -1,5 +1,5 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
-import { Search, MapPin, Filter } from "lucide-react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { Search, MapPin, Filter, GitCompare, X, Plus } from "lucide-react";
 import { COMMUNES, type Commune } from "@/data/communes";
 import { normalizeCommuneName } from "@/services/communeDataService";
 import { Input } from "@/components/ui/input";
@@ -9,13 +9,31 @@ import { toast } from "sonner";
 interface CommuneSearchProps {
   onFlyToCommune: (c: Commune) => void;
   onOpenRangeResults: (results: Commune[], min: number, max: number | null) => void;
+  /** Lista actual de comunas en el comparador (controlada desde Index). */
+  compareList: Commune[];
+  onCompareListChange: (list: Commune[]) => void;
+  onOpenCompare: () => void;
 }
 
-export const CommuneSearch = ({ onFlyToCommune, onOpenRangeResults }: CommuneSearchProps) => {
+export const CommuneSearch = ({
+  onFlyToCommune,
+  onOpenRangeResults,
+  compareList,
+  onCompareListChange,
+  onOpenCompare,
+}: CommuneSearchProps) => {
+  const [tab, setTab] = useState<"text" | "range" | "compare">("text");
   const [text, setText] = useState("");
   const [highlight, setHighlight] = useState(0);
   const [min, setMin] = useState("");
   const [max, setMax] = useState("");
+  const [cmpQuery, setCmpQuery] = useState("");
+  const [cmpHighlight, setCmpHighlight] = useState(0);
+
+  // Si llegan nuevas comunas desde el mapa (click derecho), saltamos al tab Comparar
+  useEffect(() => {
+    if (compareList.length > 0) setTab((t) => (t === "range" ? t : t));
+  }, [compareList.length]);
 
   const suggestions = useMemo(() => {
     const q = normalizeCommuneName(text);
@@ -23,10 +41,33 @@ export const CommuneSearch = ({ onFlyToCommune, onOpenRangeResults }: CommuneSea
     return COMMUNES.filter((c) => normalizeCommuneName(c.name).includes(q)).slice(0, 8);
   }, [text]);
 
+  const cmpSuggestions = useMemo(() => {
+    const q = normalizeCommuneName(cmpQuery);
+    if (!q) return [];
+    const taken = new Set(compareList.map((c) => c.name));
+    return COMMUNES.filter(
+      (c) => !taken.has(c.name) && normalizeCommuneName(c.name).includes(q),
+    ).slice(0, 8);
+  }, [cmpQuery, compareList]);
+
   const pickSuggestion = (c: Commune) => {
     setText("");
     setHighlight(0);
     onFlyToCommune(c);
+  };
+
+  const addToCompare = (c: Commune) => {
+    if (compareList.some((x) => x.name === c.name)) {
+      toast.info(`${c.name} ya está en el comparador`);
+      return;
+    }
+    onCompareListChange([...compareList, c]);
+    setCmpQuery("");
+    setCmpHighlight(0);
+  };
+
+  const removeFromCompare = (name: string) => {
+    onCompareListChange(compareList.filter((c) => c.name !== name));
   };
 
   const handleTextKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -40,6 +81,20 @@ export const CommuneSearch = ({ onFlyToCommune, onOpenRangeResults }: CommuneSea
       e.preventDefault();
       const c = suggestions[highlight] ?? suggestions[0];
       if (c) pickSuggestion(c);
+    }
+  };
+
+  const handleCmpKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setCmpHighlight((h) => Math.min(h + 1, cmpSuggestions.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setCmpHighlight((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const c = cmpSuggestions[cmpHighlight] ?? cmpSuggestions[0];
+      if (c) addToCompare(c);
     }
   };
 
@@ -65,15 +120,24 @@ export const CommuneSearch = ({ onFlyToCommune, onOpenRangeResults }: CommuneSea
   };
 
   return (
-    <Tabs defaultValue="text" className="w-full">
-      <TabsList className="grid w-full grid-cols-2 h-8">
+    <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="w-full">
+      <TabsList className="grid w-full grid-cols-3 h-8">
         <TabsTrigger value="text" className="text-[11px]">
           <Search className="mr-1 h-3 w-3" />
           Texto
         </TabsTrigger>
         <TabsTrigger value="range" className="text-[11px]">
           <Filter className="mr-1 h-3 w-3" />
-          Rango pob.
+          Rango
+        </TabsTrigger>
+        <TabsTrigger value="compare" className="text-[11px]">
+          <GitCompare className="mr-1 h-3 w-3" />
+          Comparar
+          {compareList.length > 0 && (
+            <span className="ml-1 rounded-full bg-primary/80 px-1 text-[9px] font-mono text-primary-foreground">
+              {compareList.length}
+            </span>
+          )}
         </TabsTrigger>
       </TabsList>
 
@@ -147,6 +211,87 @@ export const CommuneSearch = ({ onFlyToCommune, onOpenRangeResults }: CommuneSea
         </button>
         <p className="text-[10px] text-text-muted">
           Filtra por población. Resultados ordenables y exportables.
+        </p>
+      </TabsContent>
+
+      <TabsContent value="compare" className="mt-2 space-y-2">
+        <div className="relative">
+          <Input
+            value={cmpQuery}
+            onChange={(e) => {
+              setCmpQuery(e.target.value);
+              setCmpHighlight(0);
+            }}
+            onKeyDown={handleCmpKey}
+            placeholder="Añadir comuna al comparador..."
+            className="h-8 text-[12px]"
+          />
+          {cmpSuggestions.length > 0 && (
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-md border border-border bg-popover shadow-lg">
+              {cmpSuggestions.map((c, i) => (
+                <button
+                  key={c.name}
+                  onMouseEnter={() => setCmpHighlight(i)}
+                  onClick={() => addToCompare(c)}
+                  className={[
+                    "flex w-full items-center gap-2 px-2 py-1.5 text-left text-[11.5px] transition-colors",
+                    i === cmpHighlight
+                      ? "bg-accent text-accent-foreground"
+                      : "hover:bg-accent/60",
+                  ].join(" ")}
+                >
+                  <Plus className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                  <span className="flex-1 truncate">{c.name}</span>
+                  {c.pop > 0 && (
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {c.pop.toLocaleString("es-CL")}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {compareList.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {compareList.map((c) => (
+              <span
+                key={c.name}
+                className="inline-flex items-center gap-1 rounded-full bg-accent/60 px-2 py-0.5 text-[10.5px] text-accent-foreground"
+              >
+                {c.name}
+                <button
+                  onClick={() => removeFromCompare(c.name)}
+                  className="rounded-full hover:bg-destructive/30 hover:text-destructive"
+                  title="Quitar"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            onClick={onOpenCompare}
+            disabled={compareList.length < 2}
+            className="flex-1 rounded-md bg-primary px-2.5 py-1.5 text-[11.5px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+          >
+            Comparar ({compareList.length})
+          </button>
+          {compareList.length > 0 && (
+            <button
+              onClick={() => onCompareListChange([])}
+              className="rounded-md border border-border px-2.5 py-1.5 text-[11.5px] text-muted-foreground hover:bg-accent/40"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+        <p className="text-[10px] text-text-muted">
+          Mínimo 2 comunas. Click derecho en un globo del mapa para añadirla.
         </p>
       </TabsContent>
     </Tabs>

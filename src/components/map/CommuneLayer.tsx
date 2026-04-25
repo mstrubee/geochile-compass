@@ -20,10 +20,10 @@ const radiusForPop = (pop: number): number => {
   return Math.max(min, Math.min(max, r));
 };
 
-const FILL = "hsl(199 89% 50%)";
-const STROKE = "hsl(199 89% 30%)";
 const FILL_DRAG = "hsl(38 92% 50%)";
 const STROKE_DRAG = "hsl(38 92% 30%)";
+// Umbral de movimiento (en píxeles) que distingue click corto de drag
+const DRAG_THRESHOLD_PX = 4;
 
 const PopupRow = ({ k, v }: { k: string; v: string }) => (
   <div className="flex justify-between gap-3">
@@ -60,7 +60,7 @@ const CommunePopup = ({ c, lat, lng }: {
         <PopupRow k="Lat" v={lat.toFixed(5)} />
         <PopupRow k="Lng" v={lng.toFixed(5)} />
         <div className="pt-0.5 text-[9px] italic text-[hsl(215_19%_50%)]">
-          Click derecho + arrastrar para reposicionar
+          Click derecho: añadir al comparador · Click derecho + arrastrar: reposicionar
         </div>
       </div>
     </div>
@@ -71,14 +71,23 @@ interface CommuneLayerProps {
   visible?: boolean;
   openPopupFor?: string | null;
   onPopupOpened?: () => void;
+  onAddToCompare?: (c: Commune) => void;
 }
 
-export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: CommuneLayerProps) => {
+export const CommuneLayer = ({
+  visible = true,
+  openPopupFor,
+  onPopupOpened,
+  onAddToCompare,
+}: CommuneLayerProps) => {
   const map = useMap();
   const markersRef = useRef<Map<string, LCircleMarker>>(new Map());
   const [overrides, setOverrides] = useState<CoordOverrides>(() => loadCommuneOverrides());
   const [draggingName, setDraggingName] = useState<string | null>(null);
   const draggingRef = useRef<string | null>(null);
+  // Posición inicial del mousedown (para distinguir click corto vs drag)
+  const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const dragMovedRef = useRef<boolean>(false);
 
   useEffect(() => {
     draggingRef.current = draggingName;
@@ -105,7 +114,7 @@ export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: Co
     return () => clearTimeout(t);
   }, [openPopupFor, visible, onPopupOpened]);
 
-  // Global mousemove/mouseup while dragging
+  // Global mousemove/mouseup while right-button pressed on a commune
   useEffect(() => {
     if (!draggingName) return;
     const container = map.getContainer();
@@ -113,6 +122,17 @@ export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: Co
     const onMove = (e: LeafletMouseEvent) => {
       const name = draggingRef.current;
       if (!name) return;
+      // Marcar como drag si el cursor se movió más allá del umbral
+      const origin = dragOriginRef.current;
+      if (origin) {
+        const dx = (e.originalEvent as MouseEvent).clientX - origin.x;
+        const dy = (e.originalEvent as MouseEvent).clientY - origin.y;
+        if (!dragMovedRef.current && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
+          dragMovedRef.current = true;
+          container.style.cursor = "grabbing";
+        }
+      }
+      if (!dragMovedRef.current) return;
       const marker = markersRef.current.get(name);
       if (marker) marker.setLatLng(e.latlng);
     };
@@ -120,28 +140,36 @@ export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: Co
     const onUp = (e: LeafletMouseEvent) => {
       const name = draggingRef.current;
       if (!name) return;
-      const { lat, lng } = e.latlng;
-      saveCommuneOverride(name, lat, lng);
-      setOverrides((prev) => ({ ...prev, [name]: { lat: +lat.toFixed(6), lng: +lng.toFixed(6) } }));
+      e.originalEvent?.preventDefault?.();
+      if (dragMovedRef.current) {
+        // Fue un drag → guardar nueva posición
+        const { lat, lng } = e.latlng;
+        saveCommuneOverride(name, lat, lng);
+        setOverrides((prev) => ({
+          ...prev,
+          [name]: { lat: +lat.toFixed(6), lng: +lng.toFixed(6) },
+        }));
+        toast.success(`${name} reposicionado`, {
+          description: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+        });
+      } else {
+        // Click derecho corto → añadir al comparador
+        const commune = communes.find((c) => c.name === name);
+        if (commune && onAddToCompare) {
+          onAddToCompare(commune);
+        }
+      }
       setDraggingName(null);
-      // Re-enable map dragging
       map.dragging.enable();
       container.style.cursor = "";
-      toast.success(`${name} reposicionado`, {
-        description: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-      });
-      // Prevent default contextmenu on mouseup-right
-      e.originalEvent?.preventDefault?.();
+      dragOriginRef.current = null;
+      dragMovedRef.current = false;
     };
 
-    // Disable map drag while we're dragging marker
     map.dragging.disable();
-    container.style.cursor = "grabbing";
-
     map.on("mousemove", onMove);
     map.on("mouseup", onUp);
 
-    // Suppress browser context menu while dragging
     const suppressCtx = (ev: MouseEvent) => ev.preventDefault();
     container.addEventListener("contextmenu", suppressCtx);
 
@@ -152,13 +180,15 @@ export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: Co
       map.dragging.enable();
       container.style.cursor = "";
     };
-  }, [draggingName, map]);
+  }, [draggingName, map, communes, onAddToCompare]);
 
   const handleStartDrag = useCallback((name: string, e: LeafletMouseEvent) => {
     // Right-click only
-    const btn = (e.originalEvent as MouseEvent | undefined)?.button;
-    if (btn !== 2) return;
-    e.originalEvent?.preventDefault?.();
+    const oe = e.originalEvent as MouseEvent | undefined;
+    if (!oe || oe.button !== 2) return;
+    oe.preventDefault();
+    dragOriginRef.current = { x: oe.clientX, y: oe.clientY };
+    dragMovedRef.current = false;
     setDraggingName(name);
   }, []);
 
