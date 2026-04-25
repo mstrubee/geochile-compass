@@ -110,11 +110,21 @@ export const useComunasGeoIndex = (enabled: boolean = true) => {
     return index.byName.get(normalizeCommuneName(name)) ?? null;
   };
 
+  const getIneStats = (codigo: string, nombre?: string): IneCommuneStats | null => {
+    if (!index) return null;
+    const byCode = index.ine.byCode.get(codigo);
+    if (byCode) return byCode;
+    const officialName = nombre ?? index.nombresPorCodigo[codigo];
+    if (!officialName) return null;
+    return index.ine.byName.get(normalizeCommuneName(officialName)) ?? null;
+  };
+
   return {
     ready: !!index,
     fc: index?.fc ?? null,
     nombresPorCodigo: index?.nombresPorCodigo ?? {},
     getFeatureByName,
+    getIneStats,
     error,
   };
 };
