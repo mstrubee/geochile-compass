@@ -14,6 +14,7 @@ import type { LayerKey, LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
 import type { GseVariable } from "@/types/gse";
 import { GSE_VARIABLE_LABEL } from "@/utils/gseScales";
+import { INE_VARIABLE_LABEL, type IneVariable } from "@/utils/ineScales";
 import type { UserLayer } from "@/types/userLayers";
 import type { IsoMode, Isochrone } from "@/types/isochrones";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
@@ -36,6 +37,8 @@ interface SidebarProps {
   gseVariable: GseVariable;
   onGseVariableChange: (v: GseVariable) => void;
   gseCount: number;
+  chileCommunesVariable: IneVariable;
+  onChileCommunesVariableChange: (v: IneVariable) => void;
   userLayers: UserLayer[];
   onAddUserLayer: (layer: UserLayer) => void;
   onToggleUserLayer: (id: string) => void;
@@ -187,6 +190,8 @@ export const Sidebar = ({
   gseVariable,
   onGseVariableChange,
   gseCount,
+  chileCommunesVariable,
+  onChileCommunesVariableChange,
   userLayers = [],
   onAddUserLayer,
   onToggleUserLayer,
