@@ -5,6 +5,7 @@ import type { ManzanaSource, ManzanaVariable } from "@/types/manzanas";
 import type { GseVariable } from "@/types/gse";
 import { scaleForVariable, VARIABLE_LABEL } from "@/utils/colorScales";
 import { GSE_VARIABLE_LABEL, scaleForGseVariable } from "@/utils/gseScales";
+import { INE_VARIABLE_LABEL, scaleForIneVariable, type IneVariable } from "@/utils/ineScales";
 
 interface LegendProps {
   shifted: boolean;
@@ -19,6 +20,8 @@ interface LegendProps {
   gseVariable: GseVariable;
   gseError: string | null;
   gseCount: number;
+  chileCommunesActive: boolean;
+  chileCommunesVariable: IneVariable;
 }
 
 interface NSERow {
@@ -137,11 +140,14 @@ export const Legend = ({
   gseVariable,
   gseError,
   gseCount,
+  chileCommunesActive,
+  chileCommunesVariable,
 }: LegendProps) => {
   const showNSE = layers.nse;
   const showTraffic = layers.traffic;
   const showManzanas = layers.manzanas;
-  const showAny = showNSE || showTraffic || showManzanas;
+  const showChileCommunes = chileCommunesActive;
+  const showAny = showNSE || showTraffic || showManzanas || showChileCommunes;
 
   // Count combined matches when both filters could apply
   const matched = COMMUNES.filter(
