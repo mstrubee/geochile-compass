@@ -843,6 +843,17 @@ const Index = () => {
           onConfirm={confirmSavePois}
         />
       )}
+
+      {communeRangeResults && (
+        <CommuneSearchResultsDialog
+          open={communeRangeOpen}
+          onOpenChange={setCommuneRangeOpen}
+          results={communeRangeResults.rows}
+          min={communeRangeResults.min}
+          max={communeRangeResults.max}
+          onFlyToCommune={handleFlyToCommune}
+        />
+      )}
     </div>
   );
 };
