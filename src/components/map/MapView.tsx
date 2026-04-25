@@ -42,9 +42,9 @@ const BASEMAPS = {
   },
   hybrid: {
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: "Tiles © Esri — World Imagery · Labels & roads © CARTO/OSM",
-    // Overlay con calles + etiquetas (jerarquía vial visible)
-    overlay: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png",
+    attribution: "Tiles © Esri — World Imagery & Transportation",
+    // Overlay con calles (jerarquía vial) + etiquetas
+    overlay: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
   },
 };
 
