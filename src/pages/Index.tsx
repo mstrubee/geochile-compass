@@ -771,9 +771,6 @@ const Index = () => {
         folders={folders}
         onCreateFolder={createFolder}
         onRenameFolder={renameFolder}
-        onFocusPoi={(p) =>
-          setFlyTarget({ id: Date.now(), lat: p.lat, lng: p.lng, bbox: null })
-        }
         onDeleteFolder={deleteFolder}
         onMoveFolder={moveFolder}
         onUpdatePoi={updatePoi}
