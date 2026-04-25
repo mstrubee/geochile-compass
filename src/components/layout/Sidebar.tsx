@@ -539,16 +539,13 @@ export const Sidebar = ({
           </div>
         </SidebarSection>
 
-        <SidebarSection title="Buscar comuna">
+        <SidebarSection title="Comunas">
           <CommuneSearch
             onFlyToCommune={onFlyToCommune}
             onOpenRangeResults={onOpenCommuneRangeResults}
           />
-        </SidebarSection>
 
-        <SidebarSection title="Comunas RM — Visualización">
-          <div className="mb-2 text-[11px] text-muted-foreground">Variable a visualizar</div>
-          {/* Segmented control */}
+          <div className="mt-3 mb-2 text-[11px] text-muted-foreground">Variable a visualizar</div>
           <div className="mb-3 flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
             {variables.map((v) => (
               <button
@@ -574,13 +571,8 @@ export const Sidebar = ({
             <IOSSwitch on={layers.manzanas} />
           </button>
           <div className="mt-1.5 px-1 text-[10px] text-text-muted">Grilla adaptativa al zoom</div>
-        </SidebarSection>
 
-        <SidebarSection title="Datos demográficos (Excel)">
-          <p className="mb-2 text-[10.5px] leading-relaxed text-muted-foreground">
-            Exporta el listado completo de comunas a Excel, edítalo y vuelve a cargarlo para completar comunas sin datos o corregir valores.
-          </p>
-          <div className="flex gap-1.5">
+          <div className="mt-3 flex gap-1.5">
             <button
               onClick={async () => {
                 const { exportCommunesToExcel } = await import("@/services/communeDataService");
@@ -588,16 +580,18 @@ export const Sidebar = ({
                 toast.success("Excel descargado");
               }}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-foreground transition-colors hover:bg-surface-2"
+              title="Descargar datos demográficos (Excel)"
             >
               <Upload className="h-3.5 w-3.5 rotate-180" />
-              Descargar
+              Descargar Excel
             </button>
             <button
               onClick={() => communeImportInputRef.current?.click()}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/15 px-2 py-1.5 text-[11px] text-primary transition-colors hover:bg-primary/25"
+              title="Cargar datos demográficos (Excel)"
             >
               <Upload className="h-3.5 w-3.5" />
-              Cargar
+              Cargar Excel
             </button>
           </div>
           <input
@@ -620,8 +614,6 @@ export const Sidebar = ({
                 if (res.unknown.length) {
                   console.warn("Comunas no reconocidas:", res.unknown);
                 }
-                // Forzamos un reload suave para que todos los componentes
-                // que ya leyeron COMMUNES re-rendericen con los valores nuevos.
                 setTimeout(() => window.location.reload(), 600);
               } catch (err) {
                 toast.error(err instanceof Error ? err.message : "Error al importar", { id: tId });
