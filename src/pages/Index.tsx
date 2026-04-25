@@ -170,6 +170,14 @@ const Index = () => {
     setHighlightedCommuneName(null);
   }, [compareDialogOpen, compareCommunes]);
 
+  // Sincroniza la lista acumulada de comunas buscadas (tab Texto) con los
+  // perímetros del mapa, salvo que esté abierto el rango o el comparador.
+  useEffect(() => {
+    if (compareDialogOpen) return;
+    if (communeRangeOpen) return;
+    setOutlinedCommuneNames(searchedCommunes.map((c) => c.name));
+  }, [searchedCommunes, compareDialogOpen, communeRangeOpen]);
+
   // Microzonas
   const [microSubmode, setMicroSubmode] = useState<MicrozoneSubmode>("polygon");
   const [microBufferRadius, setMicroBufferRadius] = useState<number>(500); // metros
