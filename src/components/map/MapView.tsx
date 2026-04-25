@@ -28,14 +28,23 @@ const BASEMAPS = {
   dark: {
     url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
     attribution: "© OpenStreetMap · © CARTO",
+    overlay: null as string | null,
   },
   light: {
     url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     attribution: "© OpenStreetMap · © CARTO",
+    overlay: null as string | null,
   },
   satellite: {
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     attribution: "Tiles © Esri — World Imagery",
+    overlay: null as string | null,
+  },
+  hybrid: {
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles © Esri — World Imagery & Transportation",
+    // Overlay con calles (jerarquía vial) + etiquetas
+    overlay: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
   },
 };
 
@@ -112,7 +121,7 @@ const FlyToTarget = ({
 };
 
 interface MapViewProps {
-  basemap: "dark" | "light" | "satellite";
+  basemap: "dark" | "light" | "satellite" | "hybrid";
   onMouseMove: (c: { lat: number; lng: number }) => void;
   layers: import("@/types/layers").LayerState;
   nseFilter: import("@/data/communes").NSE | null;
@@ -205,6 +214,14 @@ export const MapView = ({
         attribution={tile.attribution}
         maxZoom={19}
       />
+      {tile.overlay && (
+        <TileLayer
+          key={`${basemap}-overlay`}
+          url={tile.overlay}
+          maxZoom={19}
+          zIndex={250}
+        />
+      )}
       <ZoomControlTopRight />
       <MouseTracker onMouseMove={onMouseMove} />
       {isoMode && <ClickHandler onClick={onMapClick} />}

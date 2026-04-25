@@ -23,8 +23,8 @@ import { parseFile, getExtension, splitByFolderPath } from "@/utils/fileParsers"
 import { OVERPASS_PRESETS } from "@/services/overpassService";
 
 interface SidebarProps {
-  basemap: "dark" | "light" | "satellite";
-  onBasemapChange: (b: "dark" | "light" | "satellite") => void;
+  basemap: "dark" | "light" | "satellite" | "hybrid";
+  onBasemapChange: (b: "dark" | "light" | "satellite" | "hybrid") => void;
   mode: "none" | "isochrone" | "microzone";
   layers: LayerState;
   onToggleLayer: (key: LayerKey) => void;
@@ -1599,7 +1599,7 @@ export const Sidebar = ({
 
         <SidebarSection title="Mapa base">
           <div className="flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
-            {(["dark", "light", "satellite"] as const).map((b) => (
+            {(["dark", "light", "satellite", "hybrid"] as const).map((b) => (
               <button
                 key={b}
                 onClick={() => onBasemapChange(b)}
@@ -1610,7 +1610,7 @@ export const Sidebar = ({
                     : "text-muted-foreground hover:text-foreground",
                 ].join(" ")}
               >
-                {b === "dark" ? "Oscuro" : b === "light" ? "Claro" : "Satélite"}
+                {b === "dark" ? "Oscuro" : b === "light" ? "Claro" : b === "satellite" ? "Satélite" : "Híbrido"}
               </button>
             ))}
           </div>
