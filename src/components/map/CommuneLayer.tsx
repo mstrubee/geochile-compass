@@ -6,7 +6,6 @@ import { fmtNum, fmtCLP, fmtArea, fmtDensity } from "@/utils/formatters";
 import {
   loadCommuneOverrides,
   saveCommuneOverride,
-  clearCommuneOverride,
   type CoordOverrides,
 } from "@/utils/communeOverrides";
 import { toast } from "sonner";
@@ -32,12 +31,10 @@ const PopupRow = ({ k, v }: { k: string; v: string }) => (
   </div>
 );
 
-const CommunePopup = ({ c, lat, lng, isOverridden, onReset }: {
+const CommunePopup = ({ c, lat, lng }: {
   c: Commune;
   lat: number;
   lng: number;
-  isOverridden: boolean;
-  onReset: () => void;
 }) => {
   const hasData = c.pop > 0;
   return (
@@ -61,15 +58,6 @@ const CommunePopup = ({ c, lat, lng, isOverridden, onReset }: {
       <div className="mt-1.5 border-t border-[hsl(215_19%_25%)] pt-1.5 space-y-0.5">
         <PopupRow k="Lat" v={lat.toFixed(5)} />
         <PopupRow k="Lng" v={lng.toFixed(5)} />
-        {isOverridden && (
-          <button
-            type="button"
-            onClick={onReset}
-            className="mt-1 w-full rounded bg-[hsl(0_70%_45%)] px-2 py-1 text-[10px] font-medium text-white hover:bg-[hsl(0_70%_38%)]"
-          >
-            Restablecer posición original
-          </button>
-        )}
         <div className="pt-0.5 text-[9px] italic text-[hsl(215_19%_50%)]">
           Click derecho + arrastrar para reposicionar
         </div>
@@ -173,16 +161,6 @@ export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: Co
     setDraggingName(name);
   }, []);
 
-  const handleReset = useCallback((name: string) => {
-    clearCommuneOverride(name);
-    setOverrides((prev) => {
-      const next = { ...prev };
-      delete next[name];
-      return next;
-    });
-    toast.success(`${name} restablecido a posición original`);
-  }, []);
-
   if (!visible) return null;
   return (
     <>
@@ -191,7 +169,6 @@ export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: Co
         const r = hasData ? radiusForPop(c.pop) : 4;
         const opacity = hasData ? 0.45 + (c.pop / 650_000) * 0.4 : 0.5;
         const isDragging = draggingName === c.name;
-        const isOverridden = !!overrides[c.name];
         return (
           <CircleMarker
             key={c.name}
@@ -203,11 +180,10 @@ export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: Co
             }}
             pathOptions={{
               color: isDragging ? STROKE_DRAG : STROKE,
-              weight: isOverridden ? 2.5 : (hasData ? 1.75 : 1),
+              weight: hasData ? 1.75 : 1,
               opacity: 0.9,
               fillColor: isDragging ? FILL_DRAG : FILL,
               fillOpacity: Math.min(0.85, opacity),
-              dashArray: isOverridden ? "3,3" : undefined,
             }}
             eventHandlers={{
               mousedown: (e) => handleStartDrag(c.name, e),
@@ -218,13 +194,7 @@ export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: Co
             }}
           >
             <Popup>
-              <CommunePopup
-                c={c}
-                lat={c.lat}
-                lng={c.lng}
-                isOverridden={isOverridden}
-                onReset={() => handleReset(c.name)}
-              />
+              <CommunePopup c={c} lat={c.lat} lng={c.lng} />
             </Popup>
           </CircleMarker>
         );
