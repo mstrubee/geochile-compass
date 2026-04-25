@@ -214,6 +214,14 @@ export const MapView = ({
         attribution={tile.attribution}
         maxZoom={19}
       />
+      {tile.overlay && (
+        <TileLayer
+          key={`${basemap}-overlay`}
+          url={tile.overlay}
+          maxZoom={19}
+          zIndex={250}
+        />
+      )}
       <ZoomControlTopRight />
       <MouseTracker onMouseMove={onMouseMove} />
       {isoMode && <ClickHandler onClick={onMapClick} />}
