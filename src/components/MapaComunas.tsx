@@ -5,8 +5,9 @@ import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Layer, PathOptions, GeoJSON as LeafletGeoJSON, LeafletMouseEvent } from "leaflet";
 
 interface ComunaProps {
-  cod_comuna: string;
-  nom_comuna: string;
+  codigo_comuna: string;
+  cod_comuna?: string;
+  nom_comuna?: string;
 }
 
 interface MapaComunasProps {
@@ -29,6 +30,7 @@ const interpolateColor = (t: number): string => {
 
 const MapaComunas = ({ valoresPorComuna, onComunaClick }: MapaComunasProps) => {
   const [data, setData] = useState<FeatureCollection<Geometry, ComunaProps> | null>(null);
+  const [nombresPorCodigo, setNombresPorCodigo] = useState<Record<string, string>>({});
   const geoJsonRef = useRef<LeafletGeoJSON | null>(null);
 
   useEffect(() => {
@@ -36,6 +38,25 @@ const MapaComunas = ({ valoresPorComuna, onComunaClick }: MapaComunasProps) => {
       .then((r) => r.json())
       .then((json: FeatureCollection<Geometry, ComunaProps>) => setData(json))
       .catch((err) => console.error("Error cargando comunas.geojson:", err));
+  }, []);
+
+  useEffect(() => {
+    fetch("/codigos_territoriales.csv")
+      .then((r) => r.text())
+      .then((text) => {
+        const lines = text.split(/\r?\n/);
+        const map: Record<string, string> = {};
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i];
+          if (!line) continue;
+          const cols = line.split(",");
+          const codigo = cols[0]?.trim();
+          const nombre = cols[1]?.trim();
+          if (codigo && nombre) map[codigo] = nombre;
+        }
+        setNombresPorCodigo(map);
+      })
+      .catch((err) => console.error("Error cargando codigos_territoriales.csv:", err));
   }, []);
 
   const maxValor = valoresPorComuna
@@ -49,7 +70,8 @@ const MapaComunas = ({ valoresPorComuna, onComunaClick }: MapaComunasProps) => {
     if (!valoresPorComuna || maxValor <= 0) {
       return { fillColor: "#3b82f6", fillOpacity: 0.45, color: "#1e3a8a", weight: 0.6 };
     }
-    const valor = valoresPorComuna[feature.properties.cod_comuna];
+    const codigo = feature.properties.codigo_comuna ?? feature.properties.cod_comuna ?? "";
+    const valor = valoresPorComuna[codigo];
     const t = valor === undefined ? 0 : valor / maxValor;
     return {
       fillColor: interpolateColor(t),
@@ -73,8 +95,9 @@ const MapaComunas = ({ valoresPorComuna, onComunaClick }: MapaComunasProps) => {
   }, [valoresPorComuna, data]);
 
   const onEachFeature = (feature: Feature<Geometry, ComunaProps>, layer: Layer) => {
-    const { nom_comuna, cod_comuna } = feature.properties;
-    layer.bindPopup(`<strong>${nom_comuna}</strong><br/>Código: ${cod_comuna}`);
+    const codigo = feature.properties.codigo_comuna ?? feature.properties.cod_comuna ?? "";
+    const nombre = nombresPorCodigo[codigo] ?? "Comuna desconocida";
+    layer.bindPopup(`<strong>${nombre}</strong><br/>Código: ${codigo}`);
 
     layer.on({
       mouseover: (e: LeafletMouseEvent) => {
@@ -89,14 +112,16 @@ const MapaComunas = ({ valoresPorComuna, onComunaClick }: MapaComunasProps) => {
         geoJsonRef.current?.resetStyle(layer as never);
       },
       click: () => {
-        onComunaClick?.(cod_comuna, nom_comuna);
+        onComunaClick?.(codigo, nombre);
       },
     });
   };
 
+  const ready = data && Object.keys(nombresPorCodigo).length > 0;
+
   return (
     <div className="w-full h-full min-h-[500px] relative">
-      {!data && (
+      {!ready && (
         <div className="absolute inset-0 z-[500] flex items-center justify-center bg-background/60 text-sm text-muted-foreground">
           Cargando comunas...
         </div>
@@ -110,7 +135,7 @@ const MapaComunas = ({ valoresPorComuna, onComunaClick }: MapaComunasProps) => {
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
         />
-        {data && (
+        {ready && (
           <GeoJSON
             ref={(r) => {
               geoJsonRef.current = r as unknown as LeafletGeoJSON | null;
