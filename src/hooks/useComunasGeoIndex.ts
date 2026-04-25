@@ -32,9 +32,10 @@ const loadOnce = async (): Promise<ComunasIndex> => {
   if (inflight) return inflight;
 
   inflight = (async () => {
-    const [geoRes, csvRes] = await Promise.all([
+    const [geoRes, csvRes, ine] = await Promise.all([
       fetch("/comunas.geojson"),
       fetch("/codigos_territoriales.csv"),
+      loadIneIndex(),
     ]);
 
     const ct = geoRes.headers.get("content-type") ?? "";
