@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { Search, MapPin, Filter, GitCompare, X, Plus } from "lucide-react";
+import { useMemo, useState, type KeyboardEvent } from "react";
+import { Search, MapPin, Filter, GitCompare, X, Plus, Trash2 } from "lucide-react";
 import { COMMUNES, type Commune } from "@/data/communes";
 import { normalizeCommuneName } from "@/services/communeDataService";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,9 @@ interface CommuneSearchProps {
   compareList: Commune[];
   onCompareListChange: (list: Commune[]) => void;
   onOpenCompare: () => void;
+  /** Lista acumulada de comunas buscadas por nombre (controlada desde Index). */
+  searchedList: Commune[];
+  onSearchedListChange: (list: Commune[]) => void;
 }
 
 export const CommuneSearch = ({
@@ -21,6 +24,8 @@ export const CommuneSearch = ({
   compareList,
   onCompareListChange,
   onOpenCompare,
+  searchedList,
+  onSearchedListChange,
 }: CommuneSearchProps) => {
   const [tab, setTab] = useState<"text" | "range" | "compare">("text");
   const [text, setText] = useState("");
@@ -29,11 +34,6 @@ export const CommuneSearch = ({
   const [max, setMax] = useState("");
   const [cmpQuery, setCmpQuery] = useState("");
   const [cmpHighlight, setCmpHighlight] = useState(0);
-
-  // Si llegan nuevas comunas desde el mapa (click derecho), saltamos al tab Comparar
-  useEffect(() => {
-    if (compareList.length > 0) setTab((t) => (t === "range" ? t : t));
-  }, [compareList.length]);
 
   const suggestions = useMemo(() => {
     const q = normalizeCommuneName(text);
@@ -54,6 +54,18 @@ export const CommuneSearch = ({
     setText("");
     setHighlight(0);
     onFlyToCommune(c);
+    // Acumula en la lista de búsquedas si no está
+    if (!searchedList.some((x) => x.name === c.name)) {
+      onSearchedListChange([...searchedList, c]);
+    }
+  };
+
+  const removeSearched = (name: string) => {
+    onSearchedListChange(searchedList.filter((c) => c.name !== name));
+  };
+
+  const clearSearched = () => {
+    onSearchedListChange([]);
   };
 
   const addToCompare = (c: Commune) => {
@@ -81,6 +93,11 @@ export const CommuneSearch = ({
       e.preventDefault();
       const c = suggestions[highlight] ?? suggestions[0];
       if (c) pickSuggestion(c);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setText("");
+      setHighlight(0);
+      clearSearched();
     }
   };
 
@@ -125,6 +142,11 @@ export const CommuneSearch = ({
         <TabsTrigger value="text" className="text-[11px]">
           <Search className="mr-1 h-3 w-3" />
           Texto
+          {searchedList.length > 0 && (
+            <span className="ml-1 rounded-full bg-primary/80 px-1 text-[9px] font-mono text-primary-foreground">
+              {searchedList.length}
+            </span>
+          )}
         </TabsTrigger>
         <TabsTrigger value="range" className="text-[11px]">
           <Filter className="mr-1 h-3 w-3" />
@@ -141,7 +163,7 @@ export const CommuneSearch = ({
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="text" className="mt-2">
+      <TabsContent value="text" className="mt-2 space-y-2">
         <div className="relative">
           <Input
             value={text}
@@ -179,8 +201,50 @@ export const CommuneSearch = ({
             </div>
           )}
         </div>
-        <p className="mt-1 text-[10px] text-text-muted">
-          Enter centra el mapa y abre la demografía.
+
+        {searchedList.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-text-muted">
+                Buscadas ({searchedList.length})
+              </span>
+              <button
+                onClick={clearSearched}
+                title="Borrar todas (ESC)"
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="h-2.5 w-2.5" />
+                Limpiar
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {searchedList.map((c) => (
+                <span
+                  key={c.name}
+                  className="inline-flex items-center gap-1 rounded-full bg-accent/60 px-2 py-0.5 text-[10.5px] text-accent-foreground"
+                >
+                  <button
+                    onClick={() => onFlyToCommune(c)}
+                    title="Centrar en mapa"
+                    className="hover:underline"
+                  >
+                    {c.name}
+                  </button>
+                  <button
+                    onClick={() => removeSearched(c.name)}
+                    className="rounded-full hover:bg-destructive/30 hover:text-destructive"
+                    title="Quitar"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <p className="text-[10px] text-text-muted">
+          Enter centra el perímetro · Click en chip para re-centrar · ESC vacía la lista.
         </p>
       </TabsContent>
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { GeoJSON } from "react-leaflet";
+import L from "leaflet";
 import type { Feature, Geometry } from "geojson";
 import type { GeoJSON as LeafletGeoJSON, Layer, PathOptions } from "leaflet";
 import { useComunasGeoIndex, type ComunaProps } from "@/hooks/useComunasGeoIndex";
@@ -15,19 +16,27 @@ interface ChileCommunesLayerProps {
   variable: IneVariable;
 }
 
+const HIGHLIGHT_STYLE: PathOptions = {
+  weight: 2,
+  color: "hsl(199 89% 70%)",
+  fillOpacity: 0.75,
+};
+
 /**
  * Polígonos de las 346 comunas de Chile (GeoJSON estático en /public),
  * coloreadas por la variable INE seleccionada (Población, Densidad, Ingreso, NSE).
- * Popup muestra nombre, código y valor de la variable activa.
+ * El destacado por hover persiste hasta que el mouse entra a otra comuna.
  */
 export const ChileCommunesLayer = ({ visible, variable }: ChileCommunesLayerProps) => {
   const { ready, fc, nombresPorCodigo, getIneStats } = useComunasGeoIndex(visible);
   const geoJsonRef = useRef<LeafletGeoJSON | null>(null);
+  const hoveredLayerRef = useRef<Layer | null>(null);
 
   // Re-aplicar estilos cuando cambia la variable (sin recrear la capa)
   useEffect(() => {
     if (geoJsonRef.current) {
       geoJsonRef.current.setStyle(styleForFeature);
+      hoveredLayerRef.current = null; // limpia destacado previo
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variable, ready]);
@@ -63,13 +72,17 @@ export const ChileCommunesLayer = ({ visible, variable }: ChileCommunesLayerProp
     });
     layer.on({
       mouseover: (e) => {
-        const l = e.target as { setStyle: (s: PathOptions) => void; bringToFront: () => void };
-        l.setStyle({ weight: 2, color: "hsl(199 89% 70%)", fillOpacity: 0.75 });
-        l.bringToFront();
+        const newLayer = e.target as L.Path;
+        const prev = hoveredLayerRef.current;
+        if (prev && prev !== newLayer) {
+          geoJsonRef.current?.resetStyle(prev as never);
+        }
+        newLayer.setStyle(HIGHLIGHT_STYLE);
+        newLayer.bringToFront();
+        hoveredLayerRef.current = newLayer;
       },
-      mouseout: (e) => {
-        geoJsonRef.current?.resetStyle(e.target);
-      },
+      // mouseout intencionalmente NO restaura el estilo: el destacado persiste
+      // hasta que el mouse entra en otra comuna.
     });
   };
 
