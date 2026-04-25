@@ -539,6 +539,13 @@ export const Sidebar = ({
           </div>
         </SidebarSection>
 
+        <SidebarSection title="Buscar comuna">
+          <CommuneSearch
+            onFlyToCommune={onFlyToCommune}
+            onOpenRangeResults={onOpenCommuneRangeResults}
+          />
+        </SidebarSection>
+
         <SidebarSection title="Comunas RM — Visualización">
           <div className="mb-2 text-[11px] text-muted-foreground">Variable a visualizar</div>
           {/* Segmented control */}
