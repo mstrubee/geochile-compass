@@ -23,6 +23,19 @@ export const INCOME_SCALE: ColorStop[] = [
   { max: Infinity, color: "#1e40af", label: "> 2,5M" },
 ];
 
+export const POPULATION_SCALE: ColorStop[] = [
+  { max: 50_000, color: "#fde047", label: "< 50k" },
+  { max: 150_000, color: "#fbbf24", label: "50 – 150k" },
+  { max: 300_000, color: "#fb923c", label: "150 – 300k" },
+  { max: 500_000, color: "#ef4444", label: "300 – 500k" },
+  { max: Infinity, color: "#b91c1c", label: "> 500k" },
+];
+
+export const colorForPopulation = (pop: number): string => {
+  for (const s of POPULATION_SCALE) if (pop <= s.max) return s.color;
+  return POPULATION_SCALE[POPULATION_SCALE.length - 1].color;
+};
+
 export const TRAFFIC_SCALE: ColorStop[] = [
   { max: 49, color: "#22c55e", label: "Fluido < 50" },
   { max: 72, color: "#eab308", label: "Moderado 50–72" },
