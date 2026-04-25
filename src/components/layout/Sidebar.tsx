@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -83,6 +83,8 @@ interface SidebarProps {
   onImportFilesIntoFolder?: (files: File[], folderId: string | null) => Promise<void> | void;
   /** Crea una carpeta nueva (opcionalmente como subcarpeta de `parentId`). */
   onCreateFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | void> | void;
+  /** Renombra una carpeta existente. */
+  onRenameFolder?: (id: string, name: string) => Promise<void> | void;
   // Papelera
   trashedPois?: SavedPoi[];
   trashedFolders?: PoiFolder[];
@@ -213,6 +215,7 @@ export const Sidebar = ({
   onMovePois,
   onImportFilesIntoFolder,
   onCreateFolder,
+  onRenameFolder,
   trashedPois = [],
   trashedFolders = [],
   onRestorePois,
@@ -1241,6 +1244,23 @@ export const Sidebar = ({
                                 <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
                                 {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
                               </ContextMenuItem>
+                              {onRenameFolder && (
+                                <ContextMenuItem
+                                  onSelect={async () => {
+                                    const next = window.prompt(`Nuevo nombre para "${f.name}":`, f.name);
+                                    if (!next || !next.trim() || next.trim() === f.name) return;
+                                    try {
+                                      await onRenameFolder(f.id, next.trim());
+                                      toast.success(`Carpeta renombrada a "${next.trim()}"`);
+                                    } catch (err) {
+                                      toast.error(err instanceof Error ? err.message : "Error al renombrar");
+                                    }
+                                  }}
+                                >
+                                  <Pencil className="mr-2 h-3.5 w-3.5" />
+                                  Renombrar carpeta…
+                                </ContextMenuItem>
+                              )}
                               {onCreateFolder && (
                                 <ContextMenuItem
                                   onSelect={async () => {
