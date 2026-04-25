@@ -124,37 +124,85 @@ export const usePoiFolders = () => {
   const purgePermanently = useCallback(
     async (id: string) => {
       if (!user) throw new Error("Debes iniciar sesión");
-      // Recoger TODOS los descendientes (incluyendo carpetas en papelera)
-      // para eliminarlos en orden hijos→padres y evitar violaciones de FK.
+      // Recoger TODAS las carpetas del usuario con su estado de papelera
+      // para sólo purgar carpetas/POIs que estén efectivamente soft-deleted.
+      // CRÍTICO: nunca borrar POIs activos ni carpetas activas, aunque sean
+      // descendientes de la carpeta a purgar.
       const { data: allFolders } = await supabase
         .from("poi_folders")
-        .select("id,parent_id")
+        .select("id,parent_id,deleted_at")
         .eq("user_id", user.id);
-      const all = (allFolders ?? []) as { id: string; parent_id: string | null }[];
+      const all = (allFolders ?? []) as {
+        id: string;
+        parent_id: string | null;
+        deleted_at: string | null;
+      }[];
+
+      // Sólo consideramos como descendientes purgables aquellas subcarpetas
+      // que también están en la papelera. Si una subcarpeta está activa,
+      // se omite (y, por tanto, también la cadena bajo ella).
       const order: string[] = [];
       const visit = (pid: string) => {
-        for (const c of all.filter((f) => f.parent_id === pid)) {
+        for (const c of all.filter((f) => f.parent_id === pid && f.deleted_at !== null)) {
           visit(c.id);
         }
         order.push(pid);
       };
+      // La carpeta raíz a purgar debe estar en papelera; si no lo está, abortar.
+      const root = all.find((f) => f.id === id);
+      if (!root) {
+        await refresh();
+        return;
+      }
+      if (root.deleted_at === null) {
+        throw new Error("La carpeta no está en la papelera");
+      }
       visit(id);
 
-      // Primero, soltar/borrar POIs asociados a estas carpetas en lotes.
+      // Primero, borrar SÓLO los POIs en papelera asociados a estas carpetas.
+      // Los POIs activos (deleted_at IS NULL) se preservan: si su carpeta
+      // padre desaparece, quedarán huérfanos pero no se eliminarán datos del usuario.
       const CHUNK = 100;
       for (let i = 0; i < order.length; i += CHUNK) {
         const slice = order.slice(i, i + CHUNK);
         const { error: pErr } = await supabase
           .from("pois")
           .delete()
-          .in("folder_id", slice);
+          .in("folder_id", slice)
+          .not("deleted_at", "is", null);
         if (pErr) {
           console.error("[purgeFolder] borrar POIs falló", pErr);
           throw new Error(pErr.message);
         }
+        // Soltar referencia (folder_id = null) de POIs activos para evitar
+        // violación de FK al borrar la carpeta.
+        const { error: nErr } = await supabase
+          .from("pois")
+          .update({ folder_id: null })
+          .in("folder_id", slice)
+          .is("deleted_at", null);
+        if (nErr) {
+          console.error("[purgeFolder] desreferenciar POIs activos falló", nErr);
+          throw new Error(nErr.message);
+        }
       }
 
-      // Luego borrar carpetas hijas→padre.
+      // Luego, reasignar carpetas hijas activas (que no se purgan) al padre
+      // de la carpeta que se elimina, para preservar la jerarquía visible.
+      for (const fid of order) {
+        const newParent = all.find((f) => f.id === fid)?.parent_id ?? null;
+        const { error: rErr } = await supabase
+          .from("poi_folders")
+          .update({ parent_id: newParent })
+          .eq("parent_id", fid)
+          .is("deleted_at", null);
+        if (rErr) {
+          console.error("[purgeFolder] reasignar subcarpetas activas falló", rErr);
+          throw new Error(rErr.message);
+        }
+      }
+
+      // Finalmente borrar carpetas hijas→padre.
       for (const fid of order) {
         const { error } = await supabase.from("poi_folders").delete().eq("id", fid);
         if (error) throw new Error(error.message);
