@@ -783,6 +783,8 @@ const Index = () => {
           compareCommunes={compareCommunes}
           onCompareCommunesChange={setCompareCommunes}
           onOpenCompareDialog={() => setCompareDialogOpen(true)}
+          searchedCommunes={searchedCommunes}
+          onSearchedCommunesChange={setSearchedCommunes}
         />
 
         <div
