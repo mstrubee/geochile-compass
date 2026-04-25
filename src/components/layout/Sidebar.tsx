@@ -83,6 +83,8 @@ interface SidebarProps {
   onImportFilesIntoFolder?: (files: File[], folderId: string | null) => Promise<void> | void;
   /** Crea una carpeta nueva (opcionalmente como subcarpeta de `parentId`). */
   onCreateFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | void> | void;
+  /** Renombra una carpeta existente. */
+  onRenameFolder?: (id: string, name: string) => Promise<void> | void;
   // Papelera
   trashedPois?: SavedPoi[];
   trashedFolders?: PoiFolder[];
