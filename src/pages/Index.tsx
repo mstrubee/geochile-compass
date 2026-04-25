@@ -39,7 +39,7 @@ type Mode = "none" | "isochrone" | "microzone";
 
 const Index = () => {
   const [mode, setMode] = useState<Mode>("none");
-  const [basemap, setBasemap] = useState<"dark" | "light" | "satellite" | "hybrid">("satellite");
+  const [basemap, setBasemap] = useState<"dark" | "light" | "satellite" | "hybrid">("hybrid");
   const [panelOpen, setPanelOpen] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [layers, setLayers] = useState<LayerState>({
@@ -76,8 +76,8 @@ const Index = () => {
   const [fitId, setFitId] = useState<string | null>(null);
 
   // Isócronas
-  const [isoMode, setIsoMode] = useState<IsoMode>("foot-walking");
-  const [isoMinutes, setIsoMinutes] = useState<number[]>([5, 10, 15]);
+  const [isoMode, setIsoMode] = useState<IsoMode>("driving-car");
+  const [isoMinutes, setIsoMinutes] = useState<number[]>([5, 7, 10]);
   const [isochrones, setIsochrones] = useState<Isochrone[]>([]);
   const [fitIsoId, setFitIsoId] = useState<string | null>(null);
   const [isoLoading, setIsoLoading] = useState(false);
