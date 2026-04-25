@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { CommuneLayer } from "./CommuneLayer";
 import { ChileCommunesLayer } from "./ChileCommunesLayer";
+import { CommuneOutlineLayer } from "./CommuneOutlineLayer";
 import { TrafficLayer } from "./TrafficLayer";
 import { GseLayer } from "./GseLayer";
 import { ManzanaLayer } from "./ManzanaLayer";
@@ -165,6 +166,8 @@ interface MapViewProps {
   openCommunePopupFor?: string | null;
   onCommunePopupOpened?: () => void;
   onAddCommuneToCompare?: (c: import("@/data/communes").Commune) => void;
+  outlinedCommuneNames?: string[];
+  highlightedCommuneName?: string | null;
 }
 
 export const MapView = ({
@@ -205,6 +208,8 @@ export const MapView = ({
   openCommunePopupFor,
   onCommunePopupOpened,
   onAddCommuneToCompare,
+  outlinedCommuneNames = [],
+  highlightedCommuneName = null,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -254,6 +259,10 @@ export const MapView = ({
         onAddToCompare={onAddCommuneToCompare}
       />
       <ChileCommunesLayer visible={layers.communesGeo} />
+      <CommuneOutlineLayer
+        names={outlinedCommuneNames}
+        highlightName={highlightedCommuneName}
+      />
       <GseLayer
         visible={layers.nse}
         data={gseData}
