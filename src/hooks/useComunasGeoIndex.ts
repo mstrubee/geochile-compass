@@ -111,6 +111,23 @@ export const useComunasGeoIndex = (enabled: boolean = true) => {
     return index.byName.get(normalizeCommuneName(name)) ?? null;
   };
 
+  /**
+   * Devuelve el bbox del polígono de una comuna por nombre, en formato
+   * `[south, north, west, east]` (compatible con `MapView.flyTarget.bbox`).
+   * Devuelve null si la comuna no existe o el geojson aún no cargó.
+   */
+  const getBboxByName = (name: string): [number, number, number, number] | null => {
+    const f = getFeatureByName(name);
+    if (!f) return null;
+    try {
+      const bounds = L.geoJSON(f as never).getBounds();
+      if (!bounds.isValid()) return null;
+      return [bounds.getSouth(), bounds.getNorth(), bounds.getWest(), bounds.getEast()];
+    } catch {
+      return null;
+    }
+  };
+
   const getIneStats = (codigo: string, nombre?: string): IneCommuneStats | null => {
     if (!index) return null;
     const byCode = index.ine.byCode.get(codigo);
@@ -125,6 +142,7 @@ export const useComunasGeoIndex = (enabled: boolean = true) => {
     fc: index?.fc ?? null,
     nombresPorCodigo: index?.nombresPorCodigo ?? {},
     getFeatureByName,
+    getBboxByName,
     getIneStats,
     error,
   };
