@@ -896,6 +896,7 @@ const Index = () => {
           min={communeRangeResults.min}
           max={communeRangeResults.max}
           onFlyToCommune={handleFlyToCommune}
+          onHighlightCommune={setHighlightedCommuneName}
         />
       )}
 

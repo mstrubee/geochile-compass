@@ -39,6 +39,7 @@ interface CommuneSearchResultsDialogProps {
   min: number;
   max: number | null;
   onFlyToCommune: (c: Commune) => void;
+  onHighlightCommune?: (name: string | null) => void;
 }
 
 export const CommuneSearchResultsDialog = ({
@@ -48,6 +49,7 @@ export const CommuneSearchResultsDialog = ({
   min,
   max,
   onFlyToCommune,
+  onHighlightCommune,
 }: CommuneSearchResultsDialogProps) => {
   const [preset, setPreset] = useState<Preset | "">("");
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -157,6 +159,8 @@ export const CommuneSearchResultsDialog = ({
               {sorted.map((c) => (
                 <TableRow
                   key={c.name}
+                  onMouseEnter={() => onHighlightCommune?.(c.name)}
+                  onMouseLeave={() => onHighlightCommune?.(null)}
                   onDoubleClick={() => {
                     onFlyToCommune(c);
                     onOpenChange(false);
