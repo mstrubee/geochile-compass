@@ -1,8 +1,15 @@
-import { useEffect, useRef } from "react";
-import { CircleMarker, Popup } from "react-leaflet";
-import type { CircleMarker as LCircleMarker } from "leaflet";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { CircleMarker, Popup, useMap } from "react-leaflet";
+import type { CircleMarker as LCircleMarker, LeafletMouseEvent } from "leaflet";
 import { COMMUNES, NSE_LABELS, NSE_INCOME, type Commune } from "@/data/communes";
 import { fmtNum, fmtCLP, fmtArea, fmtDensity } from "@/utils/formatters";
+import {
+  loadCommuneOverrides,
+  saveCommuneOverride,
+  clearCommuneOverride,
+  type CoordOverrides,
+} from "@/utils/communeOverrides";
+import { toast } from "sonner";
 
 // Radius proportional to population (sqrt for visual perception)
 const radiusForPop = (pop: number): number => {
@@ -13,9 +20,10 @@ const radiusForPop = (pop: number): number => {
   return Math.max(min, Math.min(max, r));
 };
 
-// Fill: design-system primary (sky). Stroke darker for contrast on light basemaps.
 const FILL = "hsl(199 89% 50%)";
 const STROKE = "hsl(199 89% 30%)";
+const FILL_DRAG = "hsl(38 92% 50%)";
+const STROKE_DRAG = "hsl(38 92% 30%)";
 
 const PopupRow = ({ k, v }: { k: string; v: string }) => (
   <div className="flex justify-between gap-3">
@@ -24,7 +32,13 @@ const PopupRow = ({ k, v }: { k: string; v: string }) => (
   </div>
 );
 
-const CommunePopup = ({ c }: { c: Commune }) => {
+const CommunePopup = ({ c, lat, lng, isOverridden, onReset }: {
+  c: Commune;
+  lat: number;
+  lng: number;
+  isOverridden: boolean;
+  onReset: () => void;
+}) => {
   const hasData = c.pop > 0;
   return (
     <div className="min-w-[180px]">
@@ -44,6 +58,22 @@ const CommunePopup = ({ c }: { c: Commune }) => {
       ) : (
         <div className="text-[10px] text-[hsl(215_19%_55%)]">Sin datos demográficos detallados.</div>
       )}
+      <div className="mt-1.5 border-t border-[hsl(215_19%_25%)] pt-1.5 space-y-0.5">
+        <PopupRow k="Lat" v={lat.toFixed(5)} />
+        <PopupRow k="Lng" v={lng.toFixed(5)} />
+        {isOverridden && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="mt-1 w-full rounded bg-[hsl(0_70%_45%)] px-2 py-1 text-[10px] font-medium text-white hover:bg-[hsl(0_70%_38%)]"
+          >
+            Restablecer posición original
+          </button>
+        )}
+        <div className="pt-0.5 text-[9px] italic text-[hsl(215_19%_50%)]">
+          Click derecho + arrastrar para reposicionar
+        </div>
+      </div>
     </div>
   );
 };
@@ -55,13 +85,30 @@ interface CommuneLayerProps {
 }
 
 export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: CommuneLayerProps) => {
+  const map = useMap();
   const markersRef = useRef<Map<string, LCircleMarker>>(new Map());
+  const [overrides, setOverrides] = useState<CoordOverrides>(() => loadCommuneOverrides());
+  const [draggingName, setDraggingName] = useState<string | null>(null);
+  const draggingRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    draggingRef.current = draggingName;
+  }, [draggingName]);
+
+  // Apply overrides to commune list
+  const communes = useMemo(() => {
+    return COMMUNES.map((c) => {
+      const ov = overrides[c.name];
+      if (ov) return { ...c, lat: ov.lat, lng: ov.lng };
+      return c;
+    });
+  }, [overrides]);
+
+  // Open popup programmatically after fly-to
   useEffect(() => {
     if (!visible || !openPopupFor) return;
     const marker = markersRef.current.get(openPopupFor);
     if (!marker) return;
-    // Esperar al flyTo (0.8s) antes de abrir el popup
     const t = setTimeout(() => {
       marker.openPopup();
       onPopupOpened?.();
@@ -69,32 +116,115 @@ export const CommuneLayer = ({ visible = true, openPopupFor, onPopupOpened }: Co
     return () => clearTimeout(t);
   }, [openPopupFor, visible, onPopupOpened]);
 
+  // Global mousemove/mouseup while dragging
+  useEffect(() => {
+    if (!draggingName) return;
+    const container = map.getContainer();
+
+    const onMove = (e: LeafletMouseEvent) => {
+      const name = draggingRef.current;
+      if (!name) return;
+      const marker = markersRef.current.get(name);
+      if (marker) marker.setLatLng(e.latlng);
+    };
+
+    const onUp = (e: LeafletMouseEvent) => {
+      const name = draggingRef.current;
+      if (!name) return;
+      const { lat, lng } = e.latlng;
+      saveCommuneOverride(name, lat, lng);
+      setOverrides((prev) => ({ ...prev, [name]: { lat: +lat.toFixed(6), lng: +lng.toFixed(6) } }));
+      setDraggingName(null);
+      // Re-enable map dragging
+      map.dragging.enable();
+      container.style.cursor = "";
+      toast.success(`${name} reposicionado`, {
+        description: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+      });
+      // Prevent default contextmenu on mouseup-right
+      e.originalEvent?.preventDefault?.();
+    };
+
+    // Disable map drag while we're dragging marker
+    map.dragging.disable();
+    container.style.cursor = "grabbing";
+
+    map.on("mousemove", onMove);
+    map.on("mouseup", onUp);
+
+    // Suppress browser context menu while dragging
+    const suppressCtx = (ev: MouseEvent) => ev.preventDefault();
+    container.addEventListener("contextmenu", suppressCtx);
+
+    return () => {
+      map.off("mousemove", onMove);
+      map.off("mouseup", onUp);
+      container.removeEventListener("contextmenu", suppressCtx);
+      map.dragging.enable();
+      container.style.cursor = "";
+    };
+  }, [draggingName, map]);
+
+  const handleStartDrag = useCallback((name: string, e: LeafletMouseEvent) => {
+    // Right-click only
+    const btn = (e.originalEvent as MouseEvent | undefined)?.button;
+    if (btn !== 2) return;
+    e.originalEvent?.preventDefault?.();
+    setDraggingName(name);
+  }, []);
+
+  const handleReset = useCallback((name: string) => {
+    clearCommuneOverride(name);
+    setOverrides((prev) => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+    toast.success(`${name} restablecido a posición original`);
+  }, []);
+
   if (!visible) return null;
   return (
     <>
-      {COMMUNES.map((c) => {
+      {communes.map((c) => {
         const hasData = c.pop > 0;
         const r = hasData ? radiusForPop(c.pop) : 4;
         const opacity = hasData ? 0.45 + (c.pop / 650_000) * 0.4 : 0.5;
+        const isDragging = draggingName === c.name;
+        const isOverridden = !!overrides[c.name];
         return (
           <CircleMarker
             key={c.name}
             center={[c.lat, c.lng]}
-            radius={r}
+            radius={isDragging ? r + 2 : r}
             ref={(instance) => {
               if (instance) markersRef.current.set(c.name, instance);
               else markersRef.current.delete(c.name);
             }}
             pathOptions={{
-              color: STROKE,
-              weight: hasData ? 1.75 : 1,
+              color: isDragging ? STROKE_DRAG : STROKE,
+              weight: isOverridden ? 2.5 : (hasData ? 1.75 : 1),
               opacity: 0.9,
-              fillColor: FILL,
+              fillColor: isDragging ? FILL_DRAG : FILL,
               fillOpacity: Math.min(0.85, opacity),
+              dashArray: isOverridden ? "3,3" : undefined,
+            }}
+            eventHandlers={{
+              mousedown: (e) => handleStartDrag(c.name, e),
+              contextmenu: (e) => {
+                // Avoid leaflet's default contextmenu popup
+                e.originalEvent?.preventDefault?.();
+              },
             }}
           >
             <Popup>
-              <CommunePopup c={c} />
+              <CommunePopup
+                c={c}
+                lat={c.lat}
+                lng={c.lng}
+                isOverridden={isOverridden}
+                onReset={() => handleReset(c.name)}
+              />
             </Popup>
           </CircleMarker>
         );
