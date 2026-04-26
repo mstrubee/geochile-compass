@@ -887,8 +887,9 @@ const Index = () => {
         <div
           className={[
             "relative flex-1 overflow-hidden",
-            mode === "isochrone" && "[&_.leaflet-container]:cursor-crosshair",
-            mode === "microzone" && "[&_.leaflet-container]:cursor-cell",
+            coordPicker && "[&_.leaflet-container]:cursor-crosshair",
+            !coordPicker && mode === "isochrone" && "[&_.leaflet-container]:cursor-crosshair",
+            !coordPicker && mode === "microzone" && "[&_.leaflet-container]:cursor-cell",
           ]
             .filter(Boolean)
             .join(" ")}
