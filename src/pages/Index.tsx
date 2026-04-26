@@ -261,6 +261,96 @@ const Index = () => {
   const [managerOpen, setManagerOpen] = useState(false);
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
 
+  // Editor de POI (creación/edición) — centralizado.
+  const [poiEditor, setPoiEditor] = useState<
+    | { mode: "create"; defaultDraft: Partial<PoiEditorDraft> }
+    | { mode: "edit"; poi: SavedPoi; defaultDraft?: Partial<PoiEditorDraft> }
+    | null
+  >(null);
+  // Picker de coordenadas: cuando es true, el siguiente click del mapa
+  // rellena lat/lng del draft y reabre el editor.
+  const [coordPicker, setCoordPicker] = useState<{
+    mode: "create" | "edit";
+    poi?: SavedPoi;
+    draft: PoiEditorDraft;
+  } | null>(null);
+
+  const openCreatePoiAt = useCallback(
+    (latlng: { lat: number; lng: number } | null, folderId: string | null = null) => {
+      const defaultDraft: Partial<PoiEditorDraft> = { folderId };
+      if (latlng) {
+        defaultDraft.lat = latlng.lat.toFixed(6);
+        defaultDraft.lng = latlng.lng.toFixed(6);
+      }
+      setPoiEditor({ mode: "create", defaultDraft });
+    },
+    [],
+  );
+
+  const handlePickOnMap = useCallback((draft: PoiEditorDraft) => {
+    // Cierra el editor (preservando el draft) y activa el picker.
+    setPoiEditor((prev) => {
+      if (!prev) return prev;
+      if (prev.mode === "edit") {
+        setCoordPicker({ mode: "edit", poi: prev.poi, draft });
+      } else {
+        setCoordPicker({ mode: "create", draft });
+      }
+      return null;
+    });
+    toast.info("Haz click en el mapa para fijar la posición", { duration: 4000 });
+  }, []);
+
+  const handlePickCoord = useCallback((c: { lat: number; lng: number }) => {
+    setCoordPicker((prev) => {
+      if (!prev) return null;
+      const newDraft: PoiEditorDraft = {
+        ...prev.draft,
+        lat: c.lat.toFixed(6),
+        lng: c.lng.toFixed(6),
+      };
+      if (prev.mode === "edit" && prev.poi) {
+        setPoiEditor({ mode: "edit", poi: prev.poi, defaultDraft: newDraft });
+      } else {
+        setPoiEditor({ mode: "create", defaultDraft: newDraft });
+      }
+      return null;
+    });
+  }, []);
+
+  // ESC cancela el picker.
+  useEffect(() => {
+    if (!coordPicker) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setCoordPicker((prev) => {
+        if (!prev) return null;
+        if (prev.mode === "edit" && prev.poi) {
+          setPoiEditor({ mode: "edit", poi: prev.poi, defaultDraft: prev.draft });
+        } else {
+          setPoiEditor({ mode: "create", defaultDraft: prev.draft });
+        }
+        return null;
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [coordPicker]);
+
+  // Click derecho en el mapa → crear POI en esa posición.
+  const handleMapContextMenu = useCallback(
+    (c: { lat: number; lng: number }) => {
+      if (!user) {
+        toast.error("Inicia sesión para crear POIs");
+        navigate("/auth");
+        return;
+      }
+      if (coordPicker) return; // si está activo el picker, dejar que ese click siga su flujo
+      openCreatePoiAt(c, null);
+    },
+    [user, navigate, openCreatePoiAt, coordPicker],
+  );
+
   const savePoisFromLayer = useCallback(
     (layerIdOrIds: string | string[]) => {
       if (!user) {
