@@ -20,7 +20,7 @@ import { usePoiFolders } from "@/hooks/usePoiFolders";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
 import { fetchOverpassPreset, fetchOverpassFreeText, bboxAreaDegSq } from "@/services/overpassService";
-import { extractPointPois, countPoints, type PoiInsert } from "@/types/pois";
+import { extractPointPois, countPoints, type PoiInsert, type SavedPoi } from "@/types/pois";
 import { parseFile, getExtension } from "@/utils/fileParsers";
 import type { NSE, Commune } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
