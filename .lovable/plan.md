@@ -1,117 +1,103 @@
+# Plan: Edición avanzada de POIs + creación desde el mapa
 
-## Resumen de cambios
+## 1. Reutilizar un único diálogo: `PoiEditorDialog`
 
-Trabajaré sobre el árbol de POIs del **Sidebar** (`src/components/layout/Sidebar.tsx`), añadiré utilidades de export KMZ, un diálogo modal para crear POIs y extenderé `useSavedPois` con `addOne`. **No** se requieren cambios en la base de datos.
+Refactorizar `src/components/panels/CreatePoiDialog.tsx` → renombrarlo / generalizarlo a **`PoiEditorDialog.tsx`** con un prop `mode: "create" | "edit"`.
 
----
+Campos que tendrá (en los tres flujos: crear desde carpeta, crear desde click derecho en mapa, editar POI existente):
 
-### 1. Visibilidad jerárquica del checkbox (padre-hijo, no hermanos)
+- **Nombre** (obligatorio)
+- **Descripción**
+- **Categoría**
+- **Color** (paleta + preview)
+- **Icono** — texto/URL editable; **preview siempre visible** mostrando el marker tal y como se verá en el mapa (imagen si es URL/data:image, o círculo de color en caso contrario). Por defecto se hereda del icono predominante de los hermanos del folder destino.
+- **Carpeta destino** — `Select` desplegable que lista todas las carpetas del usuario (jerárquico, ej: `Clientes / Santiago / Centro`) + opción "Sin carpeta". Al cambiar la carpeta, el icono/color heredados se recalculan en vivo a partir de los nuevos hermanos.
+- **Latitud / Longitud** — inputs numéricos editables + botón **"Elegir en el mapa"** que cierra temporalmente el diálogo y activa un modo "picker" (el siguiente click en el mapa rellena lat/lng y reabre el diálogo).
+- **Ventas** (`sales`, opcional) — input numérico con label "Ventas (opcional)". Se guarda dentro de `properties.sales` (number) ya que la columna `sales` no existe en BD y no añadiremos columnas nuevas para no romper migraciones.
 
-**Problema actual** (`togglePoiFolderVisibility`, líneas 376-391): al ocultar/mostrar una carpeta sólo se propaga **hacia abajo** (descendientes). El checkbox del padre no refleja el estado de los hijos, y al encender un hijo el padre no se enciende.
+Callbacks: `onSubmit(payload)` único; el padre decide si es insert o update.
 
-**Comportamiento nuevo (estilo Google Earth):**
-- Al **marcar** el checkbox de una subcarpeta → se quita la ocultación de **toda su cadena de ancestros** (padre, abuelo, etc.) hasta la raíz, **sin tocar a los hermanos**.
-- Al **desmarcar** una subcarpeta → sólo se afecta esa rama (y sus descendientes), los ancestros se mantienen.
-- El checkbox del padre se renderiza en **3 estados**:
-  - `checked` → todos los descendientes visibles
-  - `unchecked` → la carpeta está oculta
-  - `indeterminate` → la carpeta visible pero hay descendientes ocultos (el componente `Checkbox` de Radix ya soporta `checked="indeterminate"`)
+## 2. Creación desde click derecho en el mapa
 
-Implementación:
-- Reescribir `togglePoiFolderVisibility(id)` para:
-  1. Calcular descendientes (igual que hoy).
-  2. Si `willShow`: quitar `id` y descendientes de `hidden`, **además** quitar todos los ancestros (subiendo por `parent_id` hasta `null`).
-  3. Si `willHide`: añadir `id` y descendientes (no tocar ancestros).
-- Añadir helper `computeFolderCheckState(id): "checked" | "unchecked" | "indeterminate"` basado en si la carpeta está en `hidden` y si algún descendiente lo está.
-- Pasar `checked={state === "indeterminate" ? "indeterminate" : state === "checked"}` al `<Checkbox>` de cada carpeta (línea 1300).
+En `src/components/map/MapView.tsx`:
 
----
+- Añadir prop `onMapContextMenu?: (c: { lat; lng }) => void`.
+- Nuevo handler `ContextMenuHandler` con `useMapEvents({ contextmenu })` que llama al callback (con `L.DomEvent.preventDefault`).
 
-### 2. Menú contextual de POI (clic derecho sobre un POI)
+En `src/pages/Index.tsx`:
 
-Hoy (líneas 1270-1278) sólo tiene **Cortar** y **Mover a papelera**. Lo extenderé a:
+- Estado `poiEditor: { mode: "create" | "edit"; defaultLat?; defaultLng?; defaultFolderId?; poi?: SavedPoi } | null`.
+- `onMapContextMenu` → abre `PoiEditorDialog` en modo `create` con lat/lng del click y `folder_id = null` por defecto (el usuario elige la carpeta en el desplegable).
+- Eliminar el `CreatePoiDialog` interno del Sidebar y centralizar el render de `PoiEditorDialog` en `Index.tsx`, controlado por `poiEditor`.
+- El Sidebar dispara `onCreatePoiRequest(folder)` (abre editor en modo create con esa carpeta preseleccionada) y `onEditPoiRequest(poi)` (abre editor en modo edit).
 
-- **Copiar** → `setClipboard({ kind: "poi", id, name, mode: "copy" })` (extiendo el tipo del clipboard con `mode: "cut" | "copy"`).
-- **Cortar** → ya existe (le añado `mode: "cut"`).
-- **Pegar** → ya existe en el menú de carpetas; en el menú de POI permitiré pegar en la carpeta del POI clickeado. En `handlePaste`, si `mode === "copy"` y `kind === "poi"`, llamo `addOne` con los campos del POI original (lookup en `pois` por id) en lugar de `onMovePois`. Si `mode === "copy"` y `kind === "folder"`, mostraré toast “Copiar carpeta no disponible aún” (lo dejo fuera del scope para no inflar; o, alternativa, lo implemento recursivamente — ver pregunta abajo).
-- **Cambiar nombre** → `window.prompt` + `update(id, { name })` del hook `useSavedPois`.
-- **Guardar como KMZ** → genera y descarga un `.kmz` con un único Placemark (ver sección 4).
+## 3. Picker de coordenadas desde el editor
 
----
+En `Index.tsx`:
 
-### 3. Menú contextual de carpeta (clic derecho sobre una carpeta)
+- Estado `coordPickerActive: boolean`.
+- Cuando el usuario pulsa **"Elegir en el mapa"** dentro del editor: el diálogo se cierra (sin perder los datos del formulario, que viven en `poiEditor.draft`), `coordPickerActive = true`, el cursor del mapa cambia (clase CSS `cursor-crosshair` en el contenedor) y se muestra un toast "Haz click en el mapa para fijar la posición".
+- En `MapView`, mientras `coordPickerActive`, el siguiente `click` se redirige a `onPickCoord(lat, lng)`; el padre actualiza `poiEditor.draft.lat/lng` y reabre el diálogo.
+- El picker funciona independiente del modo isócrona/microzona: si alguno está activo, el picker tiene prioridad mientras esté activo.
 
-Hoy tiene: Cortar, Pegar, Renombrar, Crear subcarpeta, Cargar KMZ, Subir un nivel, Mover a papelera. Añadiré:
+## 4. Editar POI existente (click derecho en POI del Sidebar)
 
-- **Cambiar/Editar nombre** → ya existe ("Renombrar carpeta…", línea 1337). Confirmo que funciona; nada nuevo aquí salvo verificar el label.
-- **Crear un POI…** → nueva opción. Abre un nuevo diálogo `CreatePoiDialog` con campos:
-  - Nombre, descripción, color (paleta), categoría (texto libre), lat, lng (números editables; precarga el centro del mapa actual).
-  - Al guardar: llama a `addOne(payload, folderId)` que añadiré al hook.
-  - **Icono heredado de los hermanos**: en el `useMemo` del diálogo, calculo `siblingIcon` = el `icon` más frecuente entre `pois` con `folder_id === f.id` (y similarmente `siblingColor` como default). Se aplican como defaults editables.
-- **Guardar como KMZ (con todo su contenido)** → genera un KMZ que contiene la carpeta + subcarpetas + POIs preservando el orden y la jerarquía (ver sección 4).
+- Añadir entrada **"Editar propiedades…"** en el `ContextMenuItem` del POI en `Sidebar.tsx` (junto a "Cambiar nombre").
+- Llama a `onEditPoi(poi)` → `Index.tsx` abre `PoiEditorDialog` en modo `edit` con todos los valores precargados.
+- Submit en modo edit: `updatePoi(poi.id, { name, description, category, color, folder_id })` + para icono y `properties.sales` necesitamos extender `PoiUpdate` y permitir update de esas columnas.
 
----
+### Extensión mínima de tipos
 
-### 4. Export KMZ
+En `src/types/pois.ts`:
 
-Crearé `src/utils/kmzExport.ts` con:
-
-- `poiToPlacemarkXml(poi)`: emite un `<Placemark>` con `<name>`, `<description>`, `<Point><coordinates>lng,lat</coordinates></Point>`, y `<Style>` con `<IconStyle><color>` derivado de `poi.color`.
-- `folderToKmlXml(folder, allFolders, allPois)`: emite recursivamente `<Folder><name>...</name>` con subcarpetas y POIs anidados.
-- `buildKmlDocument(rootContent, name)`: envuelve en el preámbulo `<?xml ...?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>...</Document></kml>`.
-- `downloadKmz(filename, kmlString)`: usa `JSZip` (ya en deps) para crear `doc.kml` dentro del zip y dispara la descarga vía `URL.createObjectURL` + `<a download>`.
-
-Funciones públicas:
-- `exportPoiAsKmz(poi)` → un único Placemark.
-- `exportFolderAsKmz(folder, folders, pois)` → árbol completo (sólo descendientes activos, ignorando `deleted_at`).
-
-Escapo correctamente `&`, `<`, `>` en `name`/`description` con un helper `escapeXml`.
-
----
-
-### 5. Diálogo nuevo: `src/components/panels/CreatePoiDialog.tsx`
-
-Componente controlado por `open`/`onOpenChange`, recibe `folder`, `siblingIcon`, `siblingColor`, `defaultLatLng`, y `onCreate(payload)`.
-
-- Usa los componentes `ui/dialog`, `ui/input`, `ui/label`, `ui/textarea`, `ui/button`.
-- Validación: nombre requerido, lat/lng numéricos válidos.
-- Al confirmar, llama `onCreate` y cierra.
-
-En `Sidebar.tsx` añado el estado `createPoiTarget: PoiFolder | null` y renderizo el diálogo en el árbol.
-
----
-
-### 6. Hook `useSavedPois`: añadir `addOne`
-
-En `src/hooks/useSavedPois.ts`, añadir:
 ```ts
-const addOne = useCallback(async (item: PoiInsert) => {
-  return addMany([item], item.folder_id ?? null);
-}, [addMany]);
+export interface PoiUpdate {
+  name?: string;
+  description?: string | null;
+  category?: string | null;
+  color?: string | null;
+  icon?: string | null;          // NUEVO
+  folder_id?: string | null;
+  properties?: Record<string, unknown>; // NUEVO (para guardar sales)
+}
 ```
-Y exportarlo en el return. Lo cableo al `Sidebar` por una nueva prop opcional `onCreatePoi?: (payload: PoiInsert) => Promise<void>` que `Index.tsx` conecta.
 
----
+`useSavedPois.update` ya hace `supabase.from("pois").update(patch)`, soportará los nuevos campos sin cambios.
 
-### 7. Cableado en `src/pages/Index.tsx`
+## 5. Preview de icono (componente reutilizable)
 
-- Pasar `addOne` del hook como `onCreatePoi` al `<Sidebar>`.
-- Pasar el centro actual del mapa (ya disponible en el state del Index) como `defaultLatLng` o exponerlo a través de una ref/callback `getMapCenter()`.
+Nuevo `src/components/panels/PoiIconPreview.tsx`:
 
----
+- Recibe `{ icon, color, size }`.
+- Si `icon` es una URL/data:image válida → `<img>` 32×32 con la misma lógica `isImageUrl` que `SavedPoisLayer`.
+- Si no → círculo SVG con `fill={color}` y borde blanco (como `circleMarker`).
+- Se usa en `PoiEditorDialog` junto al campo de icono y junto al selector de color, actualizándose en vivo.
 
-## Archivos a tocar
+## 6. Herencia de icono al cambiar carpeta destino
 
-| Archivo | Cambio |
-|---|---|
-| `src/components/layout/Sidebar.tsx` | Visibilidad jerárquica + 3-state checkbox; menú contextual extendido (POI y carpeta); state para `CreatePoiDialog`; clipboard con `mode` |
-| `src/hooks/useSavedPois.ts` | Añadir `addOne` |
-| `src/utils/kmzExport.ts` | **Nuevo** — generación KML/KMZ y descarga |
-| `src/components/panels/CreatePoiDialog.tsx` | **Nuevo** — modal de creación de POI |
-| `src/pages/Index.tsx` | Cablear `onCreatePoi` y `getMapCenter` |
+Mover la lógica de "icono/color predominante de los hermanos" desde el Sidebar al **propio `PoiEditorDialog`**:
 
----
+- `useMemo` que, dado `folder_id` actual del form + lista completa `savedPois`, calcula el icono y color más frecuentes entre los POIs con ese `folder_id`.
+- Cuando el usuario cambia la carpeta en el desplegable y el campo `icon` aún tiene el valor heredado anterior (no fue tocado manualmente), se reemplaza por el nuevo heredado. Si el usuario lo editó manualmente, no se sobreescribe.
+- Para esto, el diálogo recibe como props `allPois: SavedPoi[]` y `folders: PoiFolder[]`.
 
-## Pregunta antes de implementar
+## 7. Cableado en `Index.tsx`
 
-**Copiar carpeta** (no estaba explícito en tu pedido, sí lo estaba para POI). ¿Quieres que **Copiar** del menú contextual de carpetas duplique recursivamente la carpeta + subcarpetas + POIs en el destino del Pegar? Si no lo confirmas, dejo Copiar sólo para POIs y la carpeta seguirá teniendo sólo Cortar (como hoy).
+- Pasar `pois` y `folders` al nuevo `PoiEditorDialog`.
+- `getMapCenter` se sigue usando como fallback (modo create sin click previo).
+- Pasar `onMapContextMenu` y `onPickCoord` a `MapView`.
+- Eliminar el render del antiguo `CreatePoiDialog` desde el Sidebar (línea ~1902 actual); el Sidebar solo emite `onCreatePoiRequest(folder)` y `onEditPoiRequest(poi)`.
+
+## Archivos afectados
+
+- ✏️ `src/components/panels/CreatePoiDialog.tsx` → rename/refactor a `PoiEditorDialog.tsx` (modo create/edit, selector de carpeta, ventas, preview, botón "Elegir en mapa")
+- 🆕 `src/components/panels/PoiIconPreview.tsx`
+- ✏️ `src/types/pois.ts` (ampliar `PoiUpdate` con `icon` y `properties`)
+- ✏️ `src/components/map/MapView.tsx` (`contextmenu` + modo picker de coordenadas)
+- ✏️ `src/pages/Index.tsx` (estado central del editor, picker, callbacks)
+- ✏️ `src/components/layout/Sidebar.tsx` (quitar render local del diálogo, añadir "Editar propiedades…" en context menu de POI, delegar al padre)
+
+## Notas
+
+- **Ventas** se guarda en `properties.sales` (número). No requiere migración; si más adelante se quiere consultar agregadamente, se puede crear un índice `((properties->>'sales'))` en una migración futura.
+- El `SavedPoisLayer` actualmente no muestra `properties` en el popup; opcionalmente se puede añadir una línea "Ventas: $X" cuando exista — lo incluyo como mejora menor en el mismo PR.

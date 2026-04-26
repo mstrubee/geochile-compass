@@ -232,7 +232,10 @@ export const useSavedPois = () => {
 
   const update = useCallback(
     async (id: string, patch: PoiUpdate) => {
-      const { error } = await supabase.from("pois").update(patch).eq("id", id);
+      const { error } = await supabase
+        .from("pois")
+        .update(patch as never)
+        .eq("id", id);
       if (error) throw new Error(error.message);
       await refresh();
     },

@@ -95,6 +95,10 @@ interface SidebarProps {
   onRenamePoi?: (id: string, name: string) => Promise<void> | void;
   /** Crea un POI individual (usado por "Crear un POI" en clic derecho de carpeta). */
   onCreatePoi?: (payload: import("@/types/pois").PoiInsert) => Promise<unknown> | void;
+  /** Si está definido, "Crear un POI" en clic derecho de carpeta delega al padre (usa el editor central). */
+  onRequestCreatePoiInFolder?: (folder: PoiFolder | null) => void;
+  /** Si está definido, "Editar propiedades" en clic derecho de POI abre el editor central. */
+  onEditPoi?: (poi: SavedPoi) => void;
   /** Devuelve el centro actual del mapa para precargar lat/lng al crear un POI. */
   getMapCenter?: () => { lat: number; lng: number } | null;
   /** Centra el mapa sobre un POI (doble click sobre el item). */
@@ -249,6 +253,8 @@ export const Sidebar = ({
   onRenameFolder,
   onRenamePoi,
   onCreatePoi,
+  onRequestCreatePoiInFolder,
+  onEditPoi,
   getMapCenter,
   onFocusPoi,
   trashedPois = [],
@@ -1369,6 +1375,11 @@ export const Sidebar = ({
                           <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
                           {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar"}
                         </ContextMenuItem>
+                        {onEditPoi && (
+                          <ContextMenuItem onSelect={() => onEditPoi(p)}>
+                            <Pencil className="mr-2 h-3.5 w-3.5" /> Editar propiedades…
+                          </ContextMenuItem>
+                        )}
                         {onRenamePoi && (
                           <ContextMenuItem
                             onSelect={async () => {
@@ -1461,11 +1472,15 @@ export const Sidebar = ({
                                 <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
                                 {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
                               </ContextMenuItem>
-                              {onCreatePoi && (
+                              {(onRequestCreatePoiInFolder || onCreatePoi) && (
                                 <ContextMenuItem
                                   onSelect={() => {
-                                    setCreatePoiTarget(f);
-                                    setCreatePoiOpen(true);
+                                    if (onRequestCreatePoiInFolder) {
+                                      onRequestCreatePoiInFolder(f);
+                                    } else {
+                                      setCreatePoiTarget(f);
+                                      setCreatePoiOpen(true);
+                                    }
                                   }}
                                 >
                                   <Plus className="mr-2 h-3.5 w-3.5" />

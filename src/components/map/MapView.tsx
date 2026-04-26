@@ -65,6 +65,20 @@ const ClickHandler = ({ onClick }: { onClick: (c: { lat: number; lng: number }) 
   return null;
 };
 
+const ContextMenuHandler = ({
+  onContextMenu,
+}: {
+  onContextMenu: (c: { lat: number; lng: number }) => void;
+}) => {
+  useMapEvents({
+    contextmenu: (e) => {
+      L.DomEvent.preventDefault(e.originalEvent);
+      onContextMenu({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
+  });
+  return null;
+};
+
 const ViewportTracker = ({
   onChange,
 }: {
@@ -170,6 +184,10 @@ interface MapViewProps {
   onAddCommuneToCompare?: (c: import("@/data/communes").Commune) => void;
   outlinedCommuneNames?: string[];
   highlightedCommuneName?: string | null;
+  onMapContextMenu?: (c: { lat: number; lng: number }) => void;
+  /** Cuando es true, el próximo click del mapa se delega a `onPickCoord` y nada más. */
+  coordPickerActive?: boolean;
+  onPickCoord?: (c: { lat: number; lng: number }) => void;
 }
 
 export const MapView = ({
@@ -213,6 +231,9 @@ export const MapView = ({
   onAddCommuneToCompare,
   outlinedCommuneNames = [],
   highlightedCommuneName = null,
+  onMapContextMenu,
+  coordPickerActive = false,
+  onPickCoord,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -239,7 +260,12 @@ export const MapView = ({
       )}
       <ZoomControlTopRight />
       <MouseTracker onMouseMove={onMouseMove} />
-      {isoMode && <ClickHandler onClick={onMapClick} />}
+      {coordPickerActive && onPickCoord ? (
+        <ClickHandler onClick={onPickCoord} />
+      ) : (
+        isoMode && <ClickHandler onClick={onMapClick} />
+      )}
+      {onMapContextMenu && <ContextMenuHandler onContextMenu={onMapContextMenu} />}
       <InvalidateOnResize />
       <FlyToTarget target={flyTarget} />
       {onViewportChange && <ViewportTracker onChange={onViewportChange} />}

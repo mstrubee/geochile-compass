@@ -34,7 +34,9 @@ export interface PoiUpdate {
   description?: string | null;
   category?: string | null;
   color?: string | null;
+  icon?: string | null;
   folder_id?: string | null;
+  properties?: Record<string, unknown>;
 }
 
 export interface PoiFolder {

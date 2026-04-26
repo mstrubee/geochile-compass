@@ -6,6 +6,7 @@ import { MapView } from "@/components/map/MapView";
 import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
 import { PoiManagerDialog } from "@/components/panels/PoiManagerDialog";
 import { SavePoisDialog } from "@/components/panels/SavePoisDialog";
+import { PoiEditorDialog, type PoiEditorDraft } from "@/components/panels/PoiEditorDialog";
 import { CommuneSearchResultsDialog } from "@/components/panels/CommuneSearchResultsDialog";
 import { CommuneCompareDialog } from "@/components/panels/CommuneCompareDialog";
 import { Legend } from "@/components/ui-overlays/Legend";
@@ -19,7 +20,7 @@ import { usePoiFolders } from "@/hooks/usePoiFolders";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
 import { fetchOverpassPreset, fetchOverpassFreeText, bboxAreaDegSq } from "@/services/overpassService";
-import { extractPointPois, countPoints, type PoiInsert } from "@/types/pois";
+import { extractPointPois, countPoints, type PoiInsert, type SavedPoi } from "@/types/pois";
 import { parseFile, getExtension } from "@/utils/fileParsers";
 import type { NSE, Commune } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
@@ -259,6 +260,96 @@ const Index = () => {
 
   const [managerOpen, setManagerOpen] = useState(false);
   const [savePending, setSavePending] = useState<{ items: PoiInsert[]; defaultName: string } | null>(null);
+
+  // Editor de POI (creación/edición) — centralizado.
+  const [poiEditor, setPoiEditor] = useState<
+    | { mode: "create"; defaultDraft: Partial<PoiEditorDraft> }
+    | { mode: "edit"; poi: SavedPoi; defaultDraft?: Partial<PoiEditorDraft> }
+    | null
+  >(null);
+  // Picker de coordenadas: cuando es true, el siguiente click del mapa
+  // rellena lat/lng del draft y reabre el editor.
+  const [coordPicker, setCoordPicker] = useState<{
+    mode: "create" | "edit";
+    poi?: SavedPoi;
+    draft: PoiEditorDraft;
+  } | null>(null);
+
+  const openCreatePoiAt = useCallback(
+    (latlng: { lat: number; lng: number } | null, folderId: string | null = null) => {
+      const defaultDraft: Partial<PoiEditorDraft> = { folderId };
+      if (latlng) {
+        defaultDraft.lat = latlng.lat.toFixed(6);
+        defaultDraft.lng = latlng.lng.toFixed(6);
+      }
+      setPoiEditor({ mode: "create", defaultDraft });
+    },
+    [],
+  );
+
+  const handlePickOnMap = useCallback((draft: PoiEditorDraft) => {
+    // Cierra el editor (preservando el draft) y activa el picker.
+    setPoiEditor((prev) => {
+      if (!prev) return prev;
+      if (prev.mode === "edit") {
+        setCoordPicker({ mode: "edit", poi: prev.poi, draft });
+      } else {
+        setCoordPicker({ mode: "create", draft });
+      }
+      return null;
+    });
+    toast.info("Haz click en el mapa para fijar la posición", { duration: 4000 });
+  }, []);
+
+  const handlePickCoord = useCallback((c: { lat: number; lng: number }) => {
+    setCoordPicker((prev) => {
+      if (!prev) return null;
+      const newDraft: PoiEditorDraft = {
+        ...prev.draft,
+        lat: c.lat.toFixed(6),
+        lng: c.lng.toFixed(6),
+      };
+      if (prev.mode === "edit" && prev.poi) {
+        setPoiEditor({ mode: "edit", poi: prev.poi, defaultDraft: newDraft });
+      } else {
+        setPoiEditor({ mode: "create", defaultDraft: newDraft });
+      }
+      return null;
+    });
+  }, []);
+
+  // ESC cancela el picker.
+  useEffect(() => {
+    if (!coordPicker) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setCoordPicker((prev) => {
+        if (!prev) return null;
+        if (prev.mode === "edit" && prev.poi) {
+          setPoiEditor({ mode: "edit", poi: prev.poi, defaultDraft: prev.draft });
+        } else {
+          setPoiEditor({ mode: "create", defaultDraft: prev.draft });
+        }
+        return null;
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [coordPicker]);
+
+  // Click derecho en el mapa → crear POI en esa posición.
+  const handleMapContextMenu = useCallback(
+    (c: { lat: number; lng: number }) => {
+      if (!user) {
+        toast.error("Inicia sesión para crear POIs");
+        navigate("/auth");
+        return;
+      }
+      if (coordPicker) return; // si está activo el picker, dejar que ese click siga su flujo
+      openCreatePoiAt(c, null);
+    },
+    [user, navigate, openCreatePoiAt, coordPicker],
+  );
 
   const savePoisFromLayer = useCallback(
     (layerIdOrIds: string | string[]) => {
@@ -761,6 +852,8 @@ const Index = () => {
           onRenameFolder={(id, name) => renameFolder(id, name)}
           onRenamePoi={(id, name) => updatePoi(id, { name })}
           onCreatePoi={(payload) => addOnePoi(payload)}
+          onRequestCreatePoiInFolder={(folder) => openCreatePoiAt(null, folder?.id ?? null)}
+          onEditPoi={(poi) => setPoiEditor({ mode: "edit", poi, defaultDraft: {} })}
           hiddenPoiFolders={hiddenPoiFolders}
           onHiddenPoiFoldersChange={setHiddenPoiFolders}
           trashedPois={trashedPois}
@@ -794,8 +887,9 @@ const Index = () => {
         <div
           className={[
             "relative flex-1 overflow-hidden",
-            mode === "isochrone" && "[&_.leaflet-container]:cursor-crosshair",
-            mode === "microzone" && "[&_.leaflet-container]:cursor-cell",
+            coordPicker && "[&_.leaflet-container]:cursor-crosshair",
+            !coordPicker && mode === "isochrone" && "[&_.leaflet-container]:cursor-crosshair",
+            !coordPicker && mode === "microzone" && "[&_.leaflet-container]:cursor-cell",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -841,6 +935,9 @@ const Index = () => {
             onAddCommuneToCompare={handleAddCommuneToCompare}
             outlinedCommuneNames={outlinedCommuneNames}
             highlightedCommuneName={highlightedCommuneName}
+            onMapContextMenu={handleMapContextMenu}
+            coordPickerActive={!!coordPicker}
+            onPickCoord={handlePickCoord}
           />
 
           <SearchBar
@@ -944,6 +1041,42 @@ const Index = () => {
         onRemove={handleRemoveCommuneFromCompare}
         onFlyToCommune={handleFlyToCommune}
       />
+
+      {poiEditor?.mode === "create" && (
+        <PoiEditorDialog
+          mode="create"
+          open
+          onOpenChange={(v) => { if (!v) setPoiEditor(null); }}
+          folders={folders}
+          allPois={pois}
+          initialDraft={poiEditor.defaultDraft}
+          onPickOnMap={handlePickOnMap}
+          onSubmit={async (payload) => {
+            await addOnePoi(payload);
+          }}
+        />
+      )}
+      {poiEditor?.mode === "edit" && (
+        <PoiEditorDialog
+          mode="edit"
+          poi={poiEditor.poi}
+          open
+          onOpenChange={(v) => { if (!v) setPoiEditor(null); }}
+          folders={folders}
+          allPois={pois}
+          initialDraft={poiEditor.defaultDraft}
+          onPickOnMap={handlePickOnMap}
+          onSubmit={async (id, patch) => {
+            await updatePoi(id, patch);
+          }}
+        />
+      )}
+
+      {coordPicker && (
+        <div className="pointer-events-none fixed left-1/2 top-[68px] z-[1200] -translate-x-1/2 rounded-full bg-primary/95 px-4 py-1.5 text-[12px] font-medium text-primary-foreground shadow-apple backdrop-blur-2xl">
+          Haz click en el mapa para fijar la posición · ESC para cancelar
+        </div>
+      )}
     </div>
   );
 };
