@@ -425,7 +425,9 @@ export const Sidebar = ({
     } else {
       next.delete(id);
       if (id !== "__orphan__") {
-        // Subir por la cadena de ancestros para que el padre muestre la rama.
+        // Encender también todos los descendientes (jerarquía hacia abajo).
+        descendantsOfFolder(id).forEach((d) => next.delete(d));
+        // Y subir por la cadena de ancestros hasta la raíz.
         ancestorsOfFolder(id).forEach((a) => next.delete(a));
       }
     }
