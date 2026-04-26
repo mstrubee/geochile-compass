@@ -89,6 +89,12 @@ interface SidebarProps {
   onCreateFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | void> | void;
   /** Renombra una carpeta existente. */
   onRenameFolder?: (id: string, name: string) => Promise<void> | void;
+  /** Renombra un POI existente. */
+  onRenamePoi?: (id: string, name: string) => Promise<void> | void;
+  /** Crea un POI individual (usado por "Crear un POI" en clic derecho de carpeta). */
+  onCreatePoi?: (payload: import("@/types/pois").PoiInsert) => Promise<unknown> | void;
+  /** Devuelve el centro actual del mapa para precargar lat/lng al crear un POI. */
+  getMapCenter?: () => { lat: number; lng: number } | null;
   /** Centra el mapa sobre un POI (doble click sobre el item). */
   onFocusPoi?: (poi: SavedPoi) => void;
   // Papelera
