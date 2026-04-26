@@ -1411,7 +1411,8 @@ export const Sidebar = ({
                       !!clipboard &&
                       !(clipboard.kind === "folder" && clipboard.id === f.id) &&
                       !(clipboard.kind === "folder" && descendantsOfFolder(clipboard.id).has(f.id));
-                    const isHidden = hiddenPoiFolders?.has(f.id) ?? false;
+                    const checkState = checkStateForFolder(f.id);
+                    const isHidden = checkState === false;
                     return (
                       <div key={f.id}>
                         <div className="flex w-full items-center gap-1">
@@ -1420,7 +1421,7 @@ export const Sidebar = ({
                             style={{ paddingLeft: `${depth * 12 + 2}px` }}
                           >
                             <Checkbox
-                              checked={!isHidden}
+                              checked={checkState}
                               onCheckedChange={() => togglePoiFolderVisibility(f.id)}
                               onClick={(e) => e.stopPropagation()}
                               className="h-3.5 w-3.5"
@@ -1447,8 +1448,39 @@ export const Sidebar = ({
                               </button>
                             </ContextMenuTrigger>
                             <ContextMenuContent className="z-[1100]">
-                              <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name })}>
+                              <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name, mode: "cut" })}>
                                 <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar carpeta
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                disabled={!canPasteHere}
+                                onSelect={() => handlePaste(f.id)}
+                              >
+                                <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
+                                {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
+                              </ContextMenuItem>
+                              {onCreatePoi && (
+                                <ContextMenuItem
+                                  onSelect={() => {
+                                    setCreatePoiTarget(f);
+                                    setCreatePoiOpen(true);
+                                  }}
+                                >
+                                  <Plus className="mr-2 h-3.5 w-3.5" />
+                                  Crear un POI…
+                                </ContextMenuItem>
+                              )}
+                              <ContextMenuItem
+                                onSelect={async () => {
+                                  try {
+                                    await exportFolderAsKmz(f, poiFolders, savedPois);
+                                    toast.success(`"${f.name}" exportado como KMZ`);
+                                  } catch (err) {
+                                    toast.error(err instanceof Error ? err.message : "Error al exportar KMZ");
+                                  }
+                                }}
+                              >
+                                <Download className="mr-2 h-3.5 w-3.5" />
+                                Guardar como KMZ
                               </ContextMenuItem>
                               <ContextMenuItem
                                 disabled={!canPasteHere}
