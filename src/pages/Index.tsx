@@ -1040,6 +1040,42 @@ const Index = () => {
         onRemove={handleRemoveCommuneFromCompare}
         onFlyToCommune={handleFlyToCommune}
       />
+
+      {poiEditor?.mode === "create" && (
+        <PoiEditorDialog
+          mode="create"
+          open
+          onOpenChange={(v) => { if (!v) setPoiEditor(null); }}
+          folders={folders}
+          allPois={pois}
+          initialDraft={poiEditor.defaultDraft}
+          onPickOnMap={handlePickOnMap}
+          onSubmit={async (payload) => {
+            await addOnePoi(payload);
+          }}
+        />
+      )}
+      {poiEditor?.mode === "edit" && (
+        <PoiEditorDialog
+          mode="edit"
+          poi={poiEditor.poi}
+          open
+          onOpenChange={(v) => { if (!v) setPoiEditor(null); }}
+          folders={folders}
+          allPois={pois}
+          initialDraft={poiEditor.defaultDraft}
+          onPickOnMap={handlePickOnMap}
+          onSubmit={async (id, patch) => {
+            await updatePoi(id, patch);
+          }}
+        />
+      )}
+
+      {coordPicker && (
+        <div className="pointer-events-none fixed left-1/2 top-[68px] z-[1200] -translate-x-1/2 rounded-full bg-primary/95 px-4 py-1.5 text-[12px] font-medium text-primary-foreground shadow-apple backdrop-blur-2xl">
+          Haz click en el mapa para fijar la posición · ESC para cancelar
+        </div>
+      )}
     </div>
   );
 };
