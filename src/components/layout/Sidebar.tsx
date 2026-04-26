@@ -1353,8 +1353,46 @@ export const Sidebar = ({
                         </div>
                       </ContextMenuTrigger>
                       <ContextMenuContent className="z-[1100]">
-                        <ContextMenuItem onSelect={() => setClipboard({ kind: "poi", id: p.id, name: p.name })}>
+                        <ContextMenuItem onSelect={() => setClipboard({ kind: "poi", id: p.id, name: p.name, mode: "copy" })}>
+                          <Copy className="mr-2 h-3.5 w-3.5" /> Copiar
+                        </ContextMenuItem>
+                        <ContextMenuItem onSelect={() => setClipboard({ kind: "poi", id: p.id, name: p.name, mode: "cut" })}>
                           <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          disabled={!clipboard}
+                          onSelect={() => handlePaste(p.folder_id)}
+                        >
+                          <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
+                          {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar"}
+                        </ContextMenuItem>
+                        {onRenamePoi && (
+                          <ContextMenuItem
+                            onSelect={async () => {
+                              const next = window.prompt(`Nuevo nombre para "${p.name}":`, p.name);
+                              if (!next || !next.trim() || next.trim() === p.name) return;
+                              try {
+                                await onRenamePoi(p.id, next.trim());
+                                toast.success(`POI renombrado a "${next.trim()}"`);
+                              } catch (err) {
+                                toast.error(err instanceof Error ? err.message : "Error al renombrar");
+                              }
+                            }}
+                          >
+                            <Pencil className="mr-2 h-3.5 w-3.5" /> Cambiar nombre…
+                          </ContextMenuItem>
+                        )}
+                        <ContextMenuItem
+                          onSelect={async () => {
+                            try {
+                              await exportPoiAsKmz(p);
+                              toast.success(`"${p.name}" exportado como KMZ`);
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : "Error al exportar KMZ");
+                            }
+                          }}
+                        >
+                          <Download className="mr-2 h-3.5 w-3.5" /> Guardar como KMZ
                         </ContextMenuItem>
                         <ContextMenuSeparator />
                         <ContextMenuItem onSelect={() => confirmRemovePoi(p.id, p.name)} className="text-destructive focus:text-destructive">
