@@ -4,8 +4,15 @@ import { useAuth } from "./useAuth";
 import { loadPoiCache, savePoiCache } from "@/services/poiCache";
 import type { PoiInsert, PoiUpdate, SavedPoi } from "@/types/pois";
 
-const SELECT_COLS =
-  "id,name,description,category,color,icon,lat,lng,properties,source_layer,folder_id,created_at,deleted_at";
+// Fase ligera: columnas mínimas para pintar el mapa rápido (sin `properties`
+// ni `description` que pueden ser blobs gigantes con KMZ con logos embebidos).
+const LIGHT_COLS =
+  "id,name,category,color,icon,lat,lng,source_layer,folder_id,created_at,deleted_at";
+
+// Fase de enriquecimiento: trae los campos pesados.
+const HEAVY_COLS = "id,description,properties";
+
+const PAGE = 500;
 
 export const useSavedPois = () => {
   const { user } = useAuth();
@@ -20,27 +27,20 @@ export const useSavedPois = () => {
       return;
     }
     setLoading(true);
-    // Supabase limita a 1000 filas por consulta por defecto. Paginamos en
-    // bloques para traer absolutamente todos los POIs del usuario sin tope.
-    const PAGE = 1000;
-    const fetchAllPaged = async (deleted: boolean): Promise<SavedPoi[]> => {
+
+    /** Trae paginado en columnas ligeras. Reintenta cada página hasta 3 veces. */
+    const fetchAllLight = async (deleted: boolean): Promise<SavedPoi[]> => {
       const all: SavedPoi[] = [];
       const seen = new Set<string>();
       let from = 0;
-      // Loop hasta que un page devuelva menos de PAGE filas.
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        // Reintentamos cada página hasta 3 veces para tolerar fallos
-        // transitorios de red — antes una sola página fallida dejaba
-        // cargada solo una parte de los POIs sin avisar al usuario.
         let lastError: unknown = null;
         let data: SavedPoi[] | null = null;
         for (let attempt = 0; attempt < 3 && data === null; attempt++) {
           let q = supabase
             .from("pois")
-            .select(SELECT_COLS)
-            // Orden estable: agregamos `id` como tie-breaker para evitar
-            // duplicados / saltos cuando varios POIs comparten timestamp.
+            .select(LIGHT_COLS)
             .order(deleted ? "deleted_at" : "created_at", { ascending: false })
             .order("id", { ascending: true })
             .range(from, from + PAGE - 1);
@@ -51,17 +51,22 @@ export const useSavedPois = () => {
             await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
             continue;
           }
-          data = (res.data ?? []) as SavedPoi[];
+          // En la fase ligera no traemos `properties` ni `description`,
+          // así que rellenamos con defaults para mantener el tipo `SavedPoi`.
+          data = (res.data ?? []).map((row: Record<string, unknown>) => ({
+            ...(row as object),
+            description: null,
+            properties: {},
+          })) as SavedPoi[];
         }
         if (data === null) {
-          console.error("load pois failed (after retries)", lastError);
+          console.error("[useSavedPois] light fetch failed (after retries)", lastError);
           throw new Error(
             lastError instanceof Error
               ? lastError.message
-              : "No se pudieron cargar todos los POIs",
+              : "No se pudieron cargar los POIs",
           );
         }
-        // Deduplicación defensiva por id.
         for (const row of data) {
           if (!seen.has(row.id)) {
             seen.add(row.id);
@@ -73,16 +78,72 @@ export const useSavedPois = () => {
       }
       return all;
     };
+
+    /**
+     * Enriquece en background los POIs ya cargados con `description` y
+     * `properties` (campos pesados), por chunks de IDs. Se ejecuta sin
+     * bloquear: los markers ya están pintados en el mapa.
+     */
+    const enrichInBackground = async (
+      lightPois: SavedPoi[],
+      target: "active" | "trashed",
+    ) => {
+      const CHUNK = 500;
+      for (let i = 0; i < lightPois.length; i += CHUNK) {
+        const slice = lightPois.slice(i, i + CHUNK).map((p) => p.id);
+        try {
+          const res = await supabase
+            .from("pois")
+            .select(HEAVY_COLS)
+            .in("id", slice);
+          if (res.error || !res.data) continue;
+          const byId = new Map<string, { description: string | null; properties: Record<string, unknown> }>();
+          for (const row of res.data as Array<{
+            id: string;
+            description: string | null;
+            properties: Record<string, unknown> | null;
+          }>) {
+            byId.set(row.id, {
+              description: row.description ?? null,
+              properties: row.properties ?? {},
+            });
+          }
+          // Merge en el state correspondiente.
+          const setter = target === "active" ? setPois : setTrashedPois;
+          setter((prev) =>
+            prev.map((p) => {
+              const extra = byId.get(p.id);
+              return extra ? { ...p, ...extra } : p;
+            }),
+          );
+        } catch (err) {
+          console.warn("[useSavedPois] enrich chunk failed", err);
+        }
+      }
+    };
+
     try {
       const [active, trashed] = await Promise.all([
-        fetchAllPaged(false),
-        fetchAllPaged(true),
+        fetchAllLight(false),
+        fetchAllLight(true),
       ]);
       setPois(active);
       setTrashedPois(trashed);
-      // Persistimos en IndexedDB para que la próxima carga sea instantánea
-      // y para soportar lectura offline.
+      // Persistimos snapshot ligero — la próxima carga es instantánea.
       void savePoiCache(user.id, active, trashed);
+
+      // Enriquecimiento en background (no bloquea el render del mapa).
+      void enrichInBackground(active, "active").then(() => {
+        // Re-persistimos con datos completos al terminar.
+        setPois((curr) => {
+          setTrashedPois((trashedCurr) => {
+            void savePoiCache(user.id, curr, trashedCurr);
+            return trashedCurr;
+          });
+          return curr;
+        });
+      });
+      void enrichInBackground(trashed, "trashed");
     } catch (err) {
       console.error("[useSavedPois.refresh] error", err);
     } finally {
