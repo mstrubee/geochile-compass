@@ -1375,6 +1375,11 @@ export const Sidebar = ({
                           <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
                           {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar"}
                         </ContextMenuItem>
+                        {onEditPoi && (
+                          <ContextMenuItem onSelect={() => onEditPoi(p)}>
+                            <Pencil className="mr-2 h-3.5 w-3.5" /> Editar propiedades…
+                          </ContextMenuItem>
+                        )}
                         {onRenamePoi && (
                           <ContextMenuItem
                             onSelect={async () => {
@@ -1467,11 +1472,15 @@ export const Sidebar = ({
                                 <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
                                 {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
                               </ContextMenuItem>
-                              {onCreatePoi && (
+                              {(onRequestCreatePoiInFolder || onCreatePoi) && (
                                 <ContextMenuItem
                                   onSelect={() => {
-                                    setCreatePoiTarget(f);
-                                    setCreatePoiOpen(true);
+                                    if (onRequestCreatePoiInFolder) {
+                                      onRequestCreatePoiInFolder(f);
+                                    } else {
+                                      setCreatePoiTarget(f);
+                                      setCreatePoiOpen(true);
+                                    }
                                   }}
                                 >
                                   <Plus className="mr-2 h-3.5 w-3.5" />
