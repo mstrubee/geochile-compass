@@ -22,7 +22,9 @@ import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
 import { ISO_MODE_LABEL } from "@/types/isochrones";
 import { parseFile, getExtension, splitByFolderPath } from "@/utils/fileParsers";
 import { OVERPASS_PRESETS } from "@/services/overpassService";
+import { exportPoiAsKmz, exportFolderAsKmz } from "@/utils/kmzExport";
 import { CommuneSearch } from "./CommuneSearch";
+import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
