@@ -41,10 +41,15 @@ export const SavedPoisLayer = ({ pois, visible }: Props) => {
             p.category,
           )}</div>`
         : "";
+      const salesRaw = (p.properties as Record<string, unknown> | null)?.sales;
+      const sales =
+        typeof salesRaw === "number" && Number.isFinite(salesRaw)
+          ? `<div style="font-size:11px;margin-top:4px"><b>Ventas:</b> ${salesRaw.toLocaleString("es-CL")}</div>`
+          : "";
       (marker as L.Marker | L.CircleMarker).bindPopup(
         `<div style="font-size:12px;min-width:140px"><b>${escapeHtml(
           p.name,
-        )}</b>${desc}${cat}</div>`,
+        )}</b>${desc}${cat}${sales}</div>`,
       );
       marker.addTo(group);
     });
