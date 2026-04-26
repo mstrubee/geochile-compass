@@ -628,6 +628,7 @@ export const Sidebar = ({
   };
 
   return (
+    <>
     <aside
       className="relative flex flex-shrink-0 flex-col overflow-hidden border-r border-border/60 bg-surface/95"
       style={{ width: sidebarWidth }}
