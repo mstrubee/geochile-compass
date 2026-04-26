@@ -852,6 +852,8 @@ const Index = () => {
           onRenameFolder={(id, name) => renameFolder(id, name)}
           onRenamePoi={(id, name) => updatePoi(id, { name })}
           onCreatePoi={(payload) => addOnePoi(payload)}
+          onRequestCreatePoiInFolder={(folder) => openCreatePoiAt(null, folder?.id ?? null)}
+          onEditPoi={(poi) => setPoiEditor({ mode: "edit", poi, defaultDraft: {} })}
           hiddenPoiFolders={hiddenPoiFolders}
           onHiddenPoiFoldersChange={setHiddenPoiFolders}
           trashedPois={trashedPois}
@@ -932,6 +934,9 @@ const Index = () => {
             onAddCommuneToCompare={handleAddCommuneToCompare}
             outlinedCommuneNames={outlinedCommuneNames}
             highlightedCommuneName={highlightedCommuneName}
+            onMapContextMenu={handleMapContextMenu}
+            coordPickerActive={!!coordPicker}
+            onPickCoord={handlePickCoord}
           />
 
           <SearchBar
