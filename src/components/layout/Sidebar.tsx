@@ -1896,6 +1896,48 @@ export const Sidebar = ({
         <span className="h-10 w-[3px] rounded-full bg-border/60 transition-colors group-hover:bg-primary" />
       </div>
     </aside>
+    {onCreatePoi && (
+      <CreatePoiDialog
+        open={createPoiOpen}
+        onOpenChange={(v) => {
+          setCreatePoiOpen(v);
+          if (!v) setCreatePoiTarget(null);
+        }}
+        folder={createPoiTarget}
+        defaultLatLng={getMapCenter ? getMapCenter() : null}
+        inheritedIcon={(() => {
+          if (!createPoiTarget) return null;
+          const sibs = poisByFolderMap.get(createPoiTarget.id) ?? [];
+          const counts = new Map<string, number>();
+          for (const s of sibs) {
+            if (s.icon) counts.set(s.icon, (counts.get(s.icon) ?? 0) + 1);
+          }
+          let best: string | null = null;
+          let bestN = 0;
+          counts.forEach((n, k) => { if (n > bestN) { bestN = n; best = k; } });
+          return best;
+        })()}
+        inheritedColor={(() => {
+          if (!createPoiTarget) return null;
+          const sibs = poisByFolderMap.get(createPoiTarget.id) ?? [];
+          const counts = new Map<string, number>();
+          for (const s of sibs) {
+            if (s.color) counts.set(s.color, (counts.get(s.color) ?? 0) + 1);
+          }
+          let best: string | null = null;
+          let bestN = 0;
+          counts.forEach((n, k) => { if (n > bestN) { bestN = n; best = k; } });
+          return best;
+        })()}
+        onCreate={async (payload) => {
+          await onCreatePoi(payload);
+          if (createPoiTarget) {
+            setExpandedPoiFolders((prev) => new Set(prev).add(createPoiTarget.id));
+          }
+        }}
+      />
+    )}
+    </>
   );
 };
 
