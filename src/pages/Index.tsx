@@ -192,6 +192,7 @@ const Index = () => {
     pois,
     trashedPois,
     addMany,
+    addOne: addOnePoi,
     update: updatePoi,
     moveMany: movePois,
     remove: removePoi,
