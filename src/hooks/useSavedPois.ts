@@ -321,11 +321,19 @@ export const useSavedPois = () => {
     await refresh();
   }, [user, refresh]);
 
+  const addOne = useCallback(
+    async (item: PoiInsert) => {
+      return addMany([item], item.folder_id ?? null);
+    },
+    [addMany],
+  );
+
   return {
     pois,
     trashedPois,
     loading,
     addMany,
+    addOne,
     update,
     moveMany,
     remove,

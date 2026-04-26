@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -22,7 +22,9 @@ import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
 import { ISO_MODE_LABEL } from "@/types/isochrones";
 import { parseFile, getExtension, splitByFolderPath } from "@/utils/fileParsers";
 import { OVERPASS_PRESETS } from "@/services/overpassService";
+import { exportPoiAsKmz, exportFolderAsKmz } from "@/utils/kmzExport";
 import { CommuneSearch } from "./CommuneSearch";
+import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
@@ -89,6 +91,12 @@ interface SidebarProps {
   onCreateFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | void> | void;
   /** Renombra una carpeta existente. */
   onRenameFolder?: (id: string, name: string) => Promise<void> | void;
+  /** Renombra un POI existente. */
+  onRenamePoi?: (id: string, name: string) => Promise<void> | void;
+  /** Crea un POI individual (usado por "Crear un POI" en clic derecho de carpeta). */
+  onCreatePoi?: (payload: import("@/types/pois").PoiInsert) => Promise<unknown> | void;
+  /** Devuelve el centro actual del mapa para precargar lat/lng al crear un POI. */
+  getMapCenter?: () => { lat: number; lng: number } | null;
   /** Centra el mapa sobre un POI (doble click sobre el item). */
   onFocusPoi?: (poi: SavedPoi) => void;
   // Papelera
@@ -239,6 +247,9 @@ export const Sidebar = ({
   onImportFilesIntoFolder,
   onCreateFolder,
   onRenameFolder,
+  onRenamePoi,
+  onCreatePoi,
+  getMapCenter,
   onFocusPoi,
   trashedPois = [],
   trashedFolders = [],
@@ -298,12 +309,17 @@ export const Sidebar = ({
       return next;
     });
 
-  // Portapapeles para cortar/pegar (carpetas o POIs)
+  // Portapapeles para cortar/copiar/pegar (carpetas o POIs).
+  // `mode: "cut"` mueve, `mode: "copy"` duplica (sólo POIs por ahora).
   const [clipboard, setClipboard] = useState<
-    | { kind: "folder"; id: string; name: string }
-    | { kind: "poi"; id: string; name: string }
+    | { kind: "folder"; id: string; name: string; mode: "cut" | "copy" }
+    | { kind: "poi"; id: string; name: string; mode: "cut" | "copy" }
     | null
   >(null);
+
+  // Diálogo "Crear POI" — abierto desde clic derecho en una carpeta.
+  const [createPoiTarget, setCreatePoiTarget] = useState<PoiFolder | null>(null);
+  const [createPoiOpen, setCreatePoiOpen] = useState(false);
 
   // Confirmaciones de borrado — todo lo eliminado va a la papelera (30 días).
   const confirmRemovePoi = (id: string, name: string) => {
@@ -373,27 +389,69 @@ export const Sidebar = ({
     return out;
   };
 
-  // Toggle de visibilidad de carpeta con propagación a TODAS las subcarpetas (estilo Google Earth):
-  // al ocultar una carpeta, sus descendientes se marcan como ocultas; al mostrarla, se desocultan.
+  // Mapa rápido de id de POI → POI completo (para Copiar y export KMZ).
+  const poiByIdMap = useMemo(() => {
+    const m = new Map<string, SavedPoi>();
+    savedPois.forEach((p) => m.set(p.id, p));
+    return m;
+  }, [savedPois]);
+
+  // Cadena de ancestros de una carpeta (excluido el id mismo).
+  const ancestorsOfFolder = (id: string): string[] => {
+    const out: string[] = [];
+    let cur = poiFolders.find((f) => f.id === id)?.parent_id ?? null;
+    let hops = 0;
+    while (cur && hops++ < 1000) {
+      out.push(cur);
+      cur = poiFolders.find((f) => f.id === cur)?.parent_id ?? null;
+    }
+    return out;
+  };
+
+  // Toggle de visibilidad jerárquica (estilo Google Earth):
+  // - Al MARCAR (mostrar): desocultamos esta carpeta y TODOS sus ancestros
+  //   (sin tocar hermanos), sin cambiar el estado de los descendientes.
+  // - Al DESMARCAR (ocultar): ocultamos esta carpeta y todos sus descendientes.
   const togglePoiFolderVisibility = (id: string) => {
     if (!onHiddenPoiFoldersChange) return;
     const current = hiddenPoiFolders ?? new Set<string>();
     const next = new Set(current);
     const willHide = !next.has(id);
-    const affected = id === "__orphan__" ? new Set<string>() : descendantsOfFolder(id);
-    affected.add(id);
     if (willHide) {
-      affected.forEach((x) => next.add(x));
+      next.add(id);
+      if (id !== "__orphan__") {
+        descendantsOfFolder(id).forEach((d) => next.add(d));
+      }
     } else {
-      affected.forEach((x) => next.delete(x));
+      next.delete(id);
+      if (id !== "__orphan__") {
+        // Subir por la cadena de ancestros para que el padre muestre la rama.
+        ancestorsOfFolder(id).forEach((a) => next.delete(a));
+      }
     }
     onHiddenPoiFoldersChange(next);
+  };
+
+  // Estado del checkbox para tri-state (checked / unchecked / indeterminate).
+  const checkStateForFolder = (id: string): boolean | "indeterminate" => {
+    const hidden = hiddenPoiFolders ?? new Set<string>();
+    if (hidden.has(id)) return false;
+    if (id === "__orphan__") return true;
+    const desc = descendantsOfFolder(id);
+    for (const d of desc) {
+      if (hidden.has(d)) return "indeterminate";
+    }
+    return true;
   };
 
   const handlePaste = async (targetFolderId: string | null) => {
     if (!clipboard) return;
     try {
       if (clipboard.kind === "folder") {
+        if (clipboard.mode === "copy") {
+          toast.info("Copiar carpetas no está disponible aún");
+          return;
+        }
         if (clipboard.id === targetFolderId) {
           toast.error("No puedes pegar la carpeta dentro de sí misma");
           return;
@@ -403,10 +461,37 @@ export const Sidebar = ({
           return;
         }
         await onMoveFolder(clipboard.id, targetFolderId);
+      } else if (clipboard.mode === "copy") {
+        // Duplicar el POI en la carpeta destino.
+        if (!onCreatePoi) {
+          toast.error("Pegar (copia) no disponible");
+          return;
+        }
+        const src = poiByIdMap.get(clipboard.id);
+        if (!src) {
+          toast.error("El POI original ya no existe");
+          return;
+        }
+        await onCreatePoi({
+          name: src.name,
+          description: src.description ?? null,
+          category: src.category ?? null,
+          color: src.color ?? null,
+          icon: src.icon ?? null,
+          lat: src.lat,
+          lng: src.lng,
+          properties: src.properties,
+          source_layer: src.source_layer ?? null,
+          folder_id: targetFolderId,
+        });
       } else {
         await onMovePois([clipboard.id], targetFolderId);
       }
-      toast.success(`"${clipboard.name}" movido`);
+      toast.success(
+        clipboard.mode === "copy"
+          ? `"${clipboard.name}" copiado`
+          : `"${clipboard.name}" movido`,
+      );
       if (targetFolderId) {
         setExpandedPoiFolders((p) => new Set(p).add(targetFolderId));
       }
@@ -543,6 +628,7 @@ export const Sidebar = ({
   };
 
   return (
+    <>
     <aside
       className="relative flex flex-shrink-0 flex-col overflow-hidden border-r border-border/60 bg-surface/95"
       style={{ width: sidebarWidth }}
@@ -1268,8 +1354,46 @@ export const Sidebar = ({
                         </div>
                       </ContextMenuTrigger>
                       <ContextMenuContent className="z-[1100]">
-                        <ContextMenuItem onSelect={() => setClipboard({ kind: "poi", id: p.id, name: p.name })}>
+                        <ContextMenuItem onSelect={() => setClipboard({ kind: "poi", id: p.id, name: p.name, mode: "copy" })}>
+                          <Copy className="mr-2 h-3.5 w-3.5" /> Copiar
+                        </ContextMenuItem>
+                        <ContextMenuItem onSelect={() => setClipboard({ kind: "poi", id: p.id, name: p.name, mode: "cut" })}>
                           <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          disabled={!clipboard}
+                          onSelect={() => handlePaste(p.folder_id)}
+                        >
+                          <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
+                          {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar"}
+                        </ContextMenuItem>
+                        {onRenamePoi && (
+                          <ContextMenuItem
+                            onSelect={async () => {
+                              const next = window.prompt(`Nuevo nombre para "${p.name}":`, p.name);
+                              if (!next || !next.trim() || next.trim() === p.name) return;
+                              try {
+                                await onRenamePoi(p.id, next.trim());
+                                toast.success(`POI renombrado a "${next.trim()}"`);
+                              } catch (err) {
+                                toast.error(err instanceof Error ? err.message : "Error al renombrar");
+                              }
+                            }}
+                          >
+                            <Pencil className="mr-2 h-3.5 w-3.5" /> Cambiar nombre…
+                          </ContextMenuItem>
+                        )}
+                        <ContextMenuItem
+                          onSelect={async () => {
+                            try {
+                              await exportPoiAsKmz(p);
+                              toast.success(`"${p.name}" exportado como KMZ`);
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : "Error al exportar KMZ");
+                            }
+                          }}
+                        >
+                          <Download className="mr-2 h-3.5 w-3.5" /> Guardar como KMZ
                         </ContextMenuItem>
                         <ContextMenuSeparator />
                         <ContextMenuItem onSelect={() => confirmRemovePoi(p.id, p.name)} className="text-destructive focus:text-destructive">
@@ -1288,7 +1412,8 @@ export const Sidebar = ({
                       !!clipboard &&
                       !(clipboard.kind === "folder" && clipboard.id === f.id) &&
                       !(clipboard.kind === "folder" && descendantsOfFolder(clipboard.id).has(f.id));
-                    const isHidden = hiddenPoiFolders?.has(f.id) ?? false;
+                    const checkState = checkStateForFolder(f.id);
+                    const isHidden = checkState === false;
                     return (
                       <div key={f.id}>
                         <div className="flex w-full items-center gap-1">
@@ -1297,7 +1422,7 @@ export const Sidebar = ({
                             style={{ paddingLeft: `${depth * 12 + 2}px` }}
                           >
                             <Checkbox
-                              checked={!isHidden}
+                              checked={checkState}
                               onCheckedChange={() => togglePoiFolderVisibility(f.id)}
                               onClick={(e) => e.stopPropagation()}
                               className="h-3.5 w-3.5"
@@ -1324,8 +1449,39 @@ export const Sidebar = ({
                               </button>
                             </ContextMenuTrigger>
                             <ContextMenuContent className="z-[1100]">
-                              <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name })}>
+                              <ContextMenuItem onSelect={() => setClipboard({ kind: "folder", id: f.id, name: f.name, mode: "cut" })}>
                                 <Scissors className="mr-2 h-3.5 w-3.5" /> Cortar carpeta
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                disabled={!canPasteHere}
+                                onSelect={() => handlePaste(f.id)}
+                              >
+                                <ClipboardPaste className="mr-2 h-3.5 w-3.5" />
+                                {clipboard ? `Pegar "${clipboard.name}" aquí` : "Pegar aquí"}
+                              </ContextMenuItem>
+                              {onCreatePoi && (
+                                <ContextMenuItem
+                                  onSelect={() => {
+                                    setCreatePoiTarget(f);
+                                    setCreatePoiOpen(true);
+                                  }}
+                                >
+                                  <Plus className="mr-2 h-3.5 w-3.5" />
+                                  Crear un POI…
+                                </ContextMenuItem>
+                              )}
+                              <ContextMenuItem
+                                onSelect={async () => {
+                                  try {
+                                    await exportFolderAsKmz(f, poiFolders, savedPois);
+                                    toast.success(`"${f.name}" exportado como KMZ`);
+                                  } catch (err) {
+                                    toast.error(err instanceof Error ? err.message : "Error al exportar KMZ");
+                                  }
+                                }}
+                              >
+                                <Download className="mr-2 h-3.5 w-3.5" />
+                                Guardar como KMZ
                               </ContextMenuItem>
                               <ContextMenuItem
                                 disabled={!canPasteHere}
@@ -1741,6 +1897,48 @@ export const Sidebar = ({
         <span className="h-10 w-[3px] rounded-full bg-border/60 transition-colors group-hover:bg-primary" />
       </div>
     </aside>
+    {onCreatePoi && (
+      <CreatePoiDialog
+        open={createPoiOpen}
+        onOpenChange={(v) => {
+          setCreatePoiOpen(v);
+          if (!v) setCreatePoiTarget(null);
+        }}
+        folder={createPoiTarget}
+        defaultLatLng={getMapCenter ? getMapCenter() : null}
+        inheritedIcon={(() => {
+          if (!createPoiTarget) return null;
+          const sibs = poisByFolderMap.get(createPoiTarget.id) ?? [];
+          const counts = new Map<string, number>();
+          for (const s of sibs) {
+            if (s.icon) counts.set(s.icon, (counts.get(s.icon) ?? 0) + 1);
+          }
+          let best: string | null = null;
+          let bestN = 0;
+          counts.forEach((n, k) => { if (n > bestN) { bestN = n; best = k; } });
+          return best;
+        })()}
+        inheritedColor={(() => {
+          if (!createPoiTarget) return null;
+          const sibs = poisByFolderMap.get(createPoiTarget.id) ?? [];
+          const counts = new Map<string, number>();
+          for (const s of sibs) {
+            if (s.color) counts.set(s.color, (counts.get(s.color) ?? 0) + 1);
+          }
+          let best: string | null = null;
+          let bestN = 0;
+          counts.forEach((n, k) => { if (n > bestN) { bestN = n; best = k; } });
+          return best;
+        })()}
+        onCreate={async (payload) => {
+          await onCreatePoi(payload);
+          if (createPoiTarget) {
+            setExpandedPoiFolders((prev) => new Set(prev).add(createPoiTarget.id));
+          }
+        }}
+      />
+    )}
+    </>
   );
 };
 
