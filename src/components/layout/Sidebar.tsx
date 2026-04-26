@@ -95,6 +95,10 @@ interface SidebarProps {
   onRenamePoi?: (id: string, name: string) => Promise<void> | void;
   /** Crea un POI individual (usado por "Crear un POI" en clic derecho de carpeta). */
   onCreatePoi?: (payload: import("@/types/pois").PoiInsert) => Promise<unknown> | void;
+  /** Si está definido, "Crear un POI" en clic derecho de carpeta delega al padre (usa el editor central). */
+  onRequestCreatePoiInFolder?: (folder: PoiFolder | null) => void;
+  /** Si está definido, "Editar propiedades" en clic derecho de POI abre el editor central. */
+  onEditPoi?: (poi: SavedPoi) => void;
   /** Devuelve el centro actual del mapa para precargar lat/lng al crear un POI. */
   getMapCenter?: () => { lat: number; lng: number } | null;
   /** Centra el mapa sobre un POI (doble click sobre el item). */
@@ -249,6 +253,8 @@ export const Sidebar = ({
   onRenameFolder,
   onRenamePoi,
   onCreatePoi,
+  onRequestCreatePoiInFolder,
+  onEditPoi,
   getMapCenter,
   onFocusPoi,
   trashedPois = [],
