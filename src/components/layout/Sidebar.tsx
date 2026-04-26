@@ -307,12 +307,17 @@ export const Sidebar = ({
       return next;
     });
 
-  // Portapapeles para cortar/pegar (carpetas o POIs)
+  // Portapapeles para cortar/copiar/pegar (carpetas o POIs).
+  // `mode: "cut"` mueve, `mode: "copy"` duplica (sólo POIs por ahora).
   const [clipboard, setClipboard] = useState<
-    | { kind: "folder"; id: string; name: string }
-    | { kind: "poi"; id: string; name: string }
+    | { kind: "folder"; id: string; name: string; mode: "cut" | "copy" }
+    | { kind: "poi"; id: string; name: string; mode: "cut" | "copy" }
     | null
   >(null);
+
+  // Diálogo "Crear POI" — abierto desde clic derecho en una carpeta.
+  const [createPoiTarget, setCreatePoiTarget] = useState<PoiFolder | null>(null);
+  const [createPoiOpen, setCreatePoiOpen] = useState(false);
 
   // Confirmaciones de borrado — todo lo eliminado va a la papelera (30 días).
   const confirmRemovePoi = (id: string, name: string) => {
