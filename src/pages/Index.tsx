@@ -6,6 +6,7 @@ import { MapView } from "@/components/map/MapView";
 import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
 import { PoiManagerDialog } from "@/components/panels/PoiManagerDialog";
 import { SavePoisDialog } from "@/components/panels/SavePoisDialog";
+import { PoiEditorDialog, type PoiEditorDraft } from "@/components/panels/PoiEditorDialog";
 import { CommuneSearchResultsDialog } from "@/components/panels/CommuneSearchResultsDialog";
 import { CommuneCompareDialog } from "@/components/panels/CommuneCompareDialog";
 import { Legend } from "@/components/ui-overlays/Legend";
