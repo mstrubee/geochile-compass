@@ -387,27 +387,69 @@ export const Sidebar = ({
     return out;
   };
 
-  // Toggle de visibilidad de carpeta con propagación a TODAS las subcarpetas (estilo Google Earth):
-  // al ocultar una carpeta, sus descendientes se marcan como ocultas; al mostrarla, se desocultan.
+  // Mapa rápido de id de POI → POI completo (para Copiar y export KMZ).
+  const poiByIdMap = useMemo(() => {
+    const m = new Map<string, SavedPoi>();
+    savedPois.forEach((p) => m.set(p.id, p));
+    return m;
+  }, [savedPois]);
+
+  // Cadena de ancestros de una carpeta (excluido el id mismo).
+  const ancestorsOfFolder = (id: string): string[] => {
+    const out: string[] = [];
+    let cur = poiFolders.find((f) => f.id === id)?.parent_id ?? null;
+    let hops = 0;
+    while (cur && hops++ < 1000) {
+      out.push(cur);
+      cur = poiFolders.find((f) => f.id === cur)?.parent_id ?? null;
+    }
+    return out;
+  };
+
+  // Toggle de visibilidad jerárquica (estilo Google Earth):
+  // - Al MARCAR (mostrar): desocultamos esta carpeta y TODOS sus ancestros
+  //   (sin tocar hermanos), sin cambiar el estado de los descendientes.
+  // - Al DESMARCAR (ocultar): ocultamos esta carpeta y todos sus descendientes.
   const togglePoiFolderVisibility = (id: string) => {
     if (!onHiddenPoiFoldersChange) return;
     const current = hiddenPoiFolders ?? new Set<string>();
     const next = new Set(current);
     const willHide = !next.has(id);
-    const affected = id === "__orphan__" ? new Set<string>() : descendantsOfFolder(id);
-    affected.add(id);
     if (willHide) {
-      affected.forEach((x) => next.add(x));
+      next.add(id);
+      if (id !== "__orphan__") {
+        descendantsOfFolder(id).forEach((d) => next.add(d));
+      }
     } else {
-      affected.forEach((x) => next.delete(x));
+      next.delete(id);
+      if (id !== "__orphan__") {
+        // Subir por la cadena de ancestros para que el padre muestre la rama.
+        ancestorsOfFolder(id).forEach((a) => next.delete(a));
+      }
     }
     onHiddenPoiFoldersChange(next);
+  };
+
+  // Estado del checkbox para tri-state (checked / unchecked / indeterminate).
+  const checkStateForFolder = (id: string): boolean | "indeterminate" => {
+    const hidden = hiddenPoiFolders ?? new Set<string>();
+    if (hidden.has(id)) return false;
+    if (id === "__orphan__") return true;
+    const desc = descendantsOfFolder(id);
+    for (const d of desc) {
+      if (hidden.has(d)) return "indeterminate";
+    }
+    return true;
   };
 
   const handlePaste = async (targetFolderId: string | null) => {
     if (!clipboard) return;
     try {
       if (clipboard.kind === "folder") {
+        if (clipboard.mode === "copy") {
+          toast.info("Copiar carpetas no está disponible aún");
+          return;
+        }
         if (clipboard.id === targetFolderId) {
           toast.error("No puedes pegar la carpeta dentro de sí misma");
           return;
@@ -417,10 +459,37 @@ export const Sidebar = ({
           return;
         }
         await onMoveFolder(clipboard.id, targetFolderId);
+      } else if (clipboard.mode === "copy") {
+        // Duplicar el POI en la carpeta destino.
+        if (!onCreatePoi) {
+          toast.error("Pegar (copia) no disponible");
+          return;
+        }
+        const src = poiByIdMap.get(clipboard.id);
+        if (!src) {
+          toast.error("El POI original ya no existe");
+          return;
+        }
+        await onCreatePoi({
+          name: src.name,
+          description: src.description ?? null,
+          category: src.category ?? null,
+          color: src.color ?? null,
+          icon: src.icon ?? null,
+          lat: src.lat,
+          lng: src.lng,
+          properties: src.properties,
+          source_layer: src.source_layer ?? null,
+          folder_id: targetFolderId,
+        });
       } else {
         await onMovePois([clipboard.id], targetFolderId);
       }
-      toast.success(`"${clipboard.name}" movido`);
+      toast.success(
+        clipboard.mode === "copy"
+          ? `"${clipboard.name}" copiado`
+          : `"${clipboard.name}" movido`,
+      );
       if (targetFolderId) {
         setExpandedPoiFolders((p) => new Set(p).add(targetFolderId));
       }
