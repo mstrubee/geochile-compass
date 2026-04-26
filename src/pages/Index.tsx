@@ -758,6 +758,9 @@ const Index = () => {
           onImportFilesIntoFolder={importFilesIntoFolder}
           onCreateFolder={(name, parentId) => createFolder(name, parentId, null)}
           onDeleteFolder={deleteFolder}
+          onRenameFolder={(id, name) => renameFolder(id, name)}
+          onRenamePoi={(id, name) => updatePoi(id, { name })}
+          onCreatePoi={(payload) => addOnePoi(payload)}
           hiddenPoiFolders={hiddenPoiFolders}
           onHiddenPoiFoldersChange={setHiddenPoiFolders}
           trashedPois={trashedPois}
