@@ -264,9 +264,9 @@ export const useSavedPois = () => {
         .update({ folder_id })
         .in("id", ids);
       if (error) throw new Error(error.message);
-      await refresh();
+      scheduleRefresh();
     },
-    [refresh],
+    [scheduleRefresh],
   );
 
   // Soft delete → mueve a la papelera (30 días)
