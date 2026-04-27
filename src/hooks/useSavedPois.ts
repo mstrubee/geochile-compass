@@ -177,6 +177,20 @@ export const useSavedPois = () => {
     refresh();
   }, [refresh]);
 
+  // Debounce de refresh: cuando se encadenan varias mutaciones (insert masivo,
+  // mover, borrar muchos), agrupa los refresh en uno solo a los 150ms.
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null;
+      void refresh();
+    }, 150);
+  }, [refresh]);
+  useEffect(() => () => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+  }, []);
+
   const addMany = useCallback(
     async (items: PoiInsert[], folder_id: string | null = null) => {
       if (!user) throw new Error("Debes iniciar sesión");
