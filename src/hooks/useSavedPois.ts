@@ -253,7 +253,7 @@ export const useSavedPois = () => {
       if (error) throw new Error(error.message);
       scheduleRefresh();
     },
-    [refresh],
+    [scheduleRefresh],
   );
 
   const moveMany = useCallback(
