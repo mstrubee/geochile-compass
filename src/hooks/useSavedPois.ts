@@ -303,9 +303,9 @@ export const useSavedPois = () => {
         .update({ deleted_at: null })
         .in("id", ids);
       if (error) throw new Error(error.message);
-      await refresh();
+      scheduleRefresh();
     },
-    [refresh],
+    [scheduleRefresh],
   );
 
   const purgePermanently = useCallback(
