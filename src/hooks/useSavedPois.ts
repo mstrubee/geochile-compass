@@ -251,7 +251,7 @@ export const useSavedPois = () => {
         .update(patch as never)
         .eq("id", id);
       if (error) throw new Error(error.message);
-      await refresh();
+      scheduleRefresh();
     },
     [refresh],
   );
