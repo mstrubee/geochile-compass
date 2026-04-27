@@ -277,9 +277,9 @@ export const useSavedPois = () => {
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
       if (error) throw new Error(error.message);
-      await refresh();
+      scheduleRefresh();
     },
-    [refresh],
+    [scheduleRefresh],
   );
 
   const removeMany = useCallback(
