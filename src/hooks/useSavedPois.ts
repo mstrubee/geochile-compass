@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { loadPoiCache, savePoiCache } from "@/services/poiCache";
@@ -177,6 +177,20 @@ export const useSavedPois = () => {
     refresh();
   }, [refresh]);
 
+  // Debounce de refresh: cuando se encadenan varias mutaciones (insert masivo,
+  // mover, borrar muchos), agrupa los refresh en uno solo a los 150ms.
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null;
+      void refresh();
+    }, 150);
+  }, [refresh]);
+  useEffect(() => () => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+  }, []);
+
   const addMany = useCallback(
     async (items: PoiInsert[], folder_id: string | null = null) => {
       if (!user) throw new Error("Debes iniciar sesión");
@@ -237,9 +251,9 @@ export const useSavedPois = () => {
         .update(patch as never)
         .eq("id", id);
       if (error) throw new Error(error.message);
-      await refresh();
+      scheduleRefresh();
     },
-    [refresh],
+    [scheduleRefresh],
   );
 
   const moveMany = useCallback(
@@ -250,9 +264,9 @@ export const useSavedPois = () => {
         .update({ folder_id })
         .in("id", ids);
       if (error) throw new Error(error.message);
-      await refresh();
+      scheduleRefresh();
     },
-    [refresh],
+    [scheduleRefresh],
   );
 
   // Soft delete → mueve a la papelera (30 días)
@@ -263,9 +277,9 @@ export const useSavedPois = () => {
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
       if (error) throw new Error(error.message);
-      await refresh();
+      scheduleRefresh();
     },
-    [refresh],
+    [scheduleRefresh],
   );
 
   const removeMany = useCallback(
@@ -276,9 +290,9 @@ export const useSavedPois = () => {
         .update({ deleted_at: new Date().toISOString() })
         .in("id", ids);
       if (error) throw new Error(error.message);
-      await refresh();
+      scheduleRefresh();
     },
-    [refresh],
+    [scheduleRefresh],
   );
 
   const restore = useCallback(
@@ -289,9 +303,9 @@ export const useSavedPois = () => {
         .update({ deleted_at: null })
         .in("id", ids);
       if (error) throw new Error(error.message);
-      await refresh();
+      scheduleRefresh();
     },
-    [refresh],
+    [scheduleRefresh],
   );
 
   const purgePermanently = useCallback(
