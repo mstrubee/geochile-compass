@@ -7,6 +7,8 @@ import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Auth from "./pages/Auth.tsx";
 import MapaComunasPage from "./pages/MapaComunasPage.tsx";
+import AdminCapas from "./pages/AdminCapas.tsx";
+import { TerritorialVisibilityProvider } from "@/hooks/useTerritorialVisibility";
 
 const queryClient = new QueryClient();
 
@@ -16,13 +18,16 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/comunas" element={<MapaComunasPage />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <TerritorialVisibilityProvider>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/comunas" element={<MapaComunasPage />} />
+            <Route path="/admin/capas" element={<AdminCapas />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </TerritorialVisibilityProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
