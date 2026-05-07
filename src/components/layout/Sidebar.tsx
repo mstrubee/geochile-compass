@@ -25,6 +25,7 @@ import { OVERPASS_PRESETS } from "@/services/overpassService";
 import { exportPoiAsKmz, exportFolderAsKmz } from "@/utils/kmzExport";
 import { CommuneSearch } from "./CommuneSearch";
 import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
+import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
@@ -956,6 +957,12 @@ export const Sidebar = ({
               </p>
             </div>
           )}
+          <div className="mt-3 border-t border-border/40 pt-2">
+            <div className="mb-1 px-1 text-[10px] uppercase tracking-wider text-text-muted">
+              Capas personalizadas
+            </div>
+            <TerritorialGroupsSection />
+          </div>
         </SidebarSection>
 
 
