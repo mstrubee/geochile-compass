@@ -4,7 +4,98 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
-import { parseHtml } from "../scan-territorial-html/index.ts";
+interface ScannedLayer {
+  name: string;
+  count: number;
+  features: Array<{
+    external_id: string | null;
+    name: string | null;
+    lat: number | null;
+    lng: number | null;
+    geometry: any;
+    properties: Record<string, unknown>;
+  }>;
+}
+
+const parseHtml = (html: string): ScannedLayer[] => {
+  const layers = new Map<string, ScannedLayer>();
+  const ensure = (name: string) => {
+    if (!layers.has(name)) layers.set(name, { name, count: 0, features: [] });
+    return layers.get(name)!;
+  };
+  const folderRe = /<Folder\b[^>]*>([\s\S]*?)<\/Folder>/gi;
+  const placemarkRe = /<Placemark\b[^>]*>([\s\S]*?)<\/Placemark>/gi;
+  const nameRe = /<name>([\s\S]*?)<\/name>/i;
+  const coordRe = /<coordinates>\s*([\s\S]*?)\s*<\/coordinates>/i;
+  const idRe = /<Placemark\s+id=["']([^"']+)["']/i;
+  const matches = [...html.matchAll(folderRe)];
+  if (matches.length) {
+    for (const m of matches) {
+      const inner = m[1];
+      const folderName = (inner.match(/^[\s\S]*?<name>([\s\S]*?)<\/name>/)?.[1] || "Capa").trim();
+      const layer = ensure(folderName);
+      const pms = [...inner.matchAll(placemarkRe)];
+      for (const pm of pms) {
+        const pmHtml = pm[0];
+        const body = pm[1];
+        const nameMatch = body.match(nameRe);
+        const coordMatch = body.match(coordRe);
+        const idMatch = pmHtml.match(idRe);
+        if (!coordMatch) continue;
+        const coordStr = coordMatch[1].trim();
+        const tuples = coordStr.split(/\s+/).map((t) => {
+          const [lng, lat] = t.split(",").map(Number);
+          return [lng, lat];
+        }).filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
+        if (!tuples.length) continue;
+        const isPoint = tuples.length === 1;
+        const geometry = isPoint
+          ? { type: "Point", coordinates: tuples[0] }
+          : { type: "LineString", coordinates: tuples };
+        layer.features.push({
+          external_id: idMatch?.[1] ?? null,
+          name: nameMatch?.[1].replace(/<!\[CDATA\[|\]\]>/g, "").trim() ?? null,
+          lat: isPoint ? tuples[0][1] : null,
+          lng: isPoint ? tuples[0][0] : null,
+          geometry,
+          properties: {},
+        });
+        layer.count++;
+      }
+    }
+  }
+  if (!layers.size) {
+    const varRe = /(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*(\[[\s\S]*?\]);/g;
+    for (const m of html.matchAll(varRe)) {
+      const varName = m[1];
+      let arr: any;
+      try {
+        const cleaned = m[2].replace(/,(\s*[}\]])/g, "$1");
+        arr = JSON.parse(cleaned);
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(arr)) continue;
+      const layer = ensure(varName);
+      for (const obj of arr) {
+        if (!obj || typeof obj !== "object") continue;
+        const lat = Number(obj.lat ?? obj.latitude ?? obj.LAT);
+        const lng = Number(obj.lng ?? obj.lon ?? obj.longitude ?? obj.LON ?? obj.LNG);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        layer.features.push({
+          external_id: obj.id != null ? String(obj.id) : null,
+          name: obj.name ?? obj.Name ?? obj.title ?? null,
+          lat,
+          lng,
+          geometry: { type: "Point", coordinates: [lng, lat] },
+          properties: obj,
+        });
+        layer.count++;
+      }
+    }
+  }
+  return Array.from(layers.values()).filter((l) => l.count > 0);
+};
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
