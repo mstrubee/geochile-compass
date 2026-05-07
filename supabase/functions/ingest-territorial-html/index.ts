@@ -166,22 +166,35 @@ const json = (status: number, body: unknown) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-const uploadToDrive = async (filename: string, html: string): Promise<string | null> => {
+const MIME_BY_TYPE: Record<string, string> = {
+  html: "text/html",
+  geojson: "application/geo+json",
+  kml: "application/vnd.google-earth.kml+xml",
+  kmz: "application/vnd.google-earth.kmz",
+};
+
+const uploadToDrive = async (
+  filename: string,
+  bytes: Uint8Array,
+  mimeType: string,
+): Promise<string | null> => {
   if (!LOVABLE_API_KEY || !GOOGLE_DRIVE_API_KEY) return null;
   try {
     const boundary = "----lvbnd" + crypto.randomUUID();
-    const metadata = {
-      name: filename,
-      description: "GeoPlanet territorial source",
-    };
-    const body =
+    const metadata = { name: filename, description: "GeoPlanet territorial source" };
+    const enc = new TextEncoder();
+    const head = enc.encode(
       `--${boundary}\r\n` +
       `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
       JSON.stringify(metadata) +
       `\r\n--${boundary}\r\n` +
-      `Content-Type: text/html\r\n\r\n` +
-      html +
-      `\r\n--${boundary}--`;
+      `Content-Type: ${mimeType}\r\n\r\n`,
+    );
+    const tail = enc.encode(`\r\n--${boundary}--`);
+    const body = new Uint8Array(head.length + bytes.length + tail.length);
+    body.set(head, 0);
+    body.set(bytes, head.length);
+    body.set(tail, head.length + bytes.length);
     const resp = await fetch(
       "https://connector-gateway.lovable.dev/google_drive/upload/drive/v3/files?uploadType=multipart",
       {
