@@ -123,6 +123,63 @@ export const parseHtml = (html: string): ScannedLayer[] => {
   return Array.from(layers.values()).filter((l) => l.count > 0);
 };
 
+const parseGeoJson = (text: string): ScannedLayer[] => {
+  const layers = new Map<string, ScannedLayer>();
+  const ensure = (name: string) => {
+    if (!layers.has(name)) layers.set(name, { name, count: 0, features: [] });
+    return layers.get(name)!;
+  };
+  let data: any;
+  try { data = JSON.parse(text); } catch { return []; }
+  const feats: any[] = data?.type === "FeatureCollection" ? (data.features ?? [])
+    : data?.type === "Feature" ? [data]
+    : Array.isArray(data) ? data : [];
+  for (const f of feats) {
+    const props = f?.properties ?? {};
+    const layerName = String(props.layer ?? props.folder ?? props.category ?? props.group ?? "default");
+    const layer = ensure(layerName);
+    const g = f?.geometry;
+    if (!g) continue;
+    let lat: number | null = null, lng: number | null = null;
+    if (g.type === "Point" && Array.isArray(g.coordinates)) {
+      lng = Number(g.coordinates[0]); lat = Number(g.coordinates[1]);
+    }
+    layer.features.push({
+      external_id: f.id != null ? String(f.id) : (props.id != null ? String(props.id) : null),
+      name: props.name ?? props.Name ?? props.title ?? null,
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+      geometry: g,
+      properties: props,
+    });
+    layer.count++;
+  }
+  return Array.from(layers.values()).filter((l) => l.count > 0);
+};
+
+const parseKmz = async (buffer: ArrayBuffer): Promise<ScannedLayer[]> => {
+  const { default: JSZip } = await import("npm:jszip@3.10.1");
+  const zip = await JSZip.loadAsync(buffer);
+  let kmlEntry = zip.file("doc.kml");
+  if (!kmlEntry) {
+    const names = Object.keys(zip.files).filter((n) => n.toLowerCase().endsWith(".kml"));
+    if (names.length) kmlEntry = zip.file(names[0]);
+  }
+  if (!kmlEntry) return [];
+  const xml = await kmlEntry.async("string");
+  return parseHtml(xml);
+};
+
+export const parseSource = async (
+  fileType: string,
+  text: string,
+  buffer: ArrayBuffer | null,
+): Promise<ScannedLayer[]> => {
+  if (fileType === "geojson") return parseGeoJson(text);
+  if (fileType === "kmz") return buffer ? await parseKmz(buffer) : [];
+  return parseHtml(text);
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
