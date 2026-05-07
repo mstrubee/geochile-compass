@@ -117,15 +117,232 @@ export type Database = {
           },
         ]
       }
+      territorial_features: {
+        Row: {
+          created_at: string
+          external_id: string | null
+          geometry: Json
+          id: string
+          lat: number | null
+          layer_id: string
+          lng: number | null
+          name: string | null
+          properties: Json
+        }
+        Insert: {
+          created_at?: string
+          external_id?: string | null
+          geometry: Json
+          id?: string
+          lat?: number | null
+          layer_id: string
+          lng?: number | null
+          name?: string | null
+          properties?: Json
+        }
+        Update: {
+          created_at?: string
+          external_id?: string | null
+          geometry?: Json
+          id?: string
+          lat?: number | null
+          layer_id?: string
+          lng?: number | null
+          name?: string | null
+          properties?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "territorial_features_layer_id_fkey"
+            columns: ["layer_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      territorial_layer_groups: {
+        Row: {
+          color: string | null
+          created_at: string
+          icon: string | null
+          id: string
+          name: string
+          order_index: number
+          slug: string
+          updated_at: string
+          visible_default: boolean
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          icon?: string | null
+          id?: string
+          name: string
+          order_index?: number
+          slug: string
+          updated_at?: string
+          visible_default?: boolean
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          icon?: string | null
+          id?: string
+          name?: string
+          order_index?: number
+          slug?: string
+          updated_at?: string
+          visible_default?: boolean
+        }
+        Relationships: []
+      }
+      territorial_layers: {
+        Row: {
+          bbox: Json | null
+          color: string | null
+          created_at: string
+          feature_count: number
+          group_id: string
+          icon: string | null
+          id: string
+          name: string
+          order_index: number
+          source_file_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          bbox?: Json | null
+          color?: string | null
+          created_at?: string
+          feature_count?: number
+          group_id: string
+          icon?: string | null
+          id?: string
+          name: string
+          order_index?: number
+          source_file_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bbox?: Json | null
+          color?: string | null
+          created_at?: string
+          feature_count?: number
+          group_id?: string
+          icon?: string | null
+          id?: string
+          name?: string
+          order_index?: number
+          source_file_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "territorial_layers_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layer_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      territorial_source_files: {
+        Row: {
+          dedup_strategy: string
+          error: string | null
+          excluded_layers: Json
+          gdrive_file_id: string | null
+          group_id: string | null
+          id: string
+          layers_summary: Json | null
+          original_filename: string
+          processed_at: string | null
+          size_bytes: number | null
+          status: string
+          storage_path: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          dedup_strategy?: string
+          error?: string | null
+          excluded_layers?: Json
+          gdrive_file_id?: string | null
+          group_id?: string | null
+          id?: string
+          layers_summary?: Json | null
+          original_filename: string
+          processed_at?: string | null
+          size_bytes?: number | null
+          status?: string
+          storage_path: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          dedup_strategy?: string
+          error?: string | null
+          excluded_layers?: Json
+          gdrive_file_id?: string | null
+          group_id?: string | null
+          id?: string
+          layers_summary?: Json | null
+          original_filename?: string
+          processed_at?: string | null
+          size_bytes?: number | null
+          status?: string
+          storage_path?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "territorial_source_files_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layer_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       purge_deleted_pois: { Args: never; Returns: undefined }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -252,6 +469,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const
