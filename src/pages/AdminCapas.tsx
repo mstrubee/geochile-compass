@@ -251,14 +251,28 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     onOpenChange(false);
   };
 
+  const detectFileType = (f: File): "html" | "geojson" | "kml" | "kmz" => {
+    const n = f.name.toLowerCase();
+    if (n.endsWith(".kmz")) return "kmz";
+    if (n.endsWith(".kml")) return "kml";
+    if (n.endsWith(".geojson") || n.endsWith(".json")) return "geojson";
+    return "html";
+  };
+
   const handleUpload = async () => {
     if (!file || !groupId) return;
     setUploading(true);
     try {
+      const fileType = detectFileType(file);
+      const mime =
+        fileType === "kmz" ? "application/vnd.google-earth.kmz"
+        : fileType === "kml" ? "application/vnd.google-earth.kml+xml"
+        : fileType === "geojson" ? "application/geo+json"
+        : "text/html";
       const path = `${Date.now()}-${file.name.replace(/[^\w.-]+/g, "_")}`;
       const up = await supabase.storage
         .from("territorial-sources")
-        .upload(path, file, { contentType: "text/html", upsert: false });
+        .upload(path, file, { contentType: mime, upsert: false });
       if (up.error) throw up.error;
 
       const { data: sf, error: sfErr } = await supabase
@@ -269,7 +283,8 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
           storage_path: path,
           status: "pending",
           group_id: groupId,
-        })
+          file_type: fileType,
+        } as never)
         .select("id")
         .single();
       if (sfErr || !sf) throw sfErr || new Error("insert failed");
