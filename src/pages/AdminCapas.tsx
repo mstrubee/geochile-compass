@@ -105,7 +105,7 @@ const AdminCapas = () => {
           </Button>
           <h1 className="flex-1 text-base font-semibold">Admin · Capas Territoriales</h1>
           <Button onClick={() => setUploadOpen(true)}>
-            <Upload className="h-4 w-4" /> Cargar HTML
+            <Upload className="h-4 w-4" /> Cargar capa
           </Button>
         </div>
       </header>
