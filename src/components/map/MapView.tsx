@@ -342,3 +342,10 @@ const ZoomControlTopRight = () => {
   }, [map]);
   return null;
 };
+
+const TerritorialLayersHost = () => {
+  const { layers } = useTerritorialLayers();
+  const { visibleLayerIds } = useTerritorialVisibility();
+  return <TerritorialLayersLayer layers={layers} visibleLayerIds={visibleLayerIds} />;
+};
+
