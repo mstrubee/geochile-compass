@@ -105,7 +105,7 @@ const AdminCapas = () => {
           </Button>
           <h1 className="flex-1 text-base font-semibold">Admin · Capas Territoriales</h1>
           <Button onClick={() => setUploadOpen(true)}>
-            <Upload className="h-4 w-4" /> Cargar HTML
+            <Upload className="h-4 w-4" /> Cargar capa
           </Button>
         </div>
       </header>
@@ -251,14 +251,28 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     onOpenChange(false);
   };
 
+  const detectFileType = (f: File): "html" | "geojson" | "kml" | "kmz" => {
+    const n = f.name.toLowerCase();
+    if (n.endsWith(".kmz")) return "kmz";
+    if (n.endsWith(".kml")) return "kml";
+    if (n.endsWith(".geojson") || n.endsWith(".json")) return "geojson";
+    return "html";
+  };
+
   const handleUpload = async () => {
     if (!file || !groupId) return;
     setUploading(true);
     try {
+      const fileType = detectFileType(file);
+      const mime =
+        fileType === "kmz" ? "application/vnd.google-earth.kmz"
+        : fileType === "kml" ? "application/vnd.google-earth.kml+xml"
+        : fileType === "geojson" ? "application/geo+json"
+        : "text/html";
       const path = `${Date.now()}-${file.name.replace(/[^\w.-]+/g, "_")}`;
       const up = await supabase.storage
         .from("territorial-sources")
-        .upload(path, file, { contentType: "text/html", upsert: false });
+        .upload(path, file, { contentType: mime, upsert: false });
       if (up.error) throw up.error;
 
       const { data: sf, error: sfErr } = await supabase
@@ -269,7 +283,8 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
           storage_path: path,
           status: "pending",
           group_id: groupId,
-        })
+          file_type: fileType,
+        } as never)
         .select("id")
         .single();
       if (sfErr || !sf) throw sfErr || new Error("insert failed");
@@ -330,7 +345,7 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     <Dialog open={open} onOpenChange={(v) => (!v ? close() : onOpenChange(v))}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Cargar archivo HTML</DialogTitle>
+          <DialogTitle>Cargar capa territorial</DialogTitle>
         </DialogHeader>
 
         {scanned.length === 0 ? (
@@ -349,12 +364,15 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
               </Select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Archivo HTML (hasta 1GB)</label>
+              <label className="mb-1 block text-sm font-medium">Archivo (hasta 1 GB)</label>
               <Input
                 type="file"
-                accept=".html,.htm,text/html"
+                accept=".html,.htm,.geojson,.json,.kml,.kmz,text/html,application/json,application/geo+json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Formatos aceptados: GeoJSON, HTML, KML, KMZ.
+              </p>
               {file && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   {file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB

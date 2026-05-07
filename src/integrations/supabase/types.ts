@@ -252,6 +252,7 @@ export type Database = {
           dedup_strategy: string
           error: string | null
           excluded_layers: Json
+          file_type: string
           gdrive_file_id: string | null
           group_id: string | null
           id: string
@@ -268,6 +269,7 @@ export type Database = {
           dedup_strategy?: string
           error?: string | null
           excluded_layers?: Json
+          file_type?: string
           gdrive_file_id?: string | null
           group_id?: string | null
           id?: string
@@ -284,6 +286,7 @@ export type Database = {
           dedup_strategy?: string
           error?: string | null
           excluded_layers?: Json
+          file_type?: string
           gdrive_file_id?: string | null
           group_id?: string | null
           id?: string
