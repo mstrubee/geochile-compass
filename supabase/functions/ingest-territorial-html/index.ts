@@ -273,10 +273,16 @@ Deno.serve(async (req) => {
         .eq("id", sourceFileId);
       return json(500, { error: dlErr?.message || "download failed" });
     }
-    const html = await file.text();
-    const scanned = parseHtml(html);
+    const fileType = (sf as any).file_type ?? "html";
+    const buffer = await file.arrayBuffer();
+    const text = fileType === "kmz" ? "" : new TextDecoder().decode(buffer);
+    const scanned = await parseSource(fileType, text, buffer);
 
-    const driveId = await uploadToDrive(`${Date.now()}__${sf.original_filename}`, html);
+    const driveId = await uploadToDrive(
+      `${Date.now()}__${sf.original_filename}`,
+      new Uint8Array(buffer),
+      MIME_BY_TYPE[fileType] ?? "application/octet-stream",
+    );
 
     let totalInserted = 0;
     const summary: Array<{ name: string; count: number }> = [];
