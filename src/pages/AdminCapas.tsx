@@ -345,7 +345,7 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     <Dialog open={open} onOpenChange={(v) => (!v ? close() : onOpenChange(v))}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Cargar archivo HTML</DialogTitle>
+          <DialogTitle>Cargar capa territorial</DialogTitle>
         </DialogHeader>
 
         {scanned.length === 0 ? (
