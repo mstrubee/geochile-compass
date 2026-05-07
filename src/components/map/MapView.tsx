@@ -314,6 +314,8 @@ export const MapView = ({
         onFitDone={onFitIsochroneDone}
       />
       <SavedPoisLayer pois={savedPois} visible={savedPoisVisible} />
+      <TerritorialLayersHost />
+
       <MicrozoneLayer
         microzones={microzones}
         active={microActive}
