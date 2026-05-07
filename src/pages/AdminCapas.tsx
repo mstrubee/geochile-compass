@@ -364,12 +364,15 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
               </Select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Archivo HTML (hasta 1GB)</label>
+              <label className="mb-1 block text-sm font-medium">Archivo (hasta 1 GB)</label>
               <Input
                 type="file"
-                accept=".html,.htm,text/html"
+                accept=".html,.htm,.geojson,.json,.kml,.kmz,text/html,application/json,application/geo+json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Formatos aceptados: GeoJSON, HTML, KML, KMZ.
+              </p>
               {file && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   {file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB
