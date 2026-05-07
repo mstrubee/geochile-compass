@@ -224,8 +224,10 @@ Deno.serve(async (req) => {
       return json(500, { error: dlErr?.message || "download failed" });
     }
 
-    const html = await file.text();
-    const scanned = parseHtml(html);
+    const fileType = (sf as any).file_type ?? "html";
+    const buffer = fileType === "kmz" ? await file.arrayBuffer() : null;
+    const text = fileType === "kmz" ? "" : await file.text();
+    const scanned = await parseSource(fileType, text, buffer);
     const summary = scanned.map((l) => ({ name: l.name, count: l.count }));
 
     await admin
