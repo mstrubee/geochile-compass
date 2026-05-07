@@ -10,6 +10,9 @@ import { ManzanaLayer } from "./ManzanaLayer";
 import { UserLayersLayer } from "./UserLayersLayer";
 import { IsochroneLayer } from "./IsochroneLayer";
 import { SavedPoisLayer } from "./SavedPoisLayer";
+import { TerritorialLayersLayer } from "./TerritorialLayersLayer";
+import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
+import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
 import { MicrozoneLayer } from "./MicrozoneLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { GseFeatureCollection, GseVariable } from "@/types/gse";
@@ -311,6 +314,8 @@ export const MapView = ({
         onFitDone={onFitIsochroneDone}
       />
       <SavedPoisLayer pois={savedPois} visible={savedPoisVisible} />
+      <TerritorialLayersHost />
+
       <MicrozoneLayer
         microzones={microzones}
         active={microActive}
@@ -337,3 +342,10 @@ const ZoomControlTopRight = () => {
   }, [map]);
   return null;
 };
+
+const TerritorialLayersHost = () => {
+  const { layers } = useTerritorialLayers();
+  const { visibleLayerIds } = useTerritorialVisibility();
+  return <TerritorialLayersLayer layers={layers} visibleLayerIds={visibleLayerIds} />;
+};
+
