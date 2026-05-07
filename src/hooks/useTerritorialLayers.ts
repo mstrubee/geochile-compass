@@ -13,8 +13,8 @@ export const useTerritorialLayers = () => {
       supabase.from("territorial_layer_groups").select("*").order("order_index", { ascending: true }),
       supabase.from("territorial_layers").select("*").order("order_index", { ascending: true }),
     ]);
-    if (!g.error) setGroups((g.data ?? []) as TerritorialGroup[]);
-    if (!l.error) setLayers((l.data ?? []) as TerritorialLayer[]);
+    if (!g.error) setGroups((g.data ?? []) as unknown as TerritorialGroup[]);
+    if (!l.error) setLayers((l.data ?? []) as unknown as TerritorialLayer[]);
     setLoading(false);
   }, []);
 
