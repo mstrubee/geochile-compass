@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
+import "leaflet.heat";
 import type { TerritorialLayer } from "@/types/territorial";
 import { useTerritorialFeatures } from "@/hooks/useTerritorialLayers";
 
 interface Props {
   layers: TerritorialLayer[];
   visibleLayerIds: Set<string>;
+  heatmap?: boolean;
 }
 
 const escapeHtml = (s: string) =>
