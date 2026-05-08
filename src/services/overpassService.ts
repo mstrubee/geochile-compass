@@ -56,6 +56,14 @@ export const OVERPASS_PRESETS: OverpassPreset[] = [
       node["amenity"="car_repair"](__BBOX__);
     `,
   },
+  {
+    id: "fuel",
+    label: "Estaciones de servicio",
+    query: `
+      node["amenity"="fuel"](__BBOX__);
+      way["amenity"="fuel"](__BBOX__);
+    `,
+  },
 ];
 
 export interface OverpassBbox {
