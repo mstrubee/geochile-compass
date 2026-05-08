@@ -38,7 +38,7 @@ export interface CommuneBreakdownRow {
   poblacion: number | null;
   hogares: number | null;
   ingreso: number | null;
-  nse: NSE | null;
+  nse: NseLabel | null;
   popInIso: number;
   hhInIso: number;
   incomeInIso: number; // CLP totales
