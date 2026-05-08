@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson } from "lucide-react";
+import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon } from "lucide-react";
 import { htmlToGeoJson, downloadGeoJson } from "@/utils/htmlToGeoJson";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConvertHtmlDialog } from "@/components/admin/ConvertHtmlDialog";
+import { ConfirmDeleteDialog } from "@/components/admin/ConfirmDeleteDialog";
 import {
   Select,
   SelectContent,
@@ -34,6 +38,9 @@ const AdminCapas = () => {
   const [files, setFiles] = useState<TerritorialSourceFile[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+  const [convertTarget, setConvertTarget] = useState<TerritorialSourceFile | null>(null);
+  const [deleteLayerTarget, setDeleteLayerTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteFileTarget, setDeleteFileTarget] = useState<TerritorialSourceFile | null>(null);
 
   const refreshFiles = useCallback(async () => {
     const { data } = await supabase
@@ -87,111 +94,30 @@ const AdminCapas = () => {
     void refresh();
   };
 
-  const deleteLayer = async (id: string) => {
-    if (!window.confirm("¿Eliminar la capa y todos sus puntos?")) return;
+  const performDeleteLayer = async (id: string) => {
     const { error } = await supabase.from("territorial_layers").delete().eq("id", id);
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Capa eliminada");
-      void refresh();
-    }
-  };
-
-  const convertFileToGeoJson = async (f: TerritorialSourceFile) => {
-    if (!f.storage_path) {
-      toast.error("Sin storage_path");
+    if (error) {
+      toast.error(error.message);
       return;
     }
-    const t = toast.loading("Convirtiendo a GeoJSON…");
-    try {
-      const dl = await supabase.storage.from("territorial-sources").download(f.storage_path);
-      if (dl.error || !dl.data) throw dl.error ?? new Error("download failed");
-      const text = await dl.data.text();
-      const fc = htmlToGeoJson(text);
-      if (!fc.features.length) {
-        toast.dismiss(t);
-        toast.error("No se detectaron features en el HTML");
-        return;
-      }
+    toast.success("Capa eliminada");
+    void refresh();
+  };
 
-      const baseName = f.original_filename.replace(/\.[^.]+$/, "");
-      let targetName = `${baseName}.geojson`;
-      let mode: "replace" | "new" = "new";
-
-      const { data: existing } = await supabase
-        .from("territorial_source_files")
-        .select("id, storage_path")
-        .eq("original_filename", targetName)
-        .maybeSingle();
-
-      if (existing) {
-        toast.dismiss(t);
-        const replace = window.confirm(
-          `Ya existe "${targetName}" en el historial.\n\n` +
-          `Aceptar = Reemplazar el archivo existente.\n` +
-          `Cancelar = Guardar con un nombre nuevo.`,
-        );
-        if (replace) {
-          mode = "replace";
-        } else {
-          const suggested = `${baseName}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.geojson`;
-          const input = window.prompt("Nombre del nuevo archivo:", suggested);
-          if (!input) return;
-          targetName = input.endsWith(".geojson") ? input : `${input}.geojson`;
-        }
-      }
-
-      const t2 = toast.loading("Guardando GeoJSON…");
-      const blob = new Blob([JSON.stringify(fc)], { type: "application/geo+json" });
-      const safe = targetName.replace(/[^\w.-]+/g, "_");
-      const path = `${Date.now()}-${safe}`;
-      const up = await supabase.storage
-        .from("territorial-sources")
-        .upload(path, blob, { contentType: "application/geo+json", upsert: false });
-      if (up.error) throw up.error;
-
-      if (mode === "replace" && existing) {
-        if (existing.storage_path) {
-          await supabase.storage.from("territorial-sources").remove([existing.storage_path]);
-        }
-        const { error: updErr } = await supabase
-          .from("territorial_source_files")
-          .update({
-            storage_path: path,
-            size_bytes: blob.size,
-            file_type: "geojson",
-            status: "pending",
-            error: null,
-            layers_summary: null,
-            uploaded_at: new Date().toISOString(),
-          } as never)
-          .eq("id", existing.id);
-        if (updErr) throw updErr;
-      } else {
-        const { error: insErr } = await supabase
-          .from("territorial_source_files")
-          .insert({
-            original_filename: targetName,
-            size_bytes: blob.size,
-            storage_path: path,
-            status: "pending",
-            group_id: f.group_id ?? null,
-            file_type: "geojson",
-          } as never);
-        if (insErr) throw insErr;
-      }
-
-      toast.dismiss(t2);
-      toast.success(
-        mode === "replace"
-          ? `"${targetName}" reemplazado · ${fc.features.length} features`
-          : `"${targetName}" agregado al historial · ${fc.features.length} features`,
-      );
-      void refreshFiles();
-    } catch (e) {
-      toast.dismiss(t);
-      toast.error(e instanceof Error ? e.message : String(e));
+  const performDeleteFile = async (f: TerritorialSourceFile) => {
+    if (f.storage_path) {
+      await supabase.storage.from("territorial-sources").remove([f.storage_path]);
     }
+    const { error } = await supabase
+      .from("territorial_source_files")
+      .delete()
+      .eq("id", f.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Archivo eliminado");
+    void refreshFiles();
   };
 
   return (
@@ -293,7 +219,7 @@ const AdminCapas = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => deleteLayer(l.id)}
+                            onClick={() => setDeleteLayerTarget({ id: l.id, name: l.name })}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -411,7 +337,7 @@ const AdminCapas = () => {
                     variant="ghost"
                     size="icon"
                     title="Convertir a GeoJSON y guardar en historial"
-                    onClick={() => convertFileToGeoJson(f)}
+                    onClick={() => setConvertTarget(f)}
                   >
                     <FileJson className="h-4 w-4" />
                   </Button>
@@ -419,21 +345,7 @@ const AdminCapas = () => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={async () => {
-                    if (!window.confirm(`¿Eliminar "${f.original_filename}"? Se borrará también el archivo en storage.`)) return;
-                    if (f.storage_path) {
-                      await supabase.storage.from("territorial-sources").remove([f.storage_path]);
-                    }
-                    const { error } = await supabase
-                      .from("territorial_source_files")
-                      .delete()
-                      .eq("id", f.id);
-                    if (error) toast.error(error.message);
-                    else {
-                      toast.success("Archivo eliminado");
-                      void refreshFiles();
-                    }
-                  }}
+                  onClick={() => setDeleteFileTarget(f)}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -450,6 +362,38 @@ const AdminCapas = () => {
         onDone={() => {
           void refresh();
           void refreshFiles();
+        }}
+      />
+
+      <ConvertHtmlDialog
+        open={!!convertTarget}
+        onOpenChange={(v) => !v && setConvertTarget(null)}
+        file={convertTarget}
+        onDone={() => {
+          void refreshFiles();
+          void refresh();
+        }}
+      />
+
+      <ConfirmDeleteDialog
+        open={!!deleteLayerTarget}
+        onOpenChange={(v) => !v && setDeleteLayerTarget(null)}
+        title="¿Eliminar la capa?"
+        description="Se eliminarán también todos los puntos asociados. Esta acción no se puede deshacer."
+        resourceName={deleteLayerTarget?.name}
+        onConfirm={async () => {
+          if (deleteLayerTarget) await performDeleteLayer(deleteLayerTarget.id);
+        }}
+      />
+
+      <ConfirmDeleteDialog
+        open={!!deleteFileTarget}
+        onOpenChange={(v) => !v && setDeleteFileTarget(null)}
+        title="¿Eliminar el archivo?"
+        description="Se borrará también el archivo del almacenamiento. Esta acción no se puede deshacer."
+        resourceName={deleteFileTarget?.original_filename}
+        onConfirm={async () => {
+          if (deleteFileTarget) await performDeleteFile(deleteFileTarget);
         }}
       />
     </div>
@@ -583,19 +527,38 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     [scanned, excluded],
   );
 
+  const step = scanned.length === 0 ? 1 : 2;
+
   return (
     <Dialog open={open} onOpenChange={(v) => (!v ? close() : onOpenChange(v))}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Cargar capa territorial</DialogTitle>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Upload className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <DialogTitle>Cargar capa territorial</DialogTitle>
+              <DialogDescription>
+                Subí un archivo, revisá las capas detectadas y procesalas en el grupo destino.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
+
+        {/* Stepper */}
+        <div className="flex items-center gap-2 text-xs">
+          <StepBadge n={1} label="Archivo" active={step === 1} done={step > 1} />
+          <div className="h-px flex-1 bg-border" />
+          <StepBadge n={2} label="Revisar capas" active={step === 2} done={false} />
+        </div>
 
         {scanned.length === 0 ? (
           <div className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Grupo destino</label>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Grupo destino</Label>
               <Select value={groupId} onValueChange={setGroupId}>
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue placeholder="Elegí un grupo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -605,47 +568,66 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Archivo (hasta 1 GB)</label>
-              <Input
-                type="file"
-                accept=".html,.htm,.geojson,.json,.kml,.kmz,text/html,application/json,application/geo+json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Formatos aceptados: GeoJSON, HTML, KML, KMZ.
-              </p>
-              {file && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB
-                </p>
-              )}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Archivo</Label>
+              <label
+                htmlFor="upload-file-input"
+                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30 px-4 py-6 text-center transition-colors hover:border-primary/60 hover:bg-muted/50"
+              >
+                <FileUp className="h-6 w-6 text-muted-foreground" />
+                {file ? (
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-medium">{file.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {(file.size / 1024 / 1024).toFixed(2)} MB · click para cambiar
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-sm font-medium">Hacé click para seleccionar un archivo</div>
+                    <div className="text-xs text-muted-foreground">GeoJSON · HTML · KML · KMZ (hasta 1 GB)</div>
+                  </>
+                )}
+                <input
+                  id="upload-file-input"
+                  type="file"
+                  accept=".html,.htm,.geojson,.json,.kml,.kmz,text/html,application/json,application/geo+json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
+                  className="hidden"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
             </div>
+
             <DialogFooter>
               <Button variant="outline" onClick={close}>Cancelar</Button>
               <Button onClick={handleUpload} disabled={!file || uploading || scanning}>
-                {(uploading || scanning) && <Loader2 className="h-4 w-4 animate-spin" />}
+                {(uploading || scanning) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {uploading ? "Subiendo…" : scanning ? "Analizando…" : "Subir y analizar"}
               </Button>
             </DialogFooter>
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Se detectaron {scanned.length} capas. Marcá las que quieras excluir.
-            </p>
-            <div className="max-h-[40vh] overflow-y-auto rounded-md border border-border/60">
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+              <LayersIcon className="h-4 w-4 text-primary" />
+              <span>
+                Se detectaron <strong>{scanned.length}</strong> capas. Marcá las que quieras excluir.
+              </span>
+            </div>
+
+            <div className="max-h-[40vh] overflow-y-auto rounded-lg border border-border">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-surface-2/80 text-xs text-muted-foreground">
+                <thead className="sticky top-0 bg-muted/60 text-xs text-muted-foreground backdrop-blur">
                   <tr>
-                    <th className="px-3 py-2 text-left">Excluir</th>
-                    <th className="px-3 py-2 text-left">Capa</th>
-                    <th className="px-3 py-2 text-right">Puntos</th>
+                    <th className="px-3 py-2 text-left font-medium">Excluir</th>
+                    <th className="px-3 py-2 text-left font-medium">Capa</th>
+                    <th className="px-3 py-2 text-right font-medium">Puntos</th>
                   </tr>
                 </thead>
                 <tbody>
                   {scanned.map((l) => (
-                    <tr key={l.name} className="border-t border-border/40">
+                    <tr key={l.name} className="border-t border-border/40 hover:bg-muted/30">
                       <td className="px-3 py-2">
                         <Checkbox
                           checked={excluded.has(l.name)}
@@ -666,10 +648,11 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
                 </tbody>
               </table>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Estrategia de duplicados</label>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Estrategia de duplicados</Label>
               <Select value={dedup} onValueChange={(v) => setDedup(v as DedupStrategy)}>
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -679,15 +662,15 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Se importarán {totalIncluded} puntos en total.
-            </p>
+
+            <div className="rounded-lg bg-primary/5 px-3 py-2 text-xs text-foreground">
+              Se importarán <strong>{totalIncluded.toLocaleString()}</strong> puntos en total.
+            </div>
+
             <DialogFooter>
-              <Button variant="outline" onClick={close} disabled={processing}>
-                Cancelar
-              </Button>
+              <Button variant="outline" onClick={close} disabled={processing}>Cancelar</Button>
               <Button onClick={handleProcess} disabled={processing}>
-                {processing && <Loader2 className="h-4 w-4 animate-spin" />}
+                {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {processing ? "Procesando…" : "Procesar"}
               </Button>
             </DialogFooter>
@@ -697,5 +680,21 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     </Dialog>
   );
 };
+
+const StepBadge = ({ n, label, active, done }: { n: number; label: string; active: boolean; done: boolean }) => (
+  <div className="flex items-center gap-1.5">
+    <div
+      className={[
+        "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold",
+        done ? "bg-primary text-primary-foreground"
+          : active ? "bg-primary/20 text-primary ring-2 ring-primary/40"
+          : "bg-muted text-muted-foreground",
+      ].join(" ")}
+    >
+      {n}
+    </div>
+    <span className={active || done ? "font-medium text-foreground" : "text-muted-foreground"}>{label}</span>
+  </div>
+);
 
 export default AdminCapas;
