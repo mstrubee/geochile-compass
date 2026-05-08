@@ -39,7 +39,18 @@ export const useIsochroneInsights = (
         });
         if (reqId !== reqIdRef.current) return;
         if (error) throw new Error(error.message);
-        const summary = (data as { summary?: string })?.summary ?? "";
+        const payload = data as { summary?: string; error?: string; fallback?: boolean };
+        if (payload?.error) {
+          const msg =
+            payload.error === "SERVICE_UNAVAILABLE"
+              ? "El modelo Gemini está temporalmente saturado. Intenta nuevamente en unos minutos."
+              : payload.error === "Rate limit exceeded"
+                ? "Se alcanzó el límite de uso de Gemini. Intenta más tarde."
+                : payload.error;
+          setState({ summary: null, loading: false, error: msg });
+          return;
+        }
+        const summary = payload?.summary ?? "";
         cache.set(key, summary);
         setState({ summary, loading: false, error: null });
       } catch (e) {
