@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Crosshair } from "lucide-react";
+import { Crosshair, MapPin, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -226,14 +226,21 @@ export const PoiEditorDialog = (props: Props) => {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? `Editar "${props.poi.name}"` : "Crear POI"}
-          </DialogTitle>
-          <DialogDescription>
-            {isEdit
-              ? "Edita las propiedades del POI. El icono y la carpeta pueden cambiarse en cualquier momento."
-              : "Define las propiedades del POI. El icono se hereda de los hermanos de la carpeta destino."}
-          </DialogDescription>
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              {isEdit ? <Pencil className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <DialogTitle>
+                {isEdit ? `Editar "${props.poi.name}"` : "Crear POI"}
+              </DialogTitle>
+              <DialogDescription className="mt-1">
+                {isEdit
+                  ? "Edita las propiedades del POI. El icono y la carpeta pueden cambiarse en cualquier momento."
+                  : "Define las propiedades del POI. El icono se hereda de los hermanos de la carpeta destino."}
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="space-y-3">

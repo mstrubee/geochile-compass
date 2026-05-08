@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Download, X, MapPin, ArrowUpDown } from "lucide-react";
+import { Download, X, MapPin, ArrowUpDown, Layers as LayersIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -177,10 +177,17 @@ export const CommuneCompareDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[min(95vw,1100px)]">
         <DialogHeader>
-          <DialogTitle>Comparar comunas — {orderedCommunes.length}</DialogTitle>
-          <DialogDescription>
-            Verde = mejor valor por métrica · Rojo = peor. Click en una métrica para ordenar columnas. Doble click en el encabezado para centrar el mapa.
-          </DialogDescription>
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <LayersIcon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <DialogTitle>Comparar comunas — {orderedCommunes.length}</DialogTitle>
+              <DialogDescription className="mt-1">
+                Verde = mejor valor por métrica · Rojo = peor. Click en una métrica para ordenar columnas. Doble click en el encabezado para centrar el mapa.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-2">
