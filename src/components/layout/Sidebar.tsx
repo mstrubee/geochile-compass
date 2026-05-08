@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -61,6 +61,21 @@ interface SidebarProps {
   onFocusIsochrone: (id: string) => void;
   isoLoading: boolean;
   onToggleIsoMode: () => void;
+  onAnalyzeIsochrone?: (id: string) => void;
+  onSaveIsochrone?: (id: string) => void;
+  // Saved isochrones
+  savedIsochrones?: import("@/types/savedIsochrones").SavedIsochrone[];
+  isoFolders?: import("@/types/savedIsochrones").IsochroneFolder[];
+  loadedSavedIsoIds?: Set<string>;
+  onToggleSavedIsochrone?: (id: string) => void;
+  onAnalyzeSavedIsochrone?: (id: string) => void;
+  onFocusSavedIsochrone?: (id: string) => void;
+  onRenameSavedIsochrone?: (id: string, name: string) => Promise<void> | void;
+  onMoveSavedIsochrone?: (id: string, folderId: string | null) => Promise<void> | void;
+  onDeleteSavedIsochrone?: (id: string) => Promise<void> | void;
+  onCreateIsoFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | null | void> | void;
+  onRenameIsoFolder?: (id: string, name: string) => Promise<void> | void;
+  onDeleteIsoFolder?: (id: string) => Promise<void> | void;
   // Microzonas
   microSubmode: MicrozoneSubmode;
   onMicroSubmodeChange: (s: MicrozoneSubmode) => void;
@@ -194,6 +209,293 @@ const LayerItem = ({ row, on, onToggle }: LayerItemProps) => (
   </button>
 );
 
+interface SavedIsoSubProps {
+  savedIsos: import("@/types/savedIsochrones").SavedIsochrone[];
+  folders: import("@/types/savedIsochrones").IsochroneFolder[];
+  loadedIds?: Set<string>;
+  onToggle?: (id: string) => void;
+  onAnalyze?: (id: string) => void;
+  onFocus?: (id: string) => void;
+  onRename?: (id: string, name: string) => Promise<void> | void;
+  onMove?: (id: string, folderId: string | null) => Promise<void> | void;
+  onDelete?: (id: string) => Promise<void> | void;
+  onCreateFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | null | void> | void;
+  onRenameFolder?: (id: string, name: string) => Promise<void> | void;
+  onDeleteFolder?: (id: string) => Promise<void> | void;
+}
+
+const SavedIsochronesSubsection = ({
+  savedIsos,
+  folders,
+  loadedIds,
+  onToggle,
+  onAnalyze,
+  onFocus,
+  onRename,
+  onMove,
+  onDelete,
+  onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
+}: SavedIsoSubProps) => {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [creatingRoot, setCreatingRoot] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+
+  const childrenByParent = useMemo(() => {
+    const m = new Map<string | null, typeof folders>();
+    for (const f of folders) {
+      const k = f.parent_id;
+      const arr = m.get(k) ?? [];
+      arr.push(f);
+      m.set(k, arr);
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a.name.localeCompare(b.name));
+    return m;
+  }, [folders]);
+
+  const isosByFolder = useMemo(() => {
+    const m = new Map<string | null, typeof savedIsos>();
+    for (const s of savedIsos) {
+      const k = s.folder_id;
+      const arr = m.get(k) ?? [];
+      arr.push(s);
+      m.set(k, arr);
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a.name.localeCompare(b.name));
+    return m;
+  }, [savedIsos]);
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleCreateRoot = async () => {
+    const t = newFolderName.trim();
+    if (!t || !onCreateFolder) return;
+    await onCreateFolder(t, null);
+    setNewFolderName("");
+    setCreatingRoot(false);
+  };
+
+  const renderIso = (s: typeof savedIsos[number], depth: number) => {
+    const visible = loadedIds?.has(s.id) ?? false;
+    return (
+      <ContextMenu key={s.id}>
+        <ContextMenuTrigger asChild>
+          <div
+            className="flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-surface-2/60"
+            style={{ paddingLeft: `${8 + depth * 14}px` }}
+          >
+            <button
+              onClick={() => onToggle?.(s.id)}
+              className="flex flex-1 items-center gap-2 text-left"
+            >
+              <span
+                className="h-2 w-2 flex-shrink-0 rounded-full"
+                style={{ backgroundColor: s.color ?? "hsl(var(--iso-1))" }}
+              />
+              <span
+                className={["flex-1 truncate text-[12px]", visible ? "text-foreground" : "text-muted-foreground"].join(" ")}
+                title={s.name}
+              >
+                {s.name}
+              </span>
+              <span className="font-mono text-[10px] text-text-muted">
+                {s.minutes.join("/")}′
+              </span>
+              <IOSSwitch on={visible} />
+            </button>
+            {onAnalyze && (
+              <button
+                onClick={() => onAnalyze(s.id)}
+                className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted hover:bg-primary/15 hover:text-primary"
+                title="Análisis"
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {onFocus && (
+              <button
+                onClick={() => onFocus(s.id)}
+                className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted hover:bg-primary/15 hover:text-primary"
+                title="Centrar"
+              >
+                <Crosshair className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          {onRename && (
+            <ContextMenuItem
+              onClick={() => {
+                const n = window.prompt("Nuevo nombre:", s.name);
+                if (n && n.trim()) void onRename(s.id, n.trim());
+              }}
+            >
+              <Pencil className="mr-2 h-3.5 w-3.5" /> Renombrar
+            </ContextMenuItem>
+          )}
+          {onMove && (
+            <ContextMenuItem
+              onClick={() => {
+                const opts = [
+                  { id: "", label: "(sin carpeta)" },
+                  ...folders.map((f) => ({ id: f.id, label: f.name })),
+                ];
+                const choice = window.prompt(
+                  `Mover a carpeta. Escribe el número:\n${opts.map((o, i) => `${i}: ${o.label}`).join("\n")}`,
+                  "0",
+                );
+                const idx = choice == null ? -1 : parseInt(choice, 10);
+                if (Number.isFinite(idx) && opts[idx]) {
+                  void onMove(s.id, opts[idx].id || null);
+                }
+              }}
+            >
+              <FolderOpen className="mr-2 h-3.5 w-3.5" /> Mover a carpeta
+            </ContextMenuItem>
+          )}
+          <ContextMenuSeparator />
+          {onDelete && (
+            <ContextMenuItem
+              onClick={() => {
+                if (window.confirm(`¿Eliminar "${s.name}"?`)) void onDelete(s.id);
+              }}
+              className="text-destructive"
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" /> Eliminar
+            </ContextMenuItem>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
+    );
+  };
+
+  const renderFolder = (f: typeof folders[number], depth: number) => {
+    const isOpen = expanded.has(f.id);
+    const childFolders = childrenByParent.get(f.id) ?? [];
+    const childIsos = isosByFolder.get(f.id) ?? [];
+    return (
+      <div key={f.id}>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <div
+              className="flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-surface-2/60"
+              style={{ paddingLeft: `${8 + depth * 14}px` }}
+            >
+              <button
+                onClick={() => toggleExpand(f.id)}
+                className="flex flex-1 items-center gap-1.5 text-left"
+              >
+                {isOpen ? (
+                  <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                )}
+                <Folder className="h-3.5 w-3.5 text-brand-yellow" />
+                <span className="flex-1 truncate text-[12px] text-foreground">{f.name}</span>
+                <span className="font-mono text-[10px] text-text-muted">
+                  {childIsos.length + childFolders.length}
+                </span>
+              </button>
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            {onCreateFolder && (
+              <ContextMenuItem
+                onClick={() => {
+                  const n = window.prompt("Nombre de subcarpeta:");
+                  if (n && n.trim()) void onCreateFolder(n.trim(), f.id);
+                }}
+              >
+                <FolderPlus className="mr-2 h-3.5 w-3.5" /> Nueva subcarpeta
+              </ContextMenuItem>
+            )}
+            {onRenameFolder && (
+              <ContextMenuItem
+                onClick={() => {
+                  const n = window.prompt("Nuevo nombre:", f.name);
+                  if (n && n.trim()) void onRenameFolder(f.id, n.trim());
+                }}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" /> Renombrar
+              </ContextMenuItem>
+            )}
+            <ContextMenuSeparator />
+            {onDeleteFolder && (
+              <ContextMenuItem
+                onClick={() => {
+                  if (window.confirm(`¿Eliminar carpeta "${f.name}"?`)) void onDeleteFolder(f.id);
+                }}
+                className="text-destructive"
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" /> Eliminar carpeta
+              </ContextMenuItem>
+            )}
+          </ContextMenuContent>
+        </ContextMenu>
+        {isOpen && (
+          <div>
+            {childFolders.map((cf) => renderFolder(cf, depth + 1))}
+            {childIsos.map((s) => renderIso(s, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const rootFolders = childrenByParent.get(null) ?? [];
+  const rootIsos = isosByFolder.get(null) ?? [];
+
+  return (
+    <div className="mt-3 border-t border-border/30 pt-3">
+      <div className="mb-1.5 flex items-center justify-between px-1">
+        <span className="text-[11px] font-medium text-muted-foreground">
+          Isócronas guardadas · {savedIsos.length}
+        </span>
+        {onCreateFolder && (
+          <button
+            onClick={() => setCreatingRoot((v) => !v)}
+            className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-surface-2 hover:text-foreground"
+            title="Nueva carpeta"
+          >
+            <FolderPlus className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      {creatingRoot && (
+        <div className="mb-2 flex gap-1 px-1">
+          <input
+            autoFocus
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleCreateRoot()}
+            placeholder="Nombre"
+            className="flex-1 rounded border border-border/60 bg-surface-2/60 px-2 py-1 text-[11px] outline-none focus:border-primary/60"
+          />
+          <button
+            onClick={handleCreateRoot}
+            className="rounded bg-primary px-2 py-1 text-[11px] text-primary-foreground hover:opacity-90"
+          >
+            Crear
+          </button>
+        </div>
+      )}
+      <div className="space-y-0.5">
+        {rootFolders.map((f) => renderFolder(f, 0))}
+        {rootIsos.map((s) => renderIso(s, 0))}
+      </div>
+    </div>
+  );
+};
+
 export const Sidebar = ({
   basemap,
   onBasemapChange,
@@ -226,6 +528,20 @@ export const Sidebar = ({
   onFocusIsochrone,
   isoLoading = false,
   onToggleIsoMode,
+  onAnalyzeIsochrone,
+  onSaveIsochrone,
+  savedIsochrones = [],
+  isoFolders = [],
+  loadedSavedIsoIds,
+  onToggleSavedIsochrone,
+  onAnalyzeSavedIsochrone,
+  onFocusSavedIsochrone,
+  onRenameSavedIsochrone,
+  onMoveSavedIsochrone,
+  onDeleteSavedIsochrone,
+  onCreateIsoFolder,
+  onRenameIsoFolder,
+  onDeleteIsoFolder,
   microSubmode,
   onMicroSubmodeChange,
   microBufferRadius,
@@ -1064,6 +1380,26 @@ export const Sidebar = ({
                     </span>
                     <IOSSwitch on={iso.visible} />
                   </button>
+                  {onAnalyzeIsochrone && (
+                    <button
+                      onClick={() => onAnalyzeIsochrone(iso.id)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-primary/15 hover:text-primary"
+                      aria-label="Análisis"
+                      title="Análisis de isócrona"
+                    >
+                      <BarChart3 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {onSaveIsochrone && (
+                    <button
+                      onClick={() => onSaveIsochrone(iso.id)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-brand-green/15 hover:text-brand-green"
+                      aria-label="Guardar"
+                      title="Guardar isócrona"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => onFocusIsochrone(iso.id)}
                     className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-primary/15 hover:text-primary"
@@ -1087,6 +1423,23 @@ export const Sidebar = ({
                 Borrar todas
               </button>
             </div>
+          )}
+
+          {(savedIsochrones.length > 0 || isoFolders.length > 0) && (
+            <SavedIsochronesSubsection
+              savedIsos={savedIsochrones}
+              folders={isoFolders}
+              loadedIds={loadedSavedIsoIds}
+              onToggle={onToggleSavedIsochrone}
+              onAnalyze={onAnalyzeSavedIsochrone}
+              onFocus={onFocusSavedIsochrone}
+              onRename={onRenameSavedIsochrone}
+              onMove={onMoveSavedIsochrone}
+              onDelete={onDeleteSavedIsochrone}
+              onCreateFolder={onCreateIsoFolder}
+              onRenameFolder={onRenameIsoFolder}
+              onDeleteFolder={onDeleteIsoFolder}
+            />
           )}
         </SidebarSection>
 

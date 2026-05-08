@@ -1,83 +1,51 @@
-## Análisis al crear una isócrona
+## Resumen
+Agregar a cada isócrona en la barra lateral dos acciones nuevas: **Análisis** (abre el panel de análisis) y **Guardar**, con un sistema de almacenamiento por carpetas (crear, renombrar, mover, eliminar) que recuerda el/los POI(s) usados como origen.
 
-Cuando se crea una isócrona, abrir/poblar el panel lateral derecho (`AnalysisPanel`) con datos calculados a partir del polígono de la isócrona seleccionada.
+## UX
 
-### Datos a mostrar
+En cada fila de isócrona del Sidebar, junto a los íconos actuales (centrar/eliminar):
 
-1. **Capas territoriales personalizadas**
-   - Conteo total de puntos dentro del polígono.
-   - Desglose por grupo territorial (Salud, Educación, etc.) y por capa.
-
-2. **Demografía comunal**
-   - Listado de comunas que intersectan la isócrona con porcentaje de área cubierta de cada una.
-   - Población, densidad, ingreso promedio y NSE comunal (datos INE) por comuna.
-
-3. **Habitantes y hogares estimados dentro de la isócrona**
-   - Si hay manzanas (Censo / GSE) cubriendo la zona → suma directa de `pop` y `hh` de manzanas intersectadas (proporcional al área intersectada).
-   - Fallback comuna: `pob_comuna * (area_iso ∩ area_comuna) / area_comuna` y hogares vía tamaño medio de hogar (pob/hogares comunal).
-
-4. **Ingreso total de hogares dentro de la isócrona**
-   - Para cada comuna intersectada: `hogares_estimados_en_iso * ingreso_promedio_comuna`.
-   - Suma global + ingreso promedio ponderado por hogares.
-
-### Arquitectura
-
-```text
-src/
-  utils/
-    isochroneAnalysis.ts         (NUEVO)  ← cálculo puro
-  hooks/
-    useIsochroneAnalysis.ts      (NUEVO)  ← orquesta inputs (manzanas, comunas, INE, capas territoriales)
-  components/panels/
-    AnalysisPanel.tsx            (REWRITE) recibe isócrona seleccionada + análisis
-  pages/
-    Index.tsx                    (EDIT)   selección de isócrona activa, abre panel al crear
+```
+[●] Vehículo · 5/10′  [switch]  [📊 Análisis]  [💾 Guardar]  [🎯 Centrar]  [🗑]
 ```
 
-### `utils/isochroneAnalysis.ts`
+- **Análisis** → abre el `AnalysisPanel` con esa isócrona seleccionada (ya existe la lógica, solo es un botón explícito).
+- **Guardar** → abre un mini-diálogo para nombrar la isócrona y elegir carpeta destino (o crear una nueva).
 
-Funciones puras (ya tenemos `@turf/area`, `booleanIntersects`, `intersect` se añade vía `@turf/intersect` ya disponible en deps de turf):
+Nueva sección colapsable en el sidebar **"Isócronas guardadas"** (similar a POIs guardados):
+- Árbol de carpetas con drag & drop, clic derecho con: Renombrar, Eliminar, Nueva subcarpeta, Crear isócrona aquí.
+- Cada isócrona guardada muestra: nombre, modo, minutos, switch de visibilidad, centrar, análisis, editar (nombre/carpeta), eliminar.
+- Al activar la visibilidad → se re-dibuja en el mapa (mismas features GeoJSON que la original).
+- Si la isócrona se generó desde un POI guardado, se enlaza al POI (clic → centra el POI).
 
-- `countTerritorialPointsInPolygon(polygon, features, layers, groups)` → `{ total, byGroup: [{group, count, byLayer:[{layer,count}]}] }`
-- `communeBreakdown(polygon, comunasFC, ineIndex)` → array `{ commune, areaShare, pop, hh, ingreso, nse, popInIso, hhInIso, incomeInIso }`
-- `manzanaBreakdown(polygon, manzanaFC)` → `{ pop, hh, manzanaCount }` (reutiliza lógica existente de `computeMicrozoneStats`, agregando proporción de área intersectada).
-- `aggregate(...)` → totales globales: población, hogares, ingreso total, ingreso promedio por hogar.
+## Cambios en código
 
-Estrategia de estimación:
-- Preferir manzanas si cubren ≥X% del área de la isócrona; en zonas sin manzana usar fallback comunal proporcional.
+### Backend (migración)
+Dos tablas nuevas con RLS por `user_id`:
 
-### `hooks/useIsochroneAnalysis.ts`
+- **`isochrone_folders`**: `id, user_id, name, parent_id, color, created_at, updated_at, deleted_at`. Trigger anti-ciclo (mismo patrón que `poi_folders`).
+- **`saved_isochrones`**: `id, user_id, folder_id, name, mode, minutes (int[]), center_lat, center_lng, color, features (jsonb GeoJSON), source_poi_id (uuid null), source_lat, source_lng, created_at, updated_at, deleted_at`.
 
-Inputs:
-- `isochrone: Isochrone | null` (toma la banda mayor: polígono más amplio)
-- Datos ya cargados en `Index.tsx`: `manzanaData` (densidad), `userLayers` no aplica (estos son territoriales DB), `territorialFeatures` + `territorialLayers` + `territorialGroups` (vienen de `useTerritorialLayers` + visibilidad), `comunasGeoIndex` (`useComunasGeoIndex` con `ine`).
+Políticas RLS estándar (owner CRUD), trigger `update_updated_at_column`.
 
-Output: `IsochroneAnalysis | null` memoizado.
+### Frontend
+- `src/types/savedIsochrones.ts` — tipos `SavedIsochrone`, `IsochroneFolder`, payloads.
+- `src/hooks/useSavedIsochrones.ts` — CRUD + caché offline (mismo patrón que `useSavedPois`/`poiCache`).
+- `src/hooks/useIsochroneFolders.ts` — CRUD carpetas.
+- `src/components/panels/SaveIsochroneDialog.tsx` — diálogo nombre + selector de carpeta + "nueva carpeta".
+- `src/components/layout/Sidebar.tsx`:
+  - Botones "Análisis" y "Guardar" en cada fila de isócrona activa (líneas ~1043-1081).
+  - Nueva sección "Isócronas guardadas" con árbol y context-menu reutilizando estilos.
+- `src/pages/Index.tsx`:
+  - Wiring: `onOpenIsochroneAnalysis(id)`, `onSaveIsochrone(iso)`, props para guardadas.
+  - Permitir cargar una `SavedIsochrone` al estado `isochrones` (visible) para renderizar en `IsochroneLayer` sin tocar la BD.
 
-### `AnalysisPanel.tsx`
+### Notas técnicas
+- Las features GeoJSON se almacenan tal cual en `jsonb` (tamaño típico < 50 KB por isócrona).
+- `source_poi_id` es opcional: la isócrona puede venir de un clic libre. Si viene de un POI, se guarda la referencia (sin FK estricta para tolerar POI eliminado).
+- Reutilizar `AnalysisPanel` existente — el botón "Análisis" solo dispara `setSelectedIsoId(id); setPanelOpen(true)`.
 
-Reescribir el contenido (mantener look & feel, header con tabs por banda de minutos):
-- Tab por banda (5 / 7 / 10 min etc., dinámico desde `isochrone.minutes`).
-- Tarjetas: Personas, Hogares, Ingreso total, Ingreso promedio/hogar, Área km², Densidad.
-- Sección "Capas territoriales": lista por grupo con conteos.
-- Sección "Comunas cubiertas": tabla con %, pob, NSE.
-- Sección NSE: distribución ponderada (de manzanas si hay, si no comunal).
-- Botones export CSV/JSON con datos reales.
-
-### `Index.tsx`
-
-- Estado nuevo `selectedIsochroneId`. Al crear isócrona (en handler existente) → setearla y abrir panel (`setPanelOpen(true)`).
-- Pasar a `AnalysisPanel` la isócrona seleccionada y el análisis del hook.
-- Permitir cambiar selección desde la sidebar (al click en una isócrona ya existente — usar el actual `setFitIsoId` también para seleccionar).
-
-### Detalles técnicos
-
-- Usar `@turf/intersect` para áreas comuna ∩ isócrona; degradar a `booleanIntersects` + área aproximada si falla.
-- El hook dispara cálculo solo cuando cambia `selectedIsochroneId` o sus inputs principales (debounce no necesario).
-- Manzanas: si no hay viewport cargado para la zona, mostrar aviso "Activa la capa de manzanas para mayor precisión" y usar fallback comunal.
-- Exportar CSV/JSON: serializar el objeto `IsochroneAnalysis`.
-
-### Fuera de alcance
-
-- No se modifica el cálculo de la isócrona ni el edge function.
-- No se persisten análisis en DB; son client-side.
+## Fuera de alcance
+- Compartir isócronas entre usuarios.
+- Versionado/histórico.
+- Recalcular automáticamente al cambiar el POI de origen.
