@@ -26,6 +26,7 @@ import { exportPoiAsKmz, exportFolderAsKmz } from "@/utils/kmzExport";
 import { CommuneSearch } from "./CommuneSearch";
 import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
+import { confirmDialog, promptDialog, selectDialog } from "@/components/ui/dialog-service";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
