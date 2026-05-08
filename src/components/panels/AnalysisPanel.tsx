@@ -1,8 +1,10 @@
-import { X, Download, FileJson } from "lucide-react";
+import { X, Download, FileJson, Sparkles, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import type { Isochrone } from "@/types/isochrones";
 import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
 import { useIsochroneAnalysis } from "@/hooks/useIsochroneAnalysis";
+import { useIsochroneInsights } from "@/hooks/useIsochroneInsights";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 
 interface AnalysisPanelProps {
@@ -17,14 +19,24 @@ const fmtCLP = (n: number) => `$${fmt(n)}`;
 
 const NSE_COLORS: Record<string, string> = {
   ABC1: "bg-[hsl(224_76%_38%)]",
+  C1: "bg-[hsl(217_91%_55%)]",
   C2: "bg-[hsl(217_91%_55%)]",
   C3: "bg-brand-yellow",
   D: "bg-brand-orange",
   E: "bg-brand-red",
 };
 
-const exportJson = (a: IsochroneAnalysis) => {
-  const blob = new Blob([JSON.stringify(a, null, 2)], { type: "application/json" });
+const formatComparison = (value: number, format: "int" | "clp" | "pct" | "decimal") => {
+  switch (format) {
+    case "clp": return fmtCLP(value);
+    case "pct": return `${Math.round(value)}%`;
+    case "decimal": return value.toFixed(1);
+    default: return fmt(value);
+  }
+};
+
+const exportJson = (a: IsochroneAnalysis, summary: string | null) => {
+  const blob = new Blob([JSON.stringify({ ...a, aiSummary: summary }, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a2 = document.createElement("a");
   a2.href = url;
@@ -43,6 +55,22 @@ const exportCsv = (a: IsochroneAnalysis) => {
   lines.push(`totales,ingreso_total_clp,${a.totals.incomeTotal}`);
   lines.push(`totales,ingreso_promedio_hogar_clp,${a.totals.incomeAvgPerHh}`);
   lines.push(`totales,fuente,${a.totals.source}`);
+  lines.push(`densidad,pop_por_km2,${a.density.popPerKm2}`);
+  lines.push(`densidad,hh_por_km2,${a.density.hhPerKm2}`);
+  lines.push(`densidad,puntos_por_km2,${a.density.pointsPerKm2}`);
+  lines.push(`densidad,cobertura_servicios_idx,${a.density.serviceCoverageIndex}`);
+  if (a.gse) {
+    lines.push(`gse,manzanas,${a.gse.manzanaCount}`);
+    if (a.gse.nseScoreAvg != null) lines.push(`gse,nse_score_promedio,${a.gse.nseScoreAvg}`);
+    if (a.gse.educYearsAvg != null) lines.push(`gse,escolaridad_anos,${a.gse.educYearsAvg}`);
+    if (a.gse.hacinAvg != null) lines.push(`gse,hacinamiento,${a.gse.hacinAvg}`);
+    for (const [k, v] of Object.entries(a.gse.classDistribution)) {
+      lines.push(`gse_clase,${k},${v}%`);
+    }
+  }
+  for (const c of a.comparisons) {
+    lines.push(`comparativo,${c.label},${c.value}${c.vsRmPct != null ? ` (${c.vsRmPct >= 0 ? "+" : ""}${c.vsRmPct}% vs RM)` : ""}`);
+  }
   lines.push(`puntos,total,${a.territorialPoints.total}`);
   for (const g of a.territorialPoints.groups) {
     lines.push(`puntos_grupo,${g.groupName},${g.count}`);
@@ -74,9 +102,20 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
   const bandSeconds = selectedMin != null ? selectedMin * 60 : undefined;
 
   const analysis = useIsochroneAnalysis({ isochrone, bandSeconds, manzanas });
+  const insights = useIsochroneInsights(analysis, open);
 
   const nseDist = useMemo(() => {
     if (!analysis) return [] as { label: string; pct: number; color: string }[];
+    // Prefer GSE class distribution if available (más detallado y reciente)
+    if (analysis.gse && Object.keys(analysis.gse.classDistribution).length > 0) {
+      return (["ABC1", "C1", "C2", "C3", "D", "E"] as const)
+        .map((label) => ({
+          label,
+          pct: Math.round(analysis.gse!.classDistribution[label] ?? 0),
+          color: NSE_COLORS[label] ?? "bg-surface-3",
+        }))
+        .filter((r) => r.pct > 0);
+    }
     if (analysis.manzanas && Object.keys(analysis.manzanas.nseDistribution).length > 0) {
       const total = Object.values(analysis.manzanas.nseDistribution).reduce(
         (s, v) => s + (v ?? 0),
@@ -90,7 +129,6 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
         return { label, pct: Math.round((v / total) * 100), color: NSE_COLORS[label] };
       });
     }
-    // Fallback: distribución comunal ponderada por hogares
     const counts: Record<string, number> = {};
     let total = 0;
     for (const c of analysis.communes) {
@@ -106,6 +144,12 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
     }));
   }, [analysis]);
 
+  const nseSource = analysis?.gse
+    ? "GSE manzana (Censo 2012)"
+    : analysis?.totals.source === "manzanas"
+      ? "Manzanas Censo 2017"
+      : "Comunal";
+
   return (
     <div
       className={[
@@ -113,7 +157,6 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
         open ? "translate-x-0" : "translate-x-full",
       ].join(" ")}
     >
-      {/* Header */}
       <div className="relative flex-shrink-0 border-b border-border/40 px-5 pb-3 pt-4">
         <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-foreground">
           <span
@@ -162,79 +205,121 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
 
         {analysis && (
           <>
-            {/* Metric cards */}
+            {/* Métricas principales */}
             <div className="mb-3 grid grid-cols-2 gap-2">
               <Metric value={fmt(analysis.totals.pop)} label="Personas" />
               <Metric value={fmt(analysis.totals.hh)} label="Hogares" />
               <Metric value={fmtCLP(analysis.totals.incomeTotal)} label="Ingreso total/mes" />
               <Metric value={fmtCLP(analysis.totals.incomeAvgPerHh)} label="Ingreso prom./hogar" />
               <Metric value={analysis.area_km2.toFixed(2)} label="Área km²" />
-              <Metric
-                value={
-                  analysis.area_km2 > 0
-                    ? fmt(analysis.totals.pop / analysis.area_km2)
-                    : "—"
-                }
-                label="Densidad hab/km²"
-              />
+              <Metric value={fmt(analysis.density.popPerKm2)} label="Densidad hab/km²" />
             </div>
 
             <div className="mb-3 rounded-md bg-surface-2/40 px-3 py-1.5 text-[10px] text-muted-foreground">
               Fuente población:{" "}
               <span className="font-medium text-foreground">
                 {analysis.totals.source === "manzanas"
-                  ? "Manzanas (Censo)"
+                  ? "Manzanas Censo 2017"
                   : "Estimado por comuna (proporcional al área)"}
               </span>
-              {analysis.totals.source !== "manzanas" && (
+              {analysis.gse && (
                 <div className="mt-1">
-                  Activa la capa "Manzanas" para mayor precisión.
+                  GSE/NSE enriquecido con {analysis.gse.manzanaCount} manzanas Censo 2012.
                 </div>
               )}
             </div>
 
-            {/* Capas territoriales */}
-            <div className="mb-2 px-1 text-[11px] font-medium text-muted-foreground">
-              Capas territoriales · {analysis.territorialPoints.total} puntos
-            </div>
-            <div className="mb-3 overflow-hidden rounded-xl bg-surface-2/60">
-              {analysis.territorialPoints.groups.length === 0 ? (
-                <div className="px-3 py-3 text-center text-[11px] text-text-muted">
-                  Sin puntos territoriales en el área.
+            {/* Resumen IA */}
+            <div className="mb-3 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
+                  <Sparkles className="h-3 w-3 text-primary" />
+                  Resumen IA · Gemini
                 </div>
-              ) : (
-                analysis.territorialPoints.groups.map((g) => (
-                  <div key={g.groupId} className="border-b border-border/30 px-3 py-2 last:border-b-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ background: g.color ?? "#888" }}
-                        />
-                        <span className="text-[12px] font-medium text-foreground">{g.groupName}</span>
-                      </div>
-                      <span className="font-mono text-[12px] text-foreground">{g.count}</span>
-                    </div>
-                    {g.layers.length > 0 && (
-                      <div className="mt-1 ml-4 space-y-0.5">
-                        {g.layers.map((l) => (
-                          <div key={l.layerId} className="flex items-center justify-between text-[10px] text-muted-foreground">
-                            <span className="truncate">{l.layerName}</span>
-                            <span className="ml-2 font-mono">{l.count}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
+                <button
+                  onClick={insights.regenerate}
+                  disabled={insights.loading}
+                  className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground disabled:opacity-50"
+                  aria-label="Regenerar resumen"
+                >
+                  <RefreshCw className={["h-2.5 w-2.5", insights.loading ? "animate-spin" : ""].join(" ")} />
+                  Regenerar
+                </button>
+              </div>
+              {insights.loading && (
+                <div className="space-y-1.5">
+                  <div className="h-2 w-full animate-pulse rounded bg-surface-3" />
+                  <div className="h-2 w-5/6 animate-pulse rounded bg-surface-3" />
+                  <div className="h-2 w-4/6 animate-pulse rounded bg-surface-3" />
+                </div>
+              )}
+              {insights.error && (
+                <div className="text-[11px] text-brand-red">{insights.error}</div>
+              )}
+              {insights.summary && (
+                <div className="prose prose-sm prose-invert max-w-none text-[11.5px] leading-relaxed text-foreground [&>*]:my-1 [&_h1]:hidden [&_h2]:mt-2 [&_h2]:text-[12px] [&_h2]:font-semibold [&_p]:text-[11.5px] [&_strong]:text-foreground [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0.5">
+                  <ReactMarkdown>{insights.summary}</ReactMarkdown>
+                </div>
               )}
             </div>
+
+            {/* Comparativos vs RM */}
+            {analysis.comparisons.length > 0 && (
+              <div className="mb-3 overflow-hidden rounded-xl bg-surface-2/60">
+                <div className="border-b border-border/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
+                  Comparativo vs. promedio RM
+                </div>
+                {analysis.comparisons.map((c) => (
+                  <div key={c.key} className="flex items-center justify-between border-b border-border/30 px-3 py-1.5 text-[11px] last:border-b-0">
+                    <span className="text-foreground">{c.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-foreground">{formatComparison(c.value, c.format)}</span>
+                      {c.vsRmPct != null && (
+                        <span
+                          className={[
+                            "rounded px-1.5 py-0.5 font-mono text-[10px]",
+                            c.vsRmPct >= 0
+                              ? "bg-brand-green/15 text-brand-green"
+                              : "bg-brand-red/15 text-brand-red",
+                          ].join(" ")}
+                        >
+                          {c.vsRmPct >= 0 ? "+" : ""}{c.vsRmPct}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* GSE detalle */}
+            {analysis.gse && (
+              <div className="mb-3 rounded-xl bg-surface-2/60 p-3">
+                <div className="mb-2 text-[11px] font-medium text-muted-foreground">
+                  Indicadores GSE (Censo 2012)
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  {analysis.gse.nseScoreAvg != null && (
+                    <KV label="NSE score" value={analysis.gse.nseScoreAvg.toFixed(0)} />
+                  )}
+                  {analysis.gse.educYearsAvg != null && (
+                    <KV label="Escolaridad" value={`${analysis.gse.educYearsAvg.toFixed(1)} años`} />
+                  )}
+                  {analysis.gse.hacinAvg != null && (
+                    <KV label="Hacinamiento" value={analysis.gse.hacinAvg.toFixed(2)} />
+                  )}
+                  {analysis.gse.autoScoreAvg != null && (
+                    <KV label="Motorización" value={analysis.gse.autoScoreAvg.toFixed(0)} />
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* NSE distribution */}
             {nseDist.length > 0 && (
               <div className="mb-3 rounded-xl bg-surface-2/60 p-3">
                 <div className="mb-2.5 text-[11px] font-medium text-muted-foreground">
-                  Distribución NSE {analysis.totals.source === "manzanas" ? "(manzanas)" : "(comunal)"}
+                  Distribución NSE · {nseSource}
                 </div>
                 {nseDist.map((n) => (
                   <div key={n.label} className="mb-1.5 flex items-center gap-2">
@@ -247,6 +332,48 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
                 ))}
               </div>
             )}
+
+            {/* Capas territoriales */}
+            <div className="mb-2 px-1 text-[11px] font-medium text-muted-foreground">
+              Capas territoriales · {analysis.territorialPoints.total} puntos · {analysis.density.pointsPerKm2.toFixed(1)}/km²
+            </div>
+            <div className="mb-3 overflow-hidden rounded-xl bg-surface-2/60">
+              {analysis.territorialPoints.groups.length === 0 ? (
+                <div className="px-3 py-3 text-center text-[11px] text-text-muted">
+                  Sin puntos territoriales en el área.
+                </div>
+              ) : (
+                analysis.territorialPoints.groups.map((g) => {
+                  const dens = analysis.density.pointsPerKm2ByGroup.find((d) => d.groupId === g.groupId);
+                  return (
+                    <div key={g.groupId} className="border-b border-border/30 px-3 py-2 last:border-b-0">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full" style={{ background: g.color ?? "#888" }} />
+                          <span className="text-[12px] font-medium text-foreground">{g.groupName}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {dens && (
+                            <span className="font-mono text-[10px] text-muted-foreground">{dens.perKm2.toFixed(1)}/km²</span>
+                          )}
+                          <span className="font-mono text-[12px] text-foreground">{g.count}</span>
+                        </div>
+                      </div>
+                      {g.layers.length > 0 && (
+                        <div className="mt-1 ml-4 space-y-0.5">
+                          {g.layers.map((l) => (
+                            <div key={l.layerId} className="flex items-center justify-between text-[10px] text-muted-foreground">
+                              <span className="truncate">{l.layerName}</span>
+                              <span className="ml-2 font-mono">{l.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
 
             {/* Comunas cubiertas */}
             <div className="mb-2 px-1 text-[11px] font-medium text-muted-foreground">
@@ -296,7 +423,7 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
                 <Download className="mr-1 inline h-3 w-3" /> CSV
               </button>
               <button
-                onClick={() => exportJson(analysis)}
+                onClick={() => exportJson(analysis, insights.summary)}
                 className="flex-1 rounded-lg bg-surface-2/60 px-2 py-2 text-[11px] font-medium text-foreground transition-colors hover:bg-surface-3"
               >
                 <FileJson className="mr-1 inline h-3 w-3" /> JSON
@@ -315,5 +442,12 @@ const Metric = ({ value, label }: { value: string; label: string }) => (
       {value}
     </div>
     <div className="mt-1.5 text-[11px] text-muted-foreground">{label}</div>
+  </div>
+);
+
+const KV = ({ label, value }: { label: string; value: string }) => (
+  <div className="flex items-center justify-between rounded-md bg-surface-3/40 px-2 py-1">
+    <span className="text-muted-foreground">{label}</span>
+    <span className="font-mono font-medium text-foreground">{value}</span>
   </div>
 );
