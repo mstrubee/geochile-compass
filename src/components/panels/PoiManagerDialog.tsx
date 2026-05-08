@@ -233,7 +233,8 @@ export const PoiManagerDialog = ({
       </button>
       <button
         onClick={async () => {
-          if (!window.confirm(`Eliminar "${p.name}"?`)) return;
+          const ok = await confirmDialog({ title: "Eliminar POI", description: `Eliminar "${p.name}"?`, confirmLabel: "Eliminar" });
+          if (!ok) return;
           await onDeletePois([p.id]);
         }}
         className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
