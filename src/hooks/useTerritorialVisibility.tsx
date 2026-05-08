@@ -10,7 +10,7 @@ interface Ctx {
 
 const TerritorialVisibilityContext = createContext<Ctx | null>(null);
 const STORAGE_KEY = "territorial_visible_v2";
-const DEFAULTS_APPLIED_KEY = `${STORAGE_KEY}_defaults_applied`;
+const SEEN_LAYERS_KEY = `${STORAGE_KEY}_seen_layers`;
 
 export const TerritorialVisibilityProvider = ({ children }: { children: ReactNode }) => {
   const [visibleLayerIds, setVisible] = useState<Set<string>>(() => {
@@ -50,9 +50,13 @@ export const TerritorialVisibilityProvider = ({ children }: { children: ReactNod
 
   const ensureVisibleDefaults = useCallback((ids: string[]) => {
     if (!ids.length) return;
+    let unseen = ids;
     try {
-      if (localStorage.getItem(DEFAULTS_APPLIED_KEY) === "1") return;
-      localStorage.setItem(DEFAULTS_APPLIED_KEY, "1");
+      const seen = JSON.parse(localStorage.getItem(SEEN_LAYERS_KEY) || "[]");
+      const seenSet = new Set(Array.isArray(seen) ? seen : []);
+      unseen = ids.filter((id) => !seenSet.has(id));
+      if (!unseen.length) return;
+      localStorage.setItem(SEEN_LAYERS_KEY, JSON.stringify(Array.from(new Set([...seenSet, ...ids]))));
     } catch {
       // ignore
     }
