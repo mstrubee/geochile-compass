@@ -1828,11 +1828,15 @@ export const Sidebar = ({
                         {onRenamePoi && (
                           <ContextMenuItem
                             onSelect={async () => {
-                              const next = window.prompt(`Nuevo nombre para "${p.name}":`, p.name);
-                              if (!next || !next.trim() || next.trim() === p.name) return;
+                              const next = await promptDialog({
+                                title: "Renombrar POI",
+                                label: "Nuevo nombre",
+                                defaultValue: p.name,
+                              });
+                              if (!next || next === p.name) return;
                               try {
-                                await onRenamePoi(p.id, next.trim());
-                                toast.success(`POI renombrado a "${next.trim()}"`);
+                                await onRenamePoi(p.id, next);
+                                toast.success(`POI renombrado a "${next}"`);
                               } catch (err) {
                                 toast.error(err instanceof Error ? err.message : "Error al renombrar");
                               }
