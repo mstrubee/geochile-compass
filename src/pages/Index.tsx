@@ -1114,6 +1114,15 @@ const Index = () => {
         </div>
       </main>
 
+      <SaveIsochroneDialog
+        open={!!saveIsoDialogId}
+        onClose={() => setSaveIsoDialogId(null)}
+        isochrone={isochrones.find((i) => i.id === saveIsoDialogId) ?? null}
+        folders={isoFolders}
+        onSave={handleSaveIsochronePayload}
+        onCreateFolder={(name, parentId) => createIsoFolder(name, parentId)}
+      />
+
       <PoiManagerDialog
         open={managerOpen}
         onOpenChange={setManagerOpen}
