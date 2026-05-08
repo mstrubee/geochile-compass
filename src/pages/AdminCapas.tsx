@@ -364,6 +364,38 @@ const AdminCapas = () => {
           void refreshFiles();
         }}
       />
+
+      <ConvertHtmlDialog
+        open={!!convertTarget}
+        onOpenChange={(v) => !v && setConvertTarget(null)}
+        file={convertTarget}
+        onDone={() => {
+          void refreshFiles();
+          void refresh();
+        }}
+      />
+
+      <ConfirmDeleteDialog
+        open={!!deleteLayerTarget}
+        onOpenChange={(v) => !v && setDeleteLayerTarget(null)}
+        title="¿Eliminar la capa?"
+        description="Se eliminarán también todos los puntos asociados. Esta acción no se puede deshacer."
+        resourceName={deleteLayerTarget?.name}
+        onConfirm={async () => {
+          if (deleteLayerTarget) await performDeleteLayer(deleteLayerTarget.id);
+        }}
+      />
+
+      <ConfirmDeleteDialog
+        open={!!deleteFileTarget}
+        onOpenChange={(v) => !v && setDeleteFileTarget(null)}
+        title="¿Eliminar el archivo?"
+        description="Se borrará también el archivo del almacenamiento. Esta acción no se puede deshacer."
+        resourceName={deleteFileTarget?.original_filename}
+        onConfirm={async () => {
+          if (deleteFileTarget) await performDeleteFile(deleteFileTarget);
+        }}
+      />
     </div>
   );
 };
