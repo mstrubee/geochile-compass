@@ -22,6 +22,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
     () => layers.filter((l) => visibleLayerIds.has(l.id)).map((l) => l.id),
     [layers, visibleLayerIds],
   );
+  const showHeatmap = heatmap && visibleIds.length > 0;
   const features = useTerritorialFeatures(visibleIds);
   const groupsRef = useRef<Map<string, L.LayerGroup>>(new Map());
   const heatLayerRef = useRef<L.Layer | null>(null);
@@ -36,7 +37,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
       heatLayerRef.current.remove();
       heatLayerRef.current = null;
     }
-    if (!heatmap) return;
+    if (!showHeatmap) return;
 
     const points: Array<[number, number, number]> = [];
     features.forEach((f) => {
@@ -67,7 +68,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
     });
     heat.addTo(map);
     heatLayerRef.current = heat;
-  }, [features, heatmap, map]);
+  }, [features, showHeatmap, map]);
 
   useEffect(() => {
     const layerColorById = new Map(layers.map((l) => [l.id, l.color || "#F59E0B"]));
@@ -75,14 +76,14 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
 
     // remove groups for layers no longer visible (or all, if heatmap is on)
     groupsRef.current.forEach((g, id) => {
-      if (heatmap || !visibleLayerIds.has(id)) {
+      if (showHeatmap || !visibleLayerIds.has(id)) {
         g.remove();
         groupsRef.current.delete(id);
       }
     });
 
     // In heatmap mode, do not render individual point/geometry markers
-    if (heatmap) return;
+    if (showHeatmap) return;
 
     // group features by layer
     const byLayer = new Map<string, typeof features>();
@@ -131,7 +132,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
         }
       });
     });
-  }, [features, layers, visibleLayerIds, map, canvasRenderer, heatmap]);
+  }, [features, layers, visibleLayerIds, map, canvasRenderer, showHeatmap]);
 
   useEffect(() => {
     return () => {
