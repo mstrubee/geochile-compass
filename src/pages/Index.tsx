@@ -91,6 +91,19 @@ const Index = () => {
   const [fitIsoId, setFitIsoId] = useState<string | null>(null);
   const [isoLoading, setIsoLoading] = useState(false);
   const [selectedIsoId, setSelectedIsoId] = useState<string | null>(null);
+  const [saveIsoDialogId, setSaveIsoDialogId] = useState<string | null>(null);
+  const [loadedSavedIsoIds, setLoadedSavedIsoIds] = useState<Set<string>>(new Set());
+
+  const {
+    savedIsos,
+    folders: isoFolders,
+    saveIsochrone,
+    updateIso: updateSavedIso,
+    removeIso: removeSavedIso,
+    createFolder: createIsoFolder,
+    renameFolder: renameIsoFolder,
+    deleteFolder: deleteIsoFolder,
+  } = useSavedIsochrones();
 
   // Búsqueda de direcciones (centra el mapa)
   const [flyTarget, setFlyTarget] = useState<{
