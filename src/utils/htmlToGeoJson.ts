@@ -126,7 +126,13 @@ export const htmlToGeoJson = (html: string): GeoJsonFC => {
     }
   }
 
-  // 4. Llamadas Leaflet: L.marker / L.polygon / L.polyline
+  // 4a. Leaflet/Folium con grupos del control de capas (overlays)
+  if (!features.length) {
+    const leafletGrouped = parseLeafletGrouped(html);
+    features.push(...leafletGrouped);
+  }
+
+  // 4b. Fallback genérico Leaflet sin grupos
   if (!features.length) {
     const markerRe = /L\.(?:marker|circleMarker|circle)\s*\(\s*\[\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\]/g;
     for (const m of html.matchAll(markerRe)) {
