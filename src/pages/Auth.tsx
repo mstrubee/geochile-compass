@@ -162,6 +162,20 @@ const Auth = () => {
         >
           Continuar con Google
         </button>
+
+        {lastError && (
+          <div className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-[12px] text-destructive">
+            <p>{lastError}</p>
+            <button
+              type="button"
+              onClick={handleResetSession}
+              disabled={busy}
+              className="mt-1.5 text-[11px] font-medium underline hover:no-underline"
+            >
+              Limpiar sesión y reintentar
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
