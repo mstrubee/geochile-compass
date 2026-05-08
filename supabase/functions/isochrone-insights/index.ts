@@ -78,26 +78,61 @@ Reglas:
 
     const userPrompt = `Datos de la isócrona:\n\n${JSON.stringify(compactAnalysis, null, 2)}\n\nPromedios RM de referencia:\n${JSON.stringify(rmAverages, null, 2)}`;
 
-    const aiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0.4 },
-        }),
-      },
-    );
+    const callGemini = (model: string) =>
+      fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+            generationConfig: { temperature: 0.4 },
+          }),
+        },
+      );
 
-    if (!aiRes.ok) {
-      const t = await aiRes.text();
-      console.error("Gemini API error:", aiRes.status, t);
-      const status = aiRes.status === 429 ? 429 : 500;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const fallbackModels = [GEMINI_MODEL, "gemini-2.5-flash-lite", "gemini-2.0-flash"];
+    let aiRes: Response | null = null;
+    let lastErrText = "";
+    let lastStatus = 0;
+
+    outer: for (const model of fallbackModels) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await callGemini(model);
+        if (res.ok) {
+          aiRes = res;
+          break outer;
+        }
+        lastStatus = res.status;
+        lastErrText = await res.text();
+        console.error(`Gemini ${model} attempt ${attempt + 1} failed:`, res.status, lastErrText);
+        if (res.status === 429 || res.status === 401 || res.status === 400) break;
+        if (res.status === 503 || res.status >= 500) {
+          await sleep(500 * (attempt + 1));
+          continue;
+        }
+        break;
+      }
+    }
+
+    if (!aiRes) {
+      const isUnavailable = lastStatus === 503;
       return new Response(
-        JSON.stringify({ error: aiRes.status === 429 ? "Rate limit exceeded" : "Gemini API error", detail: t }),
-        { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({
+          error: lastStatus === 429
+            ? "Rate limit exceeded"
+            : isUnavailable
+              ? "SERVICE_UNAVAILABLE"
+              : "Gemini API error",
+          detail: lastErrText,
+          fallback: isUnavailable || lastStatus >= 500,
+        }),
+        {
+          status: isUnavailable || lastStatus >= 500 ? 200 : (lastStatus || 500),
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
