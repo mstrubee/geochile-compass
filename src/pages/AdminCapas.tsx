@@ -276,6 +276,42 @@ const AdminCapas = () => {
                 <Button
                   variant="ghost"
                   size="icon"
+                  title="Reprocesar archivo (sin exclusiones)"
+                  disabled={!f.group_id}
+                  onClick={async () => {
+                    if (!f.group_id) {
+                      toast.error("Asigná un grupo antes de reprocesar");
+                      return;
+                    }
+                    const t = toast.loading("Reprocesando…");
+                    const { data, error } = await supabase.functions.invoke(
+                      "ingest-territorial-html",
+                      {
+                        body: {
+                          source_file_id: f.id,
+                          group_id: f.group_id,
+                          excluded_layers: [],
+                          dedup_strategy: "replace_layer",
+                        },
+                      },
+                    );
+                    toast.dismiss(t);
+                    if (error) {
+                      toast.error(error.message);
+                    } else {
+                      const layers = (data as { layers?: Array<{ name: string; count: number }> })?.layers ?? [];
+                      const summary = layers.map((l) => `${l.name}: ${l.count}`).join(" · ") || "0 capas";
+                      toast.success(`Reprocesado · ${summary}`);
+                      void refresh();
+                      void refreshFiles();
+                    }
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={async () => {
                     if (!window.confirm(`¿Eliminar "${f.original_filename}"? Se borrará también el archivo en storage.`)) return;
                     if (f.storage_path) {
