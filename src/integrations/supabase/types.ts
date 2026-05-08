@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      isochrone_folders: {
+        Row: {
+          color: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          name: string
+          parent_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name: string
+          parent_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          parent_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "isochrone_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "isochrone_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       poi_folders: {
         Row: {
           color: string | null
@@ -113,6 +154,74 @@ export type Database = {
             columns: ["folder_id"]
             isOneToOne: false
             referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saved_isochrones: {
+        Row: {
+          center_lat: number
+          center_lng: number
+          color: string | null
+          created_at: string
+          deleted_at: string | null
+          features: Json
+          folder_id: string | null
+          id: string
+          minutes: number[]
+          mode: string
+          name: string
+          notes: string | null
+          source_lat: number | null
+          source_lng: number | null
+          source_poi_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          center_lat: number
+          center_lng: number
+          color?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          features: Json
+          folder_id?: string | null
+          id?: string
+          minutes?: number[]
+          mode: string
+          name: string
+          notes?: string | null
+          source_lat?: number | null
+          source_lng?: number | null
+          source_poi_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          center_lat?: number
+          center_lng?: number
+          color?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          features?: Json
+          folder_id?: string | null
+          id?: string
+          minutes?: number[]
+          mode?: string
+          name?: string
+          notes?: string | null
+          source_lat?: number | null
+          source_lng?: number | null
+          source_poi_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_isochrones_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "isochrone_folders"
             referencedColumns: ["id"]
           },
         ]
