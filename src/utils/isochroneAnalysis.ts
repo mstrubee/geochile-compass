@@ -11,6 +11,8 @@ import type { IneCommuneStats } from "@/utils/ineScales";
 import type { NSE } from "@/data/communes";
 import { normalizeCommuneName } from "@/services/communeDataService";
 
+export type NseLabel = "ABC1" | "C2" | "C3" | "D" | "E";
+
 export interface PointsByLayer {
   layerId: string;
   layerName: string;
