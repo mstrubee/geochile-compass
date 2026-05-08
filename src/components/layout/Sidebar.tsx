@@ -1137,6 +1137,23 @@ export const Sidebar = ({
               </button>
             </div>
           )}
+
+          {(savedIsochrones.length > 0 || isoFolders.length > 0) && (
+            <SavedIsochronesSubsection
+              savedIsos={savedIsochrones}
+              folders={isoFolders}
+              loadedIds={loadedSavedIsoIds}
+              onToggle={onToggleSavedIsochrone}
+              onAnalyze={onAnalyzeSavedIsochrone}
+              onFocus={onFocusSavedIsochrone}
+              onRename={onRenameSavedIsochrone}
+              onMove={onMoveSavedIsochrone}
+              onDelete={onDeleteSavedIsochrone}
+              onCreateFolder={onCreateIsoFolder}
+              onRenameFolder={onRenameIsoFolder}
+              onDeleteFolder={onDeleteIsoFolder}
+            />
+          )}
         </SidebarSection>
 
 
