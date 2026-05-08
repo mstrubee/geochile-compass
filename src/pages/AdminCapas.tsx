@@ -38,6 +38,9 @@ const AdminCapas = () => {
   const [files, setFiles] = useState<TerritorialSourceFile[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+  const [convertTarget, setConvertTarget] = useState<TerritorialSourceFile | null>(null);
+  const [deleteLayerTarget, setDeleteLayerTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteFileTarget, setDeleteFileTarget] = useState<TerritorialSourceFile | null>(null);
 
   const refreshFiles = useCallback(async () => {
     const { data } = await supabase
