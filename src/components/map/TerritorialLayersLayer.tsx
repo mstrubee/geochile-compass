@@ -14,7 +14,7 @@ interface Props {
 const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export const TerritorialLayersLayer = ({ layers, visibleLayerIds }: Props) => {
+export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = false }: Props) => {
   const map = useMap();
   const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
   const lastFitKeyRef = useRef<string>("");
