@@ -216,6 +216,31 @@ const AdminCapas = () => {
                     {f.error && <span className="text-destructive"> · {f.error}</span>}
                   </div>
                 </div>
+                <Select
+                  value={f.group_id ?? ""}
+                  onValueChange={async (val) => {
+                    const { error } = await supabase
+                      .from("territorial_source_files")
+                      .update({ group_id: val })
+                      .eq("id", f.id);
+                    if (error) toast.error(error.message);
+                    else {
+                      toast.success("Grupo actualizado");
+                      void refreshFiles();
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-44">
+                    <SelectValue placeholder="Asignar grupo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {groups.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {f.gdrive_file_id && (
                   <a
                     href={`https://drive.google.com/file/d/${f.gdrive_file_id}/view`}
