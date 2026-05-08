@@ -54,6 +54,7 @@ interface SidebarProps {
   onIsoModeChange: (m: IsoMode) => void;
   isoMinutes: number[];
   onIsoMinutesChange: (m: number[]) => void;
+  onSaveIsoMinutesDefault?: () => void;
   isochrones: Isochrone[];
   onToggleIsochrone: (id: string) => void;
   onRemoveIsochrone: (id: string) => void;
@@ -521,6 +522,7 @@ export const Sidebar = ({
   onIsoModeChange,
   isoMinutes = [5, 10, 15],
   onIsoMinutesChange,
+  onSaveIsoMinutesDefault,
   isochrones = [],
   onToggleIsochrone,
   onRemoveIsochrone,
@@ -1313,24 +1315,44 @@ export const Sidebar = ({
               </button>
             ))}
           </div>
-          <div className="mb-2 text-[11px] text-muted-foreground">Minutos</div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] text-muted-foreground">Minutos</span>
+            {onSaveIsoMinutesDefault && (
+              <button
+                type="button"
+                onClick={onSaveIsoMinutesDefault}
+                className="text-[10px] text-primary hover:underline"
+                title="Guardar como valores por defecto (solo para ti)"
+              >
+                Guardar por defecto
+              </button>
+            )}
+          </div>
           <div className="mb-2 flex gap-1.5">
-            {[0, 1, 2].map((idx) => (
-              <input
-                key={idx}
-                type="number"
-                min={1}
-                max={60}
-                value={isoMinutes[idx] ?? ""}
-                onChange={(e) => {
-                  const next = [isoMinutes[0] ?? 0, isoMinutes[1] ?? 0, isoMinutes[2] ?? 0];
-                  const v = parseInt(e.target.value, 10);
-                  next[idx] = Number.isFinite(v) ? v : 0;
-                  onIsoMinutesChange(next);
-                }}
-                className="w-0 flex-1 rounded-lg border border-border/60 bg-surface-2/60 px-2 py-1.5 text-center font-mono text-[12px] text-foreground outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
-              />
-            ))}
+            {[0, 1, 2].map((idx) => {
+              const v = isoMinutes[idx];
+              return (
+                <input
+                  key={idx}
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={v ? String(v) : ""}
+                  onChange={(e) => {
+                    const next = [isoMinutes[0] ?? 0, isoMinutes[1] ?? 0, isoMinutes[2] ?? 0];
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      next[idx] = 0;
+                    } else {
+                      const parsed = parseInt(raw, 10);
+                      next[idx] = Number.isFinite(parsed) ? parsed : 0;
+                    }
+                    onIsoMinutesChange(next);
+                  }}
+                  className="w-0 flex-1 rounded-lg border border-border/60 bg-surface-2/60 px-2 py-1.5 text-center font-mono text-[12px] text-foreground outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+                />
+              );
+            })}
           </div>
           <button
             type="button"
