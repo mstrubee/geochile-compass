@@ -150,7 +150,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
         }
       });
     });
-  }, [features, layers, visibleLayerIds, map, canvasRenderer]);
+  }, [features, layers, visibleLayerIds, map, canvasRenderer, heatmap]);
 
   useEffect(() => {
     return () => {
