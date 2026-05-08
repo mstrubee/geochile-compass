@@ -1959,11 +1959,15 @@ export const Sidebar = ({
                               {onRenameFolder && (
                                 <ContextMenuItem
                                   onSelect={async () => {
-                                    const next = window.prompt(`Nuevo nombre para "${f.name}":`, f.name);
-                                    if (!next || !next.trim() || next.trim() === f.name) return;
+                                    const next = await promptDialog({
+                                      title: "Renombrar carpeta",
+                                      label: "Nuevo nombre",
+                                      defaultValue: f.name,
+                                    });
+                                    if (!next || next === f.name) return;
                                     try {
-                                      await onRenameFolder(f.id, next.trim());
-                                      toast.success(`Carpeta renombrada a "${next.trim()}"`);
+                                      await onRenameFolder(f.id, next);
+                                      toast.success(`Carpeta renombrada a "${next}"`);
                                     } catch (err) {
                                       toast.error(err instanceof Error ? err.message : "Error al renombrar");
                                     }
@@ -1976,22 +1980,25 @@ export const Sidebar = ({
                               {onCreateFolder && (
                                 <ContextMenuItem
                                   onSelect={async () => {
-                                    const name = window.prompt(
-                                      `Nombre de la nueva subcarpeta dentro de "${f.name}":`,
-                                      "",
-                                    );
-                                    if (!name?.trim()) return;
+                                    const name = await promptDialog({
+                                      title: "Nueva subcarpeta",
+                                      description: `Dentro de "${f.name}"`,
+                                      label: "Nombre",
+                                      placeholder: "Subcarpeta",
+                                    });
+                                    if (!name) return;
                                     try {
-                                      await onCreateFolder(name.trim(), f.id);
+                                      await onCreateFolder(name, f.id);
                                       setExpandedPoiFolders((prev) => {
                                         const next = new Set(prev);
                                         next.add(f.id);
                                         return next;
                                       });
-                                      toast.success(`Subcarpeta "${name.trim()}" creada`);
+                                      toast.success(`Subcarpeta "${name}" creada`);
                                     } catch (err) {
                                       toast.error(err instanceof Error ? err.message : "Error al crear");
                                     }
+                                  }}
                                   }}
                                 >
                                   <FolderPlus className="mr-2 h-3.5 w-3.5" />
