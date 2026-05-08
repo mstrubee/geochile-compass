@@ -323,16 +323,18 @@ export const parseLeafletHtml = (html: string): ScannedLayer[] => {
     if (closeIdx < 0) continue;
     const argsSrc = html.slice(openIdx + 1, closeIdx);
 
-    // Where does this thing get added to?
-    const groupVar = addToByVar.get(varName);
+    // Where does this thing get added to? Look at the chained suffix first
+    // (Folium emits `var x = L.marker(...).addTo(group);` in one statement),
+    // then fall back to a parent recorded via separate `.addTo(...)` statement.
+    const chained = readChainedSuffix(html, closeIdx + 1);
+    const groupVar = chained.group ?? parent.get(varName) ?? null;
     if (!groupVar) continue;
-    const display = resolvedOverlay.get(resolveAlias(groupVar));
+    const display = resolveGroup(groupVar);
     if (!display) continue;
 
     const layer = ensure(display);
 
     // First arg: a literal (array of coords) or an object (geojson)
-    // Find first top-level argument
     const firstArg = (() => {
       let depth = 0, str: string | null = null;
       for (let i = 0; i < argsSrc.length; i++) {
@@ -346,7 +348,7 @@ export const parseLeafletHtml = (html: string): ScannedLayer[] => {
       return argsSrc.trim();
     })();
 
-    const popup = popupByVar.get(varName) ?? null;
+    const popup = chained.popup ?? popupByVar.get(varName) ?? null;
 
     if (ctor === "marker" || ctor === "circleMarker" || ctor === "circle") {
       const coords = parseCoordsLiteral(firstArg);
