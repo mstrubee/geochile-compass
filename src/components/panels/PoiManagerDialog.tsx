@@ -147,7 +147,8 @@ export const PoiManagerDialog = ({
   const handleDeleteFolderPois = async (folderId: string | null) => {
     const ids = (poisByFolder.get(folderId) ?? []).map((p) => p.id);
     if (!ids.length) return;
-    if (!window.confirm(`Eliminar ${ids.length} POIs de esta carpeta?`)) return;
+    const ok = await confirmDialog({ title: "Eliminar POIs", description: `Eliminar ${ids.length} POIs de esta carpeta?`, confirmLabel: "Eliminar" });
+    if (!ok) return;
     try {
       await onDeletePois(ids);
       toast.success(`${ids.length} POIs eliminados`);
