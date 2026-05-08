@@ -88,6 +88,7 @@ const Index = () => {
   const [isochrones, setIsochrones] = useState<Isochrone[]>([]);
   const [fitIsoId, setFitIsoId] = useState<string | null>(null);
   const [isoLoading, setIsoLoading] = useState(false);
+  const [selectedIsoId, setSelectedIsoId] = useState<string | null>(null);
 
   // Búsqueda de direcciones (centra el mapa)
   const [flyTarget, setFlyTarget] = useState<{
