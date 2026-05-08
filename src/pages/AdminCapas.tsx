@@ -337,7 +337,7 @@ const AdminCapas = () => {
                     variant="ghost"
                     size="icon"
                     title="Convertir a GeoJSON y guardar en historial"
-                    onClick={() => convertFileToGeoJson(f)}
+                    onClick={() => setConvertTarget(f)}
                   >
                     <FileJson className="h-4 w-4" />
                   </Button>
