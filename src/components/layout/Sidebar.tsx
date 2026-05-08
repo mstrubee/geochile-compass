@@ -673,14 +673,22 @@ export const Sidebar = ({
   const [createPoiOpen, setCreatePoiOpen] = useState(false);
 
   // Confirmaciones de borrado — todo lo eliminado va a la papelera (30 días).
-  const confirmRemovePoi = (id: string, name: string) => {
-    if (window.confirm(`¿Eliminar "${name}"? Se moverá a la papelera durante 30 días antes de borrarse definitivamente.`)) {
-      onRemoveSavedPoi(id);
-    }
+  const confirmRemovePoi = async (id: string, name: string) => {
+    const ok = await confirmDialog({
+      title: "Mover POI a papelera",
+      description: `Se moverá "${name}" a la papelera durante 30 días antes de borrarse definitivamente.`,
+      confirmLabel: "Mover a papelera",
+    });
+    if (ok) onRemoveSavedPoi(id);
   };
   const confirmDeleteFolder = async (id: string, name: string) => {
     if (!onDeleteFolder) return;
-    if (window.confirm(`¿Eliminar la carpeta "${name}" y todo su contenido (subcarpetas y POIs)? Se moverá a la papelera durante 30 días antes de borrarse definitivamente.`)) {
+    const ok = await confirmDialog({
+      title: "Mover carpeta a papelera",
+      description: `Se moverá la carpeta "${name}" y todo su contenido (subcarpetas y POIs) a la papelera durante 30 días.`,
+      confirmLabel: "Mover a papelera",
+    });
+    if (ok) {
       try {
         await onDeleteFolder(id);
         toast.success("Movido a papelera");
