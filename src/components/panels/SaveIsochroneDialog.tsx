@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AppDialog } from "@/components/ui/app-dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, Save } from "lucide-react";
 import type { IsochroneFolder, SaveIsochronePayload } from "@/types/savedIsochrones";
 import type { Isochrone } from "@/types/isochrones";
 import { ISO_MODE_LABEL } from "@/types/isochrones";
@@ -101,71 +101,70 @@ export const SaveIsochroneDialog = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Guardar isócrona</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label htmlFor="iso-name">Nombre</Label>
-            <Input
-              id="iso-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Mi isócrona"
-            />
-          </div>
-          <div>
-            <div className="mb-1 flex items-center justify-between">
-              <Label htmlFor="iso-folder">Carpeta</Label>
-              <button
-                type="button"
-                onClick={() => setCreatingFolder((v) => !v)}
-                className="flex items-center gap-1 text-[11px] text-primary hover:underline"
-              >
-                <FolderPlus className="h-3 w-3" /> Nueva
-              </button>
-            </div>
-            {creatingFolder ? (
-              <div className="flex gap-2">
-                <Input
-                  autoFocus
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()}
-                  placeholder="Nombre de carpeta"
-                />
-                <Button size="sm" onClick={handleCreateFolder}>
-                  Crear
-                </Button>
-              </div>
-            ) : (
-              <select
-                id="iso-folder"
-                value={folderId ?? ""}
-                onChange={(e) => setFolderId(e.target.value || null)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="">— Sin carpeta —</option>
-                {folderOptions.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+    <AppDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      icon={Save}
+      tone="primary"
+      title="Guardar isócrona"
+      description="Asigna un nombre y elige una carpeta para organizarla."
+      cancelLabel="Cancelar"
+      confirmLabel={saving ? "Guardando…" : "Guardar"}
+      onConfirm={handleSave}
+      confirmDisabled={saving || !name.trim()}
+      confirmLoading={saving}
+    >
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="iso-name" className="text-xs">Nombre</Label>
+          <Input
+            id="iso-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Mi isócrona"
+          />
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSave} disabled={saving || !name.trim()}>
-            {saving ? "Guardando…" : "Guardar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="iso-folder" className="text-xs">Carpeta</Label>
+            <button
+              type="button"
+              onClick={() => setCreatingFolder((v) => !v)}
+              className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+            >
+              <FolderPlus className="h-3 w-3" /> Nueva
+            </button>
+          </div>
+          {creatingFolder ? (
+            <div className="flex gap-2">
+              <Input
+                autoFocus
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()}
+                placeholder="Nombre de carpeta"
+              />
+              <Button size="sm" onClick={handleCreateFolder}>
+                Crear
+              </Button>
+            </div>
+          ) : (
+            <select
+              id="iso-folder"
+              value={folderId ?? ""}
+              onChange={(e) => setFolderId(e.target.value || null)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="">— Sin carpeta —</option>
+              {folderOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </div>
+    </AppDialog>
   );
 };
