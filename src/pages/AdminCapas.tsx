@@ -234,11 +234,22 @@ const AdminCapas = () => {
                       .from("territorial_source_files")
                       .update({ group_id: val })
                       .eq("id", f.id);
-                    if (error) toast.error(error.message);
-                    else {
-                      toast.success("Grupo actualizado");
-                      void refreshFiles();
+                    if (error) {
+                      toast.error(error.message);
+                      return;
                     }
+                    // Cascade: move existing layers (and therefore their features) to the new group
+                    const { error: layerErr, count } = await supabase
+                      .from("territorial_layers")
+                      .update({ group_id: val }, { count: "exact" })
+                      .eq("source_file_id", f.id);
+                    if (layerErr) {
+                      toast.error(`Grupo actualizado, pero capas no movidas: ${layerErr.message}`);
+                    } else {
+                      toast.success(`Grupo actualizado · ${count ?? 0} capas movidas`);
+                    }
+                    void refreshFiles();
+                    void refresh();
                   }}
                 >
                   <SelectTrigger className="h-8 w-44">
