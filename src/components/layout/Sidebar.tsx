@@ -337,9 +337,13 @@ const SavedIsochronesSubsection = ({
         <ContextMenuContent>
           {onRename && (
             <ContextMenuItem
-              onClick={() => {
-                const n = window.prompt("Nuevo nombre:", s.name);
-                if (n && n.trim()) void onRename(s.id, n.trim());
+              onClick={async () => {
+                const n = await promptDialog({
+                  title: "Renombrar isócrona",
+                  label: "Nuevo nombre",
+                  defaultValue: s.name,
+                });
+                if (n) void onRename(s.id, n);
               }}
             >
               <Pencil className="mr-2 h-3.5 w-3.5" /> Renombrar
@@ -347,18 +351,19 @@ const SavedIsochronesSubsection = ({
           )}
           {onMove && (
             <ContextMenuItem
-              onClick={() => {
+              onClick={async () => {
                 const opts = [
-                  { id: "", label: "(sin carpeta)" },
-                  ...folders.map((f) => ({ id: f.id, label: f.name })),
+                  { value: "", label: "(sin carpeta)" },
+                  ...folders.map((f) => ({ value: f.id, label: f.name })),
                 ];
-                const choice = window.prompt(
-                  `Mover a carpeta. Escribe el número:\n${opts.map((o, i) => `${i}: ${o.label}`).join("\n")}`,
-                  "0",
-                );
-                const idx = choice == null ? -1 : parseInt(choice, 10);
-                if (Number.isFinite(idx) && opts[idx]) {
-                  void onMove(s.id, opts[idx].id || null);
+                const choice = await selectDialog({
+                  title: "Mover a carpeta",
+                  label: "Carpeta destino",
+                  options: opts,
+                  defaultValue: "",
+                });
+                if (choice !== null) {
+                  void onMove(s.id, choice || null);
                 }
               }}
             >
@@ -368,8 +373,13 @@ const SavedIsochronesSubsection = ({
           <ContextMenuSeparator />
           {onDelete && (
             <ContextMenuItem
-              onClick={() => {
-                if (window.confirm(`¿Eliminar "${s.name}"?`)) void onDelete(s.id);
+              onClick={async () => {
+                const ok = await confirmDialog({
+                  title: "Eliminar isócrona",
+                  description: `¿Eliminar "${s.name}"?`,
+                  confirmLabel: "Eliminar",
+                });
+                if (ok) void onDelete(s.id);
               }}
               className="text-destructive"
             >
