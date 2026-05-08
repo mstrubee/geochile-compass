@@ -6,11 +6,14 @@ interface Ctx {
   setLayers: (ids: string[], visible: boolean) => void;
   ensureVisibleDefaults: (ids: string[]) => void;
   isVisible: (id: string) => boolean;
+  heatmapEnabled: boolean;
+  setHeatmapEnabled: (v: boolean) => void;
 }
 
 const TerritorialVisibilityContext = createContext<Ctx | null>(null);
 const STORAGE_KEY = "territorial_visible_v2";
 const SEEN_LAYERS_KEY = `${STORAGE_KEY}_seen_layers`;
+const HEATMAP_KEY = "territorial_heatmap_v1";
 
 export const TerritorialVisibilityProvider = ({ children }: { children: ReactNode }) => {
   const [visibleLayerIds, setVisible] = useState<Set<string>>(() => {
@@ -69,9 +72,26 @@ export const TerritorialVisibilityProvider = ({ children }: { children: ReactNod
 
   const isVisible = useCallback((id: string) => visibleLayerIds.has(id), [visibleLayerIds]);
 
+  const [heatmapEnabled, setHeatmapEnabledState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(HEATMAP_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const setHeatmapEnabled = useCallback((v: boolean) => {
+    setHeatmapEnabledState(v);
+    try {
+      localStorage.setItem(HEATMAP_KEY, v ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const value = useMemo(
-    () => ({ visibleLayerIds, toggleLayer, setLayers, ensureVisibleDefaults, isVisible }),
-    [visibleLayerIds, toggleLayer, setLayers, ensureVisibleDefaults, isVisible],
+    () => ({ visibleLayerIds, toggleLayer, setLayers, ensureVisibleDefaults, isVisible, heatmapEnabled, setHeatmapEnabled }),
+    [visibleLayerIds, toggleLayer, setLayers, ensureVisibleDefaults, isVisible, heatmapEnabled, setHeatmapEnabled],
   );
 
   return (
