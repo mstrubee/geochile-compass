@@ -1,22 +1,60 @@
-Plan para corregirlo:
+## Objetivo
 
-1. Cambiar el parser Leaflet/Folium para que detecte capas por pertenencia real al control de capas, no por geometría.
-   - Reconocer construcciones encadenadas típicas de Folium como `var marker_x = L.marker(...).addTo(feature_group_x)` y `var polygon_x = L.polygon(...).addTo(feature_group_x)`.
-   - Seguir relaciones transitivas: marcador → cluster/subgrupo → feature group → overlay del control.
-   - Resolver `L.control.layers(...)`, `.overlays = {...}` y `.addOverlay(...)` como fuente de nombres visibles.
-   - Normalizar nombres visibles del control quitando HTML/entidades, para conservar nombres como `Zonas`, `Tiendas Ap/Ag`, `Talleres: Con Contacto`.
+Reemplazar los `window.confirm` / `window.prompt` nativos del flujo de conversión HTML → GeoJSON (y la eliminación de archivos/capas) por diálogos modernos y amigables, alineados al diseño del sistema, y pulir el `UploadDialog` existente.
 
-2. Sincronizar la corrección en ambos caminos de AdminCapas.
-   - `supabase/functions/_shared/territorial-parser.ts`: usado por “Subir y analizar”, “Procesar” y “Reprocesar archivo”.
-   - `src/utils/htmlToGeoJson.ts`: usado por el botón “HTML → GeoJSON”.
-   - Evitar que el fallback genere `Markers`, `Polygons` o `Lines` cuando sí existen overlays reales aunque el formato use `.addTo(...)` encadenado.
+## Cambios propuestos
 
-3. Añadir verificación local con fixtures mínimos de Folium/Leaflet.
-   - Caso con `feature_group_zonas`, `feature_group_tiendas`, `feature_group_talleres` en `L.control.layers`.
-   - Caso con markers/polygons encadenados directamente.
-   - Caso con marker cluster o subgrupo intermedio.
-   - Confirmar que el resumen devuelva capas reales y no `Markers`/`Polygons`.
+### 1. Nuevo componente `ConvertHtmlDialog` (`src/components/admin/ConvertHtmlDialog.tsx`)
 
-4. Desplegar la función de backend actualizada y validar el flujo.
-   - Reescanear desde AdminCapas debe mostrar las capas reales del control.
-   - Reprocesar debe crear/actualizar `territorial_layers.name` con esos nombres reales dentro del grupo destino seleccionado.
+Diálogo único que cubre las 3 fases hoy resueltas con `confirm` + `prompt`:
+
+- **Estado "confirmar"**: muestra resumen del archivo origen (nombre, tamaño, grupo) + nombre destino sugerido `<base>.geojson`. Botón primario "Convertir y guardar".
+- **Estado "conflicto"** (cuando ya existe ese nombre): tarjeta destacada con icono de alerta y dos opciones grandes seleccionables (radio cards):
+  - Reemplazar archivo existente (con timestamp del actual).
+  - Guardar con un nombre nuevo → input editable precargado con sufijo de fecha.
+- **Estado "procesando"**: spinner + mensaje ("Descargando…", "Parseando…", "Subiendo…").
+- **Estado "éxito"**: resumen (features detectadas, grupos, tamaño) + botón "Cerrar".
+
+Toda la lógica de `convertFileToGeoJson` se mueve a este componente (recibe `file` y `onDone`). Usa `Dialog`, `RadioGroup`, `Input`, `Button`, iconos de lucide y tokens semánticos.
+
+### 2. Diálogos de confirmación de borrado
+
+Reemplazar los dos `window.confirm` (eliminar capa y eliminar archivo) por `AlertDialog` (shadcn) con:
+
+- Título claro, descripción con el nombre del recurso.
+- Botón destructivo (`variant="destructive"`) "Eliminar".
+- Botón "Cancelar".
+
+Implementado vía un pequeño hook/estado local `confirmTarget` para no duplicar markup.
+
+### 3. Pulido del `UploadDialog` existente
+
+- Header con icono `Upload`, título y subtítulo descriptivo.
+- Stepper visual (1. Archivo · 2. Grupo & opciones · 3. Resultado) con estados activo/completado.
+- Drop-zone estilizado (borde dasheado, hover, archivo seleccionado con badge y tamaño).
+- Sección "Opciones avanzadas" colapsable (`Collapsible`) para `DedupStrategy` y selector de grupo, con descripciones cortas.
+- Footer consistente con `DialogFooter`, botones alineados, primario con icono.
+- Mensajes de error en `Alert` destructivo en vez de toast suelto cuando aplica al formulario.
+
+### 4. Detalles de diseño compartidos
+
+- Usar tokens: `bg-card`, `border-border`, `text-muted-foreground`, `bg-destructive/10`, etc. Sin colores hardcodeados.
+- Tipografía: títulos `text-base font-semibold`, descripciones `text-sm text-muted-foreground`.
+- Espaciado consistente (`space-y-4`), bordes `rounded-lg`, sombras suaves.
+- Animaciones por defecto de Radix (ya incluidas).
+- Iconos lucide pequeños (h-4 w-4) acompañando títulos y acciones.
+
+## Archivos a modificar / crear
+
+- **Crear**: `src/components/admin/ConvertHtmlDialog.tsx`
+- **Crear**: `src/components/admin/ConfirmDeleteDialog.tsx` (reutilizable, basado en `AlertDialog`)
+- **Editar**: `src/pages/AdminCapas.tsx`
+  - Remover `convertFileToGeoJson`, `window.confirm`, `window.prompt`.
+  - Integrar `ConvertHtmlDialog` y `ConfirmDeleteDialog` con estado local.
+  - Refinar markup del `UploadDialog` (mismo archivo).
+
+## Notas técnicas
+
+- No se modifica lógica de parseo (`htmlToGeoJson`) ni el esquema de datos.
+- No se tocan edge functions ni RLS.
+- Toda la interacción sigue dentro de `/admin/capas`; sin nuevas rutas.
