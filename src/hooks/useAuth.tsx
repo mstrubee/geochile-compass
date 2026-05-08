@@ -1,8 +1,17 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-export const useAuth = () => {
+type AuthContextValue = {
+  session: Session | null;
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+};
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +33,6 @@ export const useAuth = () => {
         if (!active) return;
         if (err) {
           setError(err.message);
-          // Sesión local corrupta: limpiar para evitar bucle de refresh
           supabase.auth.signOut({ scope: "local" }).catch(() => {});
         } else {
           setSession(data.session);
@@ -45,5 +53,19 @@ export const useAuth = () => {
     };
   }, []);
 
-  return { session, user, loading, error };
+  return (
+    <AuthContext.Provider value={{ session, user, loading, error }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = (): AuthContextValue => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    // Fallback inocuo si por alguna razón se usa fuera del provider:
+    // evita romper el árbol y permite que el caller maneje "loading".
+    return { session: null, user: null, loading: true, error: null };
+  }
+  return ctx;
 };
