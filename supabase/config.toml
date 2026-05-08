@@ -2,3 +2,6 @@ project_id = "tcmyidycqdrrtwuaovbk"
 
 [functions.isochrone]
 verify_jwt = false
+
+[functions.isochrone-insights]
+verify_jwt = false
