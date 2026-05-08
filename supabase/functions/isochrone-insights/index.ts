@@ -6,6 +6,99 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const fmt = (value: number | null | undefined) => {
+  if (value == null || Number.isNaN(value)) return null;
+  return Math.round(value).toLocaleString("es-CL");
+};
+
+const pctText = (value: number | null | undefined) => {
+  if (value == null || Number.isNaN(value)) return null;
+  return `${Math.round(value)}%`;
+};
+
+const extractRetryAfterMs = (detail: string) => {
+  try {
+    const parsed = JSON.parse(detail);
+    const retryInfo = parsed?.error?.details?.find(
+      (item: { "@type"?: string }) => item?.["@type"] === "type.googleapis.com/google.rpc.RetryInfo",
+    );
+    const retryDelay = retryInfo?.retryDelay as string | undefined;
+    if (retryDelay?.endsWith("s")) {
+      return Math.max(1000, Math.round(Number.parseFloat(retryDelay) * 1000));
+    }
+  } catch {
+    // noop
+  }
+
+  const messageMatch = detail.match(/Please retry in\s+([\d.]+)s/i);
+  if (messageMatch) {
+    return Math.max(1000, Math.round(Number.parseFloat(messageMatch[1]) * 1000));
+  }
+
+  return 30000;
+};
+
+const buildFallbackSummary = (analysis: any) => {
+  const topGse = Object.entries(analysis?.gse?.classDistribution ?? {})
+    .sort(([, a], [, b]) => Number(b) - Number(a))[0] as [string, number] | undefined;
+
+  const positiveComparison = (analysis?.comparisons ?? []).find((item: any) => (item?.vsRmPct ?? 0) >= 10);
+  const negativeComparison = (analysis?.comparisons ?? []).find((item: any) => (item?.vsRmPct ?? 0) <= -10);
+
+  const strengths: string[] = [];
+  const alerts: string[] = [];
+  const recommendations: string[] = [];
+
+  if ((analysis?.density?.serviceCoverageIndex ?? 0) >= 70) {
+    strengths.push(`Buena cobertura de servicios, con un índice de ${fmt(analysis.density.serviceCoverageIndex)}.`);
+  }
+  if ((analysis?.territorialPoints?.total ?? 0) > 0) {
+    strengths.push(`${fmt(analysis.territorialPoints.total)} puntos de interés detectados dentro de la isócrona.`);
+  }
+  if (positiveComparison) {
+    strengths.push(`${positiveComparison.label} se ubica ${positiveComparison.vsRmPct}% sobre el promedio RM.`);
+  }
+  if ((analysis?.density?.serviceCoverageIndex ?? 0) < 35) {
+    alerts.push(`Cobertura de servicios acotada, con índice ${fmt(analysis.density.serviceCoverageIndex)}.`);
+  }
+  if ((analysis?.gse?.hacinAvg ?? 0) >= 2.5) {
+    alerts.push(`Se observa hacinamiento elevado (${analysis.gse.hacinAvg.toFixed(2)}).`);
+  }
+  if (negativeComparison) {
+    alerts.push(`${negativeComparison.label} está ${negativeComparison.vsRmPct}% bajo el promedio RM.`);
+  }
+
+  if ((analysis?.density?.popPerKm2 ?? 0) >= 8000) {
+    recommendations.push("Priorizar formatos de alta rotación y servicios de conveniencia.");
+  } else {
+    recommendations.push("Evaluar una propuesta de cobertura barrial con ticket medio controlado.");
+  }
+  if ((analysis?.gse?.classDistribution?.ABC1 ?? 0) + (analysis?.gse?.classDistribution?.C1 ?? 0) >= 35) {
+    recommendations.push("Incorporar oferta premium y surtido diferenciado orientado a hogares de mayor ingreso.");
+  } else {
+    recommendations.push("Ajustar mix comercial a sensibilidad de precio y promociones recurrentes.");
+  }
+  recommendations.push("Usar este resumen como contingencia y reintentar el análisis IA cuando se libere cuota de Gemini.");
+
+  return [
+    `**Perfil socioeconómico** ${[
+      analysis?.totals?.hh ? `${fmt(analysis.totals.hh)} hogares estimados` : null,
+      analysis?.totals?.pop ? `${fmt(analysis.totals.pop)} personas` : null,
+      analysis?.totals?.incomeAvgPerHh ? `ingreso promedio hogar ${fmt(analysis.totals.incomeAvgPerHh)} CLP` : null,
+      topGse ? `predomina el segmento ${topGse[0]} (${pctText(topGse[1])})` : null,
+    ].filter(Boolean).join(", ")}.`,
+    `**Densidad y cobertura** ${[
+      analysis?.area_km2 ? `${analysis.area_km2.toFixed(2)} km² de cobertura` : null,
+      analysis?.density?.popPerKm2 ? `${fmt(analysis.density.popPerKm2)} hab/km²` : null,
+      analysis?.density?.hhPerKm2 ? `${fmt(analysis.density.hhPerKm2)} hogares/km²` : null,
+      analysis?.density?.serviceCoverageIndex != null ? `índice de cobertura ${fmt(analysis.density.serviceCoverageIndex)}` : null,
+    ].filter(Boolean).join(", ")}.`,
+    `**Fortalezas**\n${(strengths.length ? strengths : ["Base territorial con indicadores suficientes para una primera lectura operativa."]).map((item) => `- ${item}`).join("\n")}`,
+    `**Alertas**\n${(alerts.length ? alerts : ["La cuota de Gemini impidió generar una lectura narrativa más fina en este momento."]).map((item) => `- ${item}`).join("\n")}`,
+    `**Recomendaciones**\n${recommendations.map((item) => `- ${item}`).join("\n")}`,
+  ].join("\n\n");
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -97,6 +190,7 @@ Reglas:
     let aiRes: Response | null = null;
     let lastErrText = "";
     let lastStatus = 0;
+    let retryAfterMs = 0;
 
     outer: for (const model of fallbackModels) {
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -108,7 +202,11 @@ Reglas:
         lastStatus = res.status;
         lastErrText = await res.text();
         console.error(`Gemini ${model} attempt ${attempt + 1} failed:`, res.status, lastErrText);
-        if (res.status === 429 || res.status === 401 || res.status === 400) break;
+        if (res.status === 429) {
+          retryAfterMs = extractRetryAfterMs(lastErrText);
+          break outer;
+        }
+        if (res.status === 401 || res.status === 400) break outer;
         if (res.status === 503 || res.status >= 500) {
           await sleep(500 * (attempt + 1));
           continue;
@@ -119,18 +217,22 @@ Reglas:
 
     if (!aiRes) {
       const isUnavailable = lastStatus === 503;
+      const isRateLimited = lastStatus === 429;
+      const summary = (isRateLimited || isUnavailable) ? buildFallbackSummary(compactAnalysis) : null;
       return new Response(
         JSON.stringify({
-          error: lastStatus === 429
-            ? "Rate limit exceeded"
+          error: isRateLimited
+            ? "RATE_LIMITED"
             : isUnavailable
               ? "SERVICE_UNAVAILABLE"
               : "Gemini API error",
           detail: lastErrText,
-          fallback: isUnavailable || lastStatus >= 500,
+          fallback: Boolean(summary) || isUnavailable || lastStatus >= 500,
+          retryAfterMs: retryAfterMs || undefined,
+          summary,
         }),
         {
-          status: isUnavailable || lastStatus >= 500 ? 200 : (lastStatus || 500),
+          status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
