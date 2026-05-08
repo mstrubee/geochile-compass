@@ -4,11 +4,13 @@ interface Ctx {
   visibleLayerIds: Set<string>;
   toggleLayer: (id: string) => void;
   setLayers: (ids: string[], visible: boolean) => void;
+  ensureVisibleDefaults: (ids: string[]) => void;
   isVisible: (id: string) => boolean;
 }
 
 const TerritorialVisibilityContext = createContext<Ctx | null>(null);
-const STORAGE_KEY = "territorial_visible_v1";
+const STORAGE_KEY = "territorial_visible_v2";
+const DEFAULTS_APPLIED_KEY = `${STORAGE_KEY}_defaults_applied`;
 
 export const TerritorialVisibilityProvider = ({ children }: { children: ReactNode }) => {
   const [visibleLayerIds, setVisible] = useState<Set<string>>(() => {
@@ -46,11 +48,26 @@ export const TerritorialVisibilityProvider = ({ children }: { children: ReactNod
     });
   }, []);
 
+  const ensureVisibleDefaults = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    try {
+      if (localStorage.getItem(DEFAULTS_APPLIED_KEY) === "1") return;
+      localStorage.setItem(DEFAULTS_APPLIED_KEY, "1");
+    } catch {
+      // ignore
+    }
+    setVisible((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }, []);
+
   const isVisible = useCallback((id: string) => visibleLayerIds.has(id), [visibleLayerIds]);
 
   const value = useMemo(
-    () => ({ visibleLayerIds, toggleLayer, setLayers, isVisible }),
-    [visibleLayerIds, toggleLayer, setLayers, isVisible],
+    () => ({ visibleLayerIds, toggleLayer, setLayers, ensureVisibleDefaults, isVisible }),
+    [visibleLayerIds, toggleLayer, setLayers, ensureVisibleDefaults, isVisible],
   );
 
   return (
