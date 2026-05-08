@@ -86,6 +86,9 @@ export interface IsochroneAnalysis {
   territorialPoints: TerritorialPointsBreakdown;
   communes: CommuneBreakdownRow[];
   manzanas: ManzanaBreakdown | null;
+  gse: GseBreakdown | null;
+  density: DensityBreakdown;
+  comparisons: ComparisonRow[];
   totals: {
     pop: number;
     hh: number;
