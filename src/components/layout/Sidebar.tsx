@@ -522,6 +522,7 @@ export const Sidebar = ({
   onIsoModeChange,
   isoMinutes = [5, 10, 15],
   onIsoMinutesChange,
+  onSaveIsoMinutesDefault,
   isochrones = [],
   onToggleIsochrone,
   onRemoveIsochrone,
