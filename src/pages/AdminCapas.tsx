@@ -45,6 +45,24 @@ const AdminCapas = () => {
   const [bulkDeleteGroup, setBulkDeleteGroup] = useState<{ id: string; name: string; ids: string[] } | null>(null);
   const [renameGroupTarget, setRenameGroupTarget] = useState<{ id: string; name: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const [editingLayerName, setEditingLayerName] = useState("");
+
+  const saveLayerName = async (id: string, originalName: string) => {
+    const trimmed = editingLayerName.trim();
+    setEditingLayerId(null);
+    if (!trimmed || trimmed === originalName) return;
+    const { error } = await supabase
+      .from("territorial_layers")
+      .update({ name: trimmed })
+      .eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Capa renombrada");
+    void refresh();
+  };
 
   const toggleLayerSelected = (groupId: string, layerId: string) => {
     setSelectedLayers((prev) => {
