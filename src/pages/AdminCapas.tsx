@@ -149,6 +149,10 @@ const AdminCapas = () => {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-8 p-4">
+        <p className="rounded-md border border-border/40 bg-muted/30 p-3 text-xs text-muted-foreground">
+          ¿Tu HTML se subió pero no muestra capas ni puntos? Usá <strong>HTML → GeoJSON</strong> para
+          convertirlo en el navegador y luego cargá el .geojson resultante.
+        </p>
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground">Grupos</h2>
           <div className="flex gap-2">
