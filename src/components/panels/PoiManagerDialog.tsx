@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -383,7 +383,17 @@ export const PoiManagerDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-3xl overflow-hidden">
         <DialogHeader>
-          <DialogTitle>Administrar POIs</DialogTitle>
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Folder className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <DialogTitle>Administrar POIs</DialogTitle>
+              <DialogDescription className="mt-1">
+                Organiza tus puntos de interés en carpetas, edítalos o elimínalos.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="flex items-center gap-2 border-b border-border pb-2">
@@ -515,7 +525,17 @@ const PoiEditPanel = ({ poi, folders, onCancel, onSave }: EditProps) => {
     <Dialog open={!!poi} onOpenChange={(v) => { if (!v) onCancel(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Editar POI</DialogTitle>
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Pencil className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <DialogTitle>Editar POI</DialogTitle>
+              <DialogDescription className="mt-1">
+                Actualiza nombre, descripción, color o carpeta de este punto.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">

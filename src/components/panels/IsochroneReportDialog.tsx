@@ -16,7 +16,9 @@ import {
   Plus,
   ChevronDown,
   ChevronUp,
+  PieChart,
 } from "lucide-react";
+import { DialogDescription } from "@/components/ui/dialog";
 import type { Isochrone } from "@/types/isochrones";
 import { ISO_MODE_LABEL } from "@/types/isochrones";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
@@ -122,19 +124,25 @@ export const IsochroneReportDialog = ({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden p-0 sm:max-w-5xl">
-        <DialogHeader className="border-b border-border/40 px-5 pb-3 pt-4">
-          <DialogTitle className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ background: isochrone?.color ?? "#666" }}
-            />
-            Informe de isócrona
-            {isochrone && (
-              <span className="text-[12px] font-normal text-muted-foreground">
-                · {ISO_MODE_LABEL[isochrone.mode]} · {isochrone.minutes.join("/")} min
-              </span>
-            )}
-          </DialogTitle>
+        <DialogHeader className="border-b border-border/60 px-5 pb-4 pt-5">
+          <div className="flex items-start gap-3">
+            <div
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+              style={isochrone ? { background: `${isochrone.color}1f`, color: isochrone.color } : undefined}
+            >
+              <PieChart className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <DialogTitle className="text-base font-semibold leading-tight tracking-tight">
+                Informe de isócrona
+              </DialogTitle>
+              {isochrone && (
+                <DialogDescription className="mt-1 text-xs">
+                  {ISO_MODE_LABEL[isochrone.mode]} · {isochrone.minutes.join("/")} min
+                </DialogDescription>
+              )}
+            </div>
+          </div>
         </DialogHeader>
 
         {!report || !band ? (

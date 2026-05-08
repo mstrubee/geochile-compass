@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Download, ArrowUpDown, MapPin } from "lucide-react";
+import { Download, ArrowUpDown, MapPin, Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -102,10 +102,17 @@ export const CommuneSearchResultsDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Resultados — {sorted.length} comunas</DialogTitle>
-          <DialogDescription>
-            Rango de población: {rangeLabel}. Click en encabezados para ordenar, doble click en una fila para centrar el mapa.
-          </DialogDescription>
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Search className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <DialogTitle>Resultados — {sorted.length} comunas</DialogTitle>
+              <DialogDescription className="mt-1">
+                Rango de población: {rangeLabel}. Click en encabezados para ordenar, doble click en una fila para centrar el mapa.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-2">

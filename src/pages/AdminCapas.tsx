@@ -555,10 +555,17 @@ const AdminCapas = () => {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Renombrar grupo</DialogTitle>
-            <DialogDescription>
-              Cambia el nombre visible del grupo. Los slugs y referencias internas se mantienen.
-            </DialogDescription>
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <LayersIcon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1 text-left">
+                <DialogTitle>Renombrar grupo</DialogTitle>
+                <DialogDescription className="mt-1">
+                  Cambia el nombre visible del grupo. Los slugs y referencias internas se mantienen.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
           <div className="space-y-2 py-2">
             <Label htmlFor="rename-group-input">Nuevo nombre</Label>
