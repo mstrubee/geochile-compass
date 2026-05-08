@@ -579,6 +579,88 @@ const Index = () => {
   const clearIsochrones = useCallback(() => setIsochrones([]), []);
   const handleFitIsoDone = useCallback(() => setFitIsoId(null), []);
 
+  // ---- Saved isochrones loading into the active map state ----
+  const loadSavedIsoToMap = useCallback(
+    (id: string) => {
+      const s = savedIsos.find((x) => x.id === id);
+      if (!s) return null;
+      const mapId = `saved:${s.id}`;
+      setIsochrones((prev) => {
+        if (prev.some((i) => i.id === mapId)) return prev;
+        return [
+          ...prev,
+          {
+            id: mapId,
+            mode: s.mode,
+            minutes: s.minutes,
+            center: { lat: s.center_lat, lng: s.center_lng },
+            color: s.color ?? "hsl(var(--iso-1))",
+            visible: true,
+            createdAt: new Date(s.created_at).getTime(),
+            features: s.features,
+          },
+        ];
+      });
+      setLoadedSavedIsoIds((prev) => {
+        const next = new Set(prev);
+        next.add(s.id);
+        return next;
+      });
+      return mapId;
+    },
+    [savedIsos],
+  );
+
+  const toggleSavedIso = useCallback(
+    (id: string) => {
+      const mapId = `saved:${id}`;
+      if (loadedSavedIsoIds.has(id)) {
+        setIsochrones((prev) => prev.filter((i) => i.id !== mapId));
+        setLoadedSavedIsoIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      } else {
+        loadSavedIsoToMap(id);
+      }
+    },
+    [loadedSavedIsoIds, loadSavedIsoToMap],
+  );
+
+  const focusSavedIso = useCallback(
+    (id: string) => {
+      const mapId = `saved:${id}`;
+      if (!loadedSavedIsoIds.has(id)) loadSavedIsoToMap(id);
+      setFitIsoId(mapId);
+      setSelectedIsoId(mapId);
+      setPanelOpen(true);
+    },
+    [loadedSavedIsoIds, loadSavedIsoToMap],
+  );
+
+  const analyzeSavedIso = useCallback(
+    (id: string) => {
+      const mapId = `saved:${id}`;
+      if (!loadedSavedIsoIds.has(id)) loadSavedIsoToMap(id);
+      setSelectedIsoId(mapId);
+      setPanelOpen(true);
+    },
+    [loadedSavedIsoIds, loadSavedIsoToMap],
+  );
+
+  const handleSaveIsochronePayload = useCallback(
+    async (payload: import("@/types/savedIsochrones").SaveIsochronePayload) => {
+      try {
+        await saveIsochrone(payload);
+        toast.success("Isócrona guardada");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Error al guardar");
+      }
+    },
+    [saveIsochrone],
+  );
+
   const handleMapClick = useCallback(
     async (c: { lat: number; lng: number }) => {
       if (mode !== "isochrone") return;
