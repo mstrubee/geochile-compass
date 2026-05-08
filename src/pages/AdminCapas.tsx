@@ -406,6 +406,16 @@ const AdminCapas = () => {
                 >
                   <RefreshCw className="h-4 w-4" />
                 </Button>
+                {(f.file_type === "html" || f.file_type === "kml" || !f.file_type) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="Convertir a GeoJSON y guardar en historial"
+                    onClick={() => convertFileToGeoJson(f)}
+                  >
+                    <FileJson className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
