@@ -159,7 +159,8 @@ export const PoiManagerDialog = ({
 
   const handleBulkDelete = async () => {
     if (!selected.size) return;
-    if (!window.confirm(`Eliminar ${selected.size} POIs seleccionados?`)) return;
+    const ok = await confirmDialog({ title: "Eliminar POIs seleccionados", description: `Eliminar ${selected.size} POIs seleccionados?`, confirmLabel: "Eliminar" });
+    if (!ok) return;
     try {
       await onDeletePois([...selected]);
       setSelected(new Set());
