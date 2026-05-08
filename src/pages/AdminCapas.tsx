@@ -527,19 +527,38 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     [scanned, excluded],
   );
 
+  const step = scanned.length === 0 ? 1 : 2;
+
   return (
     <Dialog open={open} onOpenChange={(v) => (!v ? close() : onOpenChange(v))}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Cargar capa territorial</DialogTitle>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Upload className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <DialogTitle>Cargar capa territorial</DialogTitle>
+              <DialogDescription>
+                Subí un archivo, revisá las capas detectadas y procesalas en el grupo destino.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
+
+        {/* Stepper */}
+        <div className="flex items-center gap-2 text-xs">
+          <StepBadge n={1} label="Archivo" active={step === 1} done={step > 1} />
+          <div className="h-px flex-1 bg-border" />
+          <StepBadge n={2} label="Revisar capas" active={step === 2} done={false} />
+        </div>
 
         {scanned.length === 0 ? (
           <div className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Grupo destino</label>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Grupo destino</Label>
               <Select value={groupId} onValueChange={setGroupId}>
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue placeholder="Elegí un grupo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -549,47 +568,66 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Archivo (hasta 1 GB)</label>
-              <Input
-                type="file"
-                accept=".html,.htm,.geojson,.json,.kml,.kmz,text/html,application/json,application/geo+json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Formatos aceptados: GeoJSON, HTML, KML, KMZ.
-              </p>
-              {file && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB
-                </p>
-              )}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Archivo</Label>
+              <label
+                htmlFor="upload-file-input"
+                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30 px-4 py-6 text-center transition-colors hover:border-primary/60 hover:bg-muted/50"
+              >
+                <FileUp className="h-6 w-6 text-muted-foreground" />
+                {file ? (
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-medium">{file.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {(file.size / 1024 / 1024).toFixed(2)} MB · click para cambiar
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-sm font-medium">Hacé click para seleccionar un archivo</div>
+                    <div className="text-xs text-muted-foreground">GeoJSON · HTML · KML · KMZ (hasta 1 GB)</div>
+                  </>
+                )}
+                <input
+                  id="upload-file-input"
+                  type="file"
+                  accept=".html,.htm,.geojson,.json,.kml,.kmz,text/html,application/json,application/geo+json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
+                  className="hidden"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
             </div>
+
             <DialogFooter>
               <Button variant="outline" onClick={close}>Cancelar</Button>
               <Button onClick={handleUpload} disabled={!file || uploading || scanning}>
-                {(uploading || scanning) && <Loader2 className="h-4 w-4 animate-spin" />}
+                {(uploading || scanning) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {uploading ? "Subiendo…" : scanning ? "Analizando…" : "Subir y analizar"}
               </Button>
             </DialogFooter>
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Se detectaron {scanned.length} capas. Marcá las que quieras excluir.
-            </p>
-            <div className="max-h-[40vh] overflow-y-auto rounded-md border border-border/60">
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+              <LayersIcon className="h-4 w-4 text-primary" />
+              <span>
+                Se detectaron <strong>{scanned.length}</strong> capas. Marcá las que quieras excluir.
+              </span>
+            </div>
+
+            <div className="max-h-[40vh] overflow-y-auto rounded-lg border border-border">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-surface-2/80 text-xs text-muted-foreground">
+                <thead className="sticky top-0 bg-muted/60 text-xs text-muted-foreground backdrop-blur">
                   <tr>
-                    <th className="px-3 py-2 text-left">Excluir</th>
-                    <th className="px-3 py-2 text-left">Capa</th>
-                    <th className="px-3 py-2 text-right">Puntos</th>
+                    <th className="px-3 py-2 text-left font-medium">Excluir</th>
+                    <th className="px-3 py-2 text-left font-medium">Capa</th>
+                    <th className="px-3 py-2 text-right font-medium">Puntos</th>
                   </tr>
                 </thead>
                 <tbody>
                   {scanned.map((l) => (
-                    <tr key={l.name} className="border-t border-border/40">
+                    <tr key={l.name} className="border-t border-border/40 hover:bg-muted/30">
                       <td className="px-3 py-2">
                         <Checkbox
                           checked={excluded.has(l.name)}
@@ -610,10 +648,11 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
                 </tbody>
               </table>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Estrategia de duplicados</label>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Estrategia de duplicados</Label>
               <Select value={dedup} onValueChange={(v) => setDedup(v as DedupStrategy)}>
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -623,15 +662,15 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Se importarán {totalIncluded} puntos en total.
-            </p>
+
+            <div className="rounded-lg bg-primary/5 px-3 py-2 text-xs text-foreground">
+              Se importarán <strong>{totalIncluded.toLocaleString()}</strong> puntos en total.
+            </div>
+
             <DialogFooter>
-              <Button variant="outline" onClick={close} disabled={processing}>
-                Cancelar
-              </Button>
+              <Button variant="outline" onClick={close} disabled={processing}>Cancelar</Button>
               <Button onClick={handleProcess} disabled={processing}>
-                {processing && <Loader2 className="h-4 w-4 animate-spin" />}
+                {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {processing ? "Procesando…" : "Procesar"}
               </Button>
             </DialogFooter>
@@ -641,5 +680,21 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     </Dialog>
   );
 };
+
+const StepBadge = ({ n, label, active, done }: { n: number; label: string; active: boolean; done: boolean }) => (
+  <div className="flex items-center gap-1.5">
+    <div
+      className={[
+        "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold",
+        done ? "bg-primary text-primary-foreground"
+          : active ? "bg-primary/20 text-primary ring-2 ring-primary/40"
+          : "bg-muted text-muted-foreground",
+      ].join(" ")}
+    >
+      {n}
+    </div>
+    <span className={active || done ? "font-medium text-foreground" : "text-muted-foreground"}>{label}</span>
+  </div>
+);
 
 export default AdminCapas;
