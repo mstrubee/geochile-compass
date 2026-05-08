@@ -300,9 +300,6 @@ const resolveKmzIcons = async (
 };
 
 export const parseFile = async (file: File): Promise<FeatureCollection> => {
-  if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`Archivo demasiado grande (máx 20MB)`);
-  }
   const ext = getExtension(file.name);
   if (!ext) throw new Error("Formato no soportado. Usa GeoJSON, KML o KMZ.");
 
