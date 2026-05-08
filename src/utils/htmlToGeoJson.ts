@@ -171,9 +171,10 @@ const parseLeafletGrouped = (html: string): Feature[] => {
     const closeIdx = findMatching(html, openIdx);
     if (closeIdx < 0) continue;
     const argsSrc = html.slice(openIdx + 1, closeIdx);
-    const groupVar = addToByVar.get(varName);
+    const chained = readChainedSuffix(html, closeIdx + 1);
+    const groupVar = chained.group ?? parent.get(varName) ?? null;
     if (!groupVar) continue;
-    const folder = resolvedOverlay.get(resolveAlias(groupVar));
+    const folder = resolveGroup(groupVar);
     if (!folder) continue;
     let firstArg = argsSrc.trim();
     {
@@ -187,7 +188,7 @@ const parseLeafletGrouped = (html: string): Feature[] => {
         else if (c === "," && depth === 0) { firstArg = argsSrc.slice(0, i).trim(); break; }
       }
     }
-    const popup = popupByVar.get(varName) ?? null;
+    const popup = chained.popup ?? popupByVar.get(varName) ?? null;
 
     if (ctor === "marker" || ctor === "circleMarker" || ctor === "circle") {
       const coords = looseJsonParse(firstArg);
