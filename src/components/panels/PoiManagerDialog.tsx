@@ -18,6 +18,7 @@ import {
   Move,
 } from "lucide-react";
 import { toast } from "sonner";
+import { confirmDialog } from "@/components/ui/dialog-service";
 import type { PoiFolder, PoiUpdate, SavedPoi } from "@/types/pois";
 
 interface Props {
