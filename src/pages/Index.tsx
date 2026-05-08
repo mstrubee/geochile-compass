@@ -590,6 +590,8 @@ const Index = () => {
         };
         setIsochrones((prev) => [...prev, newIso]);
         setFitIsoId(id);
+        setSelectedIsoId(id);
+        setPanelOpen(true);
         toast.success("Isócrona añadida", { id: tId });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Error";
