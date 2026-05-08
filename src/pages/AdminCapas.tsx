@@ -118,12 +118,19 @@ const AdminCapas = () => {
                 const text = await f.text();
                 const fc = htmlToGeoJson(text);
                 if (!fc.features.length) {
-                  toast.error("No se detectaron features en el archivo");
+                  toast.error("Formato HTML no reconocido. Probá exportarlo como GeoJSON o KML desde la herramienta de origen.");
                   return;
                 }
+                const byFolder = new Map<string, number>();
+                for (const f of fc.features) {
+                  const k = String((f.properties as Record<string, unknown>)?.folder ?? "default");
+                  byFolder.set(k, (byFolder.get(k) ?? 0) + 1);
+                }
+                const summary = [...byFolder.entries()]
+                  .map(([k, v]) => `${k}: ${v}`).join(" · ");
                 const out = f.name.replace(/\.[^.]+$/, "") + ".geojson";
                 downloadGeoJson(fc, out);
-                toast.success(`${fc.features.length} features → ${out}`);
+                toast.success(`${fc.features.length} features (${summary}) → ${out}`);
               } catch (err) {
                 toast.error(err instanceof Error ? err.message : String(err));
               }
