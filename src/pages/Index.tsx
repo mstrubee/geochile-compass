@@ -933,6 +933,20 @@ const Index = () => {
           onFocusIsochrone={(id) => { setFitIsoId(id); setSelectedIsoId(id); setPanelOpen(true); }}
           isoLoading={isoLoading}
           onToggleIsoMode={() => setMode((m) => (m === "isochrone" ? "none" : "isochrone"))}
+          onAnalyzeIsochrone={(id) => { setSelectedIsoId(id); setPanelOpen(true); }}
+          onSaveIsochrone={(id) => setSaveIsoDialogId(id)}
+          savedIsochrones={savedIsos}
+          isoFolders={isoFolders}
+          loadedSavedIsoIds={loadedSavedIsoIds}
+          onToggleSavedIsochrone={toggleSavedIso}
+          onAnalyzeSavedIsochrone={analyzeSavedIso}
+          onFocusSavedIsochrone={focusSavedIso}
+          onRenameSavedIsochrone={(id, name) => updateSavedIso(id, { name })}
+          onMoveSavedIsochrone={(id, folder_id) => updateSavedIso(id, { folder_id })}
+          onDeleteSavedIsochrone={removeSavedIso}
+          onCreateIsoFolder={(name, parentId) => createIsoFolder(name, parentId)}
+          onRenameIsoFolder={renameIsoFolder}
+          onDeleteIsoFolder={deleteIsoFolder}
           savedPois={pois}
           onFocusPoi={(p) =>
             setFlyTarget({ id: Date.now(), lat: p.lat, lng: p.lng, bbox: null })
