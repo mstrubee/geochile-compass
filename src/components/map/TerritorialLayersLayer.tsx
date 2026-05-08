@@ -50,6 +50,45 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
   }, [layers, visibleIds, visibleLayerIds, map]);
 
   useEffect(() => {
+    // Remove heat layer if heatmap disabled or no features
+    if (heatLayerRef.current) {
+      heatLayerRef.current.remove();
+      heatLayerRef.current = null;
+    }
+    if (!heatmap) return;
+
+    const points: Array<[number, number, number]> = [];
+    features.forEach((f) => {
+      if (f.lat != null && f.lng != null) {
+        points.push([f.lat, f.lng, 1]);
+      } else if (f.geometry && (f.geometry as GeoJSON.Geometry).type === "Point") {
+        const coords = (f.geometry as GeoJSON.Point).coordinates;
+        if (coords && coords.length >= 2) points.push([coords[1], coords[0], 1]);
+      }
+    });
+    if (!points.length) return;
+
+    const heat = (L as unknown as {
+      heatLayer: (pts: Array<[number, number, number]>, opts: Record<string, unknown>) => L.Layer;
+    }).heatLayer(points, {
+      radius: 25,
+      blur: 18,
+      maxZoom: 17,
+      minOpacity: 0.35,
+      gradient: {
+        0.0: "#2563eb",
+        0.3: "#22d3ee",
+        0.5: "#84cc16",
+        0.7: "#facc15",
+        0.85: "#f97316",
+        1.0: "#dc2626",
+      },
+    });
+    heat.addTo(map);
+    heatLayerRef.current = heat;
+  }, [features, heatmap, map]);
+
+  useEffect(() => {
     const layerColorById = new Map(layers.map((l) => [l.id, l.color || "#F59E0B"]));
     const layerNameById = new Map(layers.map((l) => [l.id, l.name]));
 
