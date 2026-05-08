@@ -2271,7 +2271,12 @@ export const Sidebar = ({
                           <button
                             type="button"
                             onClick={async () => {
-                              if (!window.confirm(`Eliminar "${f.name}" definitivamente? Esta acción no se puede deshacer.`)) return;
+                              const ok = await confirmDialog({
+                                title: "Eliminar definitivamente",
+                                description: `Eliminar "${f.name}" definitivamente? Esta acción no se puede deshacer.`,
+                                confirmLabel: "Eliminar",
+                              });
+                              if (!ok) return;
                               try {
                                 await onPurgeFolder(f.id);
                                 toast.success("Eliminado definitivamente");
