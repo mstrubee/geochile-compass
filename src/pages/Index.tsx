@@ -953,6 +953,7 @@ const Index = () => {
           onIsoModeChange={setIsoMode}
           isoMinutes={isoMinutes}
           onIsoMinutesChange={setIsoMinutes}
+          onSaveIsoMinutesDefault={saveIsoMinutesAsDefault}
           isochrones={isochrones}
           onToggleIsochrone={toggleIsochrone}
           onRemoveIsochrone={removeIsochrone}
