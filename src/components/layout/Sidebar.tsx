@@ -423,9 +423,13 @@ const SavedIsochronesSubsection = ({
           <ContextMenuContent>
             {onCreateFolder && (
               <ContextMenuItem
-                onClick={() => {
-                  const n = window.prompt("Nombre de subcarpeta:");
-                  if (n && n.trim()) void onCreateFolder(n.trim(), f.id);
+                onClick={async () => {
+                  const n = await promptDialog({
+                    title: "Nueva subcarpeta",
+                    label: "Nombre",
+                    placeholder: "Subcarpeta",
+                  });
+                  if (n) void onCreateFolder(n, f.id);
                 }}
               >
                 <FolderPlus className="mr-2 h-3.5 w-3.5" /> Nueva subcarpeta
@@ -433,9 +437,13 @@ const SavedIsochronesSubsection = ({
             )}
             {onRenameFolder && (
               <ContextMenuItem
-                onClick={() => {
-                  const n = window.prompt("Nuevo nombre:", f.name);
-                  if (n && n.trim()) void onRenameFolder(f.id, n.trim());
+                onClick={async () => {
+                  const n = await promptDialog({
+                    title: "Renombrar carpeta",
+                    label: "Nuevo nombre",
+                    defaultValue: f.name,
+                  });
+                  if (n) void onRenameFolder(f.id, n);
                 }}
               >
                 <Pencil className="mr-2 h-3.5 w-3.5" /> Renombrar
@@ -444,8 +452,13 @@ const SavedIsochronesSubsection = ({
             <ContextMenuSeparator />
             {onDeleteFolder && (
               <ContextMenuItem
-                onClick={() => {
-                  if (window.confirm(`¿Eliminar carpeta "${f.name}"?`)) void onDeleteFolder(f.id);
+                onClick={async () => {
+                  const ok = await confirmDialog({
+                    title: "Eliminar carpeta",
+                    description: `¿Eliminar carpeta "${f.name}"?`,
+                    confirmLabel: "Eliminar",
+                  });
+                  if (ok) void onDeleteFolder(f.id);
                 }}
                 className="text-destructive"
               >
