@@ -18,6 +18,7 @@ import {
   Move,
 } from "lucide-react";
 import { toast } from "sonner";
+import { confirmDialog } from "@/components/ui/dialog-service";
 import type { PoiFolder, PoiUpdate, SavedPoi } from "@/types/pois";
 
 interface Props {
@@ -133,7 +134,8 @@ export const PoiManagerDialog = ({
     const msg = subCount || poiCount
       ? `Eliminar "${f.name}"? Contiene ${subCount} subcarpetas y ${poiCount} POIs (los POIs quedarán sin carpeta).`
       : `Eliminar carpeta "${f.name}"?`;
-    if (!window.confirm(msg)) return;
+    const ok = await confirmDialog({ title: "Eliminar carpeta", description: msg, confirmLabel: "Eliminar" });
+    if (!ok) return;
     try {
       await onDeleteFolder(f.id);
       toast.success("Carpeta eliminada");
@@ -145,7 +147,8 @@ export const PoiManagerDialog = ({
   const handleDeleteFolderPois = async (folderId: string | null) => {
     const ids = (poisByFolder.get(folderId) ?? []).map((p) => p.id);
     if (!ids.length) return;
-    if (!window.confirm(`Eliminar ${ids.length} POIs de esta carpeta?`)) return;
+    const ok = await confirmDialog({ title: "Eliminar POIs", description: `Eliminar ${ids.length} POIs de esta carpeta?`, confirmLabel: "Eliminar" });
+    if (!ok) return;
     try {
       await onDeletePois(ids);
       toast.success(`${ids.length} POIs eliminados`);
@@ -156,7 +159,8 @@ export const PoiManagerDialog = ({
 
   const handleBulkDelete = async () => {
     if (!selected.size) return;
-    if (!window.confirm(`Eliminar ${selected.size} POIs seleccionados?`)) return;
+    const ok = await confirmDialog({ title: "Eliminar POIs seleccionados", description: `Eliminar ${selected.size} POIs seleccionados?`, confirmLabel: "Eliminar" });
+    if (!ok) return;
     try {
       await onDeletePois([...selected]);
       setSelected(new Set());
@@ -229,7 +233,8 @@ export const PoiManagerDialog = ({
       </button>
       <button
         onClick={async () => {
-          if (!window.confirm(`Eliminar "${p.name}"?`)) return;
+          const ok = await confirmDialog({ title: "Eliminar POI", description: `Eliminar "${p.name}"?`, confirmLabel: "Eliminar" });
+          if (!ok) return;
           await onDeletePois([p.id]);
         }}
         className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"

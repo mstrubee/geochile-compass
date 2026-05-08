@@ -26,6 +26,7 @@ import { exportPoiAsKmz, exportFolderAsKmz } from "@/utils/kmzExport";
 import { CommuneSearch } from "./CommuneSearch";
 import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
+import { confirmDialog, promptDialog, selectDialog } from "@/components/ui/dialog-service";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
@@ -336,9 +337,13 @@ const SavedIsochronesSubsection = ({
         <ContextMenuContent>
           {onRename && (
             <ContextMenuItem
-              onClick={() => {
-                const n = window.prompt("Nuevo nombre:", s.name);
-                if (n && n.trim()) void onRename(s.id, n.trim());
+              onClick={async () => {
+                const n = await promptDialog({
+                  title: "Renombrar isócrona",
+                  label: "Nuevo nombre",
+                  defaultValue: s.name,
+                });
+                if (n) void onRename(s.id, n);
               }}
             >
               <Pencil className="mr-2 h-3.5 w-3.5" /> Renombrar
@@ -346,18 +351,19 @@ const SavedIsochronesSubsection = ({
           )}
           {onMove && (
             <ContextMenuItem
-              onClick={() => {
+              onClick={async () => {
                 const opts = [
-                  { id: "", label: "(sin carpeta)" },
-                  ...folders.map((f) => ({ id: f.id, label: f.name })),
+                  { value: "", label: "(sin carpeta)" },
+                  ...folders.map((f) => ({ value: f.id, label: f.name })),
                 ];
-                const choice = window.prompt(
-                  `Mover a carpeta. Escribe el número:\n${opts.map((o, i) => `${i}: ${o.label}`).join("\n")}`,
-                  "0",
-                );
-                const idx = choice == null ? -1 : parseInt(choice, 10);
-                if (Number.isFinite(idx) && opts[idx]) {
-                  void onMove(s.id, opts[idx].id || null);
+                const choice = await selectDialog({
+                  title: "Mover a carpeta",
+                  label: "Carpeta destino",
+                  options: opts,
+                  defaultValue: "",
+                });
+                if (choice !== null) {
+                  void onMove(s.id, choice || null);
                 }
               }}
             >
@@ -367,8 +373,13 @@ const SavedIsochronesSubsection = ({
           <ContextMenuSeparator />
           {onDelete && (
             <ContextMenuItem
-              onClick={() => {
-                if (window.confirm(`¿Eliminar "${s.name}"?`)) void onDelete(s.id);
+              onClick={async () => {
+                const ok = await confirmDialog({
+                  title: "Eliminar isócrona",
+                  description: `¿Eliminar "${s.name}"?`,
+                  confirmLabel: "Eliminar",
+                });
+                if (ok) void onDelete(s.id);
               }}
               className="text-destructive"
             >
@@ -412,9 +423,13 @@ const SavedIsochronesSubsection = ({
           <ContextMenuContent>
             {onCreateFolder && (
               <ContextMenuItem
-                onClick={() => {
-                  const n = window.prompt("Nombre de subcarpeta:");
-                  if (n && n.trim()) void onCreateFolder(n.trim(), f.id);
+                onClick={async () => {
+                  const n = await promptDialog({
+                    title: "Nueva subcarpeta",
+                    label: "Nombre",
+                    placeholder: "Subcarpeta",
+                  });
+                  if (n) void onCreateFolder(n, f.id);
                 }}
               >
                 <FolderPlus className="mr-2 h-3.5 w-3.5" /> Nueva subcarpeta
@@ -422,9 +437,13 @@ const SavedIsochronesSubsection = ({
             )}
             {onRenameFolder && (
               <ContextMenuItem
-                onClick={() => {
-                  const n = window.prompt("Nuevo nombre:", f.name);
-                  if (n && n.trim()) void onRenameFolder(f.id, n.trim());
+                onClick={async () => {
+                  const n = await promptDialog({
+                    title: "Renombrar carpeta",
+                    label: "Nuevo nombre",
+                    defaultValue: f.name,
+                  });
+                  if (n) void onRenameFolder(f.id, n);
                 }}
               >
                 <Pencil className="mr-2 h-3.5 w-3.5" /> Renombrar
@@ -433,8 +452,13 @@ const SavedIsochronesSubsection = ({
             <ContextMenuSeparator />
             {onDeleteFolder && (
               <ContextMenuItem
-                onClick={() => {
-                  if (window.confirm(`¿Eliminar carpeta "${f.name}"?`)) void onDeleteFolder(f.id);
+                onClick={async () => {
+                  const ok = await confirmDialog({
+                    title: "Eliminar carpeta",
+                    description: `¿Eliminar carpeta "${f.name}"?`,
+                    confirmLabel: "Eliminar",
+                  });
+                  if (ok) void onDeleteFolder(f.id);
                 }}
                 className="text-destructive"
               >
@@ -649,14 +673,22 @@ export const Sidebar = ({
   const [createPoiOpen, setCreatePoiOpen] = useState(false);
 
   // Confirmaciones de borrado — todo lo eliminado va a la papelera (30 días).
-  const confirmRemovePoi = (id: string, name: string) => {
-    if (window.confirm(`¿Eliminar "${name}"? Se moverá a la papelera durante 30 días antes de borrarse definitivamente.`)) {
-      onRemoveSavedPoi(id);
-    }
+  const confirmRemovePoi = async (id: string, name: string) => {
+    const ok = await confirmDialog({
+      title: "Mover POI a papelera",
+      description: `Se moverá "${name}" a la papelera durante 30 días antes de borrarse definitivamente.`,
+      confirmLabel: "Mover a papelera",
+    });
+    if (ok) onRemoveSavedPoi(id);
   };
   const confirmDeleteFolder = async (id: string, name: string) => {
     if (!onDeleteFolder) return;
-    if (window.confirm(`¿Eliminar la carpeta "${name}" y todo su contenido (subcarpetas y POIs)? Se moverá a la papelera durante 30 días antes de borrarse definitivamente.`)) {
+    const ok = await confirmDialog({
+      title: "Mover carpeta a papelera",
+      description: `Se moverá la carpeta "${name}" y todo su contenido (subcarpetas y POIs) a la papelera durante 30 días.`,
+      confirmLabel: "Mover a papelera",
+    });
+    if (ok) {
       try {
         await onDeleteFolder(id);
         toast.success("Movido a papelera");
@@ -1585,13 +1617,13 @@ export const Sidebar = ({
                         </button>
                       )}
                       <button
-                        onClick={() => {
-                          if (
-                            !window.confirm(
-                              `¿Eliminar ${selCount} capa${selCount === 1 ? "" : "s"} de archivo?`,
-                            )
-                          )
-                            return;
+                        onClick={async () => {
+                          const ok = await confirmDialog({
+                            title: "Eliminar capas",
+                            description: `¿Eliminar ${selCount} capa${selCount === 1 ? "" : "s"} de archivo?`,
+                            confirmLabel: "Eliminar",
+                          });
+                          if (!ok) return;
                           allIds
                             .filter((id) => selectedLayerIds.has(id))
                             .forEach((id) => onRemoveUserLayer(id));
@@ -1665,8 +1697,13 @@ export const Sidebar = ({
                         </button>
                       )}
                       <button
-                        onClick={() => {
-                          if (!window.confirm(`¿Eliminar la capa "${ul.name}"?`)) return;
+                        onClick={async () => {
+                          const ok = await confirmDialog({
+                            title: "Eliminar capa",
+                            description: `¿Eliminar la capa "${ul.name}"?`,
+                            confirmLabel: "Eliminar",
+                          });
+                          if (!ok) return;
                           onRemoveUserLayer(ul.id);
                         }}
                         className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
@@ -1791,11 +1828,15 @@ export const Sidebar = ({
                         {onRenamePoi && (
                           <ContextMenuItem
                             onSelect={async () => {
-                              const next = window.prompt(`Nuevo nombre para "${p.name}":`, p.name);
-                              if (!next || !next.trim() || next.trim() === p.name) return;
+                              const next = await promptDialog({
+                                title: "Renombrar POI",
+                                label: "Nuevo nombre",
+                                defaultValue: p.name,
+                              });
+                              if (!next || next === p.name) return;
                               try {
-                                await onRenamePoi(p.id, next.trim());
-                                toast.success(`POI renombrado a "${next.trim()}"`);
+                                await onRenamePoi(p.id, next);
+                                toast.success(`POI renombrado a "${next}"`);
                               } catch (err) {
                                 toast.error(err instanceof Error ? err.message : "Error al renombrar");
                               }
@@ -1918,11 +1959,15 @@ export const Sidebar = ({
                               {onRenameFolder && (
                                 <ContextMenuItem
                                   onSelect={async () => {
-                                    const next = window.prompt(`Nuevo nombre para "${f.name}":`, f.name);
-                                    if (!next || !next.trim() || next.trim() === f.name) return;
+                                    const next = await promptDialog({
+                                      title: "Renombrar carpeta",
+                                      label: "Nuevo nombre",
+                                      defaultValue: f.name,
+                                    });
+                                    if (!next || next === f.name) return;
                                     try {
-                                      await onRenameFolder(f.id, next.trim());
-                                      toast.success(`Carpeta renombrada a "${next.trim()}"`);
+                                      await onRenameFolder(f.id, next);
+                                      toast.success(`Carpeta renombrada a "${next}"`);
                                     } catch (err) {
                                       toast.error(err instanceof Error ? err.message : "Error al renombrar");
                                     }
@@ -1935,19 +1980,21 @@ export const Sidebar = ({
                               {onCreateFolder && (
                                 <ContextMenuItem
                                   onSelect={async () => {
-                                    const name = window.prompt(
-                                      `Nombre de la nueva subcarpeta dentro de "${f.name}":`,
-                                      "",
-                                    );
-                                    if (!name?.trim()) return;
+                                    const name = await promptDialog({
+                                      title: "Nueva subcarpeta",
+                                      description: `Dentro de "${f.name}"`,
+                                      label: "Nombre",
+                                      placeholder: "Subcarpeta",
+                                    });
+                                    if (!name) return;
                                     try {
-                                      await onCreateFolder(name.trim(), f.id);
+                                      await onCreateFolder(name, f.id);
                                       setExpandedPoiFolders((prev) => {
                                         const next = new Set(prev);
                                         next.add(f.id);
                                         return next;
                                       });
-                                      toast.success(`Subcarpeta "${name.trim()}" creada`);
+                                      toast.success(`Subcarpeta "${name}" creada`);
                                     } catch (err) {
                                       toast.error(err instanceof Error ? err.message : "Error al crear");
                                     }
@@ -2084,13 +2131,18 @@ export const Sidebar = ({
                 })()}
               </div>
               <button
-                onClick={() => {
+                onClick={async () => {
                   const total = savedPois.length;
                   if (total === 0) {
                     toast.info("No hay POIs para borrar");
                     return;
                   }
-                  if (!window.confirm(`¿Mover TODOS los ${total} POIs a la papelera? Podrás recuperarlos durante 30 días.`)) return;
+                  const ok = await confirmDialog({
+                    title: "Mover todos los POIs a papelera",
+                    description: `¿Mover TODOS los ${total} POIs a la papelera? Podrás recuperarlos durante 30 días.`,
+                    confirmLabel: "Mover a papelera",
+                  });
+                  if (!ok) return;
                   onClearSavedPois();
                 }}
                 className="mt-1.5 w-full rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -2117,7 +2169,12 @@ export const Sidebar = ({
               ? `Eliminar definitivamente ${visibleCount} elemento(s) que coinciden con "${trashSearch.trim()}"? Esta acción no se puede deshacer.`
               : `Vaciar la papelera por completo (${totalCount} elemento(s))? Esta acción no se puede deshacer.`;
             if (visibleCount === 0) return;
-            if (!window.confirm(label)) return;
+            const ok = await confirmDialog({
+              title: q ? "Eliminar elementos filtrados" : "Vaciar papelera",
+              description: label,
+              confirmLabel: "Eliminar definitivamente",
+            });
+            if (!ok) return;
             try {
               if (visiblePois.length && onPurgePois) {
                 await onPurgePois(visiblePois.map((p) => p.id));
@@ -2214,7 +2271,12 @@ export const Sidebar = ({
                           <button
                             type="button"
                             onClick={async () => {
-                              if (!window.confirm(`Eliminar "${f.name}" definitivamente? Esta acción no se puede deshacer.`)) return;
+                              const ok = await confirmDialog({
+                                title: "Eliminar definitivamente",
+                                description: `Eliminar "${f.name}" definitivamente? Esta acción no se puede deshacer.`,
+                                confirmLabel: "Eliminar",
+                              });
+                              if (!ok) return;
                               try {
                                 await onPurgeFolder(f.id);
                                 toast.success("Eliminado definitivamente");
@@ -2264,7 +2326,12 @@ export const Sidebar = ({
                           <button
                             type="button"
                             onClick={async () => {
-                              if (!window.confirm(`Eliminar "${p.name}" definitivamente? Esta acción no se puede deshacer.`)) return;
+                              const ok = await confirmDialog({
+                                title: "Eliminar definitivamente",
+                                description: `Eliminar "${p.name}" definitivamente? Esta acción no se puede deshacer.`,
+                                confirmLabel: "Eliminar",
+                              });
+                              if (!ok) return;
                               try {
                                 await onPurgePois([p.id]);
                                 toast.success("Eliminado definitivamente");
