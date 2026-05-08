@@ -205,6 +205,33 @@ const Index = () => {
   // POIs guardados
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // Cargar minutos por defecto guardados por usuario
+  const isoMinutesStorageKey = user ? `isoMinutesDefault:${user.id}` : null;
+  useEffect(() => {
+    if (!isoMinutesStorageKey) return;
+    try {
+      const raw = localStorage.getItem(isoMinutesStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length === 3 && parsed.every((n) => typeof n === "number")) {
+        setIsoMinutes(parsed);
+      }
+    } catch { /* ignore */ }
+  }, [isoMinutesStorageKey]);
+
+  const saveIsoMinutesAsDefault = useCallback(() => {
+    if (!isoMinutesStorageKey) {
+      toast.error("Inicia sesión para guardar tus valores por defecto");
+      return;
+    }
+    try {
+      localStorage.setItem(isoMinutesStorageKey, JSON.stringify(isoMinutes));
+      toast.success("Minutos por defecto guardados");
+    } catch {
+      toast.error("No se pudo guardar");
+    }
+  }, [isoMinutesStorageKey, isoMinutes]);
   const {
     pois,
     trashedPois,
