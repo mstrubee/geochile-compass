@@ -108,7 +108,12 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
                 <span className="font-mono text-[10px] text-text-muted">
                   {l.feature_count}
                 </span>
-                <Checkbox checked={on} onCheckedChange={() => toggleLayer(l.id)} />
+                <span onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={on}
+                    onCheckedChange={() => toggleLayer(l.id)}
+                  />
+                </span>
               </button>
             );
           })}
