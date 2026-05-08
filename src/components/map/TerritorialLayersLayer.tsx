@@ -124,10 +124,14 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
     });
 
     byLayer.forEach((feats, layerId) => {
-      // refresh: remove old, add new
-      const old = groupsRef.current.get(layerId);
-      if (old) old.remove();
-      const group = L.layerGroup().addTo(map);
+      // Si la capa ya está pintada con la misma cantidad de features, no recrear.
+      const existing = groupsRef.current.get(layerId);
+      if (existing && (existing as L.LayerGroup & { __count?: number }).__count === feats.length) {
+        return;
+      }
+      if (existing) existing.remove();
+      const group = L.layerGroup().addTo(map) as L.LayerGroup & { __count?: number };
+      group.__count = feats.length;
       groupsRef.current.set(layerId, group);
       const color = layerColorById.get(layerId) || "#F59E0B";
       const layerName = layerNameById.get(layerId) || "";

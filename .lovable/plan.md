@@ -1,54 +1,40 @@
-## Objetivo
+# Acelerar carga de capas territoriales
 
-El mapa de calor debe reflejar la **densidad real considerando los grupos activos**: las zonas donde se concentran puntos de **varios grupos a la vez** deben aparecer más calientes que zonas con muchos puntos de un solo grupo.
+## Diagnóstico
 
-## Comportamiento actual (problema)
+- Hay ~46k features en total y una sola capa concentra 25k puntos.
+- `useTerritorialFeatures` pagina secuencialmente de a 1000 filas con `.range()` haciendo N round-trips (≥25 para esa capa).
+- En cada fetch trae `geometry` y `properties` aunque la mayoría sean puntos que sólo necesitan `lat/lng/name`.
+- Cada vez que se activa/desactiva una capa, el hook re-pide TODOS los `layerIds` desde cero (no hay caché por capa).
+- El heatmap y el render de markers se recalculan sobre el array completo en cada cambio.
 
-Hoy, en `src/components/map/TerritorialLayersLayer.tsx`, todos los puntos visibles se vuelcan al heatmap con peso fijo `1`:
+## Cambios propuestos
 
-```ts
-points.push([f.lat, f.lng, 1]);
-```
+### 1. `src/hooks/useTerritorialLayers.ts` — `useTerritorialFeatures`
+- Cachear features por `layer_id` en un `Map` a nivel módulo (y/o `useRef`) para que activar/desactivar una capa ya cargada sea instantáneo.
+- Pedir sólo las capas que faltan en caché (diff entre `layerIds` y claves cacheadas).
+- Para cada capa faltante:
+  - Primero leer `feature_count` desde `territorial_layers` (ya existe en `layers`) para saber cuántas páginas pedir.
+  - Disparar las páginas en paralelo con `Promise.all` (chunks de 1000) en vez de secuencial.
+  - Seleccionar columnas livianas: `id, layer_id, name, lat, lng` por defecto. Sólo traer `geometry` cuando la capa contenga features no-Point (heurística: si todos los registros tienen `lat/lng` no se necesita geometry). Como atajo seguro: traer `geometry` sólo si la capa tiene < N features (umbral configurable, ej. 2000) o si alguna fila no tiene `lat/lng`. Para capas grandes de puntos, omitir `geometry` y `properties` (no se usan en el render actual).
+- Exponer estado `loading` por capa para que la UI pueda mostrar feedback (opcional, si encaja).
 
-Resultado: una zona con 50 puntos del mismo grupo se ve igual de "caliente" que una zona donde se cruzan 3 grupos distintos. No representa diversidad ni superposición.
+### 2. `src/components/map/TerritorialLayersLayer.tsx`
+- Memoizar la grilla del heatmap por (set de `layerIds` visibles + cantidad de features) para evitar recomputar en renders no relacionados.
+- Mantener el `LayerGroup` por `layer_id` y reusarlo cuando la capa ya estaba pintada (no remove+add si no cambió). Hoy se hace `old.remove()` y se reconstruye en cada cambio.
+- Render incremental: cuando llega una capa nueva, sólo añadir su grupo; cuando se oculta, sólo remover el suyo.
 
-## Comportamiento propuesto
-
-Calcular un peso por punto que combine:
-
-1. **Densidad local** del propio grupo (cuántos puntos del mismo grupo hay cerca).
-2. **Diversidad de grupos** activos en esa zona (bonus por superposición).
-
-### Algoritmo
-
-1. Tomar todos los puntos visibles (igual que ahora).
-2. Discretizar el espacio en una grilla (celdas ~ tamaño del `radius` del heatmap, en grados ≈ 0.002°, ajustable según zoom).
-3. Para cada celda, contar:
-   - `n_total`: total de puntos en la celda.
-   - `n_groups`: cantidad de **grupos distintos activos** representados en la celda.
-4. Peso por punto = `1 + (n_groups - 1) * BONUS` con `BONUS ≈ 0.75`.
-   - 1 grupo presente → peso 1 (densidad normal).
-   - 2 grupos → peso 1.75 por punto.
-   - 3 grupos → peso 2.5, etc.
-5. Pasar los puntos con su peso a `L.heatLayer`. Leaflet.heat ya suma pesos por radio, así que la densidad sigue contando, pero la superposición de grupos amplifica el calor.
-
-### Detalle técnico
-
-Cambios solo en `src/components/map/TerritorialLayersLayer.tsx`:
-
-- Necesitamos `group_id` de cada feature. `useTerritorialFeatures` devuelve `f.layer_id`; mapear `layer_id → group_id` usando el prop `layers` (`TerritorialLayer.group_id`).
-- Construir una `Map<cellKey, Set<groupId>>` y `Map<cellKey, number>` para conteo, en una sola pasada.
-- Recorrer puntos otra vez aplicando el peso calculado.
-- Mantener `gradient`, `radius`, `blur`, `minOpacity` actuales. Subir `max` implícito de leaflet.heat o pasar `max` explícito (ej. `max: 4`) para que el gradiente no se sature al primer grupo solapado.
-
-No se tocan: lógica de visibilidad, checkbox del heatmap, render de marcadores individuales, ni otros archivos.
-
-## Archivos afectados
-
-- `src/components/map/TerritorialLayersLayer.tsx` (única edición).
+### 3. (Opcional, si hace falta) índice DB
+- Verificar que exista índice `territorial_features (layer_id)`. Si no, agregarlo en una migración para que las queries paginadas escaneen rápido.
 
 ## Fuera de alcance
 
-- No se cambia el control del checkbox de heatmap.
-- No se agrega un heatmap por grupo separado.
-- No se introducen pesos configurables por usuario.
+- Cambiar el modelo de datos o mover a tiles vectoriales.
+- Filtrado por viewport (bbox) — se puede evaluar después si 25k puntos siguen siendo pesados de pintar.
+- Cambios al heatmap visual (colores, pesos, radios).
+
+## Detalles técnicos
+
+- Tamaño de página actual: 1000 (límite por defecto de Supabase). Mantener 1000 y paralelizar páginas calculando rangos `[0,999], [1000,1999], …` a partir de `feature_count`.
+- Caché in-module: `const cache = new Map<string, TerritorialFeature[]>()` fuera del hook para sobrevivir a remounts dentro de la sesión.
+- Invalidar caché cuando `useTerritorialLayers.refresh()` se llame (exponer un `clearTerritorialFeaturesCache()`).
