@@ -10,8 +10,36 @@ import type { ComunaFeature, ComunaFC } from "@/hooks/useComunasGeoIndex";
 import type { IneCommuneStats } from "@/utils/ineScales";
 import type { NSE } from "@/data/communes";
 import { normalizeCommuneName } from "@/services/communeDataService";
+import type { GseFeatureCollection, GseClass } from "@/types/gse";
+import { RM_AVERAGES } from "@/data/rmAverages";
 
 export type NseLabel = "ABC1" | "C2" | "C3" | "D" | "E";
+
+export interface GseBreakdown {
+  manzanaCount: number;
+  classDistribution: Partial<Record<GseClass, number>>; // % ponderado por área
+  quintilDistribution: Partial<Record<"Q1" | "Q2" | "Q3" | "Q4" | "Q5", number>>;
+  nseScoreAvg: number | null; // 0-1000
+  educYearsAvg: number | null;
+  hacinAvg: number | null;
+  autoScoreAvg: number | null;
+}
+
+export interface DensityBreakdown {
+  popPerKm2: number;
+  hhPerKm2: number;
+  pointsPerKm2: number;
+  pointsPerKm2ByGroup: { groupId: string; groupName: string; color: string | null; perKm2: number }[];
+  serviceCoverageIndex: number; // 0-100
+}
+
+export interface ComparisonRow {
+  key: string;
+  label: string;
+  value: number;
+  vsRmPct: number | null; // delta % vs RM (positive = above RM)
+  format: "int" | "clp" | "pct" | "decimal";
+}
 
 export interface PointsByLayer {
   layerId: string;
