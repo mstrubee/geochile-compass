@@ -70,6 +70,15 @@ export const Header = ({ mode, onToggleIsochrone, onToggleMicrozone }: HeaderPro
         <FileUp className="mr-1 inline h-3 w-3" /> Archivo
       </button>
 
+      {isAdmin && (
+        <Link
+          to="/admin/capas"
+          className="flex items-center gap-1 whitespace-nowrap rounded-full border border-brand-purple/40 bg-brand-purple/10 px-3 py-1 text-[12px] font-medium text-brand-purple transition-colors hover:bg-brand-purple/20"
+        >
+          <Shield className="h-3 w-3" /> Admin
+        </Link>
+      )}
+
       {user ? (
         <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-2/60 px-2.5 py-1 text-[11px] text-muted-foreground">
           <UserIcon className="h-3 w-3" />
