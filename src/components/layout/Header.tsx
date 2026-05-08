@@ -1,7 +1,8 @@
-import { Clock, Hexagon, FileUp, LogIn, LogOut, User as UserIcon } from "lucide-react";
+import { Clock, Hexagon, FileUp, LogIn, LogOut, User as UserIcon, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 
 interface HeaderProps {
@@ -12,6 +13,7 @@ interface HeaderProps {
 
 export const Header = ({ mode, onToggleIsochrone, onToggleMicrozone }: HeaderProps) => {
   const { user } = useAuth();
+  const { isAdmin } = useUserRole();
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
