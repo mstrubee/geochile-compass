@@ -105,6 +105,86 @@ export const htmlToGeoJson = (html: string): GeoJsonFC => {
     }
   }
 
+  // 3. GeoJSON embebido en cualquier <script> (Google My Maps, uMap, exports varios)
+  if (!features.length) {
+    const fcRe = /\{[^{}]*"type"\s*:\s*"FeatureCollection"[\s\S]*?"features"\s*:\s*\[[\s\S]*?\]\s*\}/g;
+    for (const m of html.matchAll(fcRe)) {
+      try {
+        const fc = JSON.parse(m[0]);
+        if (fc?.type === "FeatureCollection" && Array.isArray(fc.features)) {
+          for (const f of fc.features) {
+            if (f?.geometry) {
+              features.push({
+                type: "Feature",
+                geometry: f.geometry,
+                properties: f.properties ?? {},
+              });
+            }
+          }
+        }
+      } catch { /* skip */ }
+    }
+  }
+
+  // 4. Llamadas Leaflet: L.marker / L.polygon / L.polyline
+  if (!features.length) {
+    const markerRe = /L\.(?:marker|circleMarker|circle)\s*\(\s*\[\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\]/g;
+    for (const m of html.matchAll(markerRe)) {
+      const lat = Number(m[1]);
+      const lng = Number(m[2]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      features.push({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [lng, lat] },
+        properties: { folder: "Markers" },
+      });
+    }
+
+    const polyRe = /L\.(polygon|polyline)\s*\(\s*(\[\s*\[[\s\S]*?\]\s*\])/g;
+    for (const m of html.matchAll(polyRe)) {
+      const kind = m[1];
+      try {
+        const arr = JSON.parse(m[2].replace(/,(\s*[}\]])/g, "$1"));
+        if (!Array.isArray(arr)) continue;
+        const coords = arr
+          .map((p: any) => Array.isArray(p) && p.length >= 2 ? [Number(p[1]), Number(p[0])] : null)
+          .filter((p): p is number[] => !!p && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+        if (coords.length < 2) continue;
+        const last = coords[coords.length - 1];
+        const ring = kind === "polygon" && (coords[0][0] !== last[0] || coords[0][1] !== last[1])
+          ? [...coords, coords[0]] : coords;
+        features.push({
+          type: "Feature",
+          geometry: kind === "polygon"
+            ? { type: "Polygon", coordinates: [ring] }
+            : { type: "LineString", coordinates: coords },
+          properties: { folder: kind === "polygon" ? "Polygons" : "Lines" },
+        });
+      } catch { /* skip */ }
+    }
+  }
+
+  // 5. <script type="application/json"> con FeatureCollection o array de Features
+  if (!features.length) {
+    const scriptRe = /<script\b[^>]*type=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    for (const m of html.matchAll(scriptRe)) {
+      try {
+        const data = JSON.parse(m[1].trim());
+        const list = data?.type === "FeatureCollection" ? data.features
+          : Array.isArray(data) ? data : data?.type === "Feature" ? [data] : [];
+        for (const f of list) {
+          if (f?.geometry) {
+            features.push({
+              type: "Feature",
+              geometry: f.geometry,
+              properties: f.properties ?? {},
+            });
+          }
+        }
+      } catch { /* skip */ }
+    }
+  }
+
   return { type: "FeatureCollection", features };
 };
 

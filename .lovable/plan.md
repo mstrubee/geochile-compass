@@ -1,17 +1,23 @@
-## Problema
+## Diagnóstico
 
-El error "viola nuevas políticas de rol" al subir archivos viene de las policies del bucket `storage.objects` para `territorial-sources`. Estas siguen referenciando `public.has_role`, pero en la migración previa movimos la función a `private.has_role` y revocamos acceso a la versión pública. Resultado: la verificación de admin falla en el INSERT a storage y el upload es rechazado.
+El archivo `mapa_talleres_tiendas 1.html` se subió y escaneó, pero el parser no detectó capas (`layers_summary: []`). Resultado: 0 capas y 0 puntos. El parser actual solo entiende KML embebido y arrays JS planos `{lat,lng}`, y tu HTML usa otro formato.
 
 ## Plan
 
-Migración SQL única que recrea las 4 policies del bucket `territorial-sources` en `storage.objects` apuntando a `private.has_role`:
+Decidiste convertir a GeoJSON/KML antes de subir. Voy a:
 
-1. `DROP POLICY` de las 4 actuales (SELECT, INSERT, UPDATE, DELETE).
-2. `CREATE POLICY` equivalentes usando `private.has_role(auth.uid(), 'admin'::app_role)`.
-3. Asegurar `GRANT USAGE ON SCHEMA private TO authenticated` y `GRANT EXECUTE ON FUNCTION private.has_role TO authenticated` (idempotente, por si acaso).
+1. **Mejorar el botón "HTML → GeoJSON"** ya existente en `/admin/capas`:
+   - Hacerlo más robusto extendiendo `htmlToGeoJson` para también detectar:
+     - GeoJSON embebido en `<script>` (busca `FeatureCollection` / `"type":"Feature"` y lo extrae).
+     - Arrays de coordenadas en llamadas `L.marker([lat,lng])`, `L.polygon([...])`, `L.polyline([...])` de Leaflet.
+     - JSON dentro de `<script type="application/json">`.
+   - Si no detecta nada, mostrar un mensaje claro indicando que el HTML no es soportado.
 
-No se tocan tablas ni código frontend.
+2. **Mostrar resumen tras la conversión**: en lugar de descargar a ciegas, abrir un toast con el conteo por carpeta/capa y permitir descargar.
 
-## Verificación
+3. **Documentar el flujo en la UI**: agregar un texto corto debajo del botón aclarando "Si tu HTML no es reconocido al subirlo, conviértelo primero a GeoJSON con este botón y luego súbelo como GeoJSON."
 
-Tras aplicar la migración, recargar `/admin/capas` y reintentar subir un archivo. El upload al bucket y el insert a `territorial_source_files` deben funcionar.
+## Fuera de alcance
+
+- No tocaré la edge function `scan-territorial-html` (ya soporta GeoJSON nativo, que es el formato resultante).
+- No borraré el archivo HTML actual ya subido (puedes eliminarlo manualmente si querés).

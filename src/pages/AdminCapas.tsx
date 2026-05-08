@@ -118,12 +118,19 @@ const AdminCapas = () => {
                 const text = await f.text();
                 const fc = htmlToGeoJson(text);
                 if (!fc.features.length) {
-                  toast.error("No se detectaron features en el archivo");
+                  toast.error("Formato HTML no reconocido. Probá exportarlo como GeoJSON o KML desde la herramienta de origen.");
                   return;
                 }
+                const byFolder = new Map<string, number>();
+                for (const f of fc.features) {
+                  const k = String((f.properties as Record<string, unknown>)?.folder ?? "default");
+                  byFolder.set(k, (byFolder.get(k) ?? 0) + 1);
+                }
+                const summary = [...byFolder.entries()]
+                  .map(([k, v]) => `${k}: ${v}`).join(" · ");
                 const out = f.name.replace(/\.[^.]+$/, "") + ".geojson";
                 downloadGeoJson(fc, out);
-                toast.success(`${fc.features.length} features → ${out}`);
+                toast.success(`${fc.features.length} features (${summary}) → ${out}`);
               } catch (err) {
                 toast.error(err instanceof Error ? err.message : String(err));
               }
@@ -142,6 +149,10 @@ const AdminCapas = () => {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-8 p-4">
+        <p className="rounded-md border border-border/40 bg-muted/30 p-3 text-xs text-muted-foreground">
+          ¿Tu HTML se subió pero no muestra capas ni puntos? Usá <strong>HTML → GeoJSON</strong> para
+          convertirlo en el navegador y luego cargá el .geojson resultante.
+        </p>
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground">Grupos</h2>
           <div className="flex gap-2">
