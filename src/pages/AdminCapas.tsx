@@ -41,6 +41,57 @@ const AdminCapas = () => {
   const [convertTarget, setConvertTarget] = useState<TerritorialSourceFile | null>(null);
   const [deleteLayerTarget, setDeleteLayerTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteFileTarget, setDeleteFileTarget] = useState<TerritorialSourceFile | null>(null);
+  const [selectedLayers, setSelectedLayers] = useState<Record<string, Set<string>>>({});
+  const [bulkDeleteGroup, setBulkDeleteGroup] = useState<{ id: string; name: string; ids: string[] } | null>(null);
+  const [renameGroupTarget, setRenameGroupTarget] = useState<{ id: string; name: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const toggleLayerSelected = (groupId: string, layerId: string) => {
+    setSelectedLayers((prev) => {
+      const current = new Set(prev[groupId] ?? []);
+      if (current.has(layerId)) current.delete(layerId);
+      else current.add(layerId);
+      return { ...prev, [groupId]: current };
+    });
+  };
+
+  const toggleAllInGroup = (groupId: string, layerIds: string[]) => {
+    setSelectedLayers((prev) => {
+      const current = prev[groupId] ?? new Set<string>();
+      const allSelected = layerIds.length > 0 && layerIds.every((id) => current.has(id));
+      return { ...prev, [groupId]: allSelected ? new Set() : new Set(layerIds) };
+    });
+  };
+
+  const performBulkDelete = async (ids: string[], groupId: string) => {
+    const { error } = await supabase.from("territorial_layers").delete().in("id", ids);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`${ids.length} capas eliminadas`);
+    setSelectedLayers((prev) => ({ ...prev, [groupId]: new Set() }));
+    void refresh();
+  };
+
+  const performRenameGroup = async (id: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.error("El nombre no puede estar vacío");
+      return;
+    }
+    const { error } = await supabase
+      .from("territorial_layer_groups")
+      .update({ name: trimmed })
+      .eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Grupo renombrado");
+    setRenameGroupTarget(null);
+    void refresh();
+  };
 
   const refreshFiles = useCallback(async () => {
     const { data } = await supabase
@@ -191,6 +242,10 @@ const AdminCapas = () => {
           <div className="space-y-3">
             {groups.map((g) => {
               const groupLayers = layers.filter((l) => l.group_id === g.id);
+              const layerIds = groupLayers.map((l) => l.id);
+              const selected = selectedLayers[g.id] ?? new Set<string>();
+              const allChecked = layerIds.length > 0 && layerIds.every((id) => selected.has(id));
+              const someChecked = selected.size > 0 && !allChecked;
               return (
                 <div key={g.id} className="rounded-lg border border-border/60 p-3">
                   <div className="mb-2 flex items-center gap-2">
@@ -202,30 +257,70 @@ const AdminCapas = () => {
                     <span className="text-xs text-muted-foreground">
                       {groupLayers.length} capas
                     </span>
+                    <div className="ml-auto flex items-center gap-1">
+                      {selected.size > 0 && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() =>
+                            setBulkDeleteGroup({
+                              id: g.id,
+                              name: g.name,
+                              ids: Array.from(selected),
+                            })
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" /> Eliminar ({selected.size})
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setRenameValue(g.name);
+                          setRenameGroupTarget({ id: g.id, name: g.name });
+                        }}
+                      >
+                        Renombrar
+                      </Button>
+                    </div>
                   </div>
                   {groupLayers.length === 0 ? (
                     <p className="text-xs text-muted-foreground">Sin capas. Carga un archivo.</p>
                   ) : (
-                    <ul className="divide-y divide-border/40">
-                      {groupLayers.map((l) => (
-                        <li
-                          key={l.id}
-                          className="flex items-center gap-2 py-1.5 text-sm"
-                        >
-                          <span className="flex-1">{l.name}</span>
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {l.feature_count}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setDeleteLayerTarget({ id: l.id, name: l.name })}
+                    <>
+                      <div className="flex items-center gap-2 border-b border-border/40 pb-1.5 text-xs text-muted-foreground">
+                        <Checkbox
+                          checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                          onCheckedChange={() => toggleAllInGroup(g.id, layerIds)}
+                        />
+                        <span>Seleccionar todas</span>
+                      </div>
+                      <ul className="divide-y divide-border/40">
+                        {groupLayers.map((l) => (
+                          <li
+                            key={l.id}
+                            className="flex items-center gap-2 py-1.5 text-sm"
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
+                            <Checkbox
+                              checked={selected.has(l.id)}
+                              onCheckedChange={() => toggleLayerSelected(g.id, l.id)}
+                            />
+                            <span className="flex-1">{l.name}</span>
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {l.feature_count}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeleteLayerTarget({ id: l.id, name: l.name })}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
                   )}
                 </div>
               );
@@ -396,6 +491,63 @@ const AdminCapas = () => {
           if (deleteFileTarget) await performDeleteFile(deleteFileTarget);
         }}
       />
+
+      <ConfirmDeleteDialog
+        open={!!bulkDeleteGroup}
+        onOpenChange={(v) => !v && setBulkDeleteGroup(null)}
+        title="¿Eliminar las capas seleccionadas?"
+        description="Se eliminarán también todos los puntos asociados. Esta acción no se puede deshacer."
+        resourceName={
+          bulkDeleteGroup
+            ? `${bulkDeleteGroup.ids.length} capas de "${bulkDeleteGroup.name}"`
+            : undefined
+        }
+        onConfirm={async () => {
+          if (bulkDeleteGroup)
+            await performBulkDelete(bulkDeleteGroup.ids, bulkDeleteGroup.id);
+        }}
+      />
+
+      <Dialog
+        open={!!renameGroupTarget}
+        onOpenChange={(v) => !v && setRenameGroupTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renombrar grupo</DialogTitle>
+            <DialogDescription>
+              Cambia el nombre visible del grupo. Los slugs y referencias internas se mantienen.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="rename-group-input">Nuevo nombre</Label>
+            <Input
+              id="rename-group-input"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && renameGroupTarget) {
+                  void performRenameGroup(renameGroupTarget.id, renameValue);
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameGroupTarget(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (renameGroupTarget)
+                  void performRenameGroup(renameGroupTarget.id, renameValue);
+              }}
+            >
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
