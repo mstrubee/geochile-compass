@@ -134,7 +134,8 @@ export const PoiManagerDialog = ({
     const msg = subCount || poiCount
       ? `Eliminar "${f.name}"? Contiene ${subCount} subcarpetas y ${poiCount} POIs (los POIs quedarán sin carpeta).`
       : `Eliminar carpeta "${f.name}"?`;
-    if (!window.confirm(msg)) return;
+    const ok = await confirmDialog({ title: "Eliminar carpeta", description: msg, confirmLabel: "Eliminar" });
+    if (!ok) return;
     try {
       await onDeleteFolder(f.id);
       toast.success("Carpeta eliminada");
