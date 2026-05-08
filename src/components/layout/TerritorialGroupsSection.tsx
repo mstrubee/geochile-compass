@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
@@ -127,6 +127,10 @@ export const TerritorialGroupsSection = () => {
   const { groups, layers, loading } = useTerritorialLayers();
   const { visibleLayerIds, heatmapEnabled, setHeatmapEnabled } = useTerritorialVisibility();
   const hasVisibleLayers = layers.some((layer) => visibleLayerIds.has(layer.id));
+
+  useEffect(() => {
+    if (!hasVisibleLayers && heatmapEnabled) setHeatmapEnabled(false);
+  }, [hasVisibleLayers, heatmapEnabled, setHeatmapEnabled]);
 
   if (loading) {
     return <p className="px-2 py-1 text-[11px] text-text-muted">Cargando capas…</p>;
