@@ -94,111 +94,30 @@ const AdminCapas = () => {
     void refresh();
   };
 
-  const deleteLayer = async (id: string) => {
-    if (!window.confirm("¿Eliminar la capa y todos sus puntos?")) return;
+  const performDeleteLayer = async (id: string) => {
     const { error } = await supabase.from("territorial_layers").delete().eq("id", id);
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Capa eliminada");
-      void refresh();
-    }
-  };
-
-  const convertFileToGeoJson = async (f: TerritorialSourceFile) => {
-    if (!f.storage_path) {
-      toast.error("Sin storage_path");
+    if (error) {
+      toast.error(error.message);
       return;
     }
-    const t = toast.loading("Convirtiendo a GeoJSON…");
-    try {
-      const dl = await supabase.storage.from("territorial-sources").download(f.storage_path);
-      if (dl.error || !dl.data) throw dl.error ?? new Error("download failed");
-      const text = await dl.data.text();
-      const fc = htmlToGeoJson(text);
-      if (!fc.features.length) {
-        toast.dismiss(t);
-        toast.error("No se detectaron features en el HTML");
-        return;
-      }
+    toast.success("Capa eliminada");
+    void refresh();
+  };
 
-      const baseName = f.original_filename.replace(/\.[^.]+$/, "");
-      let targetName = `${baseName}.geojson`;
-      let mode: "replace" | "new" = "new";
-
-      const { data: existing } = await supabase
-        .from("territorial_source_files")
-        .select("id, storage_path")
-        .eq("original_filename", targetName)
-        .maybeSingle();
-
-      if (existing) {
-        toast.dismiss(t);
-        const replace = window.confirm(
-          `Ya existe "${targetName}" en el historial.\n\n` +
-          `Aceptar = Reemplazar el archivo existente.\n` +
-          `Cancelar = Guardar con un nombre nuevo.`,
-        );
-        if (replace) {
-          mode = "replace";
-        } else {
-          const suggested = `${baseName}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.geojson`;
-          const input = window.prompt("Nombre del nuevo archivo:", suggested);
-          if (!input) return;
-          targetName = input.endsWith(".geojson") ? input : `${input}.geojson`;
-        }
-      }
-
-      const t2 = toast.loading("Guardando GeoJSON…");
-      const blob = new Blob([JSON.stringify(fc)], { type: "application/geo+json" });
-      const safe = targetName.replace(/[^\w.-]+/g, "_");
-      const path = `${Date.now()}-${safe}`;
-      const up = await supabase.storage
-        .from("territorial-sources")
-        .upload(path, blob, { contentType: "application/geo+json", upsert: false });
-      if (up.error) throw up.error;
-
-      if (mode === "replace" && existing) {
-        if (existing.storage_path) {
-          await supabase.storage.from("territorial-sources").remove([existing.storage_path]);
-        }
-        const { error: updErr } = await supabase
-          .from("territorial_source_files")
-          .update({
-            storage_path: path,
-            size_bytes: blob.size,
-            file_type: "geojson",
-            status: "pending",
-            error: null,
-            layers_summary: null,
-            uploaded_at: new Date().toISOString(),
-          } as never)
-          .eq("id", existing.id);
-        if (updErr) throw updErr;
-      } else {
-        const { error: insErr } = await supabase
-          .from("territorial_source_files")
-          .insert({
-            original_filename: targetName,
-            size_bytes: blob.size,
-            storage_path: path,
-            status: "pending",
-            group_id: f.group_id ?? null,
-            file_type: "geojson",
-          } as never);
-        if (insErr) throw insErr;
-      }
-
-      toast.dismiss(t2);
-      toast.success(
-        mode === "replace"
-          ? `"${targetName}" reemplazado · ${fc.features.length} features`
-          : `"${targetName}" agregado al historial · ${fc.features.length} features`,
-      );
-      void refreshFiles();
-    } catch (e) {
-      toast.dismiss(t);
-      toast.error(e instanceof Error ? e.message : String(e));
+  const performDeleteFile = async (f: TerritorialSourceFile) => {
+    if (f.storage_path) {
+      await supabase.storage.from("territorial-sources").remove([f.storage_path]);
     }
+    const { error } = await supabase
+      .from("territorial_source_files")
+      .delete()
+      .eq("id", f.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Archivo eliminado");
+    void refreshFiles();
   };
 
   return (
