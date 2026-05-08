@@ -1617,13 +1617,13 @@ export const Sidebar = ({
                         </button>
                       )}
                       <button
-                        onClick={() => {
-                          if (
-                            !window.confirm(
-                              `¿Eliminar ${selCount} capa${selCount === 1 ? "" : "s"} de archivo?`,
-                            )
-                          )
-                            return;
+                        onClick={async () => {
+                          const ok = await confirmDialog({
+                            title: "Eliminar capas",
+                            description: `¿Eliminar ${selCount} capa${selCount === 1 ? "" : "s"} de archivo?`,
+                            confirmLabel: "Eliminar",
+                          });
+                          if (!ok) return;
                           allIds
                             .filter((id) => selectedLayerIds.has(id))
                             .forEach((id) => onRemoveUserLayer(id));
