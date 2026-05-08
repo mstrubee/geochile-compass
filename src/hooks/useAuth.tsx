@@ -11,6 +11,16 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+export const clearStoredAuthSession = () => {
+  try {
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith("sb-") || key.includes("supabase"))
+      .forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // localStorage can be unavailable in restricted browser contexts.
+  }
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -19,6 +29,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let active = true;
+
+    const isAuthScreen = window.location.pathname === "/auth";
+    if (isAuthScreen && !window.location.hash && !window.location.search.includes("code=")) {
+      clearStoredAuthSession();
+    }
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       if (!active) return;
@@ -33,7 +48,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!active) return;
         if (err) {
           setError(err.message);
-          supabase.auth.signOut({ scope: "local" }).catch(() => {});
+          clearStoredAuthSession();
         } else {
           setSession(data.session);
           setUser(data.session?.user ?? null);
@@ -42,6 +57,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .catch((e) => {
         if (!active) return;
         setError(e instanceof Error ? e.message : String(e));
+        clearStoredAuthSession();
       })
       .finally(() => {
         if (active) setLoading(false);
