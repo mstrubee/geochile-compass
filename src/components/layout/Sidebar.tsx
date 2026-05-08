@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -64,6 +64,7 @@ interface SidebarProps {
   onToggleIsoMode: () => void;
   onAnalyzeIsochrone?: (id: string) => void;
   onSaveIsochrone?: (id: string) => void;
+  onReportIsochrone?: (id: string) => void;
   // Saved isochrones
   savedIsochrones?: import("@/types/savedIsochrones").SavedIsochrone[];
   isoFolders?: import("@/types/savedIsochrones").IsochroneFolder[];
@@ -532,6 +533,7 @@ export const Sidebar = ({
   onToggleIsoMode,
   onAnalyzeIsochrone,
   onSaveIsochrone,
+  onReportIsochrone,
   savedIsochrones = [],
   isoFolders = [],
   loadedSavedIsoIds,
@@ -1410,6 +1412,16 @@ export const Sidebar = ({
                       title="Análisis de isócrona"
                     >
                       <BarChart3 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {onReportIsochrone && (
+                    <button
+                      onClick={() => onReportIsochrone(iso.id)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-primary/15 hover:text-primary"
+                      aria-label="Informe"
+                      title="Generar informe (Excel/PDF)"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
                     </button>
                   )}
                   {onSaveIsochrone && (

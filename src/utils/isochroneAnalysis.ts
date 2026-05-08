@@ -175,6 +175,61 @@ export const countTerritorialPoints = (
   };
 };
 
+export interface TerritorialPointDetail {
+  featureId: string;
+  name: string | null;
+  lat: number;
+  lng: number;
+  layerId: string;
+  layerName: string;
+  layerColor: string | null;
+  groupId: string;
+  groupName: string;
+  groupColor: string | null;
+  properties: Record<string, unknown>;
+}
+
+/**
+ * Devuelve el detalle (no solo el conteo) de cada punto territorial
+ * dentro del polígono de la isócrona. Usado por el informe exportable.
+ */
+export const listTerritorialPointsInIso = (
+  iso: Feature<Polygon | MultiPolygon>,
+  features: TerritorialFeature[],
+  layers: TerritorialLayer[],
+  groups: TerritorialGroup[],
+): TerritorialPointDetail[] => {
+  const layerMap = new Map(layers.map((l) => [l.id, l]));
+  const groupMap = new Map(groups.map((g) => [g.id, g]));
+  const out: TerritorialPointDetail[] = [];
+  for (const f of features) {
+    if (f.lat == null || f.lng == null) continue;
+    const pt = point([f.lng, f.lat]);
+    try {
+      if (!booleanPointInPolygon(pt, iso as never)) continue;
+    } catch {
+      continue;
+    }
+    const layer = layerMap.get(f.layer_id);
+    if (!layer) continue;
+    const group = groupMap.get(layer.group_id);
+    out.push({
+      featureId: f.id,
+      name: f.name,
+      lat: f.lat,
+      lng: f.lng,
+      layerId: layer.id,
+      layerName: layer.name,
+      layerColor: layer.color,
+      groupId: group?.id ?? "_unknown",
+      groupName: group?.name ?? "Sin grupo",
+      groupColor: group?.color ?? null,
+      properties: (f.properties ?? {}) as Record<string, unknown>,
+    });
+  }
+  return out;
+};
+
 const safeArea = (f: Feature<Polygon | MultiPolygon>): number => {
   try {
     return turfArea(f);

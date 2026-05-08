@@ -7,6 +7,7 @@ import { AnalysisPanel } from "@/components/panels/AnalysisPanel";
 import { PoiManagerDialog } from "@/components/panels/PoiManagerDialog";
 import { SavePoisDialog } from "@/components/panels/SavePoisDialog";
 import { SaveIsochroneDialog } from "@/components/panels/SaveIsochroneDialog";
+import { IsochroneReportDialog } from "@/components/panels/IsochroneReportDialog";
 import { PoiEditorDialog, type PoiEditorDraft } from "@/components/panels/PoiEditorDialog";
 import { CommuneSearchResultsDialog } from "@/components/panels/CommuneSearchResultsDialog";
 import { CommuneCompareDialog } from "@/components/panels/CommuneCompareDialog";
@@ -92,6 +93,7 @@ const Index = () => {
   const [isoLoading, setIsoLoading] = useState(false);
   const [selectedIsoId, setSelectedIsoId] = useState<string | null>(null);
   const [saveIsoDialogId, setSaveIsoDialogId] = useState<string | null>(null);
+  const [reportIsoDialogId, setReportIsoDialogId] = useState<string | null>(null);
   const [loadedSavedIsoIds, setLoadedSavedIsoIds] = useState<Set<string>>(new Set());
 
   const {
@@ -963,6 +965,7 @@ const Index = () => {
           onToggleIsoMode={() => setMode((m) => (m === "isochrone" ? "none" : "isochrone"))}
           onAnalyzeIsochrone={(id) => { setSelectedIsoId(id); setPanelOpen(true); }}
           onSaveIsochrone={(id) => setSaveIsoDialogId(id)}
+          onReportIsochrone={(id) => setReportIsoDialogId(id)}
           savedIsochrones={savedIsos}
           isoFolders={isoFolders}
           loadedSavedIsoIds={loadedSavedIsoIds}
@@ -1149,6 +1152,14 @@ const Index = () => {
         folders={isoFolders}
         onSave={handleSaveIsochronePayload}
         onCreateFolder={(name, parentId) => createIsoFolder(name, parentId)}
+      />
+
+      <IsochroneReportDialog
+        open={!!reportIsoDialogId}
+        onClose={() => setReportIsoDialogId(null)}
+        isochrone={isochrones.find((i) => i.id === reportIsoDialogId) ?? null}
+        manzanas={manzanaData ?? densityData ?? null}
+        gse={gseData ?? null}
       />
 
       <PoiManagerDialog
