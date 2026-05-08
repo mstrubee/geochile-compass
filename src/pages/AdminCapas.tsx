@@ -219,7 +219,7 @@ const AdminCapas = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => deleteLayer(l.id)}
+                            onClick={() => setDeleteLayerTarget({ id: l.id, name: l.name })}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
