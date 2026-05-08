@@ -39,16 +39,45 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
     }
     if (!showHeatmap) return;
 
-    const points: Array<[number, number, number]> = [];
+    // layer_id -> group_id, para detectar superposición de grupos por celda
+    const groupByLayer = new Map(layers.map((l) => [l.id, l.group_id]));
+
+    type RawPt = { lat: number; lng: number; groupId: string };
+    const raw: RawPt[] = [];
     features.forEach((f) => {
+      const groupId = groupByLayer.get(f.layer_id) || f.layer_id;
       if (f.lat != null && f.lng != null) {
-        points.push([f.lat, f.lng, 1]);
+        raw.push({ lat: f.lat, lng: f.lng, groupId });
       } else if (f.geometry && (f.geometry as GeoJSON.Geometry).type === "Point") {
         const coords = (f.geometry as GeoJSON.Point).coordinates;
-        if (coords && coords.length >= 2) points.push([coords[1], coords[0], 1]);
+        if (coords && coords.length >= 2)
+          raw.push({ lat: coords[1], lng: coords[0], groupId });
       }
     });
-    if (!points.length) return;
+    if (!raw.length) return;
+
+    // Discretizar en grilla (~0.002° ≈ radio del heatmap a zoom medio).
+    const CELL = 0.002;
+    const cellKey = (lat: number, lng: number) =>
+      `${Math.floor(lat / CELL)}:${Math.floor(lng / CELL)}`;
+    const cellGroups = new Map<string, Set<string>>();
+    raw.forEach((p) => {
+      const k = cellKey(p.lat, p.lng);
+      let s = cellGroups.get(k);
+      if (!s) {
+        s = new Set();
+        cellGroups.set(k, s);
+      }
+      s.add(p.groupId);
+    });
+
+    // Bonus por superposición de grupos en la celda.
+    const BONUS = 0.75;
+    const points: Array<[number, number, number]> = raw.map((p) => {
+      const nGroups = cellGroups.get(cellKey(p.lat, p.lng))?.size || 1;
+      const weight = 1 + (nGroups - 1) * BONUS;
+      return [p.lat, p.lng, weight];
+    });
 
     const heat = (L as unknown as {
       heatLayer: (pts: Array<[number, number, number]>, opts: Record<string, unknown>) => L.Layer;
@@ -57,6 +86,8 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
       blur: 18,
       maxZoom: 17,
       minOpacity: 0.35,
+      // Evita saturar el gradiente apenas hay solapamiento de grupos.
+      max: 4,
       gradient: {
         0.0: "#2563eb",
         0.3: "#22d3ee",
@@ -68,7 +99,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
     });
     heat.addTo(map);
     heatLayerRef.current = heat;
-  }, [features, showHeatmap, map]);
+  }, [features, layers, showHeatmap, map]);
 
   useEffect(() => {
     const layerColorById = new Map(layers.map((l) => [l.id, l.color || "#F59E0B"]));
