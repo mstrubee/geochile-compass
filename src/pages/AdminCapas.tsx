@@ -45,6 +45,24 @@ const AdminCapas = () => {
   const [bulkDeleteGroup, setBulkDeleteGroup] = useState<{ id: string; name: string; ids: string[] } | null>(null);
   const [renameGroupTarget, setRenameGroupTarget] = useState<{ id: string; name: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const [editingLayerName, setEditingLayerName] = useState("");
+
+  const saveLayerName = async (id: string, originalName: string) => {
+    const trimmed = editingLayerName.trim();
+    setEditingLayerId(null);
+    if (!trimmed || trimmed === originalName) return;
+    const { error } = await supabase
+      .from("territorial_layers")
+      .update({ name: trimmed })
+      .eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Capa renombrada");
+    void refresh();
+  };
 
   const toggleLayerSelected = (groupId: string, layerId: string) => {
     setSelectedLayers((prev) => {
@@ -306,7 +324,30 @@ const AdminCapas = () => {
                               checked={selected.has(l.id)}
                               onCheckedChange={() => toggleLayerSelected(g.id, l.id)}
                             />
-                            <span className="flex-1">{l.name}</span>
+                            {editingLayerId === l.id ? (
+                              <Input
+                                autoFocus
+                                value={editingLayerName}
+                                onChange={(e) => setEditingLayerName(e.target.value)}
+                                onBlur={() => void saveLayerName(l.id, l.name)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") void saveLayerName(l.id, l.name);
+                                  else if (e.key === "Escape") setEditingLayerId(null);
+                                }}
+                                className="h-7 flex-1"
+                              />
+                            ) : (
+                              <span
+                                className="flex-1 cursor-text rounded px-1 hover:bg-muted/50"
+                                title="Doble clic para renombrar"
+                                onDoubleClick={() => {
+                                  setEditingLayerId(l.id);
+                                  setEditingLayerName(l.name);
+                                }}
+                              >
+                                {l.name}
+                              </span>
+                            )}
                             <span className="font-mono text-xs text-muted-foreground">
                               {l.feature_count}
                             </span>
