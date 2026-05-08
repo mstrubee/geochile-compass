@@ -1,51 +1,54 @@
-## Resumen
-Agregar a cada isócrona en la barra lateral dos acciones nuevas: **Análisis** (abre el panel de análisis) y **Guardar**, con un sistema de almacenamiento por carpetas (crear, renombrar, mover, eliminar) que recuerda el/los POI(s) usados como origen.
+## Objetivo
 
-## UX
+El mapa de calor debe reflejar la **densidad real considerando los grupos activos**: las zonas donde se concentran puntos de **varios grupos a la vez** deben aparecer más calientes que zonas con muchos puntos de un solo grupo.
 
-En cada fila de isócrona del Sidebar, junto a los íconos actuales (centrar/eliminar):
+## Comportamiento actual (problema)
 
+Hoy, en `src/components/map/TerritorialLayersLayer.tsx`, todos los puntos visibles se vuelcan al heatmap con peso fijo `1`:
+
+```ts
+points.push([f.lat, f.lng, 1]);
 ```
-[●] Vehículo · 5/10′  [switch]  [📊 Análisis]  [💾 Guardar]  [🎯 Centrar]  [🗑]
-```
 
-- **Análisis** → abre el `AnalysisPanel` con esa isócrona seleccionada (ya existe la lógica, solo es un botón explícito).
-- **Guardar** → abre un mini-diálogo para nombrar la isócrona y elegir carpeta destino (o crear una nueva).
+Resultado: una zona con 50 puntos del mismo grupo se ve igual de "caliente" que una zona donde se cruzan 3 grupos distintos. No representa diversidad ni superposición.
 
-Nueva sección colapsable en el sidebar **"Isócronas guardadas"** (similar a POIs guardados):
-- Árbol de carpetas con drag & drop, clic derecho con: Renombrar, Eliminar, Nueva subcarpeta, Crear isócrona aquí.
-- Cada isócrona guardada muestra: nombre, modo, minutos, switch de visibilidad, centrar, análisis, editar (nombre/carpeta), eliminar.
-- Al activar la visibilidad → se re-dibuja en el mapa (mismas features GeoJSON que la original).
-- Si la isócrona se generó desde un POI guardado, se enlaza al POI (clic → centra el POI).
+## Comportamiento propuesto
 
-## Cambios en código
+Calcular un peso por punto que combine:
 
-### Backend (migración)
-Dos tablas nuevas con RLS por `user_id`:
+1. **Densidad local** del propio grupo (cuántos puntos del mismo grupo hay cerca).
+2. **Diversidad de grupos** activos en esa zona (bonus por superposición).
 
-- **`isochrone_folders`**: `id, user_id, name, parent_id, color, created_at, updated_at, deleted_at`. Trigger anti-ciclo (mismo patrón que `poi_folders`).
-- **`saved_isochrones`**: `id, user_id, folder_id, name, mode, minutes (int[]), center_lat, center_lng, color, features (jsonb GeoJSON), source_poi_id (uuid null), source_lat, source_lng, created_at, updated_at, deleted_at`.
+### Algoritmo
 
-Políticas RLS estándar (owner CRUD), trigger `update_updated_at_column`.
+1. Tomar todos los puntos visibles (igual que ahora).
+2. Discretizar el espacio en una grilla (celdas ~ tamaño del `radius` del heatmap, en grados ≈ 0.002°, ajustable según zoom).
+3. Para cada celda, contar:
+   - `n_total`: total de puntos en la celda.
+   - `n_groups`: cantidad de **grupos distintos activos** representados en la celda.
+4. Peso por punto = `1 + (n_groups - 1) * BONUS` con `BONUS ≈ 0.75`.
+   - 1 grupo presente → peso 1 (densidad normal).
+   - 2 grupos → peso 1.75 por punto.
+   - 3 grupos → peso 2.5, etc.
+5. Pasar los puntos con su peso a `L.heatLayer`. Leaflet.heat ya suma pesos por radio, así que la densidad sigue contando, pero la superposición de grupos amplifica el calor.
 
-### Frontend
-- `src/types/savedIsochrones.ts` — tipos `SavedIsochrone`, `IsochroneFolder`, payloads.
-- `src/hooks/useSavedIsochrones.ts` — CRUD + caché offline (mismo patrón que `useSavedPois`/`poiCache`).
-- `src/hooks/useIsochroneFolders.ts` — CRUD carpetas.
-- `src/components/panels/SaveIsochroneDialog.tsx` — diálogo nombre + selector de carpeta + "nueva carpeta".
-- `src/components/layout/Sidebar.tsx`:
-  - Botones "Análisis" y "Guardar" en cada fila de isócrona activa (líneas ~1043-1081).
-  - Nueva sección "Isócronas guardadas" con árbol y context-menu reutilizando estilos.
-- `src/pages/Index.tsx`:
-  - Wiring: `onOpenIsochroneAnalysis(id)`, `onSaveIsochrone(iso)`, props para guardadas.
-  - Permitir cargar una `SavedIsochrone` al estado `isochrones` (visible) para renderizar en `IsochroneLayer` sin tocar la BD.
+### Detalle técnico
 
-### Notas técnicas
-- Las features GeoJSON se almacenan tal cual en `jsonb` (tamaño típico < 50 KB por isócrona).
-- `source_poi_id` es opcional: la isócrona puede venir de un clic libre. Si viene de un POI, se guarda la referencia (sin FK estricta para tolerar POI eliminado).
-- Reutilizar `AnalysisPanel` existente — el botón "Análisis" solo dispara `setSelectedIsoId(id); setPanelOpen(true)`.
+Cambios solo en `src/components/map/TerritorialLayersLayer.tsx`:
+
+- Necesitamos `group_id` de cada feature. `useTerritorialFeatures` devuelve `f.layer_id`; mapear `layer_id → group_id` usando el prop `layers` (`TerritorialLayer.group_id`).
+- Construir una `Map<cellKey, Set<groupId>>` y `Map<cellKey, number>` para conteo, en una sola pasada.
+- Recorrer puntos otra vez aplicando el peso calculado.
+- Mantener `gradient`, `radius`, `blur`, `minOpacity` actuales. Subir `max` implícito de leaflet.heat o pasar `max` explícito (ej. `max: 4`) para que el gradiente no se sature al primer grupo solapado.
+
+No se tocan: lógica de visibilidad, checkbox del heatmap, render de marcadores individuales, ni otros archivos.
+
+## Archivos afectados
+
+- `src/components/map/TerritorialLayersLayer.tsx` (única edición).
 
 ## Fuera de alcance
-- Compartir isócronas entre usuarios.
-- Versionado/histórico.
-- Recalcular automáticamente al cambiar el POI de origen.
+
+- No se cambia el control del checkbox de heatmap.
+- No se agrega un heatmap por grupo separado.
+- No se introducen pesos configurables por usuario.
