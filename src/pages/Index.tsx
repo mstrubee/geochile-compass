@@ -833,7 +833,7 @@ const Index = () => {
           onToggleIsochrone={toggleIsochrone}
           onRemoveIsochrone={removeIsochrone}
           onClearIsochrones={clearIsochrones}
-          onFocusIsochrone={setFitIsoId}
+          onFocusIsochrone={(id) => { setFitIsoId(id); setSelectedIsoId(id); setPanelOpen(true); }}
           isoLoading={isoLoading}
           onToggleIsoMode={() => setMode((m) => (m === "isochrone" ? "none" : "isochrone"))}
           savedPois={pois}
