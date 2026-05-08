@@ -69,8 +69,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds }: Props) => {
             m.addTo(group);
           } else {
             const gj = L.geoJSON(geom as GeoJSON.Geometry, {
-              renderer: canvasRenderer,
-              style: { color, weight: 2, fillColor: color, fillOpacity: 0.25 },
+              style: { renderer: canvasRenderer, color, weight: 2, fillColor: color, fillOpacity: 0.25 },
             });
             gj.bindPopup(
               `<div style="font-size:12px"><b>${escapeHtml(f.name || layerName)}</b></div>`,
