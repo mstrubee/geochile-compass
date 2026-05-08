@@ -24,6 +24,211 @@ const parseCoordinates = (str: string): number[][] => {
     .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
 };
 
+// ---------- Leaflet/Folium grouped parser (replica del edge function) ----------
+
+const findMatching = (src: string, start: number): number => {
+  const open = src[start];
+  const close = open === "{" ? "}" : open === "[" ? "]" : open === "(" ? ")" : "";
+  if (!close) return -1;
+  let depth = 0, i = start;
+  let str: string | null = null;
+  while (i < src.length) {
+    const c = src[i];
+    if (str) {
+      if (c === "\\") { i += 2; continue; }
+      if (c === str) str = null;
+      i++; continue;
+    }
+    if (c === '"' || c === "'" || c === "`") { str = c; i++; continue; }
+    if (c === "/" && src[i + 1] === "/") { const nl = src.indexOf("\n", i); if (nl < 0) return -1; i = nl + 1; continue; }
+    if (c === "/" && src[i + 1] === "*") { const end = src.indexOf("*/", i + 2); if (end < 0) return -1; i = end + 2; continue; }
+    if (c === open) depth++;
+    else if (c === close) { depth--; if (depth === 0) return i; }
+    i++;
+  }
+  return -1;
+};
+
+const looseJsonParse = (text: string): any => {
+  try { return JSON.parse(text); } catch { /* */ }
+  let t = text;
+  t = t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  t = t.replace(/,(\s*[}\]])/g, "$1");
+  t = t.replace(/([{,\s])([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":');
+  t = t.replace(/'((?:\\.|[^'\\])*)'/g, (_m, inner) => JSON.stringify(inner.replace(/\\'/g, "'")));
+  try { return JSON.parse(t); } catch { return null; }
+};
+
+const parseLeafletGrouped = (html: string): Feature[] => {
+  const overlayMap = new Map<string, string>();
+
+  const ctrlRe = /L\.control\.layers\s*\(/g;
+  for (const m of html.matchAll(ctrlRe)) {
+    const open = (m.index ?? 0) + m[0].length - 1;
+    const close = findMatching(html, open);
+    if (close < 0) continue;
+    const args = html.slice(open + 1, close);
+    const parts: string[] = [];
+    let depth = 0, str: string | null = null, last = 0;
+    for (let i = 0; i < args.length; i++) {
+      const c = args[i];
+      if (str) { if (c === "\\") { i++; continue; } if (c === str) str = null; continue; }
+      if (c === '"' || c === "'" || c === "`") { str = c; continue; }
+      if (c === "{" || c === "[" || c === "(") depth++;
+      else if (c === "}" || c === "]" || c === ")") depth--;
+      else if (c === "," && depth === 0) { parts.push(args.slice(last, i)); last = i + 1; }
+    }
+    parts.push(args.slice(last));
+    if (parts.length < 2) continue;
+    const overlaysSrc = parts[1].trim();
+    if (!overlaysSrc.startsWith("{")) continue;
+    const closeObj = findMatching(overlaysSrc, 0);
+    if (closeObj < 0) continue;
+    const objBody = overlaysSrc.slice(1, closeObj);
+    const entryRe = /(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')\s*:\s*([A-Za-z_$][\w$]*)/g;
+    for (const e of objBody.matchAll(entryRe)) {
+      const name = (e[1] ?? e[2] ?? "").replace(/\\"/g, '"').replace(/\\'/g, "'");
+      overlayMap.set(e[3], name);
+    }
+  }
+
+  for (const m of html.matchAll(/\.\s*overlays\s*=\s*\{([\s\S]*?)\};/g)) {
+    const entryRe = /(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')\s*:\s*([A-Za-z_$][\w$]*)/g;
+    for (const e of m[1].matchAll(entryRe)) {
+      const name = (e[1] ?? e[2] ?? "").replace(/\\"/g, '"').replace(/\\'/g, "'");
+      overlayMap.set(e[3], name);
+    }
+  }
+  for (const m of html.matchAll(/\.addOverlay\s*\(\s*([A-Za-z_$][\w$]*)\s*,\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/g)) {
+    const name = (m[2] ?? m[3] ?? "").replace(/\\"/g, '"').replace(/\\'/g, "'");
+    overlayMap.set(m[1], name);
+  }
+
+  if (!overlayMap.size) return [];
+
+  const alias = new Map<string, string>();
+  for (const m of html.matchAll(/(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*;/g)) {
+    alias.set(m[1], m[2]);
+  }
+  const resolveAlias = (v: string): string => {
+    let cur = v; const seen = new Set<string>();
+    while (alias.has(cur) && !seen.has(cur)) { seen.add(cur); cur = alias.get(cur)!; }
+    return cur;
+  };
+  const resolvedOverlay = new Map(overlayMap);
+  for (const [from, to] of alias) {
+    const target = resolveAlias(to);
+    if (overlayMap.has(target)) resolvedOverlay.set(from, overlayMap.get(target)!);
+  }
+
+  const addToByVar = new Map<string, string>();
+  for (const m of html.matchAll(/([A-Za-z_$][\w$]*)\s*\.addTo\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g)) {
+    addToByVar.set(m[1], m[2]);
+  }
+  const popupByVar = new Map<string, string>();
+  const popupRe = /([A-Za-z_$][\w$]*)\s*\.bind(?:Popup|Tooltip)\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)/g;
+  for (const m of html.matchAll(popupRe)) {
+    const txt = (m[2] ?? m[3] ?? m[4] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (txt) popupByVar.set(m[1], txt);
+  }
+
+  const out: Feature[] = [];
+  const ctorRe = /(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*L\.(marker|circleMarker|circle|polygon|polyline|rectangle|geoJson)\s*\(/g;
+  let mm: RegExpExecArray | null;
+  while ((mm = ctorRe.exec(html))) {
+    const varName = mm[1];
+    const ctor = mm[2];
+    const openIdx = mm.index + mm[0].length - 1;
+    const closeIdx = findMatching(html, openIdx);
+    if (closeIdx < 0) continue;
+    const argsSrc = html.slice(openIdx + 1, closeIdx);
+    const groupVar = addToByVar.get(varName);
+    if (!groupVar) continue;
+    const folder = resolvedOverlay.get(resolveAlias(groupVar));
+    if (!folder) continue;
+    let firstArg = argsSrc.trim();
+    {
+      let depth = 0, str: string | null = null;
+      for (let i = 0; i < argsSrc.length; i++) {
+        const c = argsSrc[i];
+        if (str) { if (c === "\\") { i++; continue; } if (c === str) str = null; continue; }
+        if (c === '"' || c === "'" || c === "`") { str = c; continue; }
+        if (c === "{" || c === "[" || c === "(") depth++;
+        else if (c === "}" || c === "]" || c === ")") depth--;
+        else if (c === "," && depth === 0) { firstArg = argsSrc.slice(0, i).trim(); break; }
+      }
+    }
+    const popup = popupByVar.get(varName) ?? null;
+
+    if (ctor === "marker" || ctor === "circleMarker" || ctor === "circle") {
+      const coords = looseJsonParse(firstArg);
+      if (!Array.isArray(coords) || coords.length < 2 || typeof coords[0] !== "number") continue;
+      const lat = Number(coords[0]), lng = Number(coords[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      out.push({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [lng, lat] },
+        properties: { folder, name: popup, ...(popup ? { popup } : {}) },
+      });
+    } else if (ctor === "polyline") {
+      const coords = looseJsonParse(firstArg);
+      if (!Array.isArray(coords) || !Array.isArray(coords[0])) continue;
+      const ring = (coords as number[][]).map(([lat, lng]) => [Number(lng), Number(lat)])
+        .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
+      if (ring.length < 2) continue;
+      out.push({
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: ring },
+        properties: { folder, name: popup },
+      });
+    } else if (ctor === "polygon" || ctor === "rectangle") {
+      const coords = looseJsonParse(firstArg);
+      if (!Array.isArray(coords) || !coords.length) continue;
+      const toRing = (r: number[][]) => r.map(([lat, lng]) => [Number(lng), Number(lat)])
+        .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
+      let rings: number[][][];
+      if (Array.isArray(coords[0]) && Array.isArray((coords[0] as any)[0])) {
+        rings = (coords as number[][][]).map(toRing);
+      } else {
+        rings = [toRing(coords as number[][])];
+      }
+      if (ctor === "rectangle" && rings[0].length === 2) {
+        const [[x1, y1], [x2, y2]] = rings[0];
+        rings = [[[x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]]];
+      }
+      for (const r of rings) {
+        if (r.length && (r[0][0] !== r[r.length - 1][0] || r[0][1] !== r[r.length - 1][1])) {
+          r.push([r[0][0], r[0][1]]);
+        }
+      }
+      if (!rings[0] || rings[0].length < 4) continue;
+      out.push({
+        type: "Feature",
+        geometry: { type: "Polygon", coordinates: rings },
+        properties: { folder, name: popup },
+      });
+    } else if (ctor === "geoJson") {
+      const data = looseJsonParse(firstArg);
+      if (!data) continue;
+      const feats: any[] = data?.type === "FeatureCollection" ? (data.features ?? [])
+        : data?.type === "Feature" ? [data]
+        : data?.type ? [{ type: "Feature", geometry: data, properties: {} }]
+        : Array.isArray(data) ? data : [];
+      for (const f of feats) {
+        const g = f?.geometry ?? (f?.type ? f : null);
+        if (!g?.type) continue;
+        const props = f?.properties && typeof f.properties === "object" ? f.properties : {};
+        out.push({
+          type: "Feature",
+          geometry: g,
+          properties: { ...props, folder },
+        });
+      }
+    }
+  }
+  return out;
+};
+
 export const htmlToGeoJson = (html: string): GeoJsonFC => {
   const features: Feature[] = [];
 
@@ -126,7 +331,13 @@ export const htmlToGeoJson = (html: string): GeoJsonFC => {
     }
   }
 
-  // 4. Llamadas Leaflet: L.marker / L.polygon / L.polyline
+  // 4a. Leaflet/Folium con grupos del control de capas (overlays)
+  if (!features.length) {
+    const leafletGrouped = parseLeafletGrouped(html);
+    features.push(...leafletGrouped);
+  }
+
+  // 4b. Fallback genérico Leaflet sin grupos
   if (!features.length) {
     const markerRe = /L\.(?:marker|circleMarker|circle)\s*\(\s*\[\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\]/g;
     for (const m of html.matchAll(markerRe)) {
