@@ -1697,8 +1697,13 @@ export const Sidebar = ({
                         </button>
                       )}
                       <button
-                        onClick={() => {
-                          if (!window.confirm(`¿Eliminar la capa "${ul.name}"?`)) return;
+                        onClick={async () => {
+                          const ok = await confirmDialog({
+                            title: "Eliminar capa",
+                            description: `¿Eliminar la capa "${ul.name}"?`,
+                            confirmLabel: "Eliminar",
+                          });
+                          if (!ok) return;
                           onRemoveUserLayer(ul.id);
                         }}
                         className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
