@@ -88,6 +88,7 @@ const Index = () => {
   const [isochrones, setIsochrones] = useState<Isochrone[]>([]);
   const [fitIsoId, setFitIsoId] = useState<string | null>(null);
   const [isoLoading, setIsoLoading] = useState(false);
+  const [selectedIsoId, setSelectedIsoId] = useState<string | null>(null);
 
   // Búsqueda de direcciones (centra el mapa)
   const [flyTarget, setFlyTarget] = useState<{
@@ -589,6 +590,8 @@ const Index = () => {
         };
         setIsochrones((prev) => [...prev, newIso]);
         setFitIsoId(id);
+        setSelectedIsoId(id);
+        setPanelOpen(true);
         toast.success("Isócrona añadida", { id: tId });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Error";
@@ -830,7 +833,7 @@ const Index = () => {
           onToggleIsochrone={toggleIsochrone}
           onRemoveIsochrone={removeIsochrone}
           onClearIsochrones={clearIsochrones}
-          onFocusIsochrone={setFitIsoId}
+          onFocusIsochrone={(id) => { setFitIsoId(id); setSelectedIsoId(id); setPanelOpen(true); }}
           isoLoading={isoLoading}
           onToggleIsoMode={() => setMode((m) => (m === "isochrone" ? "none" : "isochrone"))}
           savedPois={pois}
@@ -991,7 +994,12 @@ const Index = () => {
             <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M13 6l6 6-6 6"/></svg>
           </button>
 
-          <AnalysisPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
+          <AnalysisPanel
+            open={panelOpen}
+            onClose={() => setPanelOpen(false)}
+            isochrone={isochrones.find((i) => i.id === selectedIsoId) ?? isochrones[isochrones.length - 1] ?? null}
+            manzanas={manzanaData ?? densityData ?? null}
+          />
         </div>
       </main>
 
