@@ -1093,6 +1093,26 @@ export const Sidebar = ({
                     </span>
                     <IOSSwitch on={iso.visible} />
                   </button>
+                  {onAnalyzeIsochrone && (
+                    <button
+                      onClick={() => onAnalyzeIsochrone(iso.id)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-primary/15 hover:text-primary"
+                      aria-label="Análisis"
+                      title="Análisis de isócrona"
+                    >
+                      <BarChart3 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {onSaveIsochrone && (
+                    <button
+                      onClick={() => onSaveIsochrone(iso.id)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-brand-green/15 hover:text-brand-green"
+                      aria-label="Guardar"
+                      title="Guardar isócrona"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => onFocusIsochrone(iso.id)}
                     className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-primary/15 hover:text-primary"
