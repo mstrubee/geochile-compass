@@ -14,6 +14,7 @@ const escapeHtml = (s: string) =>
 
 export const TerritorialLayersLayer = ({ layers, visibleLayerIds }: Props) => {
   const map = useMap();
+  const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
   const visibleIds = useMemo(
     () => layers.filter((l) => visibleLayerIds.has(l.id)).map((l) => l.id),
     [layers, visibleLayerIds],
@@ -55,6 +56,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds }: Props) => {
           if (!geom) return;
           if (geom.type === "Point" && f.lat != null && f.lng != null) {
             const m = L.circleMarker([f.lat, f.lng], {
+              renderer: canvasRenderer,
               radius: 6,
               color: "#fff",
               weight: 1.5,
@@ -67,7 +69,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds }: Props) => {
             m.addTo(group);
           } else {
             const gj = L.geoJSON(geom as GeoJSON.Geometry, {
-              style: { color, weight: 2, fillColor: color, fillOpacity: 0.25 },
+              style: { renderer: canvasRenderer, color, weight: 2, fillColor: color, fillOpacity: 0.25 },
             });
             gj.bindPopup(
               `<div style="font-size:12px"><b>${escapeHtml(f.name || layerName)}</b></div>`,
@@ -79,7 +81,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds }: Props) => {
         }
       });
     });
-  }, [features, layers, visibleLayerIds, map]);
+  }, [features, layers, visibleLayerIds, map, canvasRenderer]);
 
   useEffect(() => {
     return () => {
