@@ -152,7 +152,6 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
                 className={[
                   "flex-1 rounded-md px-1 py-1.5 text-[11px] font-medium transition-all",
                   tab === i ? "bg-surface-3 text-foreground shadow-apple-sm" : "text-muted-foreground hover:text-foreground",
-                ].join(" "),
                 ].join(" ")}
               >
                 {m} min
