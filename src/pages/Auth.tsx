@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
-import { useAuth } from "@/hooks/useAuth";
+import { clearStoredAuthSession, useAuth } from "@/hooks/useAuth";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -43,6 +43,7 @@ const Auth = () => {
         if (error) throw error;
         toast.success("Cuenta creada. Revisa tu correo para confirmar.");
       } else {
+        clearStoredAuthSession();
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         if (!data.session) throw new Error("No se obtuvo sesión.");
@@ -61,12 +62,7 @@ const Auth = () => {
   const handleResetSession = async () => {
     setBusy(true);
     try {
-      await supabase.auth.signOut({ scope: "local" });
-      try {
-        Object.keys(localStorage)
-          .filter((k) => k.startsWith("sb-") || k.includes("supabase"))
-          .forEach((k) => localStorage.removeItem(k));
-      } catch {}
+      clearStoredAuthSession();
       setLastError(null);
       toast.success("Sesión local limpiada. Intenta nuevamente.");
     } finally {
