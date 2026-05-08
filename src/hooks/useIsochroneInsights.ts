@@ -11,6 +11,7 @@ interface State {
 
 const cache = new Map<string, string>();
 const rateLimitUntil = new Map<string, number>();
+let globalRateLimitUntil = 0;
 
 const cacheKey = (a: IsochroneAnalysis) =>
   `${a.isoId}|${a.bandMinutes}|${a.totals.source}|${a.totals.pop}|${a.totals.hh}`;
@@ -25,11 +26,21 @@ export const useIsochroneInsights = (
   const fetchSummary = useCallback(
     async (a: IsochroneAnalysis, force = false) => {
       const key = cacheKey(a);
+      if (!force && globalRateLimitUntil > Date.now()) {
+        const seconds = Math.max(1, Math.ceil((globalRateLimitUntil - Date.now()) / 1000));
+        const cached = cache.get(key);
+        setState({
+          summary: cached ?? null,
+          loading: false,
+          error: `Gemini está temporalmente en cuota. Reintenta en ~${seconds}s.`,
+        });
+        return;
+      }
       const blockedUntil = rateLimitUntil.get(key) ?? 0;
       if (!force && blockedUntil > Date.now()) {
         const seconds = Math.max(1, Math.ceil((blockedUntil - Date.now()) / 1000));
         setState({
-          summary: null,
+          summary: cache.get(key) ?? null,
           loading: false,
           error: `Gemini está temporalmente en cuota. Reintenta en ~${seconds}s.`,
         });
@@ -55,6 +66,7 @@ export const useIsochroneInsights = (
           if (payload.error === "RATE_LIMITED") {
             const retryMs = Math.max(1000, payload.retryAfterMs ?? 30000);
             rateLimitUntil.set(key, Date.now() + retryMs);
+            globalRateLimitUntil = Date.now() + retryMs;
             if (payload.summary) {
               cache.set(key, payload.summary);
               setState({
@@ -76,6 +88,7 @@ export const useIsochroneInsights = (
           return;
         }
         rateLimitUntil.delete(key);
+        globalRateLimitUntil = 0;
         const summary = payload?.summary ?? "";
         cache.set(key, summary);
         setState({ summary, loading: false, error: null });
