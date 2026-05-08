@@ -8,12 +8,27 @@ import {
   pickBandFeature,
   type IsochroneAnalysis,
 } from "@/utils/isochroneAnalysis";
+import type { IneCommuneStats } from "@/utils/ineScales";
+import { normalizeCommuneName } from "@/services/communeDataService";
 
 interface Params {
   isochrone: Isochrone | null;
   bandSeconds?: number;
   manzanas?: ManzanaFeatureCollection | null;
 }
+
+const buildIneByName = (
+  comunas: ReturnType<typeof useComunasGeoIndex>,
+): Map<string, IneCommuneStats> => {
+  const out = new Map<string, IneCommuneStats>();
+  const names = comunas.nombresPorCodigo;
+  for (const codigo of Object.keys(names)) {
+    const nombre = names[codigo];
+    const stats = comunas.getIneStats(codigo, nombre);
+    if (stats) out.set(normalizeCommuneName(nombre), stats);
+  }
+  return out;
+};
 
 export const useIsochroneAnalysis = ({
   isochrone,
@@ -29,13 +44,6 @@ export const useIsochroneAnalysis = ({
     if (!isochrone) return null;
     const f = pickBandFeature(isochrone.features, bandSeconds);
     if (!f) return null;
-    // Need ine index ready
-    const ineByName = (comunas as unknown as { fc: unknown }).fc
-      ? // @ts-expect-error access internal
-        (comunas.fc && (comunas as any)) // placeholder, real access below
-      : null;
-    // We need ine map: re-import via getIneStats? Use getIneStats per name instead.
-    // Build a small Map from communes loaded
     return computeIsochroneAnalysis({
       isoId: isochrone.id,
       isoFeature: f,
@@ -48,23 +56,4 @@ export const useIsochroneAnalysis = ({
       manzanas,
     });
   }, [isochrone, bandSeconds, features, layers, groups, comunas, manzanas]);
-};
-
-// Helper: builds Map<normalizedName, IneCommuneStats> from useComunasGeoIndex.
-// The hook doesn't expose the raw map, but exposes getIneStats(codigo, nombre).
-// We iterate over nombresPorCodigo to construct it.
-import type { IneCommuneStats } from "@/utils/ineScales";
-import { normalizeCommuneName } from "@/services/communeDataService";
-
-const buildIneByName = (
-  comunas: ReturnType<typeof useComunasGeoIndex>,
-): Map<string, IneCommuneStats> => {
-  const out = new Map<string, IneCommuneStats>();
-  const names = comunas.nombresPorCodigo;
-  for (const codigo of Object.keys(names)) {
-    const nombre = names[codigo];
-    const stats = comunas.getIneStats(codigo, nombre);
-    if (stats) out.set(normalizeCommuneName(nombre), stats);
-  }
-  return out;
 };
