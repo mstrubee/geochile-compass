@@ -10,8 +10,36 @@ import type { ComunaFeature, ComunaFC } from "@/hooks/useComunasGeoIndex";
 import type { IneCommuneStats } from "@/utils/ineScales";
 import type { NSE } from "@/data/communes";
 import { normalizeCommuneName } from "@/services/communeDataService";
+import type { GseFeatureCollection, GseClass } from "@/types/gse";
+import { RM_AVERAGES } from "@/data/rmAverages";
 
 export type NseLabel = "ABC1" | "C2" | "C3" | "D" | "E";
+
+export interface GseBreakdown {
+  manzanaCount: number;
+  classDistribution: Partial<Record<GseClass, number>>; // % ponderado por área
+  quintilDistribution: Partial<Record<"Q1" | "Q2" | "Q3" | "Q4" | "Q5", number>>;
+  nseScoreAvg: number | null; // 0-1000
+  educYearsAvg: number | null;
+  hacinAvg: number | null;
+  autoScoreAvg: number | null;
+}
+
+export interface DensityBreakdown {
+  popPerKm2: number;
+  hhPerKm2: number;
+  pointsPerKm2: number;
+  pointsPerKm2ByGroup: { groupId: string; groupName: string; color: string | null; perKm2: number }[];
+  serviceCoverageIndex: number; // 0-100
+}
+
+export interface ComparisonRow {
+  key: string;
+  label: string;
+  value: number;
+  vsRmPct: number | null; // delta % vs RM (positive = above RM)
+  format: "int" | "clp" | "pct" | "decimal";
+}
 
 export interface PointsByLayer {
   layerId: string;
@@ -58,6 +86,9 @@ export interface IsochroneAnalysis {
   territorialPoints: TerritorialPointsBreakdown;
   communes: CommuneBreakdownRow[];
   manzanas: ManzanaBreakdown | null;
+  gse: GseBreakdown | null;
+  density: DensityBreakdown;
+  comparisons: ComparisonRow[];
   totals: {
     pop: number;
     hh: number;
@@ -257,6 +288,114 @@ export const manzanaBreakdown = (
   };
 };
 
+const GSE_CLASSES: GseClass[] = ["ABC1", "C1", "C2", "C3", "D", "E"];
+const QUINTILES = ["Q1", "Q2", "Q3", "Q4", "Q5"] as const;
+
+export const gseBreakdown = (
+  iso: Feature<Polygon | MultiPolygon>,
+  gse: GseFeatureCollection | null,
+): GseBreakdown | null => {
+  if (!gse?.features?.length) return null;
+  let totalArea = 0;
+  let count = 0;
+  const classArea: Partial<Record<GseClass, number>> = {};
+  const quintilArea: Partial<Record<"Q1" | "Q2" | "Q3" | "Q4" | "Q5", number>> = {};
+  let nseScoreNum = 0, nseScoreDen = 0;
+  let educNum = 0, educDen = 0;
+  let hacinNum = 0, hacinDen = 0;
+  let autoNum = 0, autoDen = 0;
+
+  for (const f of gse.features) {
+    try {
+      if (!booleanIntersects(iso, f as never)) continue;
+    } catch {
+      continue;
+    }
+    const inter = safeIntersect(iso, f as never);
+    if (!inter) continue;
+    const interArea = safeArea(inter);
+    if (interArea <= 0) continue;
+    count += 1;
+    totalArea += interArea;
+    const p = f.properties;
+    if (p.gse) classArea[p.gse] = (classArea[p.gse] ?? 0) + interArea;
+    if (p.quintil) quintilArea[p.quintil] = (quintilArea[p.quintil] ?? 0) + interArea;
+    if (p.nse_score != null) { nseScoreNum += p.nse_score * interArea; nseScoreDen += interArea; }
+    if (p.educ != null) { educNum += p.educ * interArea; educDen += interArea; }
+    if (p.hacin != null) { hacinNum += p.hacin * interArea; hacinDen += interArea; }
+    if (p.auto_score != null) { autoNum += p.auto_score * interArea; autoDen += interArea; }
+  }
+  if (count === 0 || totalArea <= 0) return null;
+
+  const classDistribution: Partial<Record<GseClass, number>> = {};
+  for (const k of GSE_CLASSES) {
+    const a = classArea[k];
+    if (a) classDistribution[k] = Math.round((a / totalArea) * 1000) / 10;
+  }
+  const quintilDistribution: Partial<Record<"Q1" | "Q2" | "Q3" | "Q4" | "Q5", number>> = {};
+  for (const k of QUINTILES) {
+    const a = quintilArea[k];
+    if (a) quintilDistribution[k] = Math.round((a / totalArea) * 1000) / 10;
+  }
+  return {
+    manzanaCount: count,
+    classDistribution,
+    quintilDistribution,
+    nseScoreAvg: nseScoreDen > 0 ? Math.round((nseScoreNum / nseScoreDen) * 10) / 10 : null,
+    educYearsAvg: educDen > 0 ? Math.round((educNum / educDen) * 10) / 10 : null,
+    hacinAvg: hacinDen > 0 ? Math.round((hacinNum / hacinDen) * 100) / 100 : null,
+    autoScoreAvg: autoDen > 0 ? Math.round((autoNum / autoDen) * 10) / 10 : null,
+  };
+};
+
+const computeDensity = (
+  area_km2: number,
+  pop: number,
+  hh: number,
+  territorialPoints: TerritorialPointsBreakdown,
+): DensityBreakdown => {
+  const safeArea = area_km2 > 0 ? area_km2 : 1;
+  const popPerKm2 = pop / safeArea;
+  const hhPerKm2 = hh / safeArea;
+  const pointsPerKm2 = territorialPoints.total / safeArea;
+  const pointsPerKm2ByGroup = territorialPoints.groups.map((g) => ({
+    groupId: g.groupId,
+    groupName: g.groupName,
+    color: g.color,
+    perKm2: g.count / safeArea,
+  }));
+  // Service coverage: normaliza puntos/km² (cap 50 ≈ 100). Heurística simple.
+  const serviceCoverageIndex = Math.min(100, Math.round((pointsPerKm2 / 50) * 100));
+  return {
+    popPerKm2: Math.round(popPerKm2),
+    hhPerKm2: Math.round(hhPerKm2),
+    pointsPerKm2: Math.round(pointsPerKm2 * 100) / 100,
+    pointsPerKm2ByGroup,
+    serviceCoverageIndex,
+  };
+};
+
+const buildComparisons = (
+  totals: { pop: number; hh: number; incomeAvgPerHh: number },
+  density: DensityBreakdown,
+  gse: GseBreakdown | null,
+): ComparisonRow[] => {
+  const rm = RM_AVERAGES;
+  const pct = (v: number, base: number) => (base > 0 ? Math.round(((v - base) / base) * 1000) / 10 : null);
+  const rows: ComparisonRow[] = [
+    { key: "popPerKm2", label: "Densidad pob.", value: density.popPerKm2, vsRmPct: pct(density.popPerKm2, rm.popPerKm2), format: "int" },
+    { key: "hhPerKm2", label: "Densidad hog.", value: density.hhPerKm2, vsRmPct: pct(density.hhPerKm2, rm.hhPerKm2), format: "int" },
+    { key: "income", label: "Ingreso/hogar", value: totals.incomeAvgPerHh, vsRmPct: pct(totals.incomeAvgPerHh, rm.incomeAvgPerHh), format: "clp" },
+  ];
+  if (gse?.educYearsAvg != null) {
+    rows.push({ key: "educ", label: "Escolaridad (años)", value: gse.educYearsAvg, vsRmPct: pct(gse.educYearsAvg, rm.educYears), format: "decimal" });
+  }
+  if (gse?.hacinAvg != null) {
+    rows.push({ key: "hacin", label: "Hacinamiento", value: gse.hacinAvg, vsRmPct: pct(gse.hacinAvg, rm.hacin), format: "decimal" });
+  }
+  return rows;
+};
+
 export const computeIsochroneAnalysis = (params: {
   isoId: string;
   isoFeature: Feature<Polygon | MultiPolygon, { value: number }>;
@@ -267,6 +406,7 @@ export const computeIsochroneAnalysis = (params: {
   ineByName: Map<string, IneCommuneStats>;
   nombresPorCodigo: Record<string, string>;
   manzanas: ManzanaFeatureCollection | null;
+  gse?: GseFeatureCollection | null;
 }): IsochroneAnalysis => {
   const {
     isoId,
@@ -278,6 +418,7 @@ export const computeIsochroneAnalysis = (params: {
     ineByName,
     nombresPorCodigo,
     manzanas,
+    gse = null,
   } = params;
 
   const bandMinutes = Math.round((isoFeature.properties?.value ?? 0) / 60);
@@ -291,6 +432,7 @@ export const computeIsochroneAnalysis = (params: {
   );
   const communes = communeBreakdown(isoFeature, comunasFC, ineByName, nombresPorCodigo);
   const manzanasBD = manzanaBreakdown(isoFeature, manzanas);
+  const gseBD = gseBreakdown(isoFeature, gse);
 
   // Decide source for population & households
   let pop = 0;
@@ -307,7 +449,6 @@ export const computeIsochroneAnalysis = (params: {
   }
 
   // Ingresos vienen siempre del ingreso comunal aplicado a hogares dentro de la iso.
-  // Si la fuente fue manzanas, escalamos los hogares comunales para que sumen `hh`.
   let incomeTotal = 0;
   const totalHhCommune = communes.reduce((s, c) => s + c.hhInIso, 0);
   const scale = source === "manzanas" && totalHhCommune > 0 ? hh / totalHhCommune : 1;
@@ -317,6 +458,13 @@ export const computeIsochroneAnalysis = (params: {
   }
   const incomeAvgPerHh = hh > 0 ? incomeTotal / hh : 0;
 
+  const density = computeDensity(area_km2, pop, hh, territorialPoints);
+  const comparisons = buildComparisons(
+    { pop, hh, incomeAvgPerHh: Math.round(incomeAvgPerHh) },
+    density,
+    gseBD,
+  );
+
   return {
     isoId,
     bandMinutes,
@@ -324,6 +472,9 @@ export const computeIsochroneAnalysis = (params: {
     territorialPoints,
     communes,
     manzanas: manzanasBD,
+    gse: gseBD,
+    density,
+    comparisons,
     totals: {
       pop,
       hh,
@@ -333,3 +484,4 @@ export const computeIsochroneAnalysis = (params: {
     },
   };
 };
+

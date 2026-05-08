@@ -1,8 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Isochrone } from "@/types/isochrones";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
+import type { GseFeatureCollection } from "@/types/gse";
 import { useTerritorialLayers, useTerritorialFeatures } from "@/hooks/useTerritorialLayers";
 import { useComunasGeoIndex } from "@/hooks/useComunasGeoIndex";
+import { gseService } from "@/services/gseService";
 import {
   computeIsochroneAnalysis,
   pickBandFeature,
@@ -30,6 +32,27 @@ const buildIneByName = (
   return out;
 };
 
+const computeIsoBbox = (
+  feat: ReturnType<typeof pickBandFeature>,
+): [number, number, number, number] | null => {
+  if (!feat) return null;
+  const rings: number[][][] =
+    feat.geometry.type === "Polygon"
+      ? feat.geometry.coordinates
+      : feat.geometry.coordinates.flat();
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const ring of rings) {
+    for (const [x, y] of ring) {
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (!isFinite(minX)) return null;
+  return [minX, minY, maxX, maxY];
+};
+
 export const useIsochroneAnalysis = ({
   isochrone,
   bandSeconds,
@@ -40,13 +63,45 @@ export const useIsochroneAnalysis = ({
   const features = useTerritorialFeatures(layerIds);
   const comunas = useComunasGeoIndex(true);
 
+  const bandFeature = useMemo(
+    () => (isochrone ? pickBandFeature(isochrone.features, bandSeconds) : null),
+    [isochrone, bandSeconds],
+  );
+  const isoBbox = useMemo(() => computeIsoBbox(bandFeature), [bandFeature]);
+
+  const [gse, setGse] = useState<GseFeatureCollection | null>(null);
+
+  useEffect(() => {
+    if (!isoBbox) {
+      setGse(null);
+      return;
+    }
+    let cancelled = false;
+    gseService
+      .fetchGse({
+        west: isoBbox[0],
+        south: isoBbox[1],
+        east: isoBbox[2],
+        north: isoBbox[3],
+        variable: "gse",
+        zoom: 13,
+      })
+      .then((res) => {
+        if (!cancelled) setGse(res);
+      })
+      .catch(() => {
+        if (!cancelled) setGse(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isoBbox]);
+
   return useMemo(() => {
-    if (!isochrone) return null;
-    const f = pickBandFeature(isochrone.features, bandSeconds);
-    if (!f) return null;
+    if (!isochrone || !bandFeature) return null;
     return computeIsochroneAnalysis({
       isoId: isochrone.id,
-      isoFeature: f,
+      isoFeature: bandFeature,
       territorialFeatures: features,
       territorialLayers: layers,
       territorialGroups: groups,
@@ -54,6 +109,7 @@ export const useIsochroneAnalysis = ({
       ineByName: buildIneByName(comunas),
       nombresPorCodigo: comunas.nombresPorCodigo,
       manzanas,
+      gse,
     });
-  }, [isochrone, bandSeconds, features, layers, groups, comunas, manzanas]);
+  }, [isochrone, bandFeature, features, layers, groups, comunas, manzanas, gse]);
 };
