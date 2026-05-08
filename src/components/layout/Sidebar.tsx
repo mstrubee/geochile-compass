@@ -1999,7 +1999,6 @@ export const Sidebar = ({
                                       toast.error(err instanceof Error ? err.message : "Error al crear");
                                     }
                                   }}
-                                  }}
                                 >
                                   <FolderPlus className="mr-2 h-3.5 w-3.5" />
                                   Crear subcarpeta…
