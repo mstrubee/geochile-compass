@@ -2169,7 +2169,12 @@ export const Sidebar = ({
               ? `Eliminar definitivamente ${visibleCount} elemento(s) que coinciden con "${trashSearch.trim()}"? Esta acción no se puede deshacer.`
               : `Vaciar la papelera por completo (${totalCount} elemento(s))? Esta acción no se puede deshacer.`;
             if (visibleCount === 0) return;
-            if (!window.confirm(label)) return;
+            const ok = await confirmDialog({
+              title: q ? "Eliminar elementos filtrados" : "Vaciar papelera",
+              description: label,
+              confirmLabel: "Eliminar definitivamente",
+            });
+            if (!ok) return;
             try {
               if (visiblePois.length && onPurgePois) {
                 await onPurgePois(visiblePois.map((p) => p.id));
