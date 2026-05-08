@@ -491,6 +491,63 @@ const AdminCapas = () => {
           if (deleteFileTarget) await performDeleteFile(deleteFileTarget);
         }}
       />
+
+      <ConfirmDeleteDialog
+        open={!!bulkDeleteGroup}
+        onOpenChange={(v) => !v && setBulkDeleteGroup(null)}
+        title="¿Eliminar las capas seleccionadas?"
+        description="Se eliminarán también todos los puntos asociados. Esta acción no se puede deshacer."
+        resourceName={
+          bulkDeleteGroup
+            ? `${bulkDeleteGroup.ids.length} capas de "${bulkDeleteGroup.name}"`
+            : undefined
+        }
+        onConfirm={async () => {
+          if (bulkDeleteGroup)
+            await performBulkDelete(bulkDeleteGroup.ids, bulkDeleteGroup.id);
+        }}
+      />
+
+      <Dialog
+        open={!!renameGroupTarget}
+        onOpenChange={(v) => !v && setRenameGroupTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renombrar grupo</DialogTitle>
+            <DialogDescription>
+              Cambia el nombre visible del grupo. Los slugs y referencias internas se mantienen.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="rename-group-input">Nuevo nombre</Label>
+            <Input
+              id="rename-group-input"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && renameGroupTarget) {
+                  void performRenameGroup(renameGroupTarget.id, renameValue);
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameGroupTarget(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (renameGroupTarget)
+                  void performRenameGroup(renameGroupTarget.id, renameValue);
+              }}
+            >
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
