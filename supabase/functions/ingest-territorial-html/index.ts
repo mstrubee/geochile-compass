@@ -97,6 +97,27 @@ const parseHtml = (html: string): ScannedLayer[] => {
   return Array.from(layers.values()).filter((l) => l.count > 0);
 };
 
+const pointFromGeometry = (g: any): { lat: number | null; lng: number | null } => {
+  if (g?.type === "Point" && Array.isArray(g.coordinates)) {
+    const lng = Number(g.coordinates[0]);
+    const lat = Number(g.coordinates[1]);
+    return {
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+    };
+  }
+  return { lat: null, lng: null };
+};
+
+const layerNameFrom = (props: Record<string, unknown>, g: any): string => {
+  const raw = props.layer ?? props.layer_name ?? props.folder ?? props.Folder ?? props.category ?? props.group;
+  if (raw != null && String(raw).trim()) return String(raw).trim();
+  if (g?.type === "Point" || g?.type === "MultiPoint") return "Puntos";
+  if (g?.type === "Polygon" || g?.type === "MultiPolygon") return "Polígonos";
+  if (g?.type === "LineString" || g?.type === "MultiLineString") return "Líneas";
+  return "default";
+};
+
 const parseGeoJson = (text: string): ScannedLayer[] => {
   const layers = new Map<string, ScannedLayer>();
   const ensure = (name: string) => {
@@ -104,20 +125,19 @@ const parseGeoJson = (text: string): ScannedLayer[] => {
     return layers.get(name)!;
   };
   let data: any;
-  try { data = JSON.parse(text); } catch { return []; }
+  try { data = JSON.parse(text.replace(/^\uFEFF/, "").trim()); } catch (e) {
+    console.warn("GeoJSON parse failed", e);
+    return [];
+  }
   const feats: any[] = data?.type === "FeatureCollection" ? (data.features ?? [])
     : data?.type === "Feature" ? [data]
     : Array.isArray(data) ? data : [];
   for (const f of feats) {
-    const props = f?.properties ?? {};
-    const layerName = String(props.layer ?? props.folder ?? props.category ?? props.group ?? "default");
-    const layer = ensure(layerName);
     const g = f?.geometry;
-    if (!g) continue;
-    let lat: number | null = null, lng: number | null = null;
-    if (g.type === "Point" && Array.isArray(g.coordinates)) {
-      lng = Number(g.coordinates[0]); lat = Number(g.coordinates[1]);
-    }
+    if (!g?.type) continue;
+    const props = f?.properties && typeof f.properties === "object" ? f.properties : {};
+    const layer = ensure(layerNameFrom(props, g));
+    const { lat, lng } = pointFromGeometry(g);
     layer.features.push({
       external_id: f.id != null ? String(f.id) : (props.id != null ? String(props.id) : null),
       name: props.name ?? props.Name ?? props.title ?? null,

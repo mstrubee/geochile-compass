@@ -345,7 +345,10 @@ const ZoomControlTopRight = () => {
 
 const TerritorialLayersHost = () => {
   const { layers } = useTerritorialLayers();
-  const { visibleLayerIds } = useTerritorialVisibility();
+  const { visibleLayerIds, ensureVisibleDefaults } = useTerritorialVisibility();
+  useEffect(() => {
+    ensureVisibleDefaults(layers.map((l) => l.id));
+  }, [layers, ensureVisibleDefaults]);
   return <TerritorialLayersLayer layers={layers} visibleLayerIds={visibleLayerIds} />;
 };
 
