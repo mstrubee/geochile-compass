@@ -10,6 +10,8 @@ interface State {
 }
 
 const cache = new Map<string, string>();
+const rateLimitUntil = new Map<string, number>();
+let globalRateLimitUntil = 0;
 
 const cacheKey = (a: IsochroneAnalysis) =>
   `${a.isoId}|${a.bandMinutes}|${a.totals.source}|${a.totals.pop}|${a.totals.hh}`;
@@ -24,6 +26,26 @@ export const useIsochroneInsights = (
   const fetchSummary = useCallback(
     async (a: IsochroneAnalysis, force = false) => {
       const key = cacheKey(a);
+      if (!force && globalRateLimitUntil > Date.now()) {
+        const seconds = Math.max(1, Math.ceil((globalRateLimitUntil - Date.now()) / 1000));
+        const cached = cache.get(key);
+        setState({
+          summary: cached ?? null,
+          loading: false,
+          error: `Gemini está temporalmente en cuota. Reintenta en ~${seconds}s.`,
+        });
+        return;
+      }
+      const blockedUntil = rateLimitUntil.get(key) ?? 0;
+      if (!force && blockedUntil > Date.now()) {
+        const seconds = Math.max(1, Math.ceil((blockedUntil - Date.now()) / 1000));
+        setState({
+          summary: cache.get(key) ?? null,
+          loading: false,
+          error: `Gemini está temporalmente en cuota. Reintenta en ~${seconds}s.`,
+        });
+        return;
+      }
       if (!force) {
         const cached = cache.get(key);
         if (cached) {
@@ -39,17 +61,34 @@ export const useIsochroneInsights = (
         });
         if (reqId !== reqIdRef.current) return;
         if (error) throw new Error(error.message);
-        const payload = data as { summary?: string; error?: string; fallback?: boolean };
+        const payload = data as { summary?: string; error?: string; fallback?: boolean; retryAfterMs?: number };
         if (payload?.error) {
+          if (payload.error === "RATE_LIMITED") {
+            const retryMs = Math.max(1000, payload.retryAfterMs ?? 30000);
+            rateLimitUntil.set(key, Date.now() + retryMs);
+            globalRateLimitUntil = Date.now() + retryMs;
+            if (payload.summary) {
+              cache.set(key, payload.summary);
+              setState({
+                summary: payload.summary,
+                loading: false,
+                error: `Gemini quedó sin cuota; mostrando un resumen de contingencia. Reintenta en ~${Math.ceil(retryMs / 1000)}s.`,
+              });
+              return;
+            }
+          }
           const msg =
             payload.error === "SERVICE_UNAVAILABLE"
               ? "El modelo Gemini está temporalmente saturado. Intenta nuevamente en unos minutos."
-              : payload.error === "Rate limit exceeded"
-                ? "Se alcanzó el límite de uso de Gemini. Intenta más tarde."
+              : payload.error === "RATE_LIMITED"
+                ? `Se alcanzó la cuota de Gemini. Intenta nuevamente en ~${Math.ceil((payload.retryAfterMs ?? 30000) / 1000)}s.`
                 : payload.error;
+          if (payload.summary) cache.set(key, payload.summary);
           setState({ summary: null, loading: false, error: msg });
           return;
         }
+        rateLimitUntil.delete(key);
+        globalRateLimitUntil = 0;
         const summary = payload?.summary ?? "";
         cache.set(key, summary);
         setState({ summary, loading: false, error: null });
