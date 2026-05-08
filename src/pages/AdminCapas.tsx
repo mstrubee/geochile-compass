@@ -242,6 +242,10 @@ const AdminCapas = () => {
           <div className="space-y-3">
             {groups.map((g) => {
               const groupLayers = layers.filter((l) => l.group_id === g.id);
+              const layerIds = groupLayers.map((l) => l.id);
+              const selected = selectedLayers[g.id] ?? new Set<string>();
+              const allChecked = layerIds.length > 0 && layerIds.every((id) => selected.has(id));
+              const someChecked = selected.size > 0 && !allChecked;
               return (
                 <div key={g.id} className="rounded-lg border border-border/60 p-3">
                   <div className="mb-2 flex items-center gap-2">
@@ -253,30 +257,70 @@ const AdminCapas = () => {
                     <span className="text-xs text-muted-foreground">
                       {groupLayers.length} capas
                     </span>
+                    <div className="ml-auto flex items-center gap-1">
+                      {selected.size > 0 && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() =>
+                            setBulkDeleteGroup({
+                              id: g.id,
+                              name: g.name,
+                              ids: Array.from(selected),
+                            })
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" /> Eliminar ({selected.size})
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setRenameValue(g.name);
+                          setRenameGroupTarget({ id: g.id, name: g.name });
+                        }}
+                      >
+                        Renombrar
+                      </Button>
+                    </div>
                   </div>
                   {groupLayers.length === 0 ? (
                     <p className="text-xs text-muted-foreground">Sin capas. Carga un archivo.</p>
                   ) : (
-                    <ul className="divide-y divide-border/40">
-                      {groupLayers.map((l) => (
-                        <li
-                          key={l.id}
-                          className="flex items-center gap-2 py-1.5 text-sm"
-                        >
-                          <span className="flex-1">{l.name}</span>
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {l.feature_count}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setDeleteLayerTarget({ id: l.id, name: l.name })}
+                    <>
+                      <div className="flex items-center gap-2 border-b border-border/40 pb-1.5 text-xs text-muted-foreground">
+                        <Checkbox
+                          checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                          onCheckedChange={() => toggleAllInGroup(g.id, layerIds)}
+                        />
+                        <span>Seleccionar todas</span>
+                      </div>
+                      <ul className="divide-y divide-border/40">
+                        {groupLayers.map((l) => (
+                          <li
+                            key={l.id}
+                            className="flex items-center gap-2 py-1.5 text-sm"
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
+                            <Checkbox
+                              checked={selected.has(l.id)}
+                              onCheckedChange={() => toggleLayerSelected(g.id, l.id)}
+                            />
+                            <span className="flex-1">{l.name}</span>
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {l.feature_count}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeleteLayerTarget({ id: l.id, name: l.name })}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
                   )}
                 </div>
               );
