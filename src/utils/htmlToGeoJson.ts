@@ -106,31 +106,60 @@ const parseLeafletGrouped = (html: string): Feature[] => {
 
   if (!overlayMap.size) return [];
 
-  const alias = new Map<string, string>();
+  // Parents: alias (var a = b;), separate-statement .addTo, and L.featureGroup.subGroup(parent,...)
+  const parent = new Map<string, string>();
   for (const m of html.matchAll(/(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*;/g)) {
-    alias.set(m[1], m[2]);
+    parent.set(m[1], m[2]);
   }
-  const resolveAlias = (v: string): string => {
+  for (const m of html.matchAll(/(?:^|[;{}\n])\s*([A-Za-z_$][\w$]*)\s*\.addTo\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g)) {
+    if (!parent.has(m[1])) parent.set(m[1], m[2]);
+  }
+  for (const m of html.matchAll(/(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*L\.featureGroup\.subGroup\s*\(\s*([A-Za-z_$][\w$]*)/g)) {
+    parent.set(m[1], m[2]);
+  }
+  const resolveGroup = (v: string): string | undefined => {
     let cur = v; const seen = new Set<string>();
-    while (alias.has(cur) && !seen.has(cur)) { seen.add(cur); cur = alias.get(cur)!; }
-    return cur;
+    while (cur && !seen.has(cur)) {
+      if (overlayMap.has(cur)) return overlayMap.get(cur);
+      seen.add(cur);
+      const next = parent.get(cur);
+      if (!next) return undefined;
+      cur = next;
+    }
+    return undefined;
   };
-  const resolvedOverlay = new Map(overlayMap);
-  for (const [from, to] of alias) {
-    const target = resolveAlias(to);
-    if (overlayMap.has(target)) resolvedOverlay.set(from, overlayMap.get(target)!);
-  }
 
-  const addToByVar = new Map<string, string>();
-  for (const m of html.matchAll(/([A-Za-z_$][\w$]*)\s*\.addTo\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g)) {
-    addToByVar.set(m[1], m[2]);
-  }
   const popupByVar = new Map<string, string>();
   const popupRe = /([A-Za-z_$][\w$]*)\s*\.bind(?:Popup|Tooltip)\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)/g;
   for (const m of html.matchAll(popupRe)) {
     const txt = (m[2] ?? m[3] ?? m[4] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     if (txt) popupByVar.set(m[1], txt);
   }
+
+  // Read chained suffix `.addTo(group)` / `.bindPopup("...")` after a constructor's closing ')'
+  const readChainedSuffix = (src: string, from: number): { group: string | null; popup: string | null } => {
+    let i = from, depth = 0, str: string | null = null, end = src.length;
+    while (i < src.length) {
+      const c = src[i];
+      if (str) { if (c === "\\") { i += 2; continue; } if (c === str) str = null; i++; continue; }
+      if (c === '"' || c === "'" || c === "`") { str = c; i++; continue; }
+      if (c === "(" || c === "{" || c === "[") { depth++; i++; continue; }
+      if (c === ")" || c === "}" || c === "]") { depth--; i++; continue; }
+      if (depth === 0 && (c === ";" || c === "\n")) { end = i; break; }
+      i++;
+    }
+    const suffix = src.slice(from, end);
+    let group: string | null = null;
+    const gM = suffix.match(/\.addTo\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/);
+    if (gM) group = gM[1];
+    let popup: string | null = null;
+    const pM = suffix.match(/\.bind(?:Popup|Tooltip)\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)/);
+    if (pM) {
+      const t = (pM[1] ?? pM[2] ?? pM[3] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (t) popup = t;
+    }
+    return { group, popup };
+  };
 
   const out: Feature[] = [];
   const ctorRe = /(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*L\.(marker|circleMarker|circle|polygon|polyline|rectangle|geoJson)\s*\(/g;
@@ -142,9 +171,10 @@ const parseLeafletGrouped = (html: string): Feature[] => {
     const closeIdx = findMatching(html, openIdx);
     if (closeIdx < 0) continue;
     const argsSrc = html.slice(openIdx + 1, closeIdx);
-    const groupVar = addToByVar.get(varName);
+    const chained = readChainedSuffix(html, closeIdx + 1);
+    const groupVar = chained.group ?? parent.get(varName) ?? null;
     if (!groupVar) continue;
-    const folder = resolvedOverlay.get(resolveAlias(groupVar));
+    const folder = resolveGroup(groupVar);
     if (!folder) continue;
     let firstArg = argsSrc.trim();
     {
@@ -158,7 +188,7 @@ const parseLeafletGrouped = (html: string): Feature[] => {
         else if (c === "," && depth === 0) { firstArg = argsSrc.slice(0, i).trim(); break; }
       }
     }
-    const popup = popupByVar.get(varName) ?? null;
+    const popup = chained.popup ?? popupByVar.get(varName) ?? null;
 
     if (ctor === "marker" || ctor === "circleMarker" || ctor === "circle") {
       const coords = looseJsonParse(firstArg);

@@ -226,24 +226,38 @@ export const parseLeafletHtml = (html: string): ScannedLayer[] => {
 
   if (!overlayMap.size) return [];
 
-  // 2. Resolve aliases: var a = b;  => addTo(a) means addTo(b)
-  const aliasRe = /(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*;/g;
-  const alias = new Map<string, string>();
-  for (const m of html.matchAll(aliasRe)) alias.set(m[1], m[2]);
-  const resolveAlias = (v: string): string => {
-    let cur = v; const seen = new Set<string>();
-    while (alias.has(cur) && !seen.has(cur)) { seen.add(cur); cur = alias.get(cur)!; }
-    return cur;
-  };
+  // 2. Resolve aliases AND parent links transitively.
+  // - alias:  var a = b;
+  // - parent (chained): var sub = L.something(...).addTo(parent)
+  //                     var sub = L.featureGroup.subGroup(parent, ...);
+  // - parent (separate stmt): sub.addTo(parent);
+  const parent = new Map<string, string>();
 
-  // Build resolved overlay map: any varName (including aliases) -> displayName
-  const resolvedOverlay = new Map<string, string>();
-  for (const [v, n] of overlayMap) resolvedOverlay.set(v, n);
-  // also map any alias whose resolved target is in overlayMap
-  for (const [from, to] of alias) {
-    const target = resolveAlias(to);
-    if (overlayMap.has(target)) resolvedOverlay.set(from, overlayMap.get(target)!);
+  const aliasRe = /(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*;/g;
+  for (const m of html.matchAll(aliasRe)) parent.set(m[1], m[2]);
+
+  // Separate-statement: SUB.addTo(PARENT);  (only when SUB is a simple ident)
+  const addToStmtRe = /(?:^|[;{}\n])\s*([A-Za-z_$][\w$]*)\s*\.addTo\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g;
+  for (const m of html.matchAll(addToStmtRe)) {
+    if (!parent.has(m[1])) parent.set(m[1], m[2]);
   }
+
+  // L.featureGroup.subGroup(parent, ...) and L.markerClusterGroup({...}).addTo(parent)
+  const subGroupRe = /(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*L\.featureGroup\.subGroup\s*\(\s*([A-Za-z_$][\w$]*)/g;
+  for (const m of html.matchAll(subGroupRe)) parent.set(m[1], m[2]);
+
+  const resolveGroup = (v: string): string | undefined => {
+    let cur = v;
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur)) {
+      if (overlayMap.has(cur)) return overlayMap.get(cur);
+      seen.add(cur);
+      const next = parent.get(cur);
+      if (!next) return undefined;
+      cur = next;
+    }
+    return undefined;
+  };
 
   // 3. Prepare layer accumulator
   const layers = new Map<string, ScannedLayer>();
@@ -252,25 +266,45 @@ export const parseLeafletHtml = (html: string): ScannedLayer[] => {
     return layers.get(display)!;
   };
 
-  // Helper: given a marker/shape variable name, attribute it to a group.
-  // We scan ALL `.addTo(varName)` occurrences and link via the variable that
-  // owns the marker. Approach: parse "var X = L.<thing>(...)" + later ".addTo(Y)"
-  // using statement boundaries.
-
-  // We'll iterate over all L.<constructor>(...) calls assigned to a var, then
-  // search for that var's `.addTo(group)` somewhere after.
   type Constructor =
     | "marker" | "circleMarker" | "circle"
     | "polygon" | "polyline" | "rectangle" | "geoJson";
   const ctorRe = /(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*L\.(marker|circleMarker|circle|polygon|polyline|rectangle|geoJson)\s*\(/g;
 
-  // Pre-index all .addTo(group) occurrences keyed by the variable name appearing immediately before.
-  // Faster approach: regex for `<varname>.addTo(<group>)` capture.
-  const addToByVar = new Map<string, string>(); // varName -> group var (last wins)
-  const addToRe = /([A-Za-z_$][\w$]*)\s*\.addTo\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g;
-  for (const m of html.matchAll(addToRe)) addToByVar.set(m[1], m[2]);
+  // Helper: find the immediate `.addTo(GROUP)` and `.bindPopup/.bindTooltip("...")`
+  // occurring in the chained suffix after a constructor's closing ')'.
+  // Reads up to the next ';' or newline at depth 0.
+  const readChainedSuffix = (src: string, from: number): { group: string | null; popup: string | null } => {
+    let i = from;
+    let depth = 0, str: string | null = null;
+    let end = src.length;
+    while (i < src.length) {
+      const c = src[i];
+      if (str) {
+        if (c === "\\") { i += 2; continue; }
+        if (c === str) str = null;
+        i++; continue;
+      }
+      if (c === '"' || c === "'" || c === "`") { str = c; i++; continue; }
+      if (c === "(" || c === "{" || c === "[") { depth++; i++; continue; }
+      if (c === ")" || c === "}" || c === "]") { depth--; i++; continue; }
+      if (depth === 0 && (c === ";" || c === "\n")) { end = i; break; }
+      i++;
+    }
+    const suffix = src.slice(from, end);
+    let group: string | null = null;
+    const gM = suffix.match(/\.addTo\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/);
+    if (gM) group = gM[1];
+    let popup: string | null = null;
+    const pM = suffix.match(/\.bind(?:Popup|Tooltip)\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)/);
+    if (pM) {
+      const t = (pM[1] ?? pM[2] ?? pM[3] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (t) popup = t;
+    }
+    return { group, popup };
+  };
 
-  // Also detect popup/tooltip text bound to a var: var.bindPopup("text") / .bindTooltip("text")
+  // Fallback popup index for popups bound in a separate statement.
   const popupByVar = new Map<string, string>();
   const popupRe = /([A-Za-z_$][\w$]*)\s*\.bind(?:Popup|Tooltip)\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)/g;
   for (const m of html.matchAll(popupRe)) {
@@ -289,16 +323,18 @@ export const parseLeafletHtml = (html: string): ScannedLayer[] => {
     if (closeIdx < 0) continue;
     const argsSrc = html.slice(openIdx + 1, closeIdx);
 
-    // Where does this thing get added to?
-    const groupVar = addToByVar.get(varName);
+    // Where does this thing get added to? Look at the chained suffix first
+    // (Folium emits `var x = L.marker(...).addTo(group);` in one statement),
+    // then fall back to a parent recorded via separate `.addTo(...)` statement.
+    const chained = readChainedSuffix(html, closeIdx + 1);
+    const groupVar = chained.group ?? parent.get(varName) ?? null;
     if (!groupVar) continue;
-    const display = resolvedOverlay.get(resolveAlias(groupVar));
+    const display = resolveGroup(groupVar);
     if (!display) continue;
 
     const layer = ensure(display);
 
     // First arg: a literal (array of coords) or an object (geojson)
-    // Find first top-level argument
     const firstArg = (() => {
       let depth = 0, str: string | null = null;
       for (let i = 0; i < argsSrc.length; i++) {
@@ -312,7 +348,7 @@ export const parseLeafletHtml = (html: string): ScannedLayer[] => {
       return argsSrc.trim();
     })();
 
-    const popup = popupByVar.get(varName) ?? null;
+    const popup = chained.popup ?? popupByVar.get(varName) ?? null;
 
     if (ctor === "marker" || ctor === "circleMarker" || ctor === "circle") {
       const coords = parseCoordsLiteral(firstArg);
