@@ -12,14 +12,27 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && user) navigate("/", { replace: true });
   }, [user, loading, navigate]);
 
+  const friendlyError = (msg: string): string => {
+    if (/failed to fetch|networkerror|load failed/i.test(msg))
+      return "No se pudo contactar al servidor de autenticación. Revisa tu conexión y reintenta.";
+    if (/invalid login credentials/i.test(msg))
+      return "Email o contraseña incorrectos.";
+    if (/email not confirmed/i.test(msg))
+      return "Debes confirmar tu correo antes de iniciar sesión.";
+    return msg;
+  };
+
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
+    setLastError(null);
     try {
       if (tab === "signup") {
         const { error } = await supabase.auth.signUp({
@@ -28,22 +41,43 @@ const Auth = () => {
           options: { emailRedirectTo: `${window.location.origin}/` },
         });
         if (error) throw error;
-        toast.success("Cuenta creada. Iniciando sesión…");
+        toast.success("Cuenta creada. Revisa tu correo para confirmar.");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        if (!data.session) throw new Error("No se obtuvo sesión.");
+        navigate("/", { replace: true });
       }
-      navigate("/", { replace: true });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Error";
+      const raw = err instanceof Error ? err.message : String(err);
+      const msg = friendlyError(raw);
+      setLastError(msg);
       toast.error(msg);
     } finally {
       setBusy(false);
     }
   };
 
-  const handleGoogle = async () => {
+  const handleResetSession = async () => {
     setBusy(true);
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+      try {
+        Object.keys(localStorage)
+          .filter((k) => k.startsWith("sb-") || k.includes("supabase"))
+          .forEach((k) => localStorage.removeItem(k));
+      } catch {}
+      setLastError(null);
+      toast.success("Sesión local limpiada. Intenta nuevamente.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    if (busy) return;
+    setBusy(true);
+    setLastError(null);
     try {
       const result = await lovable.auth.signInWithOAuth("google", {
         redirect_uri: window.location.origin,
@@ -51,12 +85,15 @@ const Auth = () => {
       if (result.error) throw result.error;
       if (!result.redirected) navigate("/", { replace: true });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Error";
+      const raw = err instanceof Error ? err.message : String(err);
+      const msg = friendlyError(raw);
+      setLastError(msg);
       toast.error(msg);
     } finally {
       setBusy(false);
     }
   };
+
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -125,6 +162,20 @@ const Auth = () => {
         >
           Continuar con Google
         </button>
+
+        {lastError && (
+          <div className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-[12px] text-destructive">
+            <p>{lastError}</p>
+            <button
+              type="button"
+              onClick={handleResetSession}
+              disabled={busy}
+              className="mt-1.5 text-[11px] font-medium underline hover:no-underline"
+            >
+              Limpiar sesión y reintentar
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
