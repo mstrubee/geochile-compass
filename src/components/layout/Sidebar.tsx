@@ -61,6 +61,21 @@ interface SidebarProps {
   onFocusIsochrone: (id: string) => void;
   isoLoading: boolean;
   onToggleIsoMode: () => void;
+  onAnalyzeIsochrone?: (id: string) => void;
+  onSaveIsochrone?: (id: string) => void;
+  // Saved isochrones
+  savedIsochrones?: import("@/types/savedIsochrones").SavedIsochrone[];
+  isoFolders?: import("@/types/savedIsochrones").IsochroneFolder[];
+  loadedSavedIsoIds?: Set<string>;
+  onToggleSavedIsochrone?: (id: string) => void;
+  onAnalyzeSavedIsochrone?: (id: string) => void;
+  onFocusSavedIsochrone?: (id: string) => void;
+  onRenameSavedIsochrone?: (id: string, name: string) => Promise<void> | void;
+  onMoveSavedIsochrone?: (id: string, folderId: string | null) => Promise<void> | void;
+  onDeleteSavedIsochrone?: (id: string) => Promise<void> | void;
+  onCreateIsoFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | null | void> | void;
+  onRenameIsoFolder?: (id: string, name: string) => Promise<void> | void;
+  onDeleteIsoFolder?: (id: string) => Promise<void> | void;
   // Microzonas
   microSubmode: MicrozoneSubmode;
   onMicroSubmodeChange: (s: MicrozoneSubmode) => void;
