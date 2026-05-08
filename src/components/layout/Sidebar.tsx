@@ -1143,7 +1143,7 @@ export const Sidebar = ({
                 {busy ? "Procesando..." : "Arrastra o haz clic"}
               </strong>
               <br />
-              <span className="text-text-muted">KMZ · KML · GeoJSON · máx 20MB</span>
+              <span className="text-text-muted">KMZ · KML · GeoJSON</span>
             </p>
           </div>
 
