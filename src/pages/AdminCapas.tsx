@@ -324,7 +324,30 @@ const AdminCapas = () => {
                               checked={selected.has(l.id)}
                               onCheckedChange={() => toggleLayerSelected(g.id, l.id)}
                             />
-                            <span className="flex-1">{l.name}</span>
+                            {editingLayerId === l.id ? (
+                              <Input
+                                autoFocus
+                                value={editingLayerName}
+                                onChange={(e) => setEditingLayerName(e.target.value)}
+                                onBlur={() => void saveLayerName(l.id, l.name)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") void saveLayerName(l.id, l.name);
+                                  else if (e.key === "Escape") setEditingLayerId(null);
+                                }}
+                                className="h-7 flex-1"
+                              />
+                            ) : (
+                              <span
+                                className="flex-1 cursor-text rounded px-1 hover:bg-muted/50"
+                                title="Doble clic para renombrar"
+                                onDoubleClick={() => {
+                                  setEditingLayerId(l.id);
+                                  setEditingLayerName(l.name);
+                                }}
+                              >
+                                {l.name}
+                              </span>
+                            )}
                             <span className="font-mono text-xs text-muted-foreground">
                               {l.feature_count}
                             </span>
