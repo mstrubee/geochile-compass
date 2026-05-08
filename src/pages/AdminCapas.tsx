@@ -105,6 +105,36 @@ const AdminCapas = () => {
             <ArrowLeft className="h-4 w-4" /> Volver
           </Button>
           <h1 className="flex-1 text-base font-semibold">Admin · Capas Territoriales</h1>
+          <input
+            type="file"
+            accept=".html,.htm,.kml"
+            id="html-to-geojson-input"
+            className="hidden"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (!f) return;
+              try {
+                const text = await f.text();
+                const fc = htmlToGeoJson(text);
+                if (!fc.features.length) {
+                  toast.error("No se detectaron features en el archivo");
+                  return;
+                }
+                const out = f.name.replace(/\.[^.]+$/, "") + ".geojson";
+                downloadGeoJson(fc, out);
+                toast.success(`${fc.features.length} features → ${out}`);
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : String(err));
+              }
+            }}
+          />
+          <Button
+            variant="outline"
+            onClick={() => document.getElementById("html-to-geojson-input")?.click()}
+          >
+            <FileDown className="h-4 w-4" /> HTML → GeoJSON
+          </Button>
           <Button onClick={() => setUploadOpen(true)}>
             <Upload className="h-4 w-4" /> Cargar capa
           </Button>
