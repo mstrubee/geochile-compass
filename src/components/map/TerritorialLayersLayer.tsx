@@ -17,7 +17,7 @@ const escapeHtml = (s: string) =>
 export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = false }: Props) => {
   const map = useMap();
   const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
-  const lastFitKeyRef = useRef<string>("");
+  
   const visibleIds = useMemo(
     () => layers.filter((l) => visibleLayerIds.has(l.id)).map((l) => l.id),
     [layers, visibleLayerIds],
