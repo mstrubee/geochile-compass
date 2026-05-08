@@ -41,6 +41,57 @@ const AdminCapas = () => {
   const [convertTarget, setConvertTarget] = useState<TerritorialSourceFile | null>(null);
   const [deleteLayerTarget, setDeleteLayerTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteFileTarget, setDeleteFileTarget] = useState<TerritorialSourceFile | null>(null);
+  const [selectedLayers, setSelectedLayers] = useState<Record<string, Set<string>>>({});
+  const [bulkDeleteGroup, setBulkDeleteGroup] = useState<{ id: string; name: string; ids: string[] } | null>(null);
+  const [renameGroupTarget, setRenameGroupTarget] = useState<{ id: string; name: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const toggleLayerSelected = (groupId: string, layerId: string) => {
+    setSelectedLayers((prev) => {
+      const current = new Set(prev[groupId] ?? []);
+      if (current.has(layerId)) current.delete(layerId);
+      else current.add(layerId);
+      return { ...prev, [groupId]: current };
+    });
+  };
+
+  const toggleAllInGroup = (groupId: string, layerIds: string[]) => {
+    setSelectedLayers((prev) => {
+      const current = prev[groupId] ?? new Set<string>();
+      const allSelected = layerIds.length > 0 && layerIds.every((id) => current.has(id));
+      return { ...prev, [groupId]: allSelected ? new Set() : new Set(layerIds) };
+    });
+  };
+
+  const performBulkDelete = async (ids: string[], groupId: string) => {
+    const { error } = await supabase.from("territorial_layers").delete().in("id", ids);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`${ids.length} capas eliminadas`);
+    setSelectedLayers((prev) => ({ ...prev, [groupId]: new Set() }));
+    void refresh();
+  };
+
+  const performRenameGroup = async (id: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.error("El nombre no puede estar vacío");
+      return;
+    }
+    const { error } = await supabase
+      .from("territorial_layer_groups")
+      .update({ name: trimmed })
+      .eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Grupo renombrado");
+    setRenameGroupTarget(null);
+    void refresh();
+  };
 
   const refreshFiles = useCallback(async () => {
     const { data } = await supabase
