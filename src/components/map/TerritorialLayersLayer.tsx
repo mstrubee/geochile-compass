@@ -24,6 +24,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
   );
   const features = useTerritorialFeatures(visibleIds);
   const groupsRef = useRef<Map<string, L.LayerGroup>>(new Map());
+  const heatLayerRef = useRef<L.Layer | null>(null);
 
   useEffect(() => {
     const fitKey = visibleIds.slice().sort().join(",");
