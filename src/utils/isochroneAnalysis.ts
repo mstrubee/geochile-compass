@@ -194,7 +194,7 @@ export const communeBreakdown = (
     const stats = ineByName.get(normalizeCommuneName(nombre));
     const poblacion = stats?.poblacion ?? null;
     const ingreso = stats?.ingreso ?? null;
-    const nse = (stats?.nse ?? null) as NSE | null;
+    const nse = (stats?.nse ?? null) as NseLabel | null;
     // hogares estimados de la comuna usando tamaño medio de hogar
     const hogares = poblacion != null ? Math.round(poblacion / HH_SIZE_FALLBACK) : null;
     const shareOfCommune = comArea > 0 ? interArea / comArea : 0;
