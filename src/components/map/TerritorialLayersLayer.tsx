@@ -15,12 +15,36 @@ const escapeHtml = (s: string) =>
 export const TerritorialLayersLayer = ({ layers, visibleLayerIds }: Props) => {
   const map = useMap();
   const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
+  const lastFitKeyRef = useRef<string>("");
   const visibleIds = useMemo(
     () => layers.filter((l) => visibleLayerIds.has(l.id)).map((l) => l.id),
     [layers, visibleLayerIds],
   );
   const features = useTerritorialFeatures(visibleIds);
   const groupsRef = useRef<Map<string, L.LayerGroup>>(new Map());
+
+  useEffect(() => {
+    const fitKey = visibleIds.slice().sort().join(",");
+    if (!fitKey) {
+      lastFitKeyRef.current = "";
+      return;
+    }
+    if (lastFitKeyRef.current === fitKey) return;
+
+    const bounds = L.latLngBounds([]);
+    layers.forEach((layer) => {
+      if (!visibleLayerIds.has(layer.id) || !Array.isArray(layer.bbox) || layer.bbox.length !== 4) return;
+      const [south, west, north, east] = layer.bbox.map(Number);
+      if ([south, west, north, east].some((v) => !Number.isFinite(v))) return;
+      bounds.extend([south, west]);
+      bounds.extend([north, east]);
+    });
+
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [48, 48], maxZoom: 15 });
+      lastFitKeyRef.current = fitKey;
+    }
+  }, [layers, visibleIds, visibleLayerIds, map]);
 
   useEffect(() => {
     const layerColorById = new Map(layers.map((l) => [l.id, l.color || "#F59E0B"]));
