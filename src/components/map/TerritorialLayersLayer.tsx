@@ -92,13 +92,16 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
     const layerColorById = new Map(layers.map((l) => [l.id, l.color || "#F59E0B"]));
     const layerNameById = new Map(layers.map((l) => [l.id, l.name]));
 
-    // remove groups for layers no longer visible
+    // remove groups for layers no longer visible (or all, if heatmap is on)
     groupsRef.current.forEach((g, id) => {
-      if (!visibleLayerIds.has(id)) {
+      if (heatmap || !visibleLayerIds.has(id)) {
         g.remove();
         groupsRef.current.delete(id);
       }
     });
+
+    // In heatmap mode, do not render individual point/geometry markers
+    if (heatmap) return;
 
     // group features by layer
     const byLayer = new Map<string, typeof features>();
