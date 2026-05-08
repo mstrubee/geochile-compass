@@ -1,60 +1,43 @@
-## Objetivo
+## Aplicar el parser v2 de Claude
 
-Reemplazar los `window.confirm` / `window.prompt` nativos del flujo de conversión HTML → GeoJSON (y la eliminación de archivos/capas) por diálogos modernos y amigables, alineados al diseño del sistema, y pulir el `UploadDialog` existente.
+Claude entregó tres archivos: las dos implementaciones reescritas del parser (browser + edge function) y una suite de tests Deno. Todos resuelven los problemas pendientes:
 
-## Cambios propuestos
+- Patrón encadenado `L.marker(...).bindPopup(...).addTo(grupo)` (Folium clásico)
+- Subgrupos transitivos `L.featureGroup.subGroup(parent, ...)` con resolución hasta el nombre visible
+- Alias `var a = b;`
+- `.addTo` separado en otra sentencia
+- `ctrl.overlays = {...}`, `L.control.layers(base, overlays)`, `addOverlay(...)`
+- Protección contra ciclos en el grafo de grupos
+- Sólo emite features cuyo padre transitivamente sea un grupo real (markers añadidos directo al map se ignoran)
 
-### 1. Nuevo componente `ConvertHtmlDialog` (`src/components/admin/ConvertHtmlDialog.tsx`)
+### Cambios a aplicar
 
-Diálogo único que cubre las 3 fases hoy resueltas con `confirm` + `prompt`:
+1. **Reemplazar `src/utils/htmlToGeoJson.ts`** con la versión v2 de Claude (594 líneas). Mantiene la cadena de fallbacks 1→5 (KML folders, JS arrays, FC embebida, Leaflet agrupado, Leaflet genérico, `<script application/json>`), pero el bloque 4a usa el nuevo `parseLeafletGrouped` basado en índice de variables + resolución transitiva. Exporta el mismo `htmlToGeoJson` y `downloadGeoJson` — sin breaking changes para `AdminCapas.tsx`.
 
-- **Estado "confirmar"**: muestra resumen del archivo origen (nombre, tamaño, grupo) + nombre destino sugerido `<base>.geojson`. Botón primario "Convertir y guardar".
-- **Estado "conflicto"** (cuando ya existe ese nombre): tarjeta destacada con icono de alerta y dos opciones grandes seleccionables (radio cards):
-  - Reemplazar archivo existente (con timestamp del actual).
-  - Guardar con un nombre nuevo → input editable precargado con sufijo de fecha.
-- **Estado "procesando"**: spinner + mensaje ("Descargando…", "Parseando…", "Subiendo…").
-- **Estado "éxito"**: resumen (features detectadas, grupos, tamaño) + botón "Cerrar".
+2. **Reemplazar `supabase/functions/_shared/territorial-parser.ts`** con la versión v2 de Claude (610 líneas). Mismo enfoque que el browser pero devuelve `ScannedLayer[]`. Mantiene exports `parseHtml`, `parseGeoJson`, `parseSource` — sin breaking changes para las edge functions `scan-territorial-html` e `ingest-territorial-html`.
 
-Toda la lógica de `convertFileToGeoJson` se mueve a este componente (recibe `file` y `onDone`). Usa `Dialog`, `RadioGroup`, `Input`, `Button`, iconos de lucide y tokens semánticos.
+3. **Crear `supabase/functions/_shared/territorial-parser.test.ts`** con la suite de tests Deno de Claude (177 líneas, 9 escenarios). Cubre los casos críticos: chained `.addTo`, subgrupos transitivos, 3 niveles anidados, `.addTo` separado, popup encadenado, alias, marker al map (skip), ciclos, `ctrl.overlays = {...}`.
 
-### 2. Diálogos de confirmación de borrado
+4. **Verificación** — Ejecutar los tests con `supabase--test_edge_functions` apuntando al archivo nuevo. Los 9 deben pasar antes de dar por terminada la tarea. Si alguno falla reportamos el detalle antes de seguir.
 
-Reemplazar los dos `window.confirm` (eliminar capa y eliminar archivo) por `AlertDialog` (shadcn) con:
+### Detalles técnicos
 
-- Título claro, descripción con el nombre del recurso.
-- Botón destructivo (`variant="destructive"`) "Eliminar".
-- Botón "Cancelar".
+El núcleo del v2 es:
 
-Implementado vía un pequeño hook/estado local `confirmTarget` para no duplicar markup.
+```text
+buildLfVarIndex(html)        → Map<var, {kind, ctor, firstArg, parentVar, aliasOf, popup}>
+                                kind ∈ {geometry, group, alias, unknown}
+buildLfOverlayMap(html)      → Map<groupVar, displayName>
+resolveLfGroup(start, ...)   → recorre parentVar/aliasOf con seen-set hasta
+                               encontrar overlay match; devuelve display + path + hasGroup
+parseLeafletGrouped(html)    → para cada var con kind=geometry y parentVar,
+                               resuelve grupo y emite Feature con groupPath en properties
+```
 
-### 3. Pulido del `UploadDialog` existente
+Sin tocar `AdminCapas.tsx`, edge functions, ni nada de UI. Es un swap directo de internos.
 
-- Header con icono `Upload`, título y subtítulo descriptivo.
-- Stepper visual (1. Archivo · 2. Grupo & opciones · 3. Resultado) con estados activo/completado.
-- Drop-zone estilizado (borde dasheado, hover, archivo seleccionado con badge y tamaño).
-- Sección "Opciones avanzadas" colapsable (`Collapsible`) para `DedupStrategy` y selector de grupo, con descripciones cortas.
-- Footer consistente con `DialogFooter`, botones alineados, primario con icono.
-- Mensajes de error en `Alert` destructivo en vez de toast suelto cuando aplica al formulario.
+### Archivos
 
-### 4. Detalles de diseño compartidos
-
-- Usar tokens: `bg-card`, `border-border`, `text-muted-foreground`, `bg-destructive/10`, etc. Sin colores hardcodeados.
-- Tipografía: títulos `text-base font-semibold`, descripciones `text-sm text-muted-foreground`.
-- Espaciado consistente (`space-y-4`), bordes `rounded-lg`, sombras suaves.
-- Animaciones por defecto de Radix (ya incluidas).
-- Iconos lucide pequeños (h-4 w-4) acompañando títulos y acciones.
-
-## Archivos a modificar / crear
-
-- **Crear**: `src/components/admin/ConvertHtmlDialog.tsx`
-- **Crear**: `src/components/admin/ConfirmDeleteDialog.tsx` (reutilizable, basado en `AlertDialog`)
-- **Editar**: `src/pages/AdminCapas.tsx`
-  - Remover `convertFileToGeoJson`, `window.confirm`, `window.prompt`.
-  - Integrar `ConvertHtmlDialog` y `ConfirmDeleteDialog` con estado local.
-  - Refinar markup del `UploadDialog` (mismo archivo).
-
-## Notas técnicas
-
-- No se modifica lógica de parseo (`htmlToGeoJson`) ni el esquema de datos.
-- No se tocan edge functions ni RLS.
-- Toda la interacción sigue dentro de `/admin/capas`; sin nuevas rutas.
+- Editar: `src/utils/htmlToGeoJson.ts`
+- Editar: `supabase/functions/_shared/territorial-parser.ts`
+- Crear: `supabase/functions/_shared/territorial-parser.test.ts`
