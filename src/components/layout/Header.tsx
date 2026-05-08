@@ -1,7 +1,8 @@
-import { Clock, Hexagon, FileUp, LogIn, LogOut, User as UserIcon } from "lucide-react";
+import { Clock, Hexagon, FileUp, LogIn, LogOut, User as UserIcon, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 
 interface HeaderProps {
@@ -12,6 +13,7 @@ interface HeaderProps {
 
 export const Header = ({ mode, onToggleIsochrone, onToggleMicrozone }: HeaderProps) => {
   const { user } = useAuth();
+  const { isAdmin } = useUserRole();
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -67,6 +69,15 @@ export const Header = ({ mode, onToggleIsochrone, onToggleMicrozone }: HeaderPro
       <button className="whitespace-nowrap rounded-full bg-primary px-3 py-1 text-[12px] font-medium text-primary-foreground shadow-apple-sm transition-colors hover:bg-primary/90">
         <FileUp className="mr-1 inline h-3 w-3" /> Archivo
       </button>
+
+      {isAdmin && (
+        <Link
+          to="/admin/capas"
+          className="flex items-center gap-1 whitespace-nowrap rounded-full border border-brand-purple/40 bg-brand-purple/10 px-3 py-1 text-[12px] font-medium text-brand-purple transition-colors hover:bg-brand-purple/20"
+        >
+          <Shield className="h-3 w-3" /> Admin
+        </Link>
+      )}
 
       {user ? (
         <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-2/60 px-2.5 py-1 text-[11px] text-muted-foreground">
