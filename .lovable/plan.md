@@ -1,30 +1,22 @@
-## Problema detectado
+Plan para corregirlo:
 
-El login sí está ejecutando la acción, pero el navegador queda atrapado intentando refrescar una sesión local antigua (`refresh_token`) y aparece `Failed to fetch`. Además, la app llama `useAuth()` en varios componentes/hooks, y cada llamada crea su propio `onAuthStateChange` + `getSession()`. Eso puede provocar carreras de sesión y el error observado: `Lock broken by another request with the 'steal' option`.
+1. Cambiar el parser Leaflet/Folium para que detecte capas por pertenencia real al control de capas, no por geometría.
+   - Reconocer construcciones encadenadas típicas de Folium como `var marker_x = L.marker(...).addTo(feature_group_x)` y `var polygon_x = L.polygon(...).addTo(feature_group_x)`.
+   - Seguir relaciones transitivas: marcador → cluster/subgrupo → feature group → overlay del control.
+   - Resolver `L.control.layers(...)`, `.overlays = {...}` y `.addOverlay(...)` como fuente de nombres visibles.
+   - Normalizar nombres visibles del control quitando HTML/entidades, para conservar nombres como `Zonas`, `Tiendas Ap/Ag`, `Talleres: Con Contacto`.
 
-## Plan de corrección
+2. Sincronizar la corrección en ambos caminos de AdminCapas.
+   - `supabase/functions/_shared/territorial-parser.ts`: usado por “Subir y analizar”, “Procesar” y “Reprocesar archivo”.
+   - `src/utils/htmlToGeoJson.ts`: usado por el botón “HTML → GeoJSON”.
+   - Evitar que el fallback genere `Markers`, `Polygons` o `Lines` cuando sí existen overlays reales aunque el formato use `.addTo(...)` encadenado.
 
-1. **Centralizar el estado de autenticación**
-   - Crear un proveedor global de auth en la raíz de la app.
-   - Hacer que `useAuth()` solo consuma ese contexto, en vez de crear múltiples listeners por componente.
-   - Mantener un único `onAuthStateChange` y una única restauración inicial de sesión.
+3. Añadir verificación local con fixtures mínimos de Folium/Leaflet.
+   - Caso con `feature_group_zonas`, `feature_group_tiendas`, `feature_group_talleres` en `L.control.layers`.
+   - Caso con markers/polygons encadenados directamente.
+   - Caso con marker cluster o subgrupo intermedio.
+   - Confirmar que el resumen devuelva capas reales y no `Markers`/`Polygons`.
 
-2. **Evitar carreras y bloqueos de sesión**
-   - Manejar `getSession()` con `try/catch/finally` para que `loading` nunca quede bloqueado.
-   - Si la sesión local está corrupta, limpiar solo la sesión local y permitir reintentar.
-   - Evitar llamadas auth pesadas dentro del callback de `onAuthStateChange`.
-
-3. **Ajustar la pantalla `/auth`**
-   - Usar el estado global de auth.
-   - Antes de login por email, limpiar tokens locales corruptos si hay error previo.
-   - Mostrar feedback visible en español si falla la conexión o las credenciales.
-   - Dejar el botón siempre reactivado si falla.
-
-4. **Ajustar montaje global**
-   - Envolver las rutas con el nuevo `AuthProvider` en `App.tsx`.
-   - Conservar Google OAuth y el resto de la app sin cambios funcionales.
-
-5. **Verificación**
-   - Probar `/auth` en preview.
-   - Confirmar que el botón ya no queda “sin hacer nada”.
-   - Revisar que desaparezca el error `Lock broken by another request with the 'steal' option` y que el login por email avance o muestre un mensaje claro.
+4. Desplegar la función de backend actualizada y validar el flujo.
+   - Reescanear desde AdminCapas debe mostrar las capas reales del control.
+   - Reprocesar debe crear/actualizar `territorial_layers.name` con esos nombres reales dentro del grupo destino seleccionado.
