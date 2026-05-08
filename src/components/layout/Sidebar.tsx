@@ -882,12 +882,26 @@ export const Sidebar = ({
             </div>
           )}
           {microzones.length > 0 && (
-            <button
-              onClick={onClearMicrozones}
-              className="w-full rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            >
-              Limpiar microzonas
-            </button>
+            <div className="flex gap-1.5">
+              {microzones.some((m) => m.kind === microSubmode) && (
+                <button
+                  onClick={() => {
+                    microzones
+                      .filter((m) => m.kind === microSubmode)
+                      .forEach((m) => onRemoveMicrozone(m.id));
+                  }}
+                  className="flex-1 rounded-lg bg-destructive/10 px-2 py-1.5 text-[11px] font-medium text-destructive transition-colors hover:bg-destructive/20"
+                >
+                  Eliminar Todos {microSubmode === "polygon" ? "Polígonos" : microSubmode === "buffer" ? "Buffers" : "Voronoi"}
+                </button>
+              )}
+              <button
+                onClick={onClearMicrozones}
+                className="flex-1 rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              >
+                Limpiar todo
+              </button>
+            </div>
           )}
           {!layers.manzanas && (
             <p className="mt-2 px-1 text-[10px] leading-relaxed text-text-muted">
