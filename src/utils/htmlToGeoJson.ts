@@ -255,9 +255,16 @@ const buildLfOverlayMap = (html: string): Map<string, string> => {
   }
 
   // ctrl.overlays = {"Name": var, ...};
-  for (const m of html.matchAll(/\.\s*overlays\s*=\s*\{([\s\S]*?)\};/g)) {
+  // overlays as `=` assignment OR `:` property inside an object literal
+  // (Folium emits `var ctrl = { base_layers: {...}, overlays: { "Name": varName, ... } }`)
+  const overlaysKeyRe = /(?:^|[^A-Za-z0-9_$])overlays\s*[:=]\s*\{/g;
+  for (const km of html.matchAll(overlaysKeyRe)) {
+    const openIdx = (km.index ?? 0) + km[0].length - 1;
+    const closeIdx = findMatching(html, openIdx);
+    if (closeIdx < 0) continue;
+    const objBody = html.slice(openIdx + 1, closeIdx);
     const entryRe = /(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')\s*:\s*([A-Za-z_$][\w$]*)/g;
-    for (const e of m[1].matchAll(entryRe)) {
+    for (const e of objBody.matchAll(entryRe)) {
       const nm = (e[1] ?? e[2] ?? "").replace(/\\"/g, '"').replace(/\\'/g, "'");
       overlayMap.set(e[3], nm);
     }

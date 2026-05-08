@@ -175,3 +175,23 @@ if (fail > 0) {
   // @ts-ignore Node
   if (typeof process !== "undefined") process.exit(1);
 }
+
+// ----------------------------------------------------------------------------
+// Test 10: Folium-style overlays as object property inside var literal
+// ----------------------------------------------------------------------------
+console.log("\n[10] overlays as : property in object literal (Folium)");
+{
+  const html = `
+    var feature_group_abc = L.featureGroup({}).addTo(map_x);
+    var marker_cluster_xyz = L.markerClusterGroup({}).addTo(feature_group_abc);
+    var marker_1 = L.marker([1, 2]).addTo(marker_cluster_xyz);
+    var layer_control_999 = {
+      base_layers: { "Mapa": tile_layer },
+      overlays: { "Talleres": feature_group_abc },
+    };
+    L.control.layers(layer_control_999.base_layers, layer_control_999.overlays).addTo(map_x);
+  `;
+  const layers = parseLeafletHtml(html);
+  assert(layers[0]?.name === "Talleres", `overlays:{} property resolved (got: ${layers[0]?.name})`);
+  assert(layers[0]?.features.length === 1, "1 feature via cluster -> group chain");
+}
