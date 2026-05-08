@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { MapPin } from "lucide-react";
+import { AppDialog } from "@/components/ui/app-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,7 +40,6 @@ export const CreatePoiDialog = ({
   const [lng, setLng] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
-  // Reset al abrir.
   useEffect(() => {
     if (!open) return;
     setName("");
@@ -75,7 +74,7 @@ export const CreatePoiDialog = ({
         description: description.trim() || null,
         category: category.trim() || null,
         color,
-        icon: inheritedIcon, // heredado de los hermanos
+        icon: inheritedIcon,
         lat: latNum,
         lng: lngNum,
         folder_id: folder?.id ?? null,
@@ -90,109 +89,103 @@ export const CreatePoiDialog = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Crear POI{folder ? ` en "${folder.name}"` : ""}</DialogTitle>
-          <DialogDescription>
-            El icono se hereda de los POIs hermanos. Lat/Lng se precargan al centro del mapa.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <Label htmlFor="poi-name" className="text-xs">Nombre *</Label>
-            <Input
-              id="poi-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ej: Sucursal Las Condes"
-              className="h-8 text-sm"
-              autoFocus
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="poi-desc" className="text-xs">Descripción</Label>
-            <Textarea
-              id="poi-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Opcional"
-              rows={2}
-              className="text-sm"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="poi-cat" className="text-xs">Categoría</Label>
-            <Input
-              id="poi-cat"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="Opcional"
-              className="h-8 text-sm"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">Color</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {COLOR_OPTIONS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className={[
-                    "h-6 w-6 rounded-full border-2 transition-all",
-                    color === c ? "border-foreground scale-110" : "border-transparent",
-                  ].join(" ")}
-                  style={{ backgroundColor: c }}
-                  aria-label={`Color ${c}`}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label htmlFor="poi-lat" className="text-xs">Latitud *</Label>
-              <Input
-                id="poi-lat"
-                value={lat}
-                onChange={(e) => setLat(e.target.value)}
-                placeholder="-33.45"
-                className="h-8 font-mono text-xs"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="poi-lng" className="text-xs">Longitud *</Label>
-              <Input
-                id="poi-lng"
-                value={lng}
-                onChange={(e) => setLng(e.target.value)}
-                placeholder="-70.66"
-                className="h-8 font-mono text-xs"
-              />
-            </div>
-          </div>
-
-          {inheritedIcon && (
-            <p className="text-[10px] text-muted-foreground">
-              Icono heredado: <code className="rounded bg-muted px-1">{inheritedIcon.length > 40 ? inheritedIcon.slice(0, 40) + "…" : inheritedIcon}</code>
-            </p>
-          )}
+    <AppDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      icon={MapPin}
+      tone="primary"
+      title={`Crear POI${folder ? ` en "${folder.name}"` : ""}`}
+      description="El icono se hereda de los POIs hermanos. Lat/Lng se precargan al centro del mapa."
+      cancelLabel="Cancelar"
+      confirmLabel={busy ? "Creando…" : "Crear POI"}
+      onConfirm={handleSubmit}
+      confirmDisabled={busy}
+      confirmLoading={busy}
+    >
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor="poi-name" className="text-xs">Nombre *</Label>
+          <Input
+            id="poi-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ej: Sucursal Las Condes"
+            className="h-8 text-sm"
+            autoFocus
+          />
         </div>
 
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancelar
-          </Button>
-          <Button size="sm" onClick={handleSubmit} disabled={busy}>
-            {busy ? "Creando…" : "Crear POI"}
-          </Button>
+        <div className="space-y-1">
+          <Label htmlFor="poi-desc" className="text-xs">Descripción</Label>
+          <Textarea
+            id="poi-desc"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Opcional"
+            rows={2}
+            className="text-sm"
+          />
         </div>
-      </DialogContent>
-    </Dialog>
+
+        <div className="space-y-1">
+          <Label htmlFor="poi-cat" className="text-xs">Categoría</Label>
+          <Input
+            id="poi-cat"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="Opcional"
+            className="h-8 text-sm"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Color</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {COLOR_OPTIONS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColor(c)}
+                className={[
+                  "h-6 w-6 rounded-full border-2 transition-all",
+                  color === c ? "border-foreground scale-110" : "border-transparent",
+                ].join(" ")}
+                style={{ backgroundColor: c }}
+                aria-label={`Color ${c}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label htmlFor="poi-lat" className="text-xs">Latitud *</Label>
+            <Input
+              id="poi-lat"
+              value={lat}
+              onChange={(e) => setLat(e.target.value)}
+              placeholder="-33.45"
+              className="h-8 font-mono text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="poi-lng" className="text-xs">Longitud *</Label>
+            <Input
+              id="poi-lng"
+              value={lng}
+              onChange={(e) => setLng(e.target.value)}
+              placeholder="-70.66"
+              className="h-8 font-mono text-xs"
+            />
+          </div>
+        </div>
+
+        {inheritedIcon && (
+          <p className="text-[10px] text-muted-foreground">
+            Icono heredado: <code className="rounded bg-muted px-1">{inheritedIcon.length > 40 ? inheritedIcon.slice(0, 40) + "…" : inheritedIcon}</code>
+          </p>
+        )}
+      </div>
+    </AppDialog>
   );
 };

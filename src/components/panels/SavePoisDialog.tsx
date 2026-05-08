@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronRight, FolderPlus, Loader2, X } from "lucide-react";
+import { ChevronRight, FolderPlus, Loader2, X, Save } from "lucide-react";
 import { toast } from "sonner";
 import type { PoiFolder } from "@/types/pois";
 
@@ -132,122 +132,117 @@ export const SavePoisDialog = ({
   const canSubmit = !busy && (pendingSel !== NEW || newName.trim().length > 0);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="z-[1000] max-w-md">
-        <DialogHeader>
-          <DialogTitle>Guardar {pointCount} POIs</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          {/* Breadcrumb del destino actual */}
-          <div className="flex flex-wrap items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs">
+    <AppDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      icon={Save}
+      tone="primary"
+      title={`Guardar ${pointCount} POIs`}
+      description="Elige la carpeta destino o crea una nueva."
+      contentClassName="z-[1000]"
+      cancelLabel="Cancelar"
+      confirmLabel={busy ? "Guardando…" : "Guardar"}
+      onConfirm={submit}
+      confirmDisabled={!canSubmit}
+      confirmLoading={busy}
+    >
+      <div className="space-y-3">
+        {/* Breadcrumb del destino actual */}
+        <div className="flex flex-wrap items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs">
+          <button
+            type="button"
+            onClick={() => popLevel(0)}
+            className={["rounded px-1.5 py-0.5", path.length === 0 ? "bg-background font-medium" : "hover:bg-background/60"].join(" ")}
+          >
+            Raíz
+          </button>
+          {path.map((id, i) => (
+            <span key={id} className="flex items-center gap-1">
+              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+              <button
+                type="button"
+                onClick={() => popLevel(i + 1)}
+                className={[
+                  "rounded px-1.5 py-0.5",
+                  i === path.length - 1 ? "bg-background font-medium" : "hover:bg-background/60",
+                ].join(" ")}
+              >
+                {folderName(id)}
+              </button>
+            </span>
+          ))}
+          {path.length > 0 && (
             <button
               type="button"
               onClick={() => popLevel(0)}
-              className={["rounded px-1.5 py-0.5", path.length === 0 ? "bg-background font-medium" : "hover:bg-background/60"].join(" ")}
+              className="ml-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-background/60"
+              aria-label="Volver a raíz"
+              title="Volver a raíz"
             >
-              Raíz
+              <X className="h-3 w-3" />
             </button>
-            {path.map((id, i) => (
-              <span key={id} className="flex items-center gap-1">
-                <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                <button
-                  type="button"
-                  onClick={() => popLevel(i + 1)}
-                  className={[
-                    "rounded px-1.5 py-0.5",
-                    i === path.length - 1 ? "bg-background font-medium" : "hover:bg-background/60",
-                  ].join(" ")}
-                >
-                  {folderName(id)}
-                </button>
-              </span>
-            ))}
-            {path.length > 0 && (
-              <button
-                type="button"
-                onClick={() => popLevel(0)}
-                className="ml-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-background/60"
-                aria-label="Volver a raíz"
-                title="Volver a raíz"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
+          )}
+        </div>
 
-          {/* Selector del siguiente nivel (o quedarse aquí / crear nueva) */}
-          <div className="space-y-1.5">
-            <Label htmlFor="lvlSel">
-              {path.length === 0 ? "Carpeta destino" : "Subcarpeta (opcional)"}
-            </Label>
-            <Select value={pendingSel} onValueChange={setPendingSel}>
-              <SelectTrigger id="lvlSel"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>
-                  {path.length === 0 ? "— Sin carpeta (raíz) —" : "— Guardar aquí —"}
-                </SelectItem>
-                {optionsAtCurrent.map((f) => (
-                  <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                ))}
-                <SelectItem value={NEW}>
-                  <span className="flex items-center gap-1.5">
-                    <FolderPlus className="h-3.5 w-3.5" />
-                    Crear nueva {path.length === 0 ? "carpeta" : "subcarpeta"}…
-                  </span>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="space-y-1.5">
+          <Label htmlFor="lvlSel" className="text-xs">
+            {path.length === 0 ? "Carpeta destino" : "Subcarpeta (opcional)"}
+          </Label>
+          <Select value={pendingSel} onValueChange={setPendingSel}>
+            <SelectTrigger id="lvlSel"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE}>
+                {path.length === 0 ? "— Sin carpeta (raíz) —" : "— Guardar aquí —"}
+              </SelectItem>
+              {optionsAtCurrent.map((f) => (
+                <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+              ))}
+              <SelectItem value={NEW}>
+                <span className="flex items-center gap-1.5">
+                  <FolderPlus className="h-3.5 w-3.5" />
+                  Crear nueva {path.length === 0 ? "carpeta" : "subcarpeta"}…
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
 
-            {/* Si elige una existente: botón para entrar dentro y seguir bajando */}
-            {pendingSel !== NONE && pendingSel !== NEW && (
+          {pendingSel !== NONE && pendingSel !== NEW && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => goDown(pendingSel)}
+              className="w-full"
+            >
+              Entrar a "{folderName(pendingSel)}" y elegir subcarpeta
+            </Button>
+          )}
+
+          {pendingSel === NEW && (
+            <div className="flex gap-2">
+              <Input
+                autoFocus
+                placeholder="Nombre de la nueva carpeta"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
               <Button
                 type="button"
                 variant="secondary"
-                size="sm"
-                onClick={() => goDown(pendingSel)}
-                className="w-full"
+                onClick={createHere}
+                disabled={creating || !newName.trim()}
+                title="Crear y entrar dentro para añadir más subcarpetas"
               >
-                Entrar a "{folderName(pendingSel)}" y elegir subcarpeta
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Crear"}
               </Button>
-            )}
-
-            {/* Si elige crear nueva: input + crear (entra dentro) o aceptar al guardar */}
-            {pendingSel === NEW && (
-              <div className="flex gap-2">
-                <Input
-                  autoFocus
-                  placeholder="Nombre de la nueva carpeta"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={createHere}
-                  disabled={creating || !newName.trim()}
-                  title="Crear y entrar dentro para añadir más subcarpetas"
-                >
-                  {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Crear"}
-                </Button>
-              </div>
-            )}
-          </div>
-
-          <p className="text-[11px] text-muted-foreground">
-            Sin límite de niveles. Usa el breadcrumb para subir o navegar.
-          </p>
+            </div>
+          )}
         </div>
 
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancelar
-          </Button>
-          <Button onClick={submit} disabled={!canSubmit}>
-            {busy ? "Guardando…" : "Guardar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <p className="text-[11px] text-muted-foreground">
+          Sin límite de niveles. Usa el breadcrumb para subir o navegar.
+        </p>
+      </div>
+    </AppDialog>
   );
 };
