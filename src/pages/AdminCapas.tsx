@@ -262,6 +262,27 @@ const AdminCapas = () => {
                     <ExternalLink className="inline h-3 w-3" /> Drive
                   </a>
                 )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={async () => {
+                    if (!window.confirm(`¿Eliminar "${f.original_filename}"? Se borrará también el archivo en storage.`)) return;
+                    if (f.storage_path) {
+                      await supabase.storage.from("territorial-sources").remove([f.storage_path]);
+                    }
+                    const { error } = await supabase
+                      .from("territorial_source_files")
+                      .delete()
+                      .eq("id", f.id);
+                    if (error) toast.error(error.message);
+                    else {
+                      toast.success("Archivo eliminado");
+                      void refreshFiles();
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </li>
             ))}
           </ul>
