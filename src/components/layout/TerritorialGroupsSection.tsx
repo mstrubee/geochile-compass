@@ -125,7 +125,8 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
 
 export const TerritorialGroupsSection = () => {
   const { groups, layers, loading } = useTerritorialLayers();
-  const { heatmapEnabled, setHeatmapEnabled } = useTerritorialVisibility();
+  const { visibleLayerIds, heatmapEnabled, setHeatmapEnabled } = useTerritorialVisibility();
+  const hasVisibleLayers = layers.some((layer) => visibleLayerIds.has(layer.id));
 
   if (loading) {
     return <p className="px-2 py-1 text-[11px] text-text-muted">Cargando capas…</p>;
@@ -137,12 +138,15 @@ export const TerritorialGroupsSection = () => {
     <>
       <label className="mb-1.5 flex items-center gap-2 rounded-lg bg-surface-2/40 px-2 py-1.5 cursor-pointer">
         <Checkbox
-          checked={heatmapEnabled}
-          onCheckedChange={(v) => setHeatmapEnabled(v === true)}
+          checked={heatmapEnabled && hasVisibleLayers}
+          disabled={!hasVisibleLayers}
+          onCheckedChange={(v) => setHeatmapEnabled(v === true && hasVisibleLayers)}
           aria-label="Mostrar mapa de calor"
         />
         <span className="text-[12px] font-medium text-foreground">Mapa de calor</span>
-        <span className="ml-auto text-[10px] text-text-muted">azul → rojo</span>
+        <span className="ml-auto text-[10px] text-text-muted">
+          {hasVisibleLayers ? "azul → rojo" : "selecciona capas"}
+        </span>
       </label>
       {groups.map((g) => (
         <GroupBlock key={g.id} group={g} layers={layers.filter((l) => l.group_id === g.id)} />
