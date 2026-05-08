@@ -6,11 +6,14 @@ interface Ctx {
   setLayers: (ids: string[], visible: boolean) => void;
   ensureVisibleDefaults: (ids: string[]) => void;
   isVisible: (id: string) => boolean;
+  heatmapEnabled: boolean;
+  setHeatmapEnabled: (v: boolean) => void;
 }
 
 const TerritorialVisibilityContext = createContext<Ctx | null>(null);
 const STORAGE_KEY = "territorial_visible_v2";
 const SEEN_LAYERS_KEY = `${STORAGE_KEY}_seen_layers`;
+const HEATMAP_KEY = "territorial_heatmap_v1";
 
 export const TerritorialVisibilityProvider = ({ children }: { children: ReactNode }) => {
   const [visibleLayerIds, setVisible] = useState<Set<string>>(() => {
