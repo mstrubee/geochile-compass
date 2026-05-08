@@ -18,6 +18,7 @@ import { useGseManzanas } from "@/hooks/useGseManzanas";
 import { useComunasGeoIndex } from "@/hooks/useComunasGeoIndex";
 import { useSavedPois } from "@/hooks/useSavedPois";
 import { usePoiFolders } from "@/hooks/usePoiFolders";
+import { useSavedIsochrones } from "@/hooks/useSavedIsochrones";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
 import { fetchOverpassPreset, fetchOverpassFreeText, bboxAreaDegSq } from "@/services/overpassService";
