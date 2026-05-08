@@ -54,6 +54,7 @@ interface SidebarProps {
   onIsoModeChange: (m: IsoMode) => void;
   isoMinutes: number[];
   onIsoMinutesChange: (m: number[]) => void;
+  onSaveIsoMinutesDefault?: () => void;
   isochrones: Isochrone[];
   onToggleIsochrone: (id: string) => void;
   onRemoveIsochrone: (id: string) => void;
