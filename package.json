@@ -67,6 +67,8 @@
     "embla-carousel-react": "^8.6.0",
     "idb-keyval": "^6.2.2",
     "input-otp": "^1.4.2",
+    "jspdf": "^2.5.2",
+    "jspdf-autotable": "^3.8.4",
     "jszip": "^3.10.1",
     "leaflet": "1.9.4",
     "leaflet.heat": "^0.2.0",
