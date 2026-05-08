@@ -170,7 +170,7 @@ const AdminCapas = () => {
                     </span>
                   </div>
                   {groupLayers.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Sin capas. Cargá un archivo.</p>
+                    <p className="text-xs text-muted-foreground">Sin capas. Carga un archivo.</p>
                   ) : (
                     <ul className="divide-y divide-border/40">
                       {groupLayers.map((l) => (
