@@ -444,22 +444,35 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props)
                             }
                           />
                           <Tooltip
-                            contentStyle={{
-                              background: "hsl(var(--background))",
-                              border: "1px solid hsl(var(--border) / 0.3)",
-                              borderRadius: 8,
-                              fontSize: 11,
+                            cursor={{ fill: "hsl(var(--border) / 0.2)" }}
+                            content={({ active: isActive, payload }) => {
+                              if (!isActive || !payload || !payload.length) return null;
+                              const p = payload[0].payload as { year: string; value: number; avg: number; complete: boolean; months: unknown[] };
+                              return (
+                                <div className="rounded-md border border-border/40 bg-background px-2.5 py-2 text-[11px] shadow-md">
+                                  <div className="mb-1 font-medium">
+                                    Año {p.year}{!p.complete ? ` (${p.months.length}/12)` : ""}
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    Total: <span className="font-mono text-foreground">{formatMetricValue(p.value, active.format)}</span>
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    Promedio mensual: <span className="font-mono text-foreground">{formatMetricValue(p.avg, active.format)}</span>
+                                  </div>
+                                  <div className="mt-1 text-[10px] text-muted-foreground">Click para ver detalle mes a mes</div>
+                                </div>
+                              );
                             }}
-                            labelFormatter={(v, payload) => {
-                              const p = payload?.[0]?.payload as { year: string; complete: boolean } | undefined;
-                              return p?.complete ? `Año ${p.year}` : `Año ${v} (parcial)`;
-                            }}
-                            formatter={(v: number) => [formatMetricValue(v, active.format), labelByKey[active.metricKey] ?? active.metricKey]}
                           />
                           <Bar
                             dataKey="value"
                             fill="hsl(217 91% 55%)"
                             radius={[4, 4, 0, 0]}
+                            cursor="pointer"
+                            onClick={(data) => {
+                              const p = (data as { payload?: typeof annualSeries[number] }).payload;
+                              if (p) setYearDetail(p);
+                            }}
                           />
                         </BarChart>
                       )}
