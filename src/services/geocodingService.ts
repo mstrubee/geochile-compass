@@ -1,25 +1,22 @@
 /**
- * Geocoding via OpenStreetMap Nominatim.
- *
- * IMPORTANT — Política de uso de Nominatim:
- *  - Máximo 1 req/seg (lo respetamos con queue interna).
- *  - Identificarse con un User-Agent o Referer (no se puede setear
- *    desde el navegador, se hace mejor desde una Edge Function).
- *  - Para lotes grandes considerar self-hosted o pago.
- *
- * Para la app actual, llamamos directo desde el cliente (usar admin).
- * Mantenemos un cache en memoria para no re-pegar la misma dirección
- * dentro de una misma sesión.
+ * Geocoding via OpenStreetMap Nominatim con reintentos y selección
+ * del mejor resultado para Chile.
  */
 
-import { normalizeAddress, buildGeocodeQuery } from "@/utils/addressNormalize";
+import {
+  normalizeAddress,
+  buildGeocodeQuery,
+  buildGeocodeQueryFallbacks,
+  addressTokens,
+  tokenJaccard,
+} from "@/utils/addressNormalize";
 
 export interface GeocodeResult {
   lat: number;
   lng: number;
   displayName: string;
   importance: number;
-  /** Confianza heurística 0..1 según `importance` y `class`. */
+  /** Confianza heurística 0..1. */
   confidence: number;
 }
 
@@ -47,9 +44,48 @@ interface NominatimResponse {
   type?: string;
 }
 
+const fetchNominatim = async (
+  q: string,
+  signal?: AbortSignal,
+): Promise<NominatimResponse[]> => {
+  await ensureRateLimit();
+  if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=cl&addressdetails=0&q=${encodeURIComponent(q)}`;
+  try {
+    const res = await fetch(url, { headers: { Accept: "application/json" }, signal });
+    if (!res.ok) return [];
+    return (await res.json()) as NominatimResponse[];
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError") throw e;
+    return [];
+  }
+};
+
+const scoreResult = (
+  r: NominatimResponse,
+  expectedComuna: string | null,
+  addrTokens: Set<string>,
+): number => {
+  const display = r.display_name.toLowerCase();
+  const baseImp = typeof r.importance === "number" ? r.importance : 0.3;
+  let score = baseImp;
+  if (expectedComuna) {
+    const comunaNorm = expectedComuna
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase().trim();
+    if (comunaNorm && display.includes(comunaNorm)) score += 0.4;
+  }
+  const respTokens = addressTokens(r.display_name);
+  score += 0.3 * tokenJaccard(addrTokens, respTokens);
+  if (r.class === "place" || r.class === "building") score += 0.15;
+  else if (r.class === "highway") score += 0.05;
+  return score;
+};
+
 /**
- * Geocodifica una dirección. Devuelve `null` si no encuentra resultado.
- * El cache es por (address+comuna) normalizados.
+ * Geocodifica una dirección. Devuelve `null` si no encuentra resultado
+ * tras varios intentos con queries cada vez más laxas.
+ * Cache es por (address+comuna) normalizados.
  */
 export const geocodeAddress = async (
   address: string,
@@ -59,56 +95,44 @@ export const geocodeAddress = async (
   const cacheKey = `${normalizeAddress(address)}|${(comuna ?? "").toLowerCase().trim()}`;
   if (memoryCache.has(cacheKey)) return memoryCache.get(cacheKey) ?? null;
 
-  await ensureRateLimit();
-  if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+  const queries = buildGeocodeQueryFallbacks(address, comuna);
+  if (queries.length === 0) queries.push(buildGeocodeQuery(address, comuna));
 
-  const q = buildGeocodeQuery(address, comuna);
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=cl&addressdetails=0&q=${encodeURIComponent(q)}`;
+  const addrTokens = addressTokens(address);
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      headers: { Accept: "application/json" },
-      signal,
-    });
-  } catch (e) {
-    if ((e as Error)?.name === "AbortError") throw e;
-    memoryCache.set(cacheKey, null);
-    return null;
+  for (const q of queries) {
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+    const results = await fetchNominatim(q, signal);
+    if (!results.length) continue;
+
+    // Elegir el mejor resultado según comuna y similitud de tokens.
+    let best: NominatimResponse | null = null;
+    let bestScore = -Infinity;
+    for (const r of results) {
+      const s = scoreResult(r, comuna, addrTokens);
+      if (s > bestScore) {
+        bestScore = s;
+        best = r;
+      }
+    }
+    if (!best) continue;
+    const lat = parseFloat(best.lat);
+    const lng = parseFloat(best.lon);
+    if (!isFinite(lat) || !isFinite(lng)) continue;
+
+    const out: GeocodeResult = {
+      lat,
+      lng,
+      displayName: best.display_name,
+      importance: typeof best.importance === "number" ? best.importance : 0.3,
+      confidence: Math.min(1, Math.max(0, bestScore)),
+    };
+    memoryCache.set(cacheKey, out);
+    return out;
   }
-  if (!res.ok) {
-    memoryCache.set(cacheKey, null);
-    return null;
-  }
-  const arr = (await res.json()) as NominatimResponse[];
-  if (!arr.length) {
-    memoryCache.set(cacheKey, null);
-    return null;
-  }
-  const r = arr[0];
-  const lat = parseFloat(r.lat);
-  const lng = parseFloat(r.lon);
-  if (!isFinite(lat) || !isFinite(lng)) {
-    memoryCache.set(cacheKey, null);
-    return null;
-  }
-  // Heurística simple de confianza: punto de tipo "house"/"building" > "road" > resto.
-  const baseImp = typeof r.importance === "number" ? r.importance : 0.3;
-  const typeBoost =
-    r.class === "place" || r.class === "building"
-      ? 0.2
-      : r.class === "highway"
-        ? 0.05
-        : 0;
-  const out: GeocodeResult = {
-    lat,
-    lng,
-    displayName: r.display_name,
-    importance: baseImp,
-    confidence: Math.min(1, baseImp + typeBoost),
-  };
-  memoryCache.set(cacheKey, out);
-  return out;
+
+  memoryCache.set(cacheKey, null);
+  return null;
 };
 
 /** Limpieza del cache, útil para tests y para forzar re-geocoding. */
