@@ -102,9 +102,30 @@ export const commitImport = async ({
   /** Mapa poi_id -> nombre que viene del Excel (la última fila gana). */
   const poiRenames = new Map<string, string>();
 
+  /** Filas omitidas: persistimos para recordar en futuros imports. */
+  const skipMemoryInserts: Array<{
+    folder_id: string;
+    normalized_key: string;
+    raw_address: string | null;
+    raw_name: string | null;
+  }> = [];
+
   for (const row of rows) {
     if (skippedRowIndices.has(row.rowIndex)) {
       rowsSkipped++;
+      const name = (
+        row.identity["Nombre Local"] ??
+        row.identity["Local"] ??
+        row.identity["Nombre"] ??
+        ""
+      ).toString().trim();
+      const addrNorm = normalizeAddress(row.rawAddress ?? "");
+      skipMemoryInserts.push({
+        folder_id: folderId,
+        normalized_key: `${name.toLowerCase()}::${addrNorm}`,
+        raw_address: row.rawAddress || null,
+        raw_name: name || null,
+      });
       continue;
     }
     const m = matchByIndex.get(row.rowIndex);
@@ -232,6 +253,21 @@ export const commitImport = async ({
         supabase.from("pois").update({ name }).eq("id", poi_id),
       ),
     );
+  }
+
+  // -------- Persistir memoria de omisiones (folder_id, normalized_key) --------
+  if (skipMemoryInserts.length > 0) {
+    const skipMap = new Map<string, typeof skipMemoryInserts[number]>();
+    for (const s of skipMemoryInserts) {
+      skipMap.set(`${s.folder_id}|${s.normalized_key}`, s);
+    }
+    const dedupSkip = [...skipMap.values()].filter((s) => s.normalized_key !== "::");
+    if (dedupSkip.length > 0) {
+      const { error: skipErr } = await supabase
+        .from("poi_import_skip_memory")
+        .upsert(dedupSkip, { onConflict: "folder_id,normalized_key" });
+      if (skipErr) console.warn("[skip memory] upsert failed", skipErr);
+    }
   }
 
   onProgress?.("Finalizando…", 0.95);
