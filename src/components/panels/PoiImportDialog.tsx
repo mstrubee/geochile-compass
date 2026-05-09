@@ -43,6 +43,8 @@ interface Props {
   onConsumeExternalSelection: () => void;
   /** Notifica al padre que el commit fue exitoso para refrescar datos. */
   onCommitSuccess?: () => void;
+  /** Centra el mapa en la ubicación dada y oculta el diálogo (mostrando "Volver"). */
+  onViewOnMap?: (target: { lat: number; lng: number; label?: string }) => void;
   /** Oculta visualmente el modal sin resetear su estado (p.ej. mientras se elige POI en el mapa). */
   hidden?: boolean;
 }
