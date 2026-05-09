@@ -115,7 +115,7 @@ export const PoiImportDialog = ({
           )}
         </DialogHeader>
 
-        <div className="flex max-h-[calc(92vh-110px)] flex-col">
+        <div className="flex max-h-[calc(92vh-110px)] min-h-0 flex-col">
           {/* IDLE / PARSING / ERROR */}
           {imp.phase === "idle" || imp.phase === "parsing" || imp.phase === "error" ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10">
@@ -221,7 +221,7 @@ export const PoiImportDialog = ({
 
           {/* REVIEW — tabla con filtros */}
           {imp.phase === "review" && imp.parsed && (
-            <div className="flex flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col">
               <div className="border-b border-border/40 px-5 py-3">
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
                   <Stat
