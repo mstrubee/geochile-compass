@@ -65,12 +65,49 @@ export const PoiImportDialog = ({
     folderPois,
   });
   const [filter, setFilter] = useState<"all" | "ok" | "review">("all");
+  const [history, setHistory] = useState<PoiImportJob[]>([]);
+  const [assignedAliases, setAssignedAliases] = useState<PoiAddressAlias[]>([]);
+  const [poisWithMetrics, setPoisWithMetrics] = useState<Set<string>>(new Set());
+  const [showAssigned, setShowAssigned] = useState(false);
+  const [loadingSummary, setLoadingSummary] = useState(false);
 
   // Reset al cerrar (no al ocultar temporalmente)
   useEffect(() => {
     if (!open) imp.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Carga historial + asignaciones existentes al abrir / cuando termina un import
+  useEffect(() => {
+    if (!open || !folder?.id) return;
+    let cancel = false;
+    setLoadingSummary(true);
+    (async () => {
+      const [jobsRes, metricsRes, aliasList] = await Promise.all([
+        supabase
+          .from("poi_import_jobs")
+          .select("*")
+          .eq("folder_id", folder.id)
+          .order("created_at", { ascending: false })
+          .limit(8),
+        supabase
+          .from("poi_metrics")
+          .select("poi_id")
+          .in("poi_id", folderPois.map((p) => p.id).length ? folderPois.map((p) => p.id) : ["00000000-0000-0000-0000-000000000000"]),
+        fetchAliasesForPois(folderPois.map((p) => p.id)),
+      ]);
+      if (cancel) return;
+      setHistory(((jobsRes.data ?? []) as unknown) as PoiImportJob[]);
+      const set = new Set<string>();
+      for (const r of (metricsRes.data ?? []) as Array<{ poi_id: string }>) set.add(r.poi_id);
+      setPoisWithMetrics(set);
+      setAssignedAliases(aliasList);
+      setLoadingSummary(false);
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [open, folder?.id, folderPois, imp.phase]);
 
   // Aplica selección externa cuando llega
   useEffect(() => {
