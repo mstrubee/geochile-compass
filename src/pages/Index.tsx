@@ -111,6 +111,7 @@ const Index = () => {
   const [poiPickContext, setPoiPickContext] = useState<{ rowIndex: number } | null>(null);
   const [externalManualSelection, setExternalManualSelection] =
     useState<{ rowIndex: number; poiId: string } | null>(null);
+  const [importViewing, setImportViewing] = useState(false);
 
   const {
     savedIsos,
