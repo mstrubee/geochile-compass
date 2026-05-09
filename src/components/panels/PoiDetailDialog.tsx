@@ -72,7 +72,7 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props)
     if (!poi || !next || next === displayName) return;
     setNameOverride(next);
     try {
-      await updatePoi(poi.id, { name: next });
+      await onRename?.(poi.id, next);
     } catch (e) {
       setNameOverride(null);
       toast.error(e instanceof Error ? e.message : "No se pudo renombrar");
