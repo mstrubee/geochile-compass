@@ -15,6 +15,7 @@ import { CommuneCompareDialog } from "@/components/panels/CommuneCompareDialog";
 import { PoiImportDialog } from "@/components/panels/PoiImportDialog";
 import { PoiDetailDialog } from "@/components/panels/PoiDetailDialog";
 import { PoiFolderSchemaDialog } from "@/components/panels/PoiFolderSchemaDialog";
+import { AnalysisConfigDialog } from "@/components/panels/AnalysisConfigDialog";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import { usePoiFolderSchemas } from "@/hooks/usePoiMetrics";
 import { Legend } from "@/components/ui-overlays/Legend";
@@ -107,6 +108,7 @@ const Index = () => {
   const { schemas: poiFolderSchemas, refresh: refreshSchemas, upsertSchema } = usePoiFolderSchemas();
   const [importDialogFolderId, setImportDialogFolderId] = useState<string | null>(null);
   const [schemaDialogFolderId, setSchemaDialogFolderId] = useState<string | null>(null);
+  const [analysisConfigFolderId, setAnalysisConfigFolderId] = useState<string | null>(null);
   const [detailPoi, setDetailPoi] = useState<SavedPoi | null>(null);
   /** Modo "elegir POI en mapa" para una fila concreta del importador. */
   const [poiPickContext, setPoiPickContext] = useState<{ rowIndex: number } | null>(null);
@@ -1049,6 +1051,7 @@ const Index = () => {
           poiFolderSchemas={poiFolderSchemas}
           onImportToFolder={(folderId) => setImportDialogFolderId(folderId)}
           onConfigureFolderSchema={(folderId) => setSchemaDialogFolderId(folderId)}
+          onConfigureAnalysis={(folderId) => setAnalysisConfigFolderId(folderId)}
         />
 
         <div
@@ -1363,6 +1366,17 @@ const Index = () => {
           onSave={async (s) => {
             await upsertSchema(s);
           }}
+        />
+      )}
+
+      {/* Analysis config (admin) */}
+      {analysisConfigFolderId && (
+        <AnalysisConfigDialog
+          open
+          onClose={() => setAnalysisConfigFolderId(null)}
+          folder={folders.find((f) => f.id === analysisConfigFolderId) ?? null}
+          allFolders={folders}
+          allLayers={userLayers.map((l) => ({ id: l.id, name: l.name }))}
         />
       )}
     </div>
