@@ -28,6 +28,8 @@ export interface PoiFolderSchema {
   metric_definitions: MetricDefinition[];
   static_columns: string[];
   import_enabled: boolean;
+  /** Orden persistido de las tarjetas KPI (compartido por todos los POIs de la carpeta). */
+  kpi_order?: string[];
   created_at: string;
   updated_at: string;
 }
