@@ -217,6 +217,48 @@ const AdminCapas = () => {
           icon={<MapIcon className="h-4 w-4" />}
           description="Cargá y administrá capas geográficas agrupadas."
         >
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="file"
+            accept=".html,.htm,.kml"
+            id="html-to-geojson-input"
+            className="hidden"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (!f) return;
+              try {
+                const text = await f.text();
+                const fc = htmlToGeoJson(text);
+                if (!fc.features.length) {
+                  toast.error("Formato HTML no reconocido. Probá exportarlo como GeoJSON o KML desde la herramienta de origen.");
+                  return;
+                }
+                const byFolder = new Map<string, number>();
+                for (const f of fc.features) {
+                  const k = String((f.properties as Record<string, unknown>)?.folder ?? "default");
+                  byFolder.set(k, (byFolder.get(k) ?? 0) + 1);
+                }
+                const summary = [...byFolder.entries()]
+                  .map(([k, v]) => `${k}: ${v}`).join(" · ");
+                const out = f.name.replace(/\.[^.]+$/, "") + ".geojson";
+                downloadGeoJson(fc, out);
+                toast.success(`${fc.features.length} features (${summary}) → ${out}`);
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : String(err));
+              }
+            }}
+          />
+          <Button
+            variant="outline"
+            onClick={() => document.getElementById("html-to-geojson-input")?.click()}
+          >
+            <FileDown className="h-4 w-4" /> HTML → GeoJSON
+          </Button>
+          <Button onClick={() => setUploadOpen(true)}>
+            <Upload className="h-4 w-4" /> Cargar capa
+          </Button>
+        </div>
         <p className="rounded-md border border-border/40 bg-muted/30 p-3 text-xs text-muted-foreground">
           ¿Tu HTML se subió pero no muestra capas ni puntos? Usá <strong>HTML → GeoJSON</strong> para
           convertirlo en el navegador y luego cargá el .geojson resultante.
