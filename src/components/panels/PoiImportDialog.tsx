@@ -66,7 +66,9 @@ export const PoiImportDialog = ({
     folderId: folder?.id ?? null,
     folderPois,
   });
-  const [filter, setFilter] = useState<"all" | "ok" | "review">("all");
+  const [filter, setFilter] = useState<
+    "all" | "ok" | "review" | "auto" | "alias" | "skipped"
+  >("all");
   const [history, setHistory] = useState<PoiImportJob[]>([]);
   const [assignedAliases, setAssignedAliases] = useState<PoiAddressAlias[]>([]);
   const [poisWithMetrics, setPoisWithMetrics] = useState<Set<string>>(new Set());
@@ -168,14 +170,27 @@ export const PoiImportDialog = ({
   const visibleMatches = useMemo(() => {
     if (!imp.parsed) return [];
     return imp.matches.filter((m) => {
-      if (filter === "all") return true;
-      const isOk =
-        m.status === "auto_matched" ||
-        m.status === "alias_matched" ||
-        !!imp.manualAssignments[m.rowIndex];
-      return filter === "ok" ? isOk : !isOk;
+      const isManual = !!imp.manualAssignments[m.rowIndex];
+      const isSkipped = imp.skippedRows.has(m.rowIndex);
+      const isOk = m.status === "auto_matched" || m.status === "alias_matched" || isManual;
+      switch (filter) {
+        case "all":
+          return true;
+        case "ok":
+          return isOk && !isSkipped;
+        case "review":
+          return !isOk && !isSkipped;
+        case "auto":
+          return m.status === "auto_matched" && !isManual && !isSkipped;
+        case "alias":
+          return m.status === "alias_matched" && !isManual && !isSkipped;
+        case "skipped":
+          return isSkipped;
+        default:
+          return true;
+      }
     });
-  }, [imp.matches, imp.parsed, imp.manualAssignments, filter]);
+  }, [imp.matches, imp.parsed, imp.manualAssignments, imp.skippedRows, filter]);
 
   return (
     <Dialog open={open && !hidden} onOpenChange={(o) => !o && !hidden && onClose()}>
@@ -439,32 +454,43 @@ export const PoiImportDialog = ({
                     value={(imp.stats.auto + imp.stats.alias + imp.stats.manualAssigned).toString()}
                     label="Listas para guardar"
                     color="green"
+                    active={filter === "ok"}
+                    onClick={() => setFilter((f) => (f === "ok" ? "all" : "ok"))}
                   />
-                  <Stat value={imp.stats.auto.toString()} label="Auto-matched" />
-                  <Stat value={imp.stats.alias.toString()} label="Por alias" />
+                  <Stat
+                    value={imp.stats.auto.toString()}
+                    label="Auto-matched"
+                    active={filter === "auto"}
+                    onClick={() => setFilter((f) => (f === "auto" ? "all" : "auto"))}
+                  />
+                  <Stat
+                    value={imp.stats.alias.toString()}
+                    label="Por alias"
+                    active={filter === "alias"}
+                    onClick={() => setFilter((f) => (f === "alias" ? "all" : "alias"))}
+                  />
                   <Stat
                     value={imp.stats.pending.toString()}
                     label="Pendientes"
                     color="amber"
+                    active={filter === "review"}
+                    onClick={() => setFilter((f) => (f === "review" ? "all" : "review"))}
                   />
-                  <Stat value={imp.stats.skipped.toString()} label="Omitidas" />
+                  <Stat
+                    value={imp.stats.skipped.toString()}
+                    label="Omitidas"
+                    active={filter === "skipped"}
+                    onClick={() => setFilter((f) => (f === "skipped" ? "all" : "skipped"))}
+                  />
                 </div>
-                <div className="mt-3 inline-flex rounded-lg bg-surface-2/60 p-0.5">
-                  {(["all", "ok", "review"] as const).map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setFilter(f)}
-                      className={[
-                        "rounded-md px-3 py-1 text-[11px] font-medium transition-all",
-                        filter === f
-                          ? "bg-surface-3 text-foreground shadow-apple-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      ].join(" ")}
-                    >
-                      {f === "all" ? "Todas" : f === "ok" ? "Resueltas" : "Por resolver"}
-                    </button>
-                  ))}
-                </div>
+                {filter !== "all" && (
+                  <button
+                    onClick={() => setFilter("all")}
+                    className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" /> Quitar filtro
+                  </button>
+                )}
               </div>
 
               <div className="scrollbar-thin flex-1 overflow-y-auto">
@@ -565,10 +591,14 @@ const Stat = ({
   value,
   label,
   color,
+  onClick,
+  active,
 }: {
   value: string;
   label: string;
   color?: "green" | "amber" | "red";
+  onClick?: () => void;
+  active?: boolean;
 }) => {
   const colorClass =
     color === "green"
@@ -578,14 +608,29 @@ const Stat = ({
         : color === "red"
           ? "text-destructive"
           : "text-foreground";
-  return (
-    <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+  const baseCls =
+    "rounded-xl px-3 py-2.5 text-left transition-all w-full";
+  const stateCls = onClick
+    ? active
+      ? "bg-primary/15 ring-1 ring-primary/40"
+      : "bg-surface-2/60 hover:bg-surface-3/70 cursor-pointer"
+    : "bg-surface-2/60";
+  const Inner = (
+    <>
       <div className={`text-[16px] font-semibold leading-none tracking-tight ${colorClass}`}>
         {value}
       </div>
       <div className="mt-1.5 text-[10px] text-muted-foreground">{label}</div>
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={`${baseCls} ${stateCls}`}>
+        {Inner}
+      </button>
+    );
+  }
+  return <div className={`${baseCls} ${stateCls}`}>{Inner}</div>;
 };
 
 interface RowItemProps {
