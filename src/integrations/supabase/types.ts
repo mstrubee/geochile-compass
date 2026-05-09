@@ -14,6 +14,97 @@ export type Database = {
   }
   public: {
     Tables: {
+      analysis_settings: {
+        Row: {
+          config_version: number
+          created_at: string
+          external_competition_folder_ids: Json
+          external_competition_layer_ids: Json
+          folder_id: string
+          iso_minutes_regions: number
+          iso_minutes_rm: number
+          updated_at: string
+          updated_by: string | null
+          use_fine_cannibalization: boolean
+        }
+        Insert: {
+          config_version?: number
+          created_at?: string
+          external_competition_folder_ids?: Json
+          external_competition_layer_ids?: Json
+          folder_id: string
+          iso_minutes_regions?: number
+          iso_minutes_rm?: number
+          updated_at?: string
+          updated_by?: string | null
+          use_fine_cannibalization?: boolean
+        }
+        Update: {
+          config_version?: number
+          created_at?: string
+          external_competition_folder_ids?: Json
+          external_competition_layer_ids?: Json
+          folder_id?: string
+          iso_minutes_regions?: number
+          iso_minutes_rm?: number
+          updated_at?: string
+          updated_by?: string | null
+          use_fine_cannibalization?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analysis_settings_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: true
+            referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      complement_weight_rules: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          folder_id: string | null
+          id: string
+          label: string | null
+          pattern: string
+          priority: number
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          folder_id?: string | null
+          id?: string
+          label?: string | null
+          pattern: string
+          priority?: number
+          updated_at?: string
+          weight: number
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          folder_id?: string | null
+          id?: string
+          label?: string | null
+          pattern?: string
+          priority?: number
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complement_weight_rules_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       custom_roles: {
         Row: {
           created_at: string
@@ -141,6 +232,54 @@ export type Database = {
             foreignKeyName: "poi_attributes_poi_id_fkey"
             columns: ["poi_id"]
             isOneToOne: false
+            referencedRelation: "pois"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      poi_features_cache: {
+        Row: {
+          computed_at: string
+          config_version: number
+          features: Json
+          folder_id: string
+          is_rm: boolean
+          iso_geom_hash: string | null
+          iso_minutes: number
+          poi_id: string
+        }
+        Insert: {
+          computed_at?: string
+          config_version: number
+          features: Json
+          folder_id: string
+          is_rm: boolean
+          iso_geom_hash?: string | null
+          iso_minutes: number
+          poi_id: string
+        }
+        Update: {
+          computed_at?: string
+          config_version?: number
+          features?: Json
+          folder_id?: string
+          is_rm?: boolean
+          iso_geom_hash?: string | null
+          iso_minutes?: number
+          poi_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poi_features_cache_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "poi_features_cache_poi_id_fkey"
+            columns: ["poi_id"]
+            isOneToOne: true
             referencedRelation: "pois"
             referencedColumns: ["id"]
           },
@@ -386,6 +525,75 @@ export type Database = {
             foreignKeyName: "poi_metrics_poi_id_fkey"
             columns: ["poi_id"]
             isOneToOne: false
+            referencedRelation: "pois"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      poi_performance_analysis: {
+        Row: {
+          actual_monthly_clp: number | null
+          actual_monthly_uf: number | null
+          computed_at: string
+          config_version: number
+          folder_id: string
+          peer_poi_ids: string[]
+          poi_id: string
+          predicted_monthly_clp: number | null
+          predicted_monthly_uf: number | null
+          residual_clp: number | null
+          residual_pct: number | null
+          target_year: number
+          temporal_decomposition: Json
+          temporal_state: string | null
+          top_drivers: Json
+        }
+        Insert: {
+          actual_monthly_clp?: number | null
+          actual_monthly_uf?: number | null
+          computed_at?: string
+          config_version: number
+          folder_id: string
+          peer_poi_ids?: string[]
+          poi_id: string
+          predicted_monthly_clp?: number | null
+          predicted_monthly_uf?: number | null
+          residual_clp?: number | null
+          residual_pct?: number | null
+          target_year: number
+          temporal_decomposition?: Json
+          temporal_state?: string | null
+          top_drivers?: Json
+        }
+        Update: {
+          actual_monthly_clp?: number | null
+          actual_monthly_uf?: number | null
+          computed_at?: string
+          config_version?: number
+          folder_id?: string
+          peer_poi_ids?: string[]
+          poi_id?: string
+          predicted_monthly_clp?: number | null
+          predicted_monthly_uf?: number | null
+          residual_clp?: number | null
+          residual_pct?: number | null
+          target_year?: number
+          temporal_decomposition?: Json
+          temporal_state?: string | null
+          top_drivers?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poi_performance_analysis_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "poi_performance_analysis_poi_id_fkey"
+            columns: ["poi_id"]
+            isOneToOne: true
             referencedRelation: "pois"
             referencedColumns: ["id"]
           },
@@ -715,6 +923,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      uf_values: {
+        Row: {
+          created_at: string
+          period: string
+          source: string | null
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          period: string
+          source?: string | null
+          updated_at?: string
+          value: number
+        }
+        Update: {
+          created_at?: string
+          period?: string
+          source?: string | null
+          updated_at?: string
+          value?: number
+        }
+        Relationships: []
       }
       user_role_assignments: {
         Row: {
