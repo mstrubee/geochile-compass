@@ -44,6 +44,7 @@ export interface CommitResult {
 export const commitImport = async ({
   folderId,
   filename,
+  sourceFilePath = null,
   rows,
   matches,
   manualAssignments = {},
