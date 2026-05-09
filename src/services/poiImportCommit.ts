@@ -154,39 +154,61 @@ export const commitImport = async ({
     }
   }
 
+  // -------- Deduplicar para evitar "ON CONFLICT cannot affect row a second time" --------
+  // Métricas: una sola fila por (poi_id, metric_key, period). La última gana.
+  const metricsMap = new Map<string, typeof metricInserts[number]>();
+  for (const m of metricInserts) {
+    metricsMap.set(`${m.poi_id}|${m.metric_key}|${m.period}`, m);
+  }
+  const dedupMetrics = [...metricsMap.values()];
+
+  // Atributos: una sola fila por (poi_id, attr_key). La última gana.
+  const attrsMap = new Map<string, typeof attrInserts[number]>();
+  for (const a of attrInserts) {
+    attrsMap.set(`${a.poi_id}|${a.attr_key}`, a);
+  }
+  const dedupAttrs = [...attrsMap.values()];
+
+  // Aliases: una sola fila por (poi_id, normalized_address).
+  const aliasMap = new Map<string, typeof aliasInserts[number]>();
+  for (const a of aliasInserts) {
+    aliasMap.set(`${a.poi_id}|${a.normalized_address}`, a);
+  }
+  const dedupAliases = [...aliasMap.values()];
+
   // -------- Batch upserts --------
-  for (let i = 0; i < metricInserts.length; i += METRICS_BATCH) {
-    const batch = metricInserts.slice(i, i + METRICS_BATCH);
+  for (let i = 0; i < dedupMetrics.length; i += METRICS_BATCH) {
+    const batch = dedupMetrics.slice(i, i + METRICS_BATCH);
     const { error } = await supabase
       .from("poi_metrics")
       .upsert(batch, { onConflict: "poi_id,metric_key,period" });
     if (error) throw error;
     metricsInserted += batch.length;
     onProgress?.(
-      `Métricas ${metricsInserted}/${metricInserts.length}`,
-      0.1 + 0.6 * (metricsInserted / Math.max(1, metricInserts.length)),
+      `Métricas ${metricsInserted}/${dedupMetrics.length}`,
+      0.1 + 0.6 * (metricsInserted / Math.max(1, dedupMetrics.length)),
     );
   }
 
-  for (let i = 0; i < attrInserts.length; i += ATTRS_BATCH) {
-    const batch = attrInserts.slice(i, i + ATTRS_BATCH);
+  for (let i = 0; i < dedupAttrs.length; i += ATTRS_BATCH) {
+    const batch = dedupAttrs.slice(i, i + ATTRS_BATCH);
     const { error } = await supabase
       .from("poi_attributes")
       .upsert(batch, { onConflict: "poi_id,attr_key" });
     if (error) throw error;
     attributesUpserted += batch.length;
     onProgress?.(
-      `Atributos ${attributesUpserted}/${attrInserts.length}`,
-      0.7 + 0.15 * (attributesUpserted / Math.max(1, attrInserts.length)),
+      `Atributos ${attributesUpserted}/${dedupAttrs.length}`,
+      0.7 + 0.15 * (attributesUpserted / Math.max(1, dedupAttrs.length)),
     );
   }
 
-  if (aliasInserts.length > 0) {
+  if (dedupAliases.length > 0) {
     const { error } = await supabase
       .from("poi_address_aliases")
-      .upsert(aliasInserts, { onConflict: "poi_id,normalized_address" });
+      .upsert(dedupAliases, { onConflict: "poi_id,normalized_address" });
     if (error) throw error;
-    aliasesCreated = aliasInserts.length;
+    aliasesCreated = dedupAliases.length;
   }
 
   onProgress?.("Finalizando…", 0.95);
