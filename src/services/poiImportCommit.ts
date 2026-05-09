@@ -192,6 +192,45 @@ export const commitImport = async ({
         raw_address: row.rawAddress,
       });
     }
+
+    // Memoria de identidad por carpeta (para reconocimiento futuro).
+    const centroSap = (row.identity["Centro Sap"] ?? "").toString().trim();
+    const localCode = (row.identity["Local"] ?? "").toString().trim();
+    const nameNorm = (
+      row.identity["Nombre Local"] ??
+      row.identity["Local"] ??
+      row.identity["Nombre"] ??
+      ""
+    )
+      .toString()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+    if (centroSap) {
+      identityMemoryInserts.push({
+        folder_id: folderId,
+        key_type: "centro_sap",
+        key_value: centroSap.toLowerCase(),
+        poi_id: poiId,
+      });
+    }
+    if (localCode) {
+      identityMemoryInserts.push({
+        folder_id: folderId,
+        key_type: "local",
+        key_value: localCode.toLowerCase(),
+        poi_id: poiId,
+      });
+    }
+    if (nameNorm) {
+      identityMemoryInserts.push({
+        folder_id: folderId,
+        key_type: "name_norm",
+        key_value: nameNorm,
+        poi_id: poiId,
+      });
+    }
   }
 
   // -------- Deduplicar para evitar "ON CONFLICT cannot affect row a second time" --------
