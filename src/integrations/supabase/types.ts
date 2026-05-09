@@ -152,6 +152,7 @@ export type Database = {
           folder_id: string
           identity_columns: Json
           import_enabled: boolean
+          kpi_order: Json
           metric_definitions: Json
           schema_type: string
           static_columns: Json
@@ -162,6 +163,7 @@ export type Database = {
           folder_id: string
           identity_columns?: Json
           import_enabled?: boolean
+          kpi_order?: Json
           metric_definitions?: Json
           schema_type?: string
           static_columns?: Json
@@ -172,6 +174,7 @@ export type Database = {
           folder_id?: string
           identity_columns?: Json
           import_enabled?: boolean
+          kpi_order?: Json
           metric_definitions?: Json
           schema_type?: string
           static_columns?: Json
@@ -801,6 +804,10 @@ export type Database = {
         Returns: boolean
       }
       purge_deleted_pois: { Args: never; Returns: undefined }
+      set_poi_folder_kpi_order: {
+        Args: { _folder_id: string; _order: Json }
+        Returns: undefined
+      }
       user_section_permissions: { Args: { _user_id: string }; Returns: Json }
     }
     Enums: {
