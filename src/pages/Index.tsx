@@ -11,6 +11,11 @@ import { IsochroneReportDialog } from "@/components/panels/IsochroneReportDialog
 import { PoiEditorDialog, type PoiEditorDraft } from "@/components/panels/PoiEditorDialog";
 import { CommuneSearchResultsDialog } from "@/components/panels/CommuneSearchResultsDialog";
 import { CommuneCompareDialog } from "@/components/panels/CommuneCompareDialog";
+import { PoiImportDialog } from "@/components/panels/PoiImportDialog";
+import { PoiDetailDialog } from "@/components/panels/PoiDetailDialog";
+import { PoiFolderSchemaDialog } from "@/components/panels/PoiFolderSchemaDialog";
+import { useUserRoles } from "@/hooks/useUserRoles";
+import { usePoiFolderSchemas } from "@/hooks/usePoiMetrics";
 import { Legend } from "@/components/ui-overlays/Legend";
 import { SearchBar, type SearchResult } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
@@ -95,6 +100,17 @@ const Index = () => {
   const [saveIsoDialogId, setSaveIsoDialogId] = useState<string | null>(null);
   const [reportIsoDialogId, setReportIsoDialogId] = useState<string | null>(null);
   const [loadedSavedIsoIds, setLoadedSavedIsoIds] = useState<Set<string>>(new Set());
+
+  // ---- Sales import system ----
+  const { isAdmin } = useUserRoles();
+  const { schemas: poiFolderSchemas, refresh: refreshSchemas, upsertSchema } = usePoiFolderSchemas();
+  const [importDialogFolderId, setImportDialogFolderId] = useState<string | null>(null);
+  const [schemaDialogFolderId, setSchemaDialogFolderId] = useState<string | null>(null);
+  const [detailPoi, setDetailPoi] = useState<SavedPoi | null>(null);
+  /** Modo "elegir POI en mapa" para una fila concreta del importador. */
+  const [poiPickContext, setPoiPickContext] = useState<{ rowIndex: number } | null>(null);
+  const [externalManualSelection, setExternalManualSelection] =
+    useState<{ rowIndex: number; poiId: string } | null>(null);
 
   const {
     savedIsos,
@@ -1027,6 +1043,10 @@ const Index = () => {
           onOpenCompareDialog={() => setCompareDialogOpen(true)}
           searchedCommunes={searchedCommunes}
           onSearchedCommunesChange={setSearchedCommunes}
+          isAdmin={isAdmin}
+          poiFolderSchemas={poiFolderSchemas}
+          onImportToFolder={(folderId) => setImportDialogFolderId(folderId)}
+          onConfigureFolderSchema={(folderId) => setSchemaDialogFolderId(folderId)}
         />
 
         <div
@@ -1083,6 +1103,17 @@ const Index = () => {
             onMapContextMenu={handleMapContextMenu}
             coordPickerActive={!!coordPicker}
             onPickCoord={handlePickCoord}
+            onPoiClick={(poi) => {
+              if (poiPickContext) return; // Si está en pick mode, no abrimos detalle.
+              setDetailPoi(poi);
+            }}
+            poiPickMode={!!poiPickContext}
+            onPoiPickSelect={(poi) => {
+              if (!poiPickContext) return;
+              setExternalManualSelection({ rowIndex: poiPickContext.rowIndex, poiId: poi.id });
+              setPoiPickContext(null);
+              toast.success(`POI "${poi.name}" asignado`);
+            }}
           />
 
           <SearchBar
@@ -1243,6 +1274,66 @@ const Index = () => {
         <div className="pointer-events-none fixed left-1/2 top-[68px] z-[1200] -translate-x-1/2 rounded-full bg-primary/95 px-4 py-1.5 text-[12px] font-medium text-primary-foreground shadow-apple backdrop-blur-2xl">
           Haz click en el mapa para fijar la posición · ESC para cancelar
         </div>
+      )}
+
+      {/* Pick mode hint para asignar POI en una fila de import */}
+      {poiPickContext && (
+        <div className="pointer-events-auto fixed left-1/2 top-[68px] z-[1200] -translate-x-1/2 flex items-center gap-2 rounded-full bg-blue-600 px-4 py-1.5 text-[12px] font-medium text-white shadow-apple backdrop-blur-2xl">
+          Haz click sobre el POI correcto en el mapa
+          <button
+            onClick={() => setPoiPickContext(null)}
+            className="ml-1 rounded-full bg-white/20 px-2 text-[10px]"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {/* POI sales import flow */}
+      {importDialogFolderId && (
+        <PoiImportDialog
+          open
+          onClose={() => setImportDialogFolderId(null)}
+          folder={folders.find((f) => f.id === importDialogFolderId) ?? null}
+          schema={poiFolderSchemas.find((s) => s.folder_id === importDialogFolderId) ?? null}
+          folderPois={pois.filter((p) => p.folder_id === importDialogFolderId)}
+          onPickPoiOnMap={(rowIndex) => {
+            setPoiPickContext({ rowIndex });
+            toast.info("Click en el mapa sobre el POI correcto");
+          }}
+          externalManualSelection={externalManualSelection}
+          onConsumeExternalSelection={() => setExternalManualSelection(null)}
+          onCommitSuccess={() => {
+            void refreshSchemas();
+          }}
+        />
+      )}
+
+      {/* POI detail dialog */}
+      {detailPoi && (
+        <PoiDetailDialog
+          open
+          onClose={() => setDetailPoi(null)}
+          poi={detailPoi}
+          schema={
+            poiFolderSchemas.find((s) => s.folder_id === detailPoi.folder_id) ?? null
+          }
+        />
+      )}
+
+      {/* Folder schema config (admin) */}
+      {schemaDialogFolderId && (
+        <PoiFolderSchemaDialog
+          open
+          onClose={() => setSchemaDialogFolderId(null)}
+          folder={folders.find((f) => f.id === schemaDialogFolderId) ?? null}
+          schema={
+            poiFolderSchemas.find((s) => s.folder_id === schemaDialogFolderId) ?? null
+          }
+          onSave={async (s) => {
+            await upsertSchema(s);
+          }}
+        />
       )}
     </div>
   );

@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.isochrone-insights]
 verify_jwt = false
+
+[functions.poi-insights]
+verify_jwt = false
