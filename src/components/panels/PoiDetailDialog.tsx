@@ -570,6 +570,57 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props)
         </div>
       </DialogContent>
     </Dialog>
+
+    {yearDetail && active && (
+      <Dialog open onOpenChange={(o) => !o && setYearDetail(null)}>
+        <DialogContent className="max-w-md p-0">
+          <DialogHeader className="border-b border-border/40 px-5 pb-3 pt-4">
+            <DialogTitle className="text-[14px] font-semibold tracking-tight">
+              Detalle mensual · Año {yearDetail.year}
+              {!yearDetail.complete && (
+                <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                  ({yearDetail.months.length}/12 meses)
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-2 px-5 py-3">
+            <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+              <div className="text-[16px] font-semibold leading-none tracking-tight">
+                {formatMetricValue(yearDetail.value, active.format)}
+              </div>
+              <div className="mt-1.5 text-[10px] text-muted-foreground">Total del año</div>
+            </div>
+            <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+              <div className="text-[16px] font-semibold leading-none tracking-tight">
+                {formatMetricValue(yearDetail.avg, active.format)}
+              </div>
+              <div className="mt-1.5 text-[10px] text-muted-foreground">Promedio mensual</div>
+            </div>
+          </div>
+          <div className="scrollbar-thin max-h-[60vh] overflow-y-auto px-5 pb-4">
+            <div className="rounded-lg border border-border/30">
+              <div className="grid grid-cols-2 bg-surface-2/60 text-[10px] font-medium text-muted-foreground">
+                <div className="px-3 py-1.5">Mes</div>
+                <div className="px-3 py-1.5 text-right">Valor</div>
+              </div>
+              {yearDetail.months.map((m) => (
+                <div
+                  key={m.period}
+                  className="grid grid-cols-2 border-t border-border/30 text-[11px]"
+                >
+                  <div className="px-3 py-1">{formatPeriod(m.period)}</div>
+                  <div className="px-3 py-1 text-right font-mono">
+                    {formatMetricValue(m.value, active.format)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   );
 };
 
