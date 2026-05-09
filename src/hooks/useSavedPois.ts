@@ -192,7 +192,7 @@ export const useSavedPois = () => {
   }, []);
 
   const addMany = useCallback(
-    async (items: PoiInsert[], folder_id: string | null = null) => {
+    async (items: PoiInsert[], folder_id: string | null = null, opts?: { deferRefresh?: boolean }) => {
       if (!user) throw new Error("Debes iniciar sesión");
       if (!items.length) return 0;
 
