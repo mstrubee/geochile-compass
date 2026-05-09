@@ -170,28 +170,36 @@ export const PoiImportDialog = ({
 
   const visibleMatches = useMemo(() => {
     if (!imp.parsed) return [];
+    const q = searchQuery.trim().toLowerCase();
+    const norm = (s: string) =>
+      s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const qn = norm(q);
     return imp.matches.filter((m) => {
       const isManual = !!imp.manualAssignments[m.rowIndex];
       const isSkipped = imp.skippedRows.has(m.rowIndex);
       const isOk = m.status === "auto_matched" || m.status === "alias_matched" || isManual;
+      let pass = true;
       switch (filter) {
-        case "all":
-          return true;
-        case "ok":
-          return isOk && !isSkipped;
-        case "review":
-          return !isOk && !isSkipped;
-        case "auto":
-          return m.status === "auto_matched" && !isManual && !isSkipped;
-        case "alias":
-          return m.status === "alias_matched" && !isManual && !isSkipped;
-        case "skipped":
-          return isSkipped;
-        default:
-          return true;
+        case "ok": pass = isOk && !isSkipped; break;
+        case "review": pass = !isOk && !isSkipped; break;
+        case "auto": pass = m.status === "auto_matched" && !isManual && !isSkipped; break;
+        case "alias": pass = m.status === "alias_matched" && !isManual && !isSkipped; break;
+        case "skipped": pass = isSkipped; break;
       }
+      if (!pass) return false;
+      if (!qn) return true;
+      const row = imp.parsed!.rows.find((r) => r.rowIndex === m.rowIndex);
+      if (!row) return false;
+      const name = row.identity["Nombre Local"] ?? row.identity["Local"] ?? row.identity["Nombre"] ?? "";
+      const assignedName = isManual
+        ? folderPois.find((p) => p.id === imp.manualAssignments[m.rowIndex])?.name ?? ""
+        : m.assignedPoiId
+          ? folderPois.find((p) => p.id === m.assignedPoiId)?.name ?? ""
+          : "";
+      const hay = norm(`${name} ${row.comuna ?? ""} ${row.rawAddress ?? ""} ${assignedName}`);
+      return hay.includes(qn);
     });
-  }, [imp.matches, imp.parsed, imp.manualAssignments, imp.skippedRows, filter]);
+  }, [imp.matches, imp.parsed, imp.manualAssignments, imp.skippedRows, filter, searchQuery, folderPois]);
 
   return (
     <Dialog open={open && !hidden} onOpenChange={(o) => !o && !hidden && onClose()}>
