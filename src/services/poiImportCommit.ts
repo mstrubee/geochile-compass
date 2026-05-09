@@ -255,6 +255,21 @@ export const commitImport = async ({
     );
   }
 
+  // -------- Persistir memoria de omisiones (folder_id, normalized_key) --------
+  if (skipMemoryInserts.length > 0) {
+    const skipMap = new Map<string, typeof skipMemoryInserts[number]>();
+    for (const s of skipMemoryInserts) {
+      skipMap.set(`${s.folder_id}|${s.normalized_key}`, s);
+    }
+    const dedupSkip = [...skipMap.values()].filter((s) => s.normalized_key !== "::");
+    if (dedupSkip.length > 0) {
+      const { error: skipErr } = await supabase
+        .from("poi_import_skip_memory")
+        .upsert(dedupSkip, { onConflict: "folder_id,normalized_key" });
+      if (skipErr) console.warn("[skip memory] upsert failed", skipErr);
+    }
+  }
+
   onProgress?.("Finalizando…", 0.95);
 
   // -------- Cerrar el job --------
