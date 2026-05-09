@@ -46,9 +46,10 @@ interface Props {
   poi: SavedPoi | null;
   schema: PoiFolderSchema | null;
   onRename?: (id: string, name: string) => Promise<void> | void;
+  onKpiOrderChange?: (folderId: string, order: string[]) => Promise<void> | void;
 }
 
-export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props) => {
+export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename, onKpiOrderChange }: Props) => {
   const { metrics, loading: metricsLoading } = usePoiMetrics(poi?.id ?? null);
   const { attrs, loading: attrsLoading } = usePoiAttributes(poi?.id ?? null);
   const [insights, setInsights] = useState<string | null>(null);
