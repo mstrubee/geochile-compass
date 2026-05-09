@@ -346,5 +346,6 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
     toggleSkip,
     commit,
     reset,
+    resumeFromStorage,
   };
 };
