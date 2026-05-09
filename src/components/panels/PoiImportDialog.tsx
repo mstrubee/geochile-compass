@@ -500,6 +500,25 @@ export const PoiImportDialog = ({
                     <X className="h-3 w-3" /> Quitar filtro
                   </button>
                 )}
+                <div className="relative mt-3">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar por nombre, comuna, dirección…"
+                    className="h-8 w-full rounded-md border border-border/60 bg-background pl-8 pr-8 text-[12px] outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+                      aria-label="Limpiar búsqueda"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="scrollbar-thin flex-1 overflow-y-auto">
