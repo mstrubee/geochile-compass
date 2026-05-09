@@ -143,23 +143,50 @@ Deno.serve(async (req) => {
       if (excluded.includes(layer.name)) continue;
       summary.push({ name: layer.name, count: layer.count });
 
-      // Find or create the territorial_layer
+      // Find or create the territorial_layer.
+      // Match by source_name (nombre original del archivo) para preservar
+      // los renombrados manuales del admin entre re-importaciones.
       const { data: existing } = await admin
         .from("territorial_layers")
         .select("id")
         .eq("group_id", groupId)
-        .eq("name", layer.name)
+        .eq("source_name", layer.name)
         .maybeSingle();
       let layerId = existing?.id as string | undefined;
       if (!layerId) {
+        // Fallback: capas legacy creadas antes de tener source_name.
+        const { data: legacy } = await admin
+          .from("territorial_layers")
+          .select("id")
+          .eq("group_id", groupId)
+          .eq("name", layer.name)
+          .is("source_name", null)
+          .maybeSingle();
+        if (legacy?.id) {
+          layerId = legacy.id;
+          // Marcamos su source_name para que futuras importaciones lo encuentren.
+          await admin
+            .from("territorial_layers")
+            .update({ source_name: layer.name })
+            .eq("id", layerId);
+        }
+      }
+      if (!layerId) {
         const { data: created, error: cErr } = await admin
           .from("territorial_layers")
-          .insert({ group_id: groupId, name: layer.name, source_file_id: sourceFileId })
+          .insert({
+            group_id: groupId,
+            name: layer.name,
+            source_name: layer.name,
+            source_file_id: sourceFileId,
+          })
           .select("id")
           .single();
         if (cErr || !created) continue;
         layerId = created.id;
       }
+      // Importante: NO actualizamos `name` si la capa ya existía — preservamos
+      // el nombre que el admin pudo haber editado.
 
       // Dedup strategy
       if (dedup === "replace_layer") {
