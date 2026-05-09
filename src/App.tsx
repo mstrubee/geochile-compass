@@ -21,6 +21,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+        <PermissionsProvider>
         <TerritorialVisibilityProvider>
           <Routes>
             <Route path="/" element={<Index />} />
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </TerritorialVisibilityProvider>
+        </PermissionsProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
