@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      custom_roles: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          permissions: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          permissions?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          permissions?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       isochrone_folders: {
         Row: {
           color: string | null
@@ -626,6 +653,35 @@ export type Database = {
           },
         ]
       }
+      user_role_assignments: {
+        Row: {
+          created_at: string
+          custom_role_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_role_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          custom_role_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_role_assignments_custom_role_id_fkey"
+            columns: ["custom_role_id"]
+            isOneToOne: false
+            referencedRelation: "custom_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -668,6 +724,15 @@ export type Database = {
       }
     }
     Functions: {
+      admin_list_users: {
+        Args: never
+        Returns: {
+          created_at: string
+          email: string
+          is_admin: boolean
+          user_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -676,6 +741,7 @@ export type Database = {
         Returns: boolean
       }
       purge_deleted_pois: { Args: never; Returns: undefined }
+      user_section_permissions: { Args: { _user_id: string }; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
