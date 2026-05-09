@@ -55,6 +55,111 @@ export type Database = {
           },
         ]
       }
+      poi_address_aliases: {
+        Row: {
+          created_at: string
+          id: string
+          normalized_address: string
+          poi_id: string
+          raw_address: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          normalized_address: string
+          poi_id: string
+          raw_address?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          normalized_address?: string
+          poi_id?: string
+          raw_address?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poi_address_aliases_poi_id_fkey"
+            columns: ["poi_id"]
+            isOneToOne: false
+            referencedRelation: "pois"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      poi_attributes: {
+        Row: {
+          attr_key: string
+          attr_value: string | null
+          poi_id: string
+          source_import_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          attr_key: string
+          attr_value?: string | null
+          poi_id: string
+          source_import_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attr_key?: string
+          attr_value?: string | null
+          poi_id?: string
+          source_import_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poi_attributes_poi_id_fkey"
+            columns: ["poi_id"]
+            isOneToOne: false
+            referencedRelation: "pois"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      poi_folder_schemas: {
+        Row: {
+          created_at: string
+          folder_id: string
+          identity_columns: Json
+          import_enabled: boolean
+          metric_definitions: Json
+          schema_type: string
+          static_columns: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          folder_id: string
+          identity_columns?: Json
+          import_enabled?: boolean
+          metric_definitions?: Json
+          schema_type?: string
+          static_columns?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          folder_id?: string
+          identity_columns?: Json
+          import_enabled?: boolean
+          metric_definitions?: Json
+          schema_type?: string
+          static_columns?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poi_folder_schemas_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: true
+            referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       poi_folders: {
         Row: {
           color: string | null
@@ -92,6 +197,109 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      poi_import_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          error: string | null
+          filename: string
+          folder_id: string
+          id: string
+          metric_keys: Json
+          period_max: string | null
+          period_min: string | null
+          rows_matched_auto: number
+          rows_matched_manual: number
+          rows_total: number
+          rows_unmatched: number
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          filename: string
+          folder_id: string
+          id?: string
+          metric_keys?: Json
+          period_max?: string | null
+          period_min?: string | null
+          rows_matched_auto?: number
+          rows_matched_manual?: number
+          rows_total?: number
+          rows_unmatched?: number
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          filename?: string
+          folder_id?: string
+          id?: string
+          metric_keys?: Json
+          period_max?: string | null
+          period_min?: string | null
+          rows_matched_auto?: number
+          rows_matched_manual?: number
+          rows_total?: number
+          rows_unmatched?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poi_import_jobs_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      poi_metrics: {
+        Row: {
+          created_at: string
+          id: string
+          metric_key: string
+          period: string
+          poi_id: string
+          source_import_id: string | null
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metric_key: string
+          period: string
+          poi_id: string
+          source_import_id?: string | null
+          updated_at?: string
+          value: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metric_key?: string
+          period?: string
+          poi_id?: string
+          source_import_id?: string | null
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poi_metrics_poi_id_fkey"
+            columns: ["poi_id"]
+            isOneToOne: false
+            referencedRelation: "pois"
             referencedColumns: ["id"]
           },
         ]
@@ -441,7 +649,23 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      poi_metrics_latest: {
+        Row: {
+          metric_key: string | null
+          period: string | null
+          poi_id: string | null
+          value: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poi_metrics_poi_id_fkey"
+            columns: ["poi_id"]
+            isOneToOne: false
+            referencedRelation: "pois"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       has_role: {
