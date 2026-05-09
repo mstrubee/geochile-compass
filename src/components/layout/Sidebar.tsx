@@ -154,6 +154,8 @@ interface SidebarProps {
   poiFolderSchemas?: import("@/types/poiMetrics").PoiFolderSchema[];
   onImportToFolder?: (folderId: string) => void;
   onConfigureFolderSchema?: (folderId: string) => void;
+  // Analysis module (admin only)
+  onConfigureAnalysis?: (folderId: string) => void;
 }
 
 interface LayerRow {
@@ -603,6 +605,7 @@ export const Sidebar = ({
   poiFolderSchemas = [],
   onImportToFolder,
   onConfigureFolderSchema,
+  onConfigureAnalysis,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Input separado para "Cargar KMZ a esta carpeta" (clic derecho sobre carpeta POI)
@@ -1995,6 +1998,12 @@ export const Sidebar = ({
                                 <ContextMenuItem onSelect={() => onConfigureFolderSchema(f.id)}>
                                   <Settings2 className="mr-2 h-3.5 w-3.5" />
                                   Configurar importación…
+                                </ContextMenuItem>
+                              )}
+                              {isAdmin && onConfigureAnalysis && (
+                                <ContextMenuItem onSelect={() => onConfigureAnalysis(f.id)}>
+                                  <BarChart3 className="mr-2 h-3.5 w-3.5" />
+                                  Configurar análisis…
                                 </ContextMenuItem>
                               )}
                               {(() => {
