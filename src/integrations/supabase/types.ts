@@ -290,6 +290,33 @@ export type Database = {
           },
         ]
       }
+      poi_import_skip_memory: {
+        Row: {
+          created_at: string
+          folder_id: string
+          id: string
+          normalized_key: string
+          raw_address: string | null
+          raw_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          folder_id: string
+          id?: string
+          normalized_key: string
+          raw_address?: string | null
+          raw_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          folder_id?: string
+          id?: string
+          normalized_key?: string
+          raw_address?: string | null
+          raw_name?: string | null
+        }
+        Relationships: []
+      }
       poi_metrics: {
         Row: {
           created_at: string
