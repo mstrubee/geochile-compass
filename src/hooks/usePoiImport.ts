@@ -120,15 +120,39 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
       try {
         setPhase("matching");
         setProgressFrac(0);
-        const aliasList = await fetchAliasesForPois(folderPois.map((p) => p.id));
+        const poiIds = folderPois.map((p) => p.id);
+        const [aliasList, attrsRes, identityRes] = await Promise.all([
+          fetchAliasesForPois(poiIds),
+          poiIds.length > 0
+            ? supabase.from("poi_attributes").select("*").in("poi_id", poiIds)
+            : Promise.resolve({ data: [], error: null }),
+          supabase
+            .from("poi_import_identity_memory")
+            .select("key_type,key_value,poi_id")
+            .eq("folder_id", folderId),
+        ]);
         setAliases(aliasList);
+        const poiAttributes = (attrsRes.data ?? []) as Array<{
+          poi_id: string;
+          attr_key: string;
+          attr_value: string | null;
+          source_import_id: string | null;
+          updated_at: string;
+        }>;
+        const identityMemory = (identityRes.data ?? []) as Array<{
+          key_type: string;
+          key_value: string;
+          poi_id: string;
+        }>;
         const result = await matchImportRows({
           rows: parsed.rows,
           pois: folderPois,
           aliases: aliasList,
+          poiAttributes,
+          identityMemory,
           thresholdMeters,
           onProgress: (done, total) => {
-            setProgressMsg(`Geocodificando ${done}/${total}…`);
+            setProgressMsg(`Reconociendo filas ${done}/${total}…`);
             setProgressFrac(done / Math.max(1, total));
           },
           signal: ctrl.signal,
