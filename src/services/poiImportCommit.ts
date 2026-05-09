@@ -61,6 +61,7 @@ export const commitImport = async ({
       status: "pending",
       rows_total: rows.length,
       created_by: user?.id ?? null,
+      source_file_path: sourceFilePath,
     })
     .select("id")
     .single();
