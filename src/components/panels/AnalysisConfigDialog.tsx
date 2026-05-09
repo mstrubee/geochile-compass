@@ -17,6 +17,9 @@ import {
   Check,
   AlertTriangle,
   Settings2,
+  ChevronRight,
+  ChevronDown,
+  Folder,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { PoiFolder } from "@/types/pois";
