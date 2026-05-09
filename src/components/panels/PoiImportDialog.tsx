@@ -160,52 +160,159 @@ export const PoiImportDialog = ({
         <div className="flex max-h-[calc(92vh-110px)] min-h-0 flex-col">
           {/* IDLE / PARSING / ERROR */}
           {imp.phase === "idle" || imp.phase === "parsing" || imp.phase === "error" ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10">
+            <div className="scrollbar-thin flex flex-1 flex-col overflow-y-auto">
               {imp.phase === "parsing" ? (
-                <>
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                   <div className="text-[12px] text-muted-foreground">Leyendo planilla…</div>
-                </>
+                </div>
               ) : (
                 <>
-                  <FileSpreadsheet className="h-12 w-12 text-muted-foreground/50" />
-                  <div className="max-w-md text-center text-[12px] text-muted-foreground">
-                    Sube un archivo Excel con las ventas históricas.
-                    {schema && (
-                      <div className="mt-2">
-                        Se esperan las columnas:{" "}
-                        <span className="font-mono text-foreground">
-                          {schema.identity_columns.join(", ")}
-                        </span>{" "}
-                        y columnas mensuales (fechas) con los valores de{" "}
-                        <span className="text-foreground">
-                          {schema.metric_definitions[0]?.label}
-                        </span>
-                        .
+                  <div className="flex flex-col items-center gap-3 px-6 py-8">
+                    <FileSpreadsheet className="h-12 w-12 text-muted-foreground/50" />
+                    <div className="max-w-md text-center text-[12px] text-muted-foreground">
+                      Sube un archivo Excel con las ventas históricas.
+                      {schema && (
+                        <div className="mt-2">
+                          Se esperan las columnas:{" "}
+                          <span className="font-mono text-foreground">
+                            {schema.identity_columns.join(", ")}
+                          </span>{" "}
+                          y columnas mensuales (fechas) con los valores de{" "}
+                          <span className="text-foreground">
+                            {schema.metric_definitions[0]?.label}
+                          </span>
+                          .
+                        </div>
+                      )}
+                    </div>
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={handleFile}
+                        className="hidden"
+                      />
+                      <span className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+                        Seleccionar archivo
+                      </span>
+                    </label>
+                    {imp.error && (
+                      <div className="mt-2 flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                        <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                        {imp.error}
                       </div>
                     )}
                   </div>
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      accept=".xlsx,.xls"
-                      onChange={handleFile}
-                      className="hidden"
-                    />
-                    <span className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-                      Seleccionar archivo
-                    </span>
-                  </label>
-                  {imp.error && (
-                    <div className="mt-2 flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
-                      <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
-                      {imp.error}
+
+                  {/* Ya importado */}
+                  <div className="border-t border-border/40 bg-surface-2/30 px-5 py-4">
+                    <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <History className="h-3.5 w-3.5" />
+                      Ya importado en esta carpeta
                     </div>
-                  )}
+
+                    {loadingSummary ? (
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Cargando resumen…
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-3 gap-2">
+                          <Stat value={poisWithMetrics.size.toString()} label="POIs con datos" />
+                          <Stat value={assignedAliases.length.toString()} label="Direcciones asignadas" />
+                          <Stat value={history.length.toString()} label="Imports previos" />
+                        </div>
+
+                        {history.length > 0 && (
+                          <div className="mt-3 space-y-1">
+                            {history.map((j) => (
+                              <div
+                                key={j.id}
+                                className="flex items-center justify-between gap-2 rounded-md bg-surface-3/40 px-2.5 py-1.5 text-[11px]"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate font-medium text-foreground">
+                                    {j.filename}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {new Date(j.created_at).toLocaleString("es-CL")} ·{" "}
+                                    {j.rows_total} filas · {j.rows_matched_auto + j.rows_matched_manual} ok
+                                    {j.rows_unmatched > 0 ? ` · ${j.rows_unmatched} sin asignar` : ""}
+                                  </div>
+                                </div>
+                                <span
+                                  className={[
+                                    "inline-flex h-4 items-center rounded px-1.5 text-[9px] font-medium uppercase tracking-wide",
+                                    j.status === "completed"
+                                      ? "bg-brand-green/15 text-brand-green"
+                                      : j.status === "failed"
+                                        ? "bg-destructive/15 text-destructive"
+                                        : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                                  ].join(" ")}
+                                >
+                                  {j.status}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {poisWithMetrics.size > 0 && (
+                          <button
+                            onClick={() => setShowAssigned((v) => !v)}
+                            className="mt-3 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                          >
+                            {showAssigned ? (
+                              <ChevronDown className="h-3 w-3" />
+                            ) : (
+                              <ChevronRight className="h-3 w-3" />
+                            )}
+                            {showAssigned ? "Ocultar" : "Ver"} POIs ya asignados ({poisWithMetrics.size})
+                          </button>
+                        )}
+
+                        {showAssigned && poisWithMetrics.size > 0 && (
+                          <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-md border border-border/30 bg-surface-2/40 p-2">
+                            {folderPois
+                              .filter((p) => poisWithMetrics.has(p.id))
+                              .map((p) => {
+                                const aliases = assignedAliases.filter((a) => a.poi_id === p.id);
+                                return (
+                                  <div
+                                    key={p.id}
+                                    className="rounded px-2 py-1.5 text-[11px] hover:bg-surface-3/40"
+                                  >
+                                    <div className="flex items-center gap-1 font-medium">
+                                      <MapPin className="h-3 w-3 text-primary" />
+                                      <span className="truncate">{p.name}</span>
+                                    </div>
+                                    {aliases.length > 0 && (
+                                      <div className="mt-0.5 pl-4 text-[10px] text-muted-foreground">
+                                        {aliases.length} dirección{aliases.length === 1 ? "" : "es"}:{" "}
+                                        {aliases.slice(0, 2).map((a) => a.raw_address ?? a.normalized_address).join(" · ")}
+                                        {aliases.length > 2 ? ` · +${aliases.length - 2}` : ""}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        )}
+
+                        {history.length === 0 && poisWithMetrics.size === 0 && (
+                          <div className="text-[11px] text-muted-foreground">
+                            Aún no se ha importado ningún archivo en esta carpeta.
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </>
               )}
             </div>
           ) : null}
+
 
           {/* PARSED — pantalla previa al matching */}
           {imp.phase === "parsed" && imp.parsed && (
