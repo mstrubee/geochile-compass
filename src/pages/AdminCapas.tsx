@@ -934,8 +934,8 @@ const AdminCollapsible = ({
   id: string;
   title: string;
   description?: string;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
+  icon?: ReactNode;
+  children: ReactNode;
 }) => {
   // Default cerrado, según pedido del usuario
   const [open, setOpen] = useState<boolean>(() => {
