@@ -110,6 +110,14 @@ export const commitImport = async ({
     raw_name: string | null;
   }> = [];
 
+  /** Memoria de identidad: código/nombre → POI, por carpeta. */
+  const identityMemoryInserts: Array<{
+    folder_id: string;
+    key_type: string;
+    key_value: string;
+    poi_id: string;
+  }> = [];
+
   for (const row of rows) {
     if (skippedRowIndices.has(row.rowIndex)) {
       rowsSkipped++;
