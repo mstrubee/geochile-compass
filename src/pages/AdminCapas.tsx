@@ -505,6 +505,7 @@ const AdminCapas = () => {
             ))}
           </ul>
         </section>
+        </AdminCollapsible>
       </main>
 
       <UploadDialog
