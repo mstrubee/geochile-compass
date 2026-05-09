@@ -358,7 +358,18 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename, onKpiOrd
               )}
 
               {/* KPIs */}
-              {active && <MetricKpis active={active} formatLabel={labelByKey[active.metricKey] ?? active.metricKey} />}
+              {active && (
+                <MetricKpis
+                  active={active}
+                  formatLabel={labelByKey[active.metricKey] ?? active.metricKey}
+                  initialOrder={schema?.kpi_order ?? null}
+                  onOrderChange={
+                    schema && onKpiOrderChange
+                      ? (next) => onKpiOrderChange(schema.folder_id, next)
+                      : undefined
+                  }
+                />
+              )}
 
               {/* Gráfico */}
               {active && active.series.length > 0 && (
