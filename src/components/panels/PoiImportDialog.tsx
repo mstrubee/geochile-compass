@@ -69,6 +69,7 @@ export const PoiImportDialog = ({
   const [filter, setFilter] = useState<
     "all" | "ok" | "review" | "auto" | "alias" | "skipped"
   >("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [history, setHistory] = useState<PoiImportJob[]>([]);
   const [assignedAliases, setAssignedAliases] = useState<PoiAddressAlias[]>([]);
   const [poisWithMetrics, setPoisWithMetrics] = useState<Set<string>>(new Set());
@@ -169,28 +170,36 @@ export const PoiImportDialog = ({
 
   const visibleMatches = useMemo(() => {
     if (!imp.parsed) return [];
+    const q = searchQuery.trim().toLowerCase();
+    const norm = (s: string) =>
+      s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const qn = norm(q);
     return imp.matches.filter((m) => {
       const isManual = !!imp.manualAssignments[m.rowIndex];
       const isSkipped = imp.skippedRows.has(m.rowIndex);
       const isOk = m.status === "auto_matched" || m.status === "alias_matched" || isManual;
+      let pass = true;
       switch (filter) {
-        case "all":
-          return true;
-        case "ok":
-          return isOk && !isSkipped;
-        case "review":
-          return !isOk && !isSkipped;
-        case "auto":
-          return m.status === "auto_matched" && !isManual && !isSkipped;
-        case "alias":
-          return m.status === "alias_matched" && !isManual && !isSkipped;
-        case "skipped":
-          return isSkipped;
-        default:
-          return true;
+        case "ok": pass = isOk && !isSkipped; break;
+        case "review": pass = !isOk && !isSkipped; break;
+        case "auto": pass = m.status === "auto_matched" && !isManual && !isSkipped; break;
+        case "alias": pass = m.status === "alias_matched" && !isManual && !isSkipped; break;
+        case "skipped": pass = isSkipped; break;
       }
+      if (!pass) return false;
+      if (!qn) return true;
+      const row = imp.parsed!.rows.find((r) => r.rowIndex === m.rowIndex);
+      if (!row) return false;
+      const name = row.identity["Nombre Local"] ?? row.identity["Local"] ?? row.identity["Nombre"] ?? "";
+      const assignedName = isManual
+        ? folderPois.find((p) => p.id === imp.manualAssignments[m.rowIndex])?.name ?? ""
+        : m.assignedPoiId
+          ? folderPois.find((p) => p.id === m.assignedPoiId)?.name ?? ""
+          : "";
+      const hay = norm(`${name} ${row.comuna ?? ""} ${row.rawAddress ?? ""} ${assignedName}`);
+      return hay.includes(qn);
     });
-  }, [imp.matches, imp.parsed, imp.manualAssignments, imp.skippedRows, filter]);
+  }, [imp.matches, imp.parsed, imp.manualAssignments, imp.skippedRows, filter, searchQuery, folderPois]);
 
   return (
     <Dialog open={open && !hidden} onOpenChange={(o) => !o && !hidden && onClose()}>
@@ -491,6 +500,25 @@ export const PoiImportDialog = ({
                     <X className="h-3 w-3" /> Quitar filtro
                   </button>
                 )}
+                <div className="relative mt-3">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar por nombre, comuna, dirección…"
+                    className="h-8 w-full rounded-md border border-border/60 bg-background pl-8 pr-8 text-[12px] outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+                      aria-label="Limpiar búsqueda"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="scrollbar-thin flex-1 overflow-y-auto">
