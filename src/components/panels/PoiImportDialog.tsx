@@ -10,15 +10,20 @@ import { Button } from "@/components/ui/button";
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   FileSpreadsheet,
+  History,
   Loader2,
   MapPin,
   Search,
   X,
 } from "lucide-react";
 import type { SavedPoi, PoiFolder } from "@/types/pois";
-import type { PoiFolderSchema } from "@/types/poiMetrics";
+import type { PoiFolderSchema, PoiImportJob, PoiAddressAlias } from "@/types/poiMetrics";
 import { usePoiImport } from "@/hooks/usePoiImport";
+import { supabase } from "@/integrations/supabase/client";
+import { fetchAliasesForPois } from "@/hooks/usePoiMetrics";
 
 interface Props {
   open: boolean;
