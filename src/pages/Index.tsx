@@ -1332,6 +1332,10 @@ const Index = () => {
           schema={
             poiFolderSchemas.find((s) => s.folder_id === detailPoi.folder_id) ?? null
           }
+          onRename={async (id, name) => {
+            await updatePoi(id, { name });
+            setDetailPoi((curr) => (curr && curr.id === id ? { ...curr, name } : curr));
+          }}
         />
       )}
 
