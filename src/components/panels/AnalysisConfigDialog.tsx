@@ -208,34 +208,16 @@ export const AnalysisConfigDialog = ({
               {/* Competencia externa: carpetas */}
               <section>
                 <Label className="text-[11px]">Competencia externa · Carpetas POI</Label>
-                <div className="mt-1.5 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border/40 bg-surface-2/40 p-2">
-                  {allFolders.filter((f) => f.id !== folder?.id).length === 0 ? (
-                    <div className="px-2 py-1 text-[10px] text-muted-foreground">
-                      No hay otras carpetas POI cargadas.
-                    </div>
-                  ) : (
-                    allFolders
-                      .filter((f) => f.id !== folder?.id)
-                      .map((f) => {
-                        const checked = extFolderIds.includes(f.id);
-                        return (
-                          <label
-                            key={f.id}
-                            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-surface-3/50"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => {
-                                if (e.target.checked) setExtFolderIds([...extFolderIds, f.id]);
-                                else setExtFolderIds(extFolderIds.filter((x) => x !== f.id));
-                              }}
-                            />
-                            <span className="text-[11px]">{f.name}</span>
-                          </label>
-                        );
-                      })
-                  )}
+                <div className="mt-1.5 max-h-64 overflow-y-auto rounded-lg border border-border/40 bg-surface-2/40 p-2">
+                  <FolderTreePicker
+                    folders={allFolders}
+                    excludeId={folder?.id ?? null}
+                    selected={extFolderIds}
+                    onChange={setExtFolderIds}
+                  />
+                </div>
+                <div className="mt-1 text-[10px] text-muted-foreground">
+                  Al marcar una carpeta madre se seleccionan todas sus subcarpetas.
                 </div>
               </section>
 
