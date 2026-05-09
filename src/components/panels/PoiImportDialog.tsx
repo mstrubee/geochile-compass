@@ -16,7 +16,9 @@ import {
   History,
   Loader2,
   MapPin,
+  RefreshCw,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import type { SavedPoi, PoiFolder } from "@/types/pois";
@@ -127,6 +129,40 @@ export const PoiImportDialog = ({
     const f = e.target.files?.[0];
     if (!f) return;
     await imp.parse(f);
+    e.target.value = "";
+  };
+
+  const handleDeleteJob = async (job: PoiImportJob) => {
+    if (
+      !confirm(
+        `¿Eliminar el import "${job.filename}"?\n\nSe borrarán las métricas y atributos guardados por este archivo (no se borran POIs ni aliases).`,
+      )
+    )
+      return;
+    const { error: mErr } = await supabase
+      .from("poi_metrics")
+      .delete()
+      .eq("source_import_id", job.id);
+    if (mErr) {
+      alert(`Error eliminando métricas: ${mErr.message}`);
+      return;
+    }
+    const { error: aErr } = await supabase
+      .from("poi_attributes")
+      .delete()
+      .eq("source_import_id", job.id);
+    if (aErr) {
+      alert(`Error eliminando atributos: ${aErr.message}`);
+      return;
+    }
+    const { error: jErr } = await supabase.from("poi_import_jobs").delete().eq("id", job.id);
+    if (jErr) {
+      alert(`Error eliminando el job: ${jErr.message}`);
+      return;
+    }
+    // Refrescar resumen
+    setHistory((prev) => prev.filter((j) => j.id !== job.id));
+    onCommitSuccess?.();
   };
 
   const visibleMatches = useMemo(() => {
@@ -241,18 +277,44 @@ export const PoiImportDialog = ({
                                     {j.rows_unmatched > 0 ? ` · ${j.rows_unmatched} sin asignar` : ""}
                                   </div>
                                 </div>
-                                <span
-                                  className={[
-                                    "inline-flex h-4 items-center rounded px-1.5 text-[9px] font-medium uppercase tracking-wide",
-                                    j.status === "completed"
-                                      ? "bg-brand-green/15 text-brand-green"
-                                      : j.status === "failed"
-                                        ? "bg-destructive/15 text-destructive"
-                                        : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-                                  ].join(" ")}
-                                >
-                                  {j.status}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={[
+                                      "inline-flex h-4 items-center rounded px-1.5 text-[9px] font-medium uppercase tracking-wide",
+                                      j.status === "completed"
+                                        ? "bg-brand-green/15 text-brand-green"
+                                        : j.status === "failed"
+                                          ? "bg-destructive/15 text-destructive"
+                                          : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                                    ].join(" ")}
+                                  >
+                                    {j.status}
+                                  </span>
+                                  <label
+                                    className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-border/40 bg-surface-2/60 px-1.5 text-[10px] text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                                    title={
+                                      j.rows_unmatched > 0
+                                        ? `Re-subir el archivo para asignar las ${j.rows_unmatched} filas pendientes (las ya matcheadas se resuelven solas vía aliases)`
+                                        : "Re-subir el archivo para continuar editando"
+                                    }
+                                  >
+                                    <input
+                                      type="file"
+                                      accept=".xlsx,.xls"
+                                      onChange={handleFile}
+                                      className="hidden"
+                                    />
+                                    <RefreshCw className="h-2.5 w-2.5" />
+                                    Continuar
+                                  </label>
+                                  <button
+                                    onClick={() => handleDeleteJob(j)}
+                                    className="inline-flex h-6 items-center gap-1 rounded-md border border-border/40 bg-surface-2/60 px-1.5 text-[10px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                    title="Eliminar este import (borra sus métricas y atributos)"
+                                  >
+                                    <Trash2 className="h-2.5 w-2.5" />
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>
