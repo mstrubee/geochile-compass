@@ -304,51 +304,113 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
               {/* Gráfico */}
               {active && active.series.length > 0 && (
                 <div className="mt-4 rounded-xl border border-border/30 bg-surface-2/40 p-3">
-                  <div className="mb-2 text-[11px] font-medium text-muted-foreground">
-                    Serie histórica · {active.series.length} períodos
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-[11px] font-medium text-muted-foreground">
+                      {chartMode === "monthly"
+                        ? `Serie mensual · ${active.series.length} períodos`
+                        : `Ventas anuales · ${annualSeries.length} año${annualSeries.length === 1 ? "" : "s"}`}
+                    </div>
+                    <div className="inline-flex rounded-md bg-surface-2/60 p-0.5">
+                      <button
+                        onClick={() => setChartMode("monthly")}
+                        className={[
+                          "rounded px-2 py-0.5 text-[10px] font-medium transition-all",
+                          chartMode === "monthly"
+                            ? "bg-surface-3 text-foreground shadow-apple-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        ].join(" ")}
+                      >
+                        Mensual
+                      </button>
+                      <button
+                        onClick={() => setChartMode("annual")}
+                        className={[
+                          "rounded px-2 py-0.5 text-[10px] font-medium transition-all",
+                          chartMode === "annual"
+                            ? "bg-surface-3 text-foreground shadow-apple-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        ].join(" ")}
+                      >
+                        Anual
+                      </button>
+                    </div>
                   </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={active.series} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                        <CartesianGrid stroke="hsl(var(--border) / 0.3)" strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="period"
-                          tick={{ fontSize: 10 }}
-                          tickFormatter={(v) => formatPeriod(v).replace(/ \d{4}/, (m) => m.slice(-3))}
-                          interval="preserveStartEnd"
-                          minTickGap={24}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 10 }}
-                          tickFormatter={(v) =>
-                            active.format === "clp"
-                              ? `${(v / 1_000_000).toFixed(0)}M`
-                              : v.toLocaleString("es-CL")
-                          }
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            background: "hsl(var(--background))",
-                            border: "1px solid hsl(var(--border) / 0.3)",
-                            borderRadius: 8,
-                            fontSize: 11,
-                          }}
-                          labelFormatter={(v) => formatPeriod(String(v))}
-                          formatter={(v: number) => [formatMetricValue(v, active.format), labelByKey[active.metricKey] ?? active.metricKey]}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="value"
-                          stroke="hsl(217 91% 55%)"
-                          strokeWidth={2}
-                          dot={false}
-                          activeDot={{ r: 4 }}
-                        />
-                      </LineChart>
+                      {chartMode === "monthly" ? (
+                        <LineChart data={active.series} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                          <CartesianGrid stroke="hsl(var(--border) / 0.3)" strokeDasharray="3 3" />
+                          <XAxis
+                            dataKey="period"
+                            tick={{ fontSize: 10 }}
+                            tickFormatter={(v) => formatPeriod(v).replace(/ \d{4}/, (m) => m.slice(-3))}
+                            interval="preserveStartEnd"
+                            minTickGap={24}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 10 }}
+                            tickFormatter={(v) =>
+                              active.format === "clp"
+                                ? `${(v / 1_000_000).toFixed(0)}M`
+                                : v.toLocaleString("es-CL")
+                            }
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              background: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border) / 0.3)",
+                              borderRadius: 8,
+                              fontSize: 11,
+                            }}
+                            labelFormatter={(v) => formatPeriod(String(v))}
+                            formatter={(v: number) => [formatMetricValue(v, active.format), labelByKey[active.metricKey] ?? active.metricKey]}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            stroke="hsl(217 91% 55%)"
+                            strokeWidth={2}
+                            dot={false}
+                            activeDot={{ r: 4 }}
+                          />
+                        </LineChart>
+                      ) : (
+                        <BarChart data={annualSeries} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                          <CartesianGrid stroke="hsl(var(--border) / 0.3)" strokeDasharray="3 3" />
+                          <XAxis dataKey="year" tick={{ fontSize: 10 }} />
+                          <YAxis
+                            tick={{ fontSize: 10 }}
+                            tickFormatter={(v) =>
+                              active.format === "clp"
+                                ? `${(v / 1_000_000).toFixed(0)}M`
+                                : v.toLocaleString("es-CL")
+                            }
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              background: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border) / 0.3)",
+                              borderRadius: 8,
+                              fontSize: 11,
+                            }}
+                            labelFormatter={(v, payload) => {
+                              const p = payload?.[0]?.payload as { year: string; complete: boolean } | undefined;
+                              return p?.complete ? `Año ${p.year}` : `Año ${v} (parcial)`;
+                            }}
+                            formatter={(v: number) => [formatMetricValue(v, active.format), labelByKey[active.metricKey] ?? active.metricKey]}
+                          />
+                          <Bar
+                            dataKey="value"
+                            fill="hsl(217 91% 55%)"
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      )}
                     </ResponsiveContainer>
                   </div>
                 </div>
               )}
+
 
               {/* Resumen ejecutivo */}
               <div className="mt-4 rounded-xl border border-border/30 bg-surface-2/40 p-3">
