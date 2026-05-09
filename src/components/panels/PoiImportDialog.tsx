@@ -43,6 +43,8 @@ interface Props {
   onConsumeExternalSelection: () => void;
   /** Notifica al padre que el commit fue exitoso para refrescar datos. */
   onCommitSuccess?: () => void;
+  /** Centra el mapa en la ubicación dada y oculta el diálogo (mostrando "Volver"). */
+  onViewOnMap?: (target: { lat: number; lng: number; label?: string }) => void;
   /** Oculta visualmente el modal sin resetear su estado (p.ej. mientras se elige POI en el mapa). */
   hidden?: boolean;
 }
@@ -59,6 +61,7 @@ export const PoiImportDialog = ({
   externalManualSelection,
   onConsumeExternalSelection,
   onCommitSuccess,
+  onViewOnMap,
   hidden = false,
 }: Props) => {
   const imp = usePoiImport({
@@ -561,6 +564,29 @@ export const PoiImportDialog = ({
                           onToggleSkip={() => imp.toggleSkip(m.rowIndex)}
                           candidates={m.candidates}
                           onChooseCandidate={(poiId) => imp.assignManual(m.rowIndex, poiId)}
+                          onView={
+                            onViewOnMap
+                              ? () => {
+                                  const assignedId = manualPoi ?? m.assignedPoiId ?? null;
+                                  const poi = assignedId
+                                    ? folderPois.find((p) => p.id === assignedId) ?? null
+                                    : null;
+                                  const target = poi
+                                    ? { lat: poi.lat, lng: poi.lng, label: poi.name }
+                                    : m.geocoded
+                                      ? {
+                                          lat: m.geocoded.lat,
+                                          lng: m.geocoded.lng,
+                                          label:
+                                            row.identity["Nombre Local"] ??
+                                            row.identity["Local"] ??
+                                            row.rawAddress,
+                                        }
+                                      : null;
+                                  if (target) onViewOnMap(target);
+                                }
+                              : undefined
+                          }
                         />
                       );
                     })}
@@ -676,6 +702,7 @@ interface RowItemProps {
   onClearManual: () => void;
   onToggleSkip: () => void;
   onChooseCandidate: (poiId: string) => void;
+  onView?: () => void;
 }
 
 const STATUS_TAG: Record<string, { label: string; cls: string }> = {
@@ -701,6 +728,7 @@ const RowItem = ({
   onClearManual,
   onToggleSkip,
   onChooseCandidate,
+  onView,
 }: RowItemProps) => {
   const tag = STATUS_TAG[isManual ? "manual_assigned" : status] ?? STATUS_TAG.needs_review;
   return (
@@ -713,7 +741,18 @@ const RowItem = ({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-[12px] font-medium">{rowName}</span>
+            {onView ? (
+              <button
+                type="button"
+                onClick={onView}
+                title="Ver en el mapa"
+                className="truncate text-left text-[12px] font-medium text-foreground hover:text-primary hover:underline"
+              >
+                {rowName}
+              </button>
+            ) : (
+              <span className="truncate text-[12px] font-medium">{rowName}</span>
+            )}
             <span
               className={`inline-flex h-4 items-center rounded px-1.5 text-[9px] font-medium uppercase tracking-wide ${tag.cls}`}
             >

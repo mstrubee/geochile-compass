@@ -111,6 +111,7 @@ const Index = () => {
   const [poiPickContext, setPoiPickContext] = useState<{ rowIndex: number } | null>(null);
   const [externalManualSelection, setExternalManualSelection] =
     useState<{ rowIndex: number; poiId: string } | null>(null);
+  const [importViewing, setImportViewing] = useState(false);
 
   const {
     savedIsos,
@@ -1293,7 +1294,7 @@ const Index = () => {
       {importDialogFolderId && (
         <PoiImportDialog
           open
-          hidden={!!poiPickContext}
+          hidden={!!poiPickContext || importViewing}
           onClose={() => setImportDialogFolderId(null)}
           folder={folders.find((f) => f.id === importDialogFolderId) ?? null}
           schema={poiFolderSchemas.find((s) => s.folder_id === importDialogFolderId) ?? null}
@@ -1302,12 +1303,24 @@ const Index = () => {
             setPoiPickContext({ rowIndex });
             toast.info("Click en el mapa sobre el POI correcto");
           }}
+          onViewOnMap={(t) => {
+            setFlyTarget({ id: Date.now(), lat: t.lat, lng: t.lng, bbox: null });
+            setImportViewing(true);
+          }}
           externalManualSelection={externalManualSelection}
           onConsumeExternalSelection={() => setExternalManualSelection(null)}
           onCommitSuccess={() => {
             void refreshSchemas();
           }}
         />
+      )}
+      {importViewing && (
+        <button
+          onClick={() => setImportViewing(false)}
+          className="fixed bottom-6 left-1/2 z-[1000] -translate-x-1/2 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground shadow-lg hover:opacity-90"
+        >
+          ← Volver al importador
+        </button>
       )}
 
       {/* POI detail dialog */}
