@@ -251,6 +251,9 @@ export const useSavedPois = () => {
         .update(patch as never)
         .eq("id", id);
       if (error) throw new Error(error.message);
+      // Optimistic local update so the UI reflects the change immediately,
+      // sin esperar al refresh paginado completo (que con miles de POIs tarda).
+      setPois((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } as SavedPoi : p)));
       scheduleRefresh();
     },
     [scheduleRefresh],
