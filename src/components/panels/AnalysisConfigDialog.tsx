@@ -17,6 +17,9 @@ import {
   Check,
   AlertTriangle,
   Settings2,
+  ChevronRight,
+  ChevronDown,
+  Folder,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { PoiFolder } from "@/types/pois";
@@ -208,34 +211,16 @@ export const AnalysisConfigDialog = ({
               {/* Competencia externa: carpetas */}
               <section>
                 <Label className="text-[11px]">Competencia externa · Carpetas POI</Label>
-                <div className="mt-1.5 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border/40 bg-surface-2/40 p-2">
-                  {allFolders.filter((f) => f.id !== folder?.id).length === 0 ? (
-                    <div className="px-2 py-1 text-[10px] text-muted-foreground">
-                      No hay otras carpetas POI cargadas.
-                    </div>
-                  ) : (
-                    allFolders
-                      .filter((f) => f.id !== folder?.id)
-                      .map((f) => {
-                        const checked = extFolderIds.includes(f.id);
-                        return (
-                          <label
-                            key={f.id}
-                            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-surface-3/50"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => {
-                                if (e.target.checked) setExtFolderIds([...extFolderIds, f.id]);
-                                else setExtFolderIds(extFolderIds.filter((x) => x !== f.id));
-                              }}
-                            />
-                            <span className="text-[11px]">{f.name}</span>
-                          </label>
-                        );
-                      })
-                  )}
+                <div className="mt-1.5 max-h-64 overflow-y-auto rounded-lg border border-border/40 bg-surface-2/40 p-2">
+                  <FolderTreePicker
+                    folders={allFolders}
+                    excludeId={folder?.id ?? null}
+                    selected={extFolderIds}
+                    onChange={setExtFolderIds}
+                  />
+                </div>
+                <div className="mt-1 text-[10px] text-muted-foreground">
+                  Al marcar una carpeta madre se seleccionan todas sus subcarpetas.
                 </div>
               </section>
 
@@ -489,4 +474,134 @@ const RulesEditor = ({ rules, folderId, onUpsert, onRemove }: RulesEditorProps) 
       </div>
     </div>
   );
+};
+
+/* ----------------- Folder tree picker (jerárquico) ----------------- */
+
+interface FolderTreePickerProps {
+  folders: PoiFolder[];
+  excludeId: string | null;
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}
+
+interface TreeNode {
+  folder: PoiFolder;
+  children: TreeNode[];
+}
+
+const buildTree = (folders: PoiFolder[]): TreeNode[] => {
+  const map = new Map<string, TreeNode>();
+  for (const f of folders) map.set(f.id, { folder: f, children: [] });
+  const roots: TreeNode[] = [];
+  for (const node of map.values()) {
+    const pid = node.folder.parent_id;
+    if (pid && map.has(pid)) {
+      map.get(pid)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  const sortRec = (nodes: TreeNode[]) => {
+    nodes.sort((a, b) => a.folder.name.localeCompare(b.folder.name, "es"));
+    nodes.forEach((n) => sortRec(n.children));
+  };
+  sortRec(roots);
+  return roots;
+};
+
+const collectIds = (node: TreeNode, out: string[]) => {
+  out.push(node.folder.id);
+  node.children.forEach((c) => collectIds(c, out));
+};
+
+const FolderTreePicker = ({ folders, excludeId, selected, onChange }: FolderTreePickerProps) => {
+  const tree = useMemo(() => {
+    const filtered = folders.filter((f) => f.id !== excludeId);
+    return buildTree(filtered);
+  }, [folders, excludeId]);
+
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleNode = (node: TreeNode, checked: boolean) => {
+    const ids: string[] = [];
+    collectIds(node, ids);
+    const next = new Set(selectedSet);
+    if (checked) ids.forEach((i) => next.add(i));
+    else ids.forEach((i) => next.delete(i));
+    onChange(Array.from(next));
+  };
+
+  const getNodeState = (node: TreeNode): "all" | "some" | "none" => {
+    const ids: string[] = [];
+    collectIds(node, ids);
+    const sel = ids.filter((i) => selectedSet.has(i)).length;
+    if (sel === 0) return "none";
+    if (sel === ids.length) return "all";
+    return "some";
+  };
+
+  const renderNode = (node: TreeNode, depth: number) => {
+    const hasChildren = node.children.length > 0;
+    const state = getNodeState(node);
+    const isOpen = expanded.has(node.folder.id);
+    return (
+      <div key={node.folder.id}>
+        <div
+          className="flex items-center gap-1 rounded px-1 py-1 hover:bg-surface-3/50"
+          style={{ paddingLeft: `${depth * 14 + 4}px` }}
+        >
+          {hasChildren ? (
+            <button
+              type="button"
+              onClick={() => toggleExpand(node.folder.id)}
+              className="flex h-4 w-4 items-center justify-center text-muted-foreground hover:text-foreground"
+            >
+              {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            </button>
+          ) : (
+            <span className="h-4 w-4" />
+          )}
+          <label className="flex flex-1 cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={state === "all"}
+              ref={(el) => {
+                if (el) el.indeterminate = state === "some";
+              }}
+              onChange={(e) => toggleNode(node, e.target.checked)}
+            />
+            <Folder className="h-3 w-3 text-muted-foreground" />
+            <span className="text-[11px]">{node.folder.name}</span>
+            {hasChildren && (
+              <span className="text-[10px] text-muted-foreground">({node.children.length})</span>
+            )}
+          </label>
+        </div>
+        {hasChildren && isOpen && (
+          <div>{node.children.map((c) => renderNode(c, depth + 1))}</div>
+        )}
+      </div>
+    );
+  };
+
+  if (tree.length === 0) {
+    return (
+      <div className="px-2 py-1 text-[10px] text-muted-foreground">
+        No hay otras carpetas POI cargadas.
+      </div>
+    );
+  }
+
+  return <div className="space-y-0.5">{tree.map((n) => renderNode(n, 0))}</div>;
 };
