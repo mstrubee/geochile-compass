@@ -973,7 +973,7 @@ const AdminCollapsible = ({
         />
       </button>
       {open && (
-        <div className="space-y-4 border-t border-border/40 p-4">{children}</div>
+        <div className="max-h-[calc(100vh-12rem)] space-y-4 overflow-y-auto border-t border-border/40 p-4">{children}</div>
       )}
     </section>
   );
