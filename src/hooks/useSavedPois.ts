@@ -219,12 +219,14 @@ export const useSavedPois = () => {
       // o logos como data URLs) que pueden hacer fallar todo el batch.
       const CHUNK_SIZE = 200;
       let totalInserted = 0;
+      const inserted: SavedPoi[] = [];
       const errors: string[] = [];
       for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
         const slice = rows.slice(i, i + CHUNK_SIZE);
-        const { error, count } = await supabase
+        const { data, error, count } = await supabase
           .from("pois")
-          .insert(slice, { count: "exact" });
+          .insert(slice, { count: "exact" })
+          .select(LIGHT_COLS);
         if (error) {
           console.error(
             `[addMany] chunk ${i}-${i + slice.length} falló:`,
@@ -234,14 +236,34 @@ export const useSavedPois = () => {
           continue;
         }
         totalInserted += count ?? slice.length;
+        if (data) {
+          for (const row of data as Record<string, unknown>[]) {
+            inserted.push({
+              ...(row as object),
+              description: null,
+              properties: {},
+            } as SavedPoi);
+          }
+        }
       }
-      await refresh();
+      // Optimistic: prepend new rows so UI reflects immediately.
+      if (inserted.length) {
+        setPois((prev) => [...inserted, ...prev]);
+      }
+      if (opts?.deferRefresh) {
+        scheduleRefresh();
+      } else {
+        // Refresh in background — do NOT block caller. The full paginated
+        // refresh can take a long time on large datasets and was causing
+        // dialogs to hang on "Guardando…".
+        void refresh();
+      }
       if (totalInserted === 0 && errors.length) {
         throw new Error(errors[0]);
       }
       return totalInserted;
     },
-    [user, refresh],
+    [user, refresh, scheduleRefresh],
   );
 
   const update = useCallback(
