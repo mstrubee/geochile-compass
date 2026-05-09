@@ -197,7 +197,7 @@ const AdminCapas = () => {
           <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
             <ArrowLeft className="h-4 w-4" /> Volver
           </Button>
-          <h1 className="flex-1 text-base font-semibold">Admin · Capas Territoriales</h1>
+          <h1 className="flex-1 text-base font-semibold">Admin</h1>
           <input
             type="file"
             accept=".html,.htm,.kml"
