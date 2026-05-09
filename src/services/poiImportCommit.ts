@@ -102,9 +102,30 @@ export const commitImport = async ({
   /** Mapa poi_id -> nombre que viene del Excel (la última fila gana). */
   const poiRenames = new Map<string, string>();
 
+  /** Filas omitidas: persistimos para recordar en futuros imports. */
+  const skipMemoryInserts: Array<{
+    folder_id: string;
+    normalized_key: string;
+    raw_address: string | null;
+    raw_name: string | null;
+  }> = [];
+
   for (const row of rows) {
     if (skippedRowIndices.has(row.rowIndex)) {
       rowsSkipped++;
+      const name = (
+        row.identity["Nombre Local"] ??
+        row.identity["Local"] ??
+        row.identity["Nombre"] ??
+        ""
+      ).toString().trim();
+      const addrNorm = normalizeAddress(row.rawAddress ?? "");
+      skipMemoryInserts.push({
+        folder_id: folderId,
+        normalized_key: `${name.toLowerCase()}::${addrNorm}`,
+        raw_address: row.rawAddress || null,
+        raw_name: name || null,
+      });
       continue;
     }
     const m = matchByIndex.get(row.rowIndex);
