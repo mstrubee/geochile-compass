@@ -16,7 +16,9 @@ import {
   History,
   Loader2,
   MapPin,
+  RefreshCw,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import type { SavedPoi, PoiFolder } from "@/types/pois";
