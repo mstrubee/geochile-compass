@@ -170,14 +170,27 @@ export const PoiImportDialog = ({
   const visibleMatches = useMemo(() => {
     if (!imp.parsed) return [];
     return imp.matches.filter((m) => {
-      if (filter === "all") return true;
-      const isOk =
-        m.status === "auto_matched" ||
-        m.status === "alias_matched" ||
-        !!imp.manualAssignments[m.rowIndex];
-      return filter === "ok" ? isOk : !isOk;
+      const isManual = !!imp.manualAssignments[m.rowIndex];
+      const isSkipped = imp.skippedRows.has(m.rowIndex);
+      const isOk = m.status === "auto_matched" || m.status === "alias_matched" || isManual;
+      switch (filter) {
+        case "all":
+          return true;
+        case "ok":
+          return isOk && !isSkipped;
+        case "review":
+          return !isOk && !isSkipped;
+        case "auto":
+          return m.status === "auto_matched" && !isManual && !isSkipped;
+        case "alias":
+          return m.status === "alias_matched" && !isManual && !isSkipped;
+        case "skipped":
+          return isSkipped;
+        default:
+          return true;
+      }
     });
-  }, [imp.matches, imp.parsed, imp.manualAssignments, filter]);
+  }, [imp.matches, imp.parsed, imp.manualAssignments, imp.skippedRows, filter]);
 
   return (
     <Dialog open={open && !hidden} onOpenChange={(o) => !o && !hidden && onClose()}>
