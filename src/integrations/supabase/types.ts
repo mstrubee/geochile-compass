@@ -271,6 +271,7 @@ export type Database = {
           rows_matched_manual: number
           rows_total: number
           rows_unmatched: number
+          source_file_path: string | null
           status: string
         }
         Insert: {
@@ -288,6 +289,7 @@ export type Database = {
           rows_matched_manual?: number
           rows_total?: number
           rows_unmatched?: number
+          source_file_path?: string | null
           status?: string
         }
         Update: {
@@ -305,6 +307,7 @@ export type Database = {
           rows_matched_manual?: number
           rows_total?: number
           rows_unmatched?: number
+          source_file_path?: string | null
           status?: string
         }
         Relationships: [
