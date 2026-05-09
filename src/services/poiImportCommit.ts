@@ -119,6 +119,15 @@ export const commitImport = async ({
     if (manualId) rowsMatchedManual++;
     else rowsMatchedAuto++;
 
+    // Renombrar el POI con el nombre de la planilla (facilita identificar locales en el futuro)
+    const excelName = (
+      row.identity["Nombre Local"] ??
+      row.identity["Local"] ??
+      row.identity["Nombre"] ??
+      ""
+    ).trim();
+    if (excelName) poiRenames.set(poiId, excelName);
+
     // Métricas
     for (const met of row.metrics) {
       metricInserts.push({
