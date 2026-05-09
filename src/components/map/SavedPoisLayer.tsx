@@ -6,9 +6,14 @@ import type { SavedPoi } from "@/types/pois";
 interface Props {
   pois: SavedPoi[];
   visible: boolean;
+  /** Si se pasa, suplanta el popup nativo y dispara este callback al click. */
+  onPoiClick?: (poi: SavedPoi) => void;
+  /** Modo selección: cuando está en true, el cursor cambia y el click llama a onPickPoi. */
+  pickMode?: boolean;
+  onPickPoi?: (poi: SavedPoi) => void;
 }
 
-export const SavedPoisLayer = ({ pois, visible }: Props) => {
+export const SavedPoisLayer = ({ pois, visible, onPoiClick, pickMode, onPickPoi }: Props) => {
   const map = useMap();
 
   useEffect(() => {
@@ -22,42 +27,61 @@ export const SavedPoisLayer = ({ pois, visible }: Props) => {
         ? L.marker([p.lat, p.lng], {
             icon: L.icon({
               iconUrl,
-              iconSize: [28, 28],
-              iconAnchor: [14, 28],
+              iconSize: pickMode ? [36, 36] : [28, 28],
+              iconAnchor: pickMode ? [18, 36] : [14, 28],
               popupAnchor: [0, -26],
-              className: "saved-poi-icon",
+              className: pickMode ? "saved-poi-icon saved-poi-pick" : "saved-poi-icon",
             }),
           })
         : L.circleMarker([p.lat, p.lng], {
-            radius: 6,
-            color: "#fff",
-            weight: 1.5,
+            radius: pickMode ? 9 : 6,
+            color: pickMode ? "#3b82f6" : "#fff",
+            weight: pickMode ? 2.5 : 1.5,
             fillColor: color,
             fillOpacity: 0.95,
           });
-      const desc = p.description ? `<br/>${escapeHtml(p.description)}` : "";
-      const cat = p.category
-        ? `<div style="opacity:.7;font-size:11px;margin-top:2px">${escapeHtml(
-            p.category,
-          )}</div>`
-        : "";
-      const salesRaw = (p.properties as Record<string, unknown> | null)?.sales;
-      const sales =
-        typeof salesRaw === "number" && Number.isFinite(salesRaw)
-          ? `<div style="font-size:11px;margin-top:4px"><b>Ventas:</b> ${salesRaw.toLocaleString("es-CL")}</div>`
+
+      // Pick mode: solo handler de click, sin popup ni info default.
+      if (pickMode && onPickPoi) {
+        (marker as L.Marker | L.CircleMarker).on("click", (e) => {
+          L.DomEvent.stopPropagation(e);
+          onPickPoi(p);
+        });
+        marker.addTo(group);
+        return;
+      }
+
+      // Modo normal — popup o callback custom.
+      if (onPoiClick) {
+        (marker as L.Marker | L.CircleMarker).on("click", (e) => {
+          L.DomEvent.stopPropagation(e);
+          onPoiClick(p);
+        });
+      } else {
+        const desc = p.description ? `<br/>${escapeHtml(p.description)}` : "";
+        const cat = p.category
+          ? `<div style="opacity:.7;font-size:11px;margin-top:2px">${escapeHtml(
+              p.category,
+            )}</div>`
           : "";
-      (marker as L.Marker | L.CircleMarker).bindPopup(
-        `<div style="font-size:12px;min-width:140px"><b>${escapeHtml(
-          p.name,
-        )}</b>${desc}${cat}${sales}</div>`,
-      );
+        const salesRaw = (p.properties as Record<string, unknown> | null)?.sales;
+        const sales =
+          typeof salesRaw === "number" && Number.isFinite(salesRaw)
+            ? `<div style="font-size:11px;margin-top:4px"><b>Ventas:</b> ${salesRaw.toLocaleString("es-CL")}</div>`
+            : "";
+        (marker as L.Marker | L.CircleMarker).bindPopup(
+          `<div style="font-size:12px;min-width:140px"><b>${escapeHtml(
+            p.name,
+          )}</b>${desc}${cat}${sales}</div>`,
+        );
+      }
       marker.addTo(group);
     });
 
     return () => {
       group.remove();
     };
-  }, [map, pois, visible]);
+  }, [map, pois, visible, onPoiClick, pickMode, onPickPoi]);
 
   return null;
 };

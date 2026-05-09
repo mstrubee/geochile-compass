@@ -1,0 +1,218 @@
+import { supabase } from "@/integrations/supabase/client";
+import type { ImportRow, RowMatchResult } from "@/types/poiMetrics";
+import { normalizeAddress } from "@/utils/addressNormalize";
+
+/**
+ * Escribe a Supabase los resultados de una importación:
+ * 1) Inserta `poi_import_jobs` (head).
+ * 2) Por cada fila con poi asignado:
+ *    a. Upsert de `poi_metrics` (poi_id, metric_key, period) con `source_import_id`.
+ *    b. Upsert de `poi_attributes` (poi_id, attr_key) con valores estáticos.
+ *    c. Si la fila era manual (manual_assigned), crea alias en `poi_address_aliases`.
+ * 3) Marca el job como completed.
+ *
+ * Toda esta operación corre en el cliente. Para volúmenes grandes
+ * (>500 filas × 88 períodos = 44k upserts), usa batches.
+ */
+
+const METRICS_BATCH = 1000;
+const ATTRS_BATCH = 500;
+
+interface CommitParams {
+  folderId: string;
+  filename: string;
+  rows: ImportRow[];
+  matches: RowMatchResult[];
+  /** Mapa overrides manuales: rowIndex -> poiId (para filas manual_assigned). */
+  manualAssignments?: Record<number, string>;
+  /** Filas a omitir del commit. */
+  skippedRowIndices?: Set<number>;
+  onProgress?: (msg: string, frac: number) => void;
+}
+
+export interface CommitResult {
+  jobId: string;
+  metricsInserted: number;
+  attributesUpserted: number;
+  aliasesCreated: number;
+  rowsCommitted: number;
+  rowsSkipped: number;
+}
+
+export const commitImport = async ({
+  folderId,
+  filename,
+  rows,
+  matches,
+  manualAssignments = {},
+  skippedRowIndices = new Set(),
+  onProgress,
+}: CommitParams): Promise<CommitResult> => {
+  // -------- Crear el job head --------
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: jobRow, error: jobErr } = await supabase
+    .from("poi_import_jobs")
+    .insert({
+      folder_id: folderId,
+      filename,
+      status: "pending",
+      rows_total: rows.length,
+      created_by: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (jobErr || !jobRow) throw jobErr ?? new Error("No se pudo crear el import job");
+  const jobId = jobRow.id as string;
+
+  onProgress?.("Job creado, escribiendo datos…", 0);
+
+  // -------- Indices auxiliares --------
+  const rowByIndex = new Map(rows.map((r) => [r.rowIndex, r]));
+  const matchByIndex = new Map(matches.map((m) => [m.rowIndex, m]));
+
+  let metricsInserted = 0;
+  let attributesUpserted = 0;
+  let aliasesCreated = 0;
+  let rowsMatchedAuto = 0;
+  let rowsMatchedManual = 0;
+  let rowsCommitted = 0;
+  let rowsSkipped = 0;
+  let periodMin: string | null = null;
+  let periodMax: string | null = null;
+  const metricKeySet = new Set<string>();
+
+  const metricInserts: Array<{
+    poi_id: string;
+    metric_key: string;
+    period: string;
+    value: number;
+    source_import_id: string;
+  }> = [];
+  const attrInserts: Array<{
+    poi_id: string;
+    attr_key: string;
+    attr_value: string | null;
+    source_import_id: string;
+  }> = [];
+  const aliasInserts: Array<{
+    poi_id: string;
+    normalized_address: string;
+    raw_address: string;
+  }> = [];
+
+  for (const row of rows) {
+    if (skippedRowIndices.has(row.rowIndex)) {
+      rowsSkipped++;
+      continue;
+    }
+    const m = matchByIndex.get(row.rowIndex);
+    const manualId = manualAssignments[row.rowIndex];
+    const poiId = manualId ?? m?.assignedPoiId ?? null;
+    if (!poiId) {
+      rowsSkipped++;
+      continue;
+    }
+
+    rowsCommitted++;
+    if (manualId) rowsMatchedManual++;
+    else rowsMatchedAuto++;
+
+    // Métricas
+    for (const met of row.metrics) {
+      metricInserts.push({
+        poi_id: poiId,
+        metric_key: met.key,
+        period: met.period,
+        value: met.value,
+        source_import_id: jobId,
+      });
+      metricKeySet.add(met.key);
+      if (!periodMin || met.period < periodMin) periodMin = met.period;
+      if (!periodMax || met.period > periodMax) periodMax = met.period;
+    }
+
+    // Atributos
+    for (const [k, v] of Object.entries(row.staticAttrs)) {
+      if (v == null || v === "") continue;
+      attrInserts.push({
+        poi_id: poiId,
+        attr_key: k,
+        attr_value: v,
+        source_import_id: jobId,
+      });
+    }
+
+    // Alias para asignaciones manuales
+    if (manualId && row.rawAddress) {
+      aliasInserts.push({
+        poi_id: poiId,
+        normalized_address: normalizeAddress(row.rawAddress),
+        raw_address: row.rawAddress,
+      });
+    }
+  }
+
+  // -------- Batch upserts --------
+  for (let i = 0; i < metricInserts.length; i += METRICS_BATCH) {
+    const batch = metricInserts.slice(i, i + METRICS_BATCH);
+    const { error } = await supabase
+      .from("poi_metrics")
+      .upsert(batch, { onConflict: "poi_id,metric_key,period" });
+    if (error) throw error;
+    metricsInserted += batch.length;
+    onProgress?.(
+      `Métricas ${metricsInserted}/${metricInserts.length}`,
+      0.1 + 0.6 * (metricsInserted / Math.max(1, metricInserts.length)),
+    );
+  }
+
+  for (let i = 0; i < attrInserts.length; i += ATTRS_BATCH) {
+    const batch = attrInserts.slice(i, i + ATTRS_BATCH);
+    const { error } = await supabase
+      .from("poi_attributes")
+      .upsert(batch, { onConflict: "poi_id,attr_key" });
+    if (error) throw error;
+    attributesUpserted += batch.length;
+    onProgress?.(
+      `Atributos ${attributesUpserted}/${attrInserts.length}`,
+      0.7 + 0.15 * (attributesUpserted / Math.max(1, attrInserts.length)),
+    );
+  }
+
+  if (aliasInserts.length > 0) {
+    const { error } = await supabase
+      .from("poi_address_aliases")
+      .upsert(aliasInserts, { onConflict: "poi_id,normalized_address" });
+    if (error) throw error;
+    aliasesCreated = aliasInserts.length;
+  }
+
+  onProgress?.("Finalizando…", 0.95);
+
+  // -------- Cerrar el job --------
+  const { error: updErr } = await supabase
+    .from("poi_import_jobs")
+    .update({
+      status: "completed",
+      rows_matched_auto: rowsMatchedAuto,
+      rows_matched_manual: rowsMatchedManual,
+      rows_unmatched: rowsSkipped,
+      metric_keys: Array.from(metricKeySet),
+      period_min: periodMin,
+      period_max: periodMax,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", jobId);
+  if (updErr) throw updErr;
+
+  onProgress?.("Listo", 1);
+
+  return {
+    jobId,
+    metricsInserted,
+    attributesUpserted,
+    aliasesCreated,
+    rowsCommitted,
+    rowsSkipped,
+  };
+};

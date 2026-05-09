@@ -191,6 +191,11 @@ interface MapViewProps {
   /** Cuando es true, el próximo click del mapa se delega a `onPickCoord` y nada más. */
   coordPickerActive?: boolean;
   onPickCoord?: (c: { lat: number; lng: number }) => void;
+  /** Click sobre un POI guardado: si está definido, suplanta el popup y abre detalle. */
+  onPoiClick?: (poi: SavedPoi) => void;
+  /** Modo selección de POI (para el flujo de import manual). */
+  poiPickMode?: boolean;
+  onPoiPickSelect?: (poi: SavedPoi) => void;
 }
 
 export const MapView = ({
@@ -237,6 +242,9 @@ export const MapView = ({
   onMapContextMenu,
   coordPickerActive = false,
   onPickCoord,
+  onPoiClick,
+  poiPickMode = false,
+  onPoiPickSelect,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -313,7 +321,13 @@ export const MapView = ({
         fitId={fitIsochroneId}
         onFitDone={onFitIsochroneDone}
       />
-      <SavedPoisLayer pois={savedPois} visible={savedPoisVisible} />
+      <SavedPoisLayer
+        pois={savedPois}
+        visible={savedPoisVisible}
+        onPoiClick={onPoiClick}
+        pickMode={poiPickMode}
+        onPickPoi={onPoiPickSelect}
+      />
       <TerritorialLayersHost />
 
       <MicrozoneLayer
