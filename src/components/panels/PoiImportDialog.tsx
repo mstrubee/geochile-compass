@@ -741,7 +741,18 @@ const RowItem = ({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-[12px] font-medium">{rowName}</span>
+            {onView ? (
+              <button
+                type="button"
+                onClick={onView}
+                title="Ver en el mapa"
+                className="truncate text-left text-[12px] font-medium text-foreground hover:text-primary hover:underline"
+              >
+                {rowName}
+              </button>
+            ) : (
+              <span className="truncate text-[12px] font-medium">{rowName}</span>
+            )}
             <span
               className={`inline-flex h-4 items-center rounded px-1.5 text-[9px] font-medium uppercase tracking-wide ${tag.cls}`}
             >
