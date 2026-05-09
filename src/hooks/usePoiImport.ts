@@ -270,6 +270,7 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
       const res = await commitImport({
         folderId,
         filename,
+        sourceFilePath,
         rows: parsed.rows,
         matches,
         manualAssignments,
@@ -285,7 +286,7 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
       setError(e instanceof Error ? e.message : "Error al guardar");
       setPhase("error");
     }
-  }, [parsed, folderId, filename, matches, manualAssignments, skippedRows]);
+  }, [parsed, folderId, filename, matches, manualAssignments, skippedRows, sourceFilePath]);
 
   // Estadísticas para la UI
   const stats = useMemo(() => {
