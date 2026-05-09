@@ -259,10 +259,34 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props)
         <DialogHeader className="border-b border-border/40 px-5 pb-3 pt-4">
           <DialogTitle className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
             <span
-              className="h-2.5 w-2.5 rounded-full"
+              className="h-2.5 w-2.5 rounded-full shrink-0"
               style={{ background: poi?.color ?? "#34D399" }}
             />
-            {poi?.name ?? "POI"}
+            {editingName ? (
+              <Input
+                autoFocus
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename();
+                  if (e.key === "Escape") setEditingName(false);
+                }}
+                className="h-7 text-[15px] font-semibold"
+              />
+            ) : (
+              <span
+                onDoubleClick={() => {
+                  if (!poi || !onRename) return;
+                  setNameDraft(displayName);
+                  setEditingName(true);
+                }}
+                title={onRename ? "Doble clic para renombrar" : undefined}
+                className={onRename ? "cursor-text" : undefined}
+              >
+                {displayName}
+              </span>
+            )}
           </DialogTitle>
           {poi && (
             <div className="text-[11px] text-muted-foreground">
