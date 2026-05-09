@@ -454,32 +454,43 @@ export const PoiImportDialog = ({
                     value={(imp.stats.auto + imp.stats.alias + imp.stats.manualAssigned).toString()}
                     label="Listas para guardar"
                     color="green"
+                    active={filter === "ok"}
+                    onClick={() => setFilter((f) => (f === "ok" ? "all" : "ok"))}
                   />
-                  <Stat value={imp.stats.auto.toString()} label="Auto-matched" />
-                  <Stat value={imp.stats.alias.toString()} label="Por alias" />
+                  <Stat
+                    value={imp.stats.auto.toString()}
+                    label="Auto-matched"
+                    active={filter === "auto"}
+                    onClick={() => setFilter((f) => (f === "auto" ? "all" : "auto"))}
+                  />
+                  <Stat
+                    value={imp.stats.alias.toString()}
+                    label="Por alias"
+                    active={filter === "alias"}
+                    onClick={() => setFilter((f) => (f === "alias" ? "all" : "alias"))}
+                  />
                   <Stat
                     value={imp.stats.pending.toString()}
                     label="Pendientes"
                     color="amber"
+                    active={filter === "review"}
+                    onClick={() => setFilter((f) => (f === "review" ? "all" : "review"))}
                   />
-                  <Stat value={imp.stats.skipped.toString()} label="Omitidas" />
+                  <Stat
+                    value={imp.stats.skipped.toString()}
+                    label="Omitidas"
+                    active={filter === "skipped"}
+                    onClick={() => setFilter((f) => (f === "skipped" ? "all" : "skipped"))}
+                  />
                 </div>
-                <div className="mt-3 inline-flex rounded-lg bg-surface-2/60 p-0.5">
-                  {(["all", "ok", "review"] as const).map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setFilter(f)}
-                      className={[
-                        "rounded-md px-3 py-1 text-[11px] font-medium transition-all",
-                        filter === f
-                          ? "bg-surface-3 text-foreground shadow-apple-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      ].join(" ")}
-                    >
-                      {f === "all" ? "Todas" : f === "ok" ? "Resueltas" : "Por resolver"}
-                    </button>
-                  ))}
-                </div>
+                {filter !== "all" && (
+                  <button
+                    onClick={() => setFilter("all")}
+                    className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" /> Quitar filtro
+                  </button>
+                )}
               </div>
 
               <div className="scrollbar-thin flex-1 overflow-y-auto">
