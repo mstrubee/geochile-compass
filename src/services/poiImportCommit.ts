@@ -99,6 +99,8 @@ export const commitImport = async ({
     normalized_address: string;
     raw_address: string;
   }> = [];
+  /** Mapa poi_id -> nombre que viene del Excel (la última fila gana). */
+  const poiRenames = new Map<string, string>();
 
   for (const row of rows) {
     if (skippedRowIndices.has(row.rowIndex)) {
@@ -116,6 +118,15 @@ export const commitImport = async ({
     rowsCommitted++;
     if (manualId) rowsMatchedManual++;
     else rowsMatchedAuto++;
+
+    // Renombrar el POI con el nombre de la planilla (facilita identificar locales en el futuro)
+    const excelName = (
+      row.identity["Nombre Local"] ??
+      row.identity["Local"] ??
+      row.identity["Nombre"] ??
+      ""
+    ).trim();
+    if (excelName) poiRenames.set(poiId, excelName);
 
     // Métricas
     for (const met of row.metrics) {
@@ -209,6 +220,18 @@ export const commitImport = async ({
       .upsert(dedupAliases, { onConflict: "poi_id,normalized_address" });
     if (error) throw error;
     aliasesCreated = dedupAliases.length;
+  }
+
+  // -------- Renombrar POIs asignados con el nombre del Excel --------
+  if (poiRenames.size > 0) {
+    onProgress?.(`Actualizando nombres de ${poiRenames.size} POIs…`, 0.92);
+    const renameEntries = [...poiRenames.entries()];
+    // Una update por POI (N suele ser pequeño: ~filas comprometidas).
+    await Promise.all(
+      renameEntries.map(([poi_id, name]) =>
+        supabase.from("pois").update({ name }).eq("id", poi_id),
+      ),
+    );
   }
 
   onProgress?.("Finalizando…", 0.95);
