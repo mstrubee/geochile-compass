@@ -45,12 +45,12 @@ interface Props {
   onClose: () => void;
   poi: SavedPoi | null;
   schema: PoiFolderSchema | null;
+  onRename?: (id: string, name: string) => Promise<void> | void;
 }
 
-export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
+export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props) => {
   const { metrics, loading: metricsLoading } = usePoiMetrics(poi?.id ?? null);
   const { attrs, loading: attrsLoading } = usePoiAttributes(poi?.id ?? null);
-  const { update: updatePoi } = useSavedPois();
   const [insights, setInsights] = useState<string | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState<string | null>(null);
