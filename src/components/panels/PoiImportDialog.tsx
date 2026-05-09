@@ -739,7 +739,7 @@ const RowItem = ({
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
-          {!isResolved && !skipped && (
+          {!skipped && (
             <Button
               size="sm"
               variant="outline"
@@ -747,7 +747,7 @@ const RowItem = ({
               onClick={onPick}
             >
               <MapPin className="mr-1 h-3 w-3" />
-              Elegir en mapa
+              {isResolved ? "Reasignar" : "Elegir en mapa"}
             </Button>
           )}
           {isManual && (
@@ -771,10 +771,10 @@ const RowItem = ({
           </Button>
         </div>
       </div>
-      {/* Sugerencias inline si las hay y no está resuelta */}
-      {!isResolved && !skipped && candidates.length > 0 && (
+      {/* Sugerencias inline (también para reasignar) */}
+      {!skipped && candidates.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
-          {candidates.slice(0, 3).map((c) => (
+          {candidates.slice(0, 5).map((c) => (
             <button
               key={c.poiId}
               onClick={() => onChooseCandidate(c.poiId)}
