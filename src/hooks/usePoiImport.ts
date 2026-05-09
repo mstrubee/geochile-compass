@@ -13,6 +13,19 @@ import {
 } from "@/services/poiImportMatcher";
 import { fetchAliasesForPois } from "@/hooks/usePoiMetrics";
 import { commitImport, type CommitResult } from "@/services/poiImportCommit";
+import { supabase } from "@/integrations/supabase/client";
+import { normalizeAddress } from "@/utils/addressNormalize";
+
+const skipKeyForRow = (row: ImportRow): string => {
+  const name = (
+    row.identity["Nombre Local"] ??
+    row.identity["Local"] ??
+    row.identity["Nombre"] ??
+    ""
+  ).toString().trim().toLowerCase();
+  const addr = normalizeAddress(row.rawAddress ?? "");
+  return `${name}::${addr}`;
+};
 
 export type ImportPhase =
   | "idle"
