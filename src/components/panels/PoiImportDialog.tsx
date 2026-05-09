@@ -69,6 +69,7 @@ export const PoiImportDialog = ({
   const [filter, setFilter] = useState<
     "all" | "ok" | "review" | "auto" | "alias" | "skipped"
   >("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [history, setHistory] = useState<PoiImportJob[]>([]);
   const [assignedAliases, setAssignedAliases] = useState<PoiAddressAlias[]>([]);
   const [poisWithMetrics, setPoisWithMetrics] = useState<Set<string>>(new Set());
