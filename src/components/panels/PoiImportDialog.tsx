@@ -115,7 +115,7 @@ export const PoiImportDialog = ({
           )}
         </DialogHeader>
 
-        <div className="flex max-h-[calc(92vh-110px)] flex-col">
+        <div className="flex max-h-[calc(92vh-110px)] min-h-0 flex-col">
           {/* IDLE / PARSING / ERROR */}
           {imp.phase === "idle" || imp.phase === "parsing" || imp.phase === "error" ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10">
