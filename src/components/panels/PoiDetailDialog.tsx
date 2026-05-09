@@ -262,6 +262,7 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props)
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[92vh] max-w-4xl overflow-hidden p-0 sm:max-w-4xl">
         <DialogHeader className="border-b border-border/40 px-5 pb-3 pt-4">
