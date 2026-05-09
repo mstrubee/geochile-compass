@@ -702,6 +702,7 @@ interface RowItemProps {
   onClearManual: () => void;
   onToggleSkip: () => void;
   onChooseCandidate: (poiId: string) => void;
+  onView?: () => void;
 }
 
 const STATUS_TAG: Record<string, { label: string; cls: string }> = {
