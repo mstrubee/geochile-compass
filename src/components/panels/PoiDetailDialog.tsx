@@ -82,7 +82,78 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
     }
   }, [aggregates, activeMetric]);
 
-  const active = aggregates.find((a) => a.metricKey === activeMetric) ?? aggregates[0] ?? null;
+  const rawActive = aggregates.find((a) => a.metricKey === activeMetric) ?? aggregates[0] ?? null;
+
+  // Sanitiza: descarta meses futuros (no se inventan valores)
+  const active = useMemo(() => {
+    if (!rawActive) return null;
+    const now = new Date();
+    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const series = rawActive.series.filter((p) => p.period <= currentPeriod);
+    const total = series.reduce((s, p) => s + p.value, 0);
+    const latest = series.length ? series[series.length - 1] : null;
+    let mom: number | null = null;
+    if (series.length >= 2) {
+      const prev = series[series.length - 2];
+      const last = series[series.length - 1];
+      if (prev.value > 0) mom = ((last.value - prev.value) / prev.value) * 100;
+    }
+    let yoy: number | null = null;
+    if (latest) {
+      const [y, m] = latest.period.split("-").map(Number);
+      const prevYear = `${y - 1}-${String(m).padStart(2, "0")}-01`;
+      const prev = series.find((p) => p.period === prevYear);
+      if (prev && prev.value > 0) yoy = ((latest.value - prev.value) / prev.value) * 100;
+    }
+    const trailing12 = series.slice(-12);
+    const trailing12Sum = trailing12.reduce((s, p) => s + p.value, 0);
+    const avgLast12 = trailing12.length > 0 ? trailing12Sum / trailing12.length : null;
+
+    // Promedio del último año calendario completado
+    const lastCompletedYear = new Date().getFullYear() - 1;
+    const yearSeries = series.filter((p) => p.period.startsWith(`${lastCompletedYear}-`));
+    const avgLastCompletedYear =
+      yearSeries.length === 12
+        ? yearSeries.reduce((s, p) => s + p.value, 0) / 12
+        : null;
+
+    let best = series[0] ?? null;
+    let worst = series[0] ?? null;
+    for (const p of series) {
+      if (p.value > (best?.value ?? -Infinity)) best = p;
+      if (p.value < (worst?.value ?? Infinity)) worst = p;
+    }
+    return {
+      ...rawActive,
+      series,
+      totalAllTime: total,
+      latest,
+      mom,
+      yoy,
+      trailing12Sum,
+      bestMonth: best,
+      worstMonth: worst,
+      avgLast12,
+      avgLastCompletedYear,
+      lastCompletedYear,
+    };
+  }, [rawActive]);
+
+  // Series anuales (suma por año calendario, sólo años con 12 meses)
+  const annualSeries = useMemo(() => {
+    if (!active) return [];
+    const map = new Map<string, { sum: number; count: number }>();
+    for (const p of active.series) {
+      const y = p.period.slice(0, 4);
+      const cur = map.get(y) ?? { sum: 0, count: 0 };
+      cur.sum += p.value;
+      cur.count += 1;
+      map.set(y, cur);
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([year, { sum, count }]) => ({ year, value: sum, complete: count === 12 }));
+  }, [active]);
 
   const labelByKey = useMemo(() => {
     const out: Record<string, string> = {};
