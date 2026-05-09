@@ -52,6 +52,7 @@ export const PoiImportDialog = ({
   externalManualSelection,
   onConsumeExternalSelection,
   onCommitSuccess,
+  hidden = false,
 }: Props) => {
   const imp = usePoiImport({
     schema,
@@ -60,7 +61,7 @@ export const PoiImportDialog = ({
   });
   const [filter, setFilter] = useState<"all" | "ok" | "review">("all");
 
-  // Reset al cerrar
+  // Reset al cerrar (no al ocultar temporalmente)
   useEffect(() => {
     if (!open) imp.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
