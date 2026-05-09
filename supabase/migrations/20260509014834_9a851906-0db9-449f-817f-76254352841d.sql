@@ -1,0 +1,1 @@
+ALTER VIEW public.poi_metrics_latest SET (security_invoker = true);
