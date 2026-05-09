@@ -100,7 +100,7 @@ export const PoiImportDialog = ({
   }, [imp.matches, imp.parsed, imp.manualAssignments, filter]);
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open && !hidden} onOpenChange={(o) => !o && !hidden && onClose()}>
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden p-0 sm:max-w-5xl">
         <DialogHeader className="border-b border-border/40 px-5 pb-3 pt-4">
           <DialogTitle className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
