@@ -35,7 +35,7 @@ export const usePoiFolderSchemas = () => {
     async (s: Partial<PoiFolderSchema> & { folder_id: string }) => {
       const { error } = await supabase
         .from("poi_folder_schemas")
-        .upsert(s, { onConflict: "folder_id" });
+        .upsert(s as never, { onConflict: "folder_id" });
       if (error) throw error;
       await refresh();
     },
