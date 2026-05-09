@@ -110,6 +110,14 @@ export const commitImport = async ({
     raw_name: string | null;
   }> = [];
 
+  /** Memoria de identidad: código/nombre → POI, por carpeta. */
+  const identityMemoryInserts: Array<{
+    folder_id: string;
+    key_type: string;
+    key_value: string;
+    poi_id: string;
+  }> = [];
+
   for (const row of rows) {
     if (skippedRowIndices.has(row.rowIndex)) {
       rowsSkipped++;
@@ -182,6 +190,45 @@ export const commitImport = async ({
         poi_id: poiId,
         normalized_address: normalizeAddress(row.rawAddress),
         raw_address: row.rawAddress,
+      });
+    }
+
+    // Memoria de identidad por carpeta (para reconocimiento futuro).
+    const centroSap = (row.identity["Centro Sap"] ?? "").toString().trim();
+    const localCode = (row.identity["Local"] ?? "").toString().trim();
+    const nameNorm = (
+      row.identity["Nombre Local"] ??
+      row.identity["Local"] ??
+      row.identity["Nombre"] ??
+      ""
+    )
+      .toString()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+    if (centroSap) {
+      identityMemoryInserts.push({
+        folder_id: folderId,
+        key_type: "centro_sap",
+        key_value: centroSap.toLowerCase(),
+        poi_id: poiId,
+      });
+    }
+    if (localCode) {
+      identityMemoryInserts.push({
+        folder_id: folderId,
+        key_type: "local",
+        key_value: localCode.toLowerCase(),
+        poi_id: poiId,
+      });
+    }
+    if (nameNorm) {
+      identityMemoryInserts.push({
+        folder_id: folderId,
+        key_type: "name_norm",
+        key_value: nameNorm,
+        poi_id: poiId,
       });
     }
   }
@@ -267,6 +314,21 @@ export const commitImport = async ({
         .from("poi_import_skip_memory")
         .upsert(dedupSkip, { onConflict: "folder_id,normalized_key" });
       if (skipErr) console.warn("[skip memory] upsert failed", skipErr);
+    }
+  }
+
+  // -------- Persistir memoria de identidad (folder_id, key_type, key_value) --------
+  if (identityMemoryInserts.length > 0) {
+    const idMap = new Map<string, typeof identityMemoryInserts[number]>();
+    for (const e of identityMemoryInserts) {
+      idMap.set(`${e.folder_id}|${e.key_type}|${e.key_value}`, e);
+    }
+    const dedupIdentity = [...idMap.values()];
+    if (dedupIdentity.length > 0) {
+      const { error: idErr } = await supabase
+        .from("poi_import_identity_memory")
+        .upsert(dedupIdentity, { onConflict: "folder_id,key_type,key_value" });
+      if (idErr) console.warn("[identity memory] upsert failed", idErr);
     }
   }
 

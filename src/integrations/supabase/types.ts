@@ -228,6 +228,33 @@ export type Database = {
           },
         ]
       }
+      poi_import_identity_memory: {
+        Row: {
+          created_at: string
+          folder_id: string
+          id: string
+          key_type: string
+          key_value: string
+          poi_id: string
+        }
+        Insert: {
+          created_at?: string
+          folder_id: string
+          id?: string
+          key_type: string
+          key_value: string
+          poi_id: string
+        }
+        Update: {
+          created_at?: string
+          folder_id?: string
+          id?: string
+          key_type?: string
+          key_value?: string
+          poi_id?: string
+        }
+        Relationships: []
+      }
       poi_import_jobs: {
         Row: {
           completed_at: string | null
