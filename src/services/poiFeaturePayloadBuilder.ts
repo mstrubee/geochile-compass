@@ -435,7 +435,9 @@ export const buildFeaturePayload = async (
   const competitors: CompetitorPoi[] = [];
 
   if (includeCompetitorIsos) {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     for (const p of internalPeers) {
+      await sleep(1600); // ORS ≈ 40/min — throttle conservador entre peers
       try {
         const peerIso = await fetchIsochrone(
           p.lng,
