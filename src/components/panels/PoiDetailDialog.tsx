@@ -598,7 +598,7 @@ const MetricKpis = ({
     persist(next);
   };
 
-  const cards: Record<KpiId, React.ReactNode> = {
+  const cards: Record<KpiId, ReactNode> = {
     latest: (
       <>
         <div className="text-[16px] font-semibold leading-none tracking-tight">
