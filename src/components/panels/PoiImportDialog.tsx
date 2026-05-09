@@ -166,9 +166,24 @@ export const PoiImportDialog = ({
       alert(`Error eliminando el job: ${jErr.message}`);
       return;
     }
+    // Borrar el archivo en storage si existía.
+    const path = (job as PoiImportJob & { source_file_path?: string | null }).source_file_path;
+    if (path) {
+      await supabase.storage.from("poi-imports").remove([path]).catch(() => {});
+    }
     // Refrescar resumen
     setHistory((prev) => prev.filter((j) => j.id !== job.id));
     onCommitSuccess?.();
+  };
+
+  const handleResumeJob = async (job: PoiImportJob) => {
+    const path = (job as PoiImportJob & { source_file_path?: string | null }).source_file_path;
+    if (!path) return;
+    await imp.resumeFromStorage(path, job.filename);
+    // Inmediatamente lanzar el matching (los aliases/memoria resolverán las ya OK).
+    setTimeout(() => {
+      void imp.runMatching();
+    }, 0);
   };
 
   const visibleMatches = useMemo(() => {
