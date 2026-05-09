@@ -222,6 +222,18 @@ export const commitImport = async ({
     aliasesCreated = dedupAliases.length;
   }
 
+  // -------- Renombrar POIs asignados con el nombre del Excel --------
+  if (poiRenames.size > 0) {
+    onProgress?.(`Actualizando nombres de ${poiRenames.size} POIs…`, 0.92);
+    const renameEntries = [...poiRenames.entries()];
+    // Una update por POI (N suele ser pequeño: ~filas comprometidas).
+    await Promise.all(
+      renameEntries.map(([poi_id, name]) =>
+        supabase.from("pois").update({ name }).eq("id", poi_id),
+      ),
+    );
+  }
+
   onProgress?.("Finalizando…", 0.95);
 
   // -------- Cerrar el job --------
