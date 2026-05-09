@@ -221,7 +221,7 @@ export const PoiImportDialog = ({
 
           {/* REVIEW — tabla con filtros */}
           {imp.phase === "review" && imp.parsed && (
-            <div className="flex flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col">
               <div className="border-b border-border/40 px-5 py-3">
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
                   <Stat
