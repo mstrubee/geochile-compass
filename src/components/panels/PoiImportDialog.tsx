@@ -61,6 +61,7 @@ export const PoiImportDialog = ({
   externalManualSelection,
   onConsumeExternalSelection,
   onCommitSuccess,
+  onViewOnMap,
   hidden = false,
 }: Props) => {
   const imp = usePoiImport({
