@@ -21,6 +21,8 @@ const ATTRS_BATCH = 500;
 interface CommitParams {
   folderId: string;
   filename: string;
+  /** Ruta del archivo en el bucket `poi-imports`, si fue subido. */
+  sourceFilePath?: string | null;
   rows: ImportRow[];
   matches: RowMatchResult[];
   /** Mapa overrides manuales: rowIndex -> poiId (para filas manual_assigned). */
