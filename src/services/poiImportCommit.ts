@@ -21,6 +21,8 @@ const ATTRS_BATCH = 500;
 interface CommitParams {
   folderId: string;
   filename: string;
+  /** Ruta del archivo en el bucket `poi-imports`, si fue subido. */
+  sourceFilePath?: string | null;
   rows: ImportRow[];
   matches: RowMatchResult[];
   /** Mapa overrides manuales: rowIndex -> poiId (para filas manual_assigned). */
@@ -42,6 +44,7 @@ export interface CommitResult {
 export const commitImport = async ({
   folderId,
   filename,
+  sourceFilePath = null,
   rows,
   matches,
   manualAssignments = {},
@@ -58,6 +61,7 @@ export const commitImport = async ({
       status: "pending",
       rows_total: rows.length,
       created_by: user?.id ?? null,
+      source_file_path: sourceFilePath,
     })
     .select("id")
     .single();

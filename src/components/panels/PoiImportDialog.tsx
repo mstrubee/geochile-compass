@@ -166,9 +166,24 @@ export const PoiImportDialog = ({
       alert(`Error eliminando el job: ${jErr.message}`);
       return;
     }
+    // Borrar el archivo en storage si existía.
+    const path = (job as PoiImportJob & { source_file_path?: string | null }).source_file_path;
+    if (path) {
+      await supabase.storage.from("poi-imports").remove([path]).catch(() => {});
+    }
     // Refrescar resumen
     setHistory((prev) => prev.filter((j) => j.id !== job.id));
     onCommitSuccess?.();
+  };
+
+  const handleResumeJob = async (job: PoiImportJob) => {
+    const path = (job as PoiImportJob & { source_file_path?: string | null }).source_file_path;
+    if (!path) return;
+    await imp.resumeFromStorage(path, job.filename);
+    // Inmediatamente lanzar el matching (los aliases/memoria resolverán las ya OK).
+    setTimeout(() => {
+      void imp.runMatching();
+    }, 0);
   };
 
   const visibleMatches = useMemo(() => {
@@ -317,23 +332,30 @@ export const PoiImportDialog = ({
                                   >
                                     {j.status}
                                   </span>
-                                  <label
-                                    className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-border/40 bg-surface-2/60 px-1.5 text-[10px] text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                                    title={
-                                      j.rows_unmatched > 0
-                                        ? `Re-subir el archivo para asignar las ${j.rows_unmatched} filas pendientes (las ya matcheadas se resuelven solas vía aliases)`
-                                        : "Re-subir el archivo para continuar editando"
-                                    }
-                                  >
-                                    <input
-                                      type="file"
-                                      accept=".xlsx,.xls"
-                                      onChange={handleFile}
-                                      className="hidden"
-                                    />
-                                    <RefreshCw className="h-2.5 w-2.5" />
-                                    Continuar
-                                  </label>
+                                  {(j as PoiImportJob & { source_file_path?: string | null }).source_file_path ? (
+                                    <button
+                                      onClick={() => handleResumeJob(j)}
+                                      className="inline-flex h-6 items-center gap-1 rounded-md border border-border/40 bg-surface-2/60 px-1.5 text-[10px] text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                                      title="Retomar la revisión usando el archivo guardado (no necesitas subirlo de nuevo)"
+                                    >
+                                      <RefreshCw className="h-2.5 w-2.5" />
+                                      Continuar
+                                    </button>
+                                  ) : (
+                                    <label
+                                      className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-border/40 bg-surface-2/60 px-1.5 text-[10px] text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                                      title="Re-subir el archivo para continuar (este import no tiene archivo guardado)"
+                                    >
+                                      <input
+                                        type="file"
+                                        accept=".xlsx,.xls"
+                                        onChange={handleFile}
+                                        className="hidden"
+                                      />
+                                      <RefreshCw className="h-2.5 w-2.5" />
+                                      Continuar
+                                    </label>
+                                  )}
                                   <button
                                     onClick={() => handleDeleteJob(j)}
                                     className="inline-flex h-6 items-center gap-1 rounded-md border border-border/40 bg-surface-2/60 px-1.5 text-[10px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"

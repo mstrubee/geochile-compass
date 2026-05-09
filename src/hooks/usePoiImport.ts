@@ -65,6 +65,7 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
   const [error, setError] = useState<string | null>(null);
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
   const [aliases, setAliases] = useState<PoiAddressAlias[]>([]);
+  const [sourceFilePath, setSourceFilePath] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const reset = useCallback(() => {
@@ -81,11 +82,12 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
     setError(null);
     setCommitResult(null);
     setAliases([]);
+    setSourceFilePath(null);
   }, []);
 
-  /** Etapa 1: parsea el Excel. */
+  /** Etapa 1: parsea el Excel y lo sube a storage para poder retomarlo después. */
   const parse = useCallback(
-    async (file: File) => {
+    async (file: File, options?: { existingPath?: string | null }) => {
       if (!schema) {
         setError("Esta carpeta no tiene esquema de importación configurado.");
         setPhase("error");
@@ -103,12 +105,54 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
         }
         setParsed(result);
         setPhase("parsed");
+
+        // Subir el archivo en background si todavía no estaba en storage.
+        if (folderId && !options?.existingPath) {
+          const path = `${folderId}/${crypto.randomUUID()}-${file.name}`;
+          supabase.storage
+            .from("poi-imports")
+            .upload(path, file, { upsert: true, contentType: file.type })
+            .then(({ error: upErr }) => {
+              if (upErr) console.warn("[poi-imports upload]", upErr.message);
+              else setSourceFilePath(path);
+            });
+        } else if (options?.existingPath) {
+          setSourceFilePath(options.existingPath);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Error al parsear");
         setPhase("error");
       }
     },
-    [schema],
+    [schema, folderId],
+  );
+
+  /** Retoma un import previo descargando el archivo desde storage. */
+  const resumeFromStorage = useCallback(
+    async (path: string, fileName: string) => {
+      try {
+        setPhase("parsing");
+        setError(null);
+        const { data, error: dlErr } = await supabase.storage
+          .from("poi-imports")
+          .download(path);
+        if (dlErr || !data) {
+          throw new Error(
+            dlErr?.message ?? "No se pudo descargar el archivo original",
+          );
+        }
+        const file = new File([data], fileName, {
+          type:
+            data.type ||
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        await parse(file, { existingPath: path });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Error al retomar el import");
+        setPhase("error");
+      }
+    },
+    [parse],
   );
 
   /** Etapa 2: geocodifica y matchea. */
@@ -226,6 +270,7 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
       const res = await commitImport({
         folderId,
         filename,
+        sourceFilePath,
         rows: parsed.rows,
         matches,
         manualAssignments,
@@ -241,7 +286,7 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
       setError(e instanceof Error ? e.message : "Error al guardar");
       setPhase("error");
     }
-  }, [parsed, folderId, filename, matches, manualAssignments, skippedRows]);
+  }, [parsed, folderId, filename, matches, manualAssignments, skippedRows, sourceFilePath]);
 
   // Estadísticas para la UI
   const stats = useMemo(() => {
@@ -301,5 +346,6 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
     toggleSkip,
     commit,
     reset,
+    resumeFromStorage,
   };
 };
