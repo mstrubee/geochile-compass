@@ -164,21 +164,29 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props)
     };
   }, [rawActive]);
 
-  // Series anuales (suma por año calendario, sólo años con 12 meses)
+  // Series anuales (suma por año calendario)
   const annualSeries = useMemo(() => {
-    if (!active) return [];
-    const map = new Map<string, { sum: number; count: number }>();
+    if (!active) return [] as Array<{ year: string; value: number; avg: number; complete: boolean; months: { period: string; value: number }[] }>;
+    const map = new Map<string, { sum: number; months: { period: string; value: number }[] }>();
     for (const p of active.series) {
       const y = p.period.slice(0, 4);
-      const cur = map.get(y) ?? { sum: 0, count: 0 };
+      const cur = map.get(y) ?? { sum: 0, months: [] };
       cur.sum += p.value;
-      cur.count += 1;
+      cur.months.push(p);
       map.set(y, cur);
     }
     return Array.from(map.entries())
       .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([year, { sum, count }]) => ({ year, value: sum, complete: count === 12 }));
+      .map(([year, { sum, months }]) => ({
+        year,
+        value: sum,
+        avg: months.length > 0 ? sum / months.length : 0,
+        complete: months.length === 12,
+        months,
+      }));
   }, [active]);
+
+  const [yearDetail, setYearDetail] = useState<typeof annualSeries[number] | null>(null);
 
   const labelByKey = useMemo(() => {
     const out: Record<string, string> = {};
@@ -254,6 +262,7 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props)
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[92vh] max-w-4xl overflow-hidden p-0 sm:max-w-4xl">
         <DialogHeader className="border-b border-border/40 px-5 pb-3 pt-4">
@@ -436,22 +445,35 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props)
                             }
                           />
                           <Tooltip
-                            contentStyle={{
-                              background: "hsl(var(--background))",
-                              border: "1px solid hsl(var(--border) / 0.3)",
-                              borderRadius: 8,
-                              fontSize: 11,
+                            cursor={{ fill: "hsl(var(--border) / 0.2)" }}
+                            content={({ active: isActive, payload }) => {
+                              if (!isActive || !payload || !payload.length) return null;
+                              const p = payload[0].payload as { year: string; value: number; avg: number; complete: boolean; months: unknown[] };
+                              return (
+                                <div className="rounded-md border border-border/40 bg-background px-2.5 py-2 text-[11px] shadow-md">
+                                  <div className="mb-1 font-medium">
+                                    Año {p.year}{!p.complete ? ` (${p.months.length}/12)` : ""}
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    Total: <span className="font-mono text-foreground">{formatMetricValue(p.value, active.format)}</span>
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    Promedio mensual: <span className="font-mono text-foreground">{formatMetricValue(p.avg, active.format)}</span>
+                                  </div>
+                                  <div className="mt-1 text-[10px] text-muted-foreground">Click para ver detalle mes a mes</div>
+                                </div>
+                              );
                             }}
-                            labelFormatter={(v, payload) => {
-                              const p = payload?.[0]?.payload as { year: string; complete: boolean } | undefined;
-                              return p?.complete ? `Año ${p.year}` : `Año ${v} (parcial)`;
-                            }}
-                            formatter={(v: number) => [formatMetricValue(v, active.format), labelByKey[active.metricKey] ?? active.metricKey]}
                           />
                           <Bar
                             dataKey="value"
                             fill="hsl(217 91% 55%)"
                             radius={[4, 4, 0, 0]}
+                            cursor="pointer"
+                            onClick={(data) => {
+                              const p = (data as { payload?: typeof annualSeries[number] }).payload;
+                              if (p) setYearDetail(p);
+                            }}
                           />
                         </BarChart>
                       )}
@@ -549,6 +571,57 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props)
         </div>
       </DialogContent>
     </Dialog>
+
+    {yearDetail && active && (
+      <Dialog open onOpenChange={(o) => !o && setYearDetail(null)}>
+        <DialogContent className="max-w-md p-0">
+          <DialogHeader className="border-b border-border/40 px-5 pb-3 pt-4">
+            <DialogTitle className="text-[14px] font-semibold tracking-tight">
+              Detalle mensual · Año {yearDetail.year}
+              {!yearDetail.complete && (
+                <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                  ({yearDetail.months.length}/12 meses)
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-2 px-5 py-3">
+            <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+              <div className="text-[16px] font-semibold leading-none tracking-tight">
+                {formatMetricValue(yearDetail.value, active.format)}
+              </div>
+              <div className="mt-1.5 text-[10px] text-muted-foreground">Total del año</div>
+            </div>
+            <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+              <div className="text-[16px] font-semibold leading-none tracking-tight">
+                {formatMetricValue(yearDetail.avg, active.format)}
+              </div>
+              <div className="mt-1.5 text-[10px] text-muted-foreground">Promedio mensual</div>
+            </div>
+          </div>
+          <div className="scrollbar-thin max-h-[60vh] overflow-y-auto px-5 pb-4">
+            <div className="rounded-lg border border-border/30">
+              <div className="grid grid-cols-2 bg-surface-2/60 text-[10px] font-medium text-muted-foreground">
+                <div className="px-3 py-1.5">Mes</div>
+                <div className="px-3 py-1.5 text-right">Valor</div>
+              </div>
+              {yearDetail.months.map((m) => (
+                <div
+                  key={m.period}
+                  className="grid grid-cols-2 border-t border-border/30 text-[11px]"
+                >
+                  <div className="px-3 py-1">{formatPeriod(m.period)}</div>
+                  <div className="px-3 py-1 text-right font-mono">
+                    {formatMetricValue(m.value, active.format)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   );
 };
 
