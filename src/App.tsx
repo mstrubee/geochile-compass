@@ -10,6 +10,7 @@ import MapaComunasPage from "./pages/MapaComunasPage.tsx";
 import AdminCapas from "./pages/AdminCapas.tsx";
 import { TerritorialVisibilityProvider } from "@/hooks/useTerritorialVisibility";
 import { AuthProvider } from "@/hooks/useAuth";
+import { PermissionsProvider } from "@/hooks/usePermissions";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+        <PermissionsProvider>
         <TerritorialVisibilityProvider>
           <Routes>
             <Route path="/" element={<Index />} />
@@ -30,6 +32,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </TerritorialVisibilityProvider>
+        </PermissionsProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

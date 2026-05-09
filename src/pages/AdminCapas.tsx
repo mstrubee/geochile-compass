@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon } from "lucide-react";
+import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon } from "lucide-react";
 import { htmlToGeoJson, downloadGeoJson } from "@/utils/htmlToGeoJson";
+import { UsersAdminSection } from "@/components/admin/UsersAdminSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -196,7 +197,7 @@ const AdminCapas = () => {
           <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
             <ArrowLeft className="h-4 w-4" /> Volver
           </Button>
-          <h1 className="flex-1 text-base font-semibold">Admin · Capas Territoriales</h1>
+          <h1 className="flex-1 text-base font-semibold">Admin</h1>
           <input
             type="file"
             accept=".html,.htm,.kml"
@@ -240,7 +241,22 @@ const AdminCapas = () => {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl space-y-8 p-4">
+      <main className="mx-auto max-w-5xl space-y-4 p-4">
+        <AdminCollapsible
+          id="users"
+          title="Usuarios y permisos"
+          icon={<UsersIcon className="h-4 w-4" />}
+          description="Roles personalizados y asignación de permisos por sección."
+        >
+          <UsersAdminSection />
+        </AdminCollapsible>
+
+        <AdminCollapsible
+          id="capas"
+          title="Capas territoriales"
+          icon={<MapIcon className="h-4 w-4" />}
+          description="Cargá y administrá capas geográficas agrupadas."
+        >
         <p className="rounded-md border border-border/40 bg-muted/30 p-3 text-xs text-muted-foreground">
           ¿Tu HTML se subió pero no muestra capas ni puntos? Usá <strong>HTML → GeoJSON</strong> para
           convertirlo en el navegador y luego cargá el .geojson resultante.
@@ -489,6 +505,7 @@ const AdminCapas = () => {
             ))}
           </ul>
         </section>
+        </AdminCollapsible>
       </main>
 
       <UploadDialog
@@ -897,4 +914,68 @@ const StepBadge = ({ n, label, active, done }: { n: number; label: string; activ
   </div>
 );
 
+
+const ADMIN_COLLAPSED_KEY = "admin_sections_open_v1";
+const readAdminMap = (): Record<string, boolean> => {
+  try {
+    return JSON.parse(localStorage.getItem(ADMIN_COLLAPSED_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+};
+
+const AdminCollapsible = ({
+  id,
+  title,
+  description,
+  icon,
+  children,
+}: {
+  id: string;
+  title: string;
+  description?: string;
+  icon?: ReactNode;
+  children: ReactNode;
+}) => {
+  // Default cerrado, según pedido del usuario
+  const [open, setOpen] = useState<boolean>(() => {
+    const m = readAdminMap();
+    return m[id] === true;
+  });
+  useEffect(() => {
+    const m = readAdminMap();
+    m[id] = open;
+    localStorage.setItem(ADMIN_COLLAPSED_KEY, JSON.stringify(m));
+  }, [id, open]);
+  return (
+    <section className="rounded-xl border border-border/60 bg-card/30">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
+        aria-expanded={open}
+      >
+        {icon && (
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            {icon}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold">{title}</div>
+          {description && (
+            <div className="text-xs text-muted-foreground">{description}</div>
+          )}
+        </div>
+        <ChevronDown
+          className={["h-4 w-4 text-muted-foreground transition-transform", open ? "" : "-rotate-90"].join(" ")}
+        />
+      </button>
+      {open && (
+        <div className="space-y-4 border-t border-border/40 p-4">{children}</div>
+      )}
+    </section>
+  );
+};
+
 export default AdminCapas;
+
