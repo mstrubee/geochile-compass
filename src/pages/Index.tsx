@@ -1293,6 +1293,7 @@ const Index = () => {
       {importDialogFolderId && (
         <PoiImportDialog
           open
+          hidden={!!poiPickContext}
           onClose={() => setImportDialogFolderId(null)}
           folder={folders.find((f) => f.id === importDialogFolderId) ?? null}
           schema={poiFolderSchemas.find((s) => s.folder_id === importDialogFolderId) ?? null}

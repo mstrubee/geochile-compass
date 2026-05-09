@@ -36,6 +36,8 @@ interface Props {
   onConsumeExternalSelection: () => void;
   /** Notifica al padre que el commit fue exitoso para refrescar datos. */
   onCommitSuccess?: () => void;
+  /** Oculta visualmente el modal sin resetear su estado (p.ej. mientras se elige POI en el mapa). */
+  hidden?: boolean;
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
@@ -50,6 +52,7 @@ export const PoiImportDialog = ({
   externalManualSelection,
   onConsumeExternalSelection,
   onCommitSuccess,
+  hidden = false,
 }: Props) => {
   const imp = usePoiImport({
     schema,
@@ -58,7 +61,7 @@ export const PoiImportDialog = ({
   });
   const [filter, setFilter] = useState<"all" | "ok" | "review">("all");
 
-  // Reset al cerrar
+  // Reset al cerrar (no al ocultar temporalmente)
   useEffect(() => {
     if (!open) imp.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,7 +100,7 @@ export const PoiImportDialog = ({
   }, [imp.matches, imp.parsed, imp.manualAssignments, filter]);
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open && !hidden} onOpenChange={(o) => !o && !hidden && onClose()}>
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden p-0 sm:max-w-5xl">
         <DialogHeader className="border-b border-border/40 px-5 pb-3 pt-4">
           <DialogTitle className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
