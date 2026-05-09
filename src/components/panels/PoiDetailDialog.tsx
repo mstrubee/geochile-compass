@@ -643,34 +643,39 @@ type ActiveAggregate = MetricAggregate & {
   lastCompletedYear: number;
 };
 
-const KPI_ORDER_KEY = "poi-detail-kpi-order-v1";
 const DEFAULT_KPI_ORDER = ["latest", "mom", "yoy", "ttm", "avg12", "avgYear"] as const;
 type KpiId = (typeof DEFAULT_KPI_ORDER)[number];
+
+const normalizeOrder = (raw: unknown): KpiId[] => {
+  const arr = Array.isArray(raw) ? (raw as string[]) : [];
+  const valid = arr.filter((k): k is KpiId =>
+    (DEFAULT_KPI_ORDER as readonly string[]).includes(k),
+  );
+  const missing = DEFAULT_KPI_ORDER.filter((k) => !valid.includes(k));
+  return [...valid, ...missing];
+};
 
 const MetricKpis = ({
   active,
   formatLabel,
+  initialOrder,
+  onOrderChange,
 }: {
   active: ActiveAggregate;
   formatLabel: string;
+  initialOrder: string[] | null;
+  onOrderChange?: (next: string[]) => Promise<void> | void;
 }) => {
-  const [order, setOrder] = useState<KpiId[]>(() => {
-    try {
-      const raw = localStorage.getItem(KPI_ORDER_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as KpiId[];
-        const valid = parsed.filter((k) => DEFAULT_KPI_ORDER.includes(k));
-        const missing = DEFAULT_KPI_ORDER.filter((k) => !valid.includes(k));
-        return [...valid, ...missing] as KpiId[];
-      }
-    } catch { /* noop */ }
-    return [...DEFAULT_KPI_ORDER];
-  });
+  const [order, setOrder] = useState<KpiId[]>(() => normalizeOrder(initialOrder));
+  // Si llega un nuevo orden desde el servidor (otro POI / refresh), lo sincronizamos
+  useEffect(() => {
+    setOrder(normalizeOrder(initialOrder));
+  }, [initialOrder]);
   const dragId = useRef<KpiId | null>(null);
 
   const persist = (next: KpiId[]) => {
     setOrder(next);
-    try { localStorage.setItem(KPI_ORDER_KEY, JSON.stringify(next)); } catch { /* noop */ }
+    void onOrderChange?.(next);
   };
 
   const onDrop = (target: KpiId) => {
