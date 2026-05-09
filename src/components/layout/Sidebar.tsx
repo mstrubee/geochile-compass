@@ -981,7 +981,7 @@ export const Sidebar = ({
           </div>
         </SidebarSection>
 
-        <SidebarSection title="Comunas">
+        <SidebarSection title="Comunas" permissionKey="comunas">
           <CommuneSearch
             onFlyToCommune={onFlyToCommune}
             onOpenRangeResults={onOpenCommuneRangeResults}
@@ -1041,7 +1041,7 @@ export const Sidebar = ({
           />
         </SidebarSection>
 
-        <SidebarSection title="Datos OpenStreetMap">
+        <SidebarSection title="Datos OpenStreetMap" permissionKey="osm">
           <div className="mb-2 flex items-center gap-2 rounded-lg bg-surface-2/60 px-2.5 py-1.5 text-[11px]">
             <span className="h-1.5 w-1.5 animate-blink rounded-full bg-brand-green" />
             <span className="flex-1 text-muted-foreground">OSM Overpass · área visible</span>
@@ -1113,7 +1113,7 @@ export const Sidebar = ({
           </p>
         </SidebarSection>
 
-        <SidebarSection title="Microzonas personalizadas">
+        <SidebarSection title="Microzonas personalizadas" permissionKey="microzonas">
           <div className="mb-2 flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
             {(["polygon", "buffer", "voronoi"] as const).map((s) => (
               <button
@@ -1239,7 +1239,7 @@ export const Sidebar = ({
           )}
         </SidebarSection>
 
-        <SidebarSection title="Capas territoriales">
+        <SidebarSection title="Capas territoriales" permissionKey="capas_territoriales">
           {TERRITORIAL_LAYERS.map((row) => (
             <LayerItem
               key={row.name}
@@ -1309,7 +1309,7 @@ export const Sidebar = ({
         </SidebarSection>
 
 
-        <SidebarSection title="Isócronas">
+        <SidebarSection title="Isócronas" permissionKey="isocronas">
           <div className="mb-2 flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
             {(["foot-walking", "driving-car", "cycling-regular"] as const).map((m) => (
               <button
@@ -1487,7 +1487,7 @@ export const Sidebar = ({
         </SidebarSection>
 
 
-        <SidebarSection title="Archivos">
+        <SidebarSection title="Archivos" permissionKey="archivos">
           <input
             ref={fileInputRef}
             type="file"
@@ -1691,7 +1691,7 @@ export const Sidebar = ({
           })()}
         </SidebarSection>
 
-        <SidebarSection title="Puntos de interés">
+        <SidebarSection title="Puntos de interés" permissionKey="pois">
           {!isAuthenticated ? (
             <div className="rounded-lg bg-surface-2/60 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
               Inicia sesión para guardar puntos de forma permanente.
