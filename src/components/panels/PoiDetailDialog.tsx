@@ -503,21 +503,27 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
   );
 };
 
+type ActiveAggregate = MetricAggregate & {
+  avgLast12: number | null;
+  avgLastCompletedYear: number | null;
+  lastCompletedYear: number;
+};
+
 const MetricKpis = ({
   active,
   formatLabel,
 }: {
-  active: MetricAggregate;
+  active: ActiveAggregate;
   formatLabel: string;
 }) => {
   return (
-    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
       <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
         <div className="text-[16px] font-semibold leading-none tracking-tight">
           {active.latest ? formatMetricValue(active.latest.value, active.format) : "—"}
         </div>
         <div className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
-          {active.latest ? formatPeriod(active.latest.period) : "Sin datos"}
+          {active.latest ? `Último mes · ${formatPeriod(active.latest.period)}` : "Sin datos"}
         </div>
       </div>
       <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
@@ -568,11 +574,28 @@ const MetricKpis = ({
         <div className="text-[16px] font-semibold leading-none tracking-tight">
           {formatMetricValue(active.trailing12Sum, active.format)}
         </div>
-        <div className="mt-1.5 text-[10px] text-muted-foreground">{formatLabel} TTM</div>
+        <div className="mt-1.5 text-[10px] text-muted-foreground">{formatLabel} TTM (suma 12m)</div>
+      </div>
+      <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+        <div className="text-[16px] font-semibold leading-none tracking-tight">
+          {active.avgLast12 != null ? formatMetricValue(active.avgLast12, active.format) : "—"}
+        </div>
+        <div className="mt-1.5 text-[10px] text-muted-foreground">Promedio últimos 12 meses</div>
+      </div>
+      <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+        <div className="text-[16px] font-semibold leading-none tracking-tight">
+          {active.avgLastCompletedYear != null
+            ? formatMetricValue(active.avgLastCompletedYear, active.format)
+            : "—"}
+        </div>
+        <div className="mt-1.5 text-[10px] text-muted-foreground">
+          Promedio mensual {active.lastCompletedYear}
+        </div>
       </div>
     </div>
   );
 };
+
 
 /** Render mínimo de markdown — sólo bold (**text**) y bullets (`- `). */
 const SimpleMarkdown = ({ markdown }: { markdown: string }) => {
