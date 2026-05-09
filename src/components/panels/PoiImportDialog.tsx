@@ -129,6 +129,40 @@ export const PoiImportDialog = ({
     const f = e.target.files?.[0];
     if (!f) return;
     await imp.parse(f);
+    e.target.value = "";
+  };
+
+  const handleDeleteJob = async (job: PoiImportJob) => {
+    if (
+      !confirm(
+        `¿Eliminar el import "${job.filename}"?\n\nSe borrarán las métricas y atributos guardados por este archivo (no se borran POIs ni aliases).`,
+      )
+    )
+      return;
+    const { error: mErr } = await supabase
+      .from("poi_metrics")
+      .delete()
+      .eq("source_import_id", job.id);
+    if (mErr) {
+      alert(`Error eliminando métricas: ${mErr.message}`);
+      return;
+    }
+    const { error: aErr } = await supabase
+      .from("poi_attributes")
+      .delete()
+      .eq("source_import_id", job.id);
+    if (aErr) {
+      alert(`Error eliminando atributos: ${aErr.message}`);
+      return;
+    }
+    const { error: jErr } = await supabase.from("poi_import_jobs").delete().eq("id", job.id);
+    if (jErr) {
+      alert(`Error eliminando el job: ${jErr.message}`);
+      return;
+    }
+    // Refrescar resumen
+    setHistory((prev) => prev.filter((j) => j.id !== job.id));
+    onCommitSuccess?.();
   };
 
   const visibleMatches = useMemo(() => {
