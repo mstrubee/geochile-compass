@@ -99,6 +99,8 @@ export const commitImport = async ({
     normalized_address: string;
     raw_address: string;
   }> = [];
+  /** Mapa poi_id -> nombre que viene del Excel (la última fila gana). */
+  const poiRenames = new Map<string, string>();
 
   for (const row of rows) {
     if (skippedRowIndices.has(row.rowIndex)) {
