@@ -1336,6 +1336,17 @@ const Index = () => {
             await updatePoi(id, { name });
             setDetailPoi((curr) => (curr && curr.id === id ? { ...curr, name } : curr));
           }}
+          onKpiOrderChange={async (folderId, order) => {
+            const { error } = await supabase.rpc("set_poi_folder_kpi_order", {
+              _folder_id: folderId,
+              _order: order,
+            });
+            if (error) {
+              toast.error("No se pudo guardar el orden: " + error.message);
+              return;
+            }
+            await refreshSchemas();
+          }}
         />
       )}
 
