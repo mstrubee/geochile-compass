@@ -914,4 +914,68 @@ const StepBadge = ({ n, label, active, done }: { n: number; label: string; activ
   </div>
 );
 
+
+const ADMIN_COLLAPSED_KEY = "admin_sections_open_v1";
+const readAdminMap = (): Record<string, boolean> => {
+  try {
+    return JSON.parse(localStorage.getItem(ADMIN_COLLAPSED_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+};
+
+const AdminCollapsible = ({
+  id,
+  title,
+  description,
+  icon,
+  children,
+}: {
+  id: string;
+  title: string;
+  description?: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) => {
+  // Default cerrado, según pedido del usuario
+  const [open, setOpen] = useState<boolean>(() => {
+    const m = readAdminMap();
+    return m[id] === true;
+  });
+  useEffect(() => {
+    const m = readAdminMap();
+    m[id] = open;
+    localStorage.setItem(ADMIN_COLLAPSED_KEY, JSON.stringify(m));
+  }, [id, open]);
+  return (
+    <section className="rounded-xl border border-border/60 bg-card/30">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
+        aria-expanded={open}
+      >
+        {icon && (
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            {icon}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold">{title}</div>
+          {description && (
+            <div className="text-xs text-muted-foreground">{description}</div>
+          )}
+        </div>
+        <ChevronDown
+          className={["h-4 w-4 text-muted-foreground transition-transform", open ? "" : "-rotate-90"].join(" ")}
+        />
+      </button>
+      {open && (
+        <div className="space-y-4 border-t border-border/40 p-4">{children}</div>
+      )}
+    </section>
+  );
+};
+
 export default AdminCapas;
+
