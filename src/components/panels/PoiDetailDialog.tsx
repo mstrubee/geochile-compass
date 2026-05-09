@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,6 +6,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import {
   ResponsiveContainer,
   LineChart,
@@ -43,9 +45,10 @@ interface Props {
   onClose: () => void;
   poi: SavedPoi | null;
   schema: PoiFolderSchema | null;
+  onRename?: (id: string, name: string) => Promise<void> | void;
 }
 
-export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
+export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props) => {
   const { metrics, loading: metricsLoading } = usePoiMetrics(poi?.id ?? null);
   const { attrs, loading: attrsLoading } = usePoiAttributes(poi?.id ?? null);
   const [insights, setInsights] = useState<string | null>(null);
@@ -53,6 +56,28 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [activeMetric, setActiveMetric] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<"monthly" | "annual">("monthly");
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameOverride, setNameOverride] = useState<string | null>(null);
+  const displayName = nameOverride ?? poi?.name ?? "POI";
+
+  useEffect(() => {
+    setNameOverride(null);
+    setEditingName(false);
+  }, [poi?.id]);
+
+  const commitRename = async () => {
+    const next = nameDraft.trim();
+    setEditingName(false);
+    if (!poi || !next || next === displayName) return;
+    setNameOverride(next);
+    try {
+      await onRename?.(poi.id, next);
+    } catch (e) {
+      setNameOverride(null);
+      toast.error(e instanceof Error ? e.message : "No se pudo renombrar");
+    }
+  };
 
   // Reset cuando cambia el POI
   useEffect(() => {
@@ -234,10 +259,34 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
         <DialogHeader className="border-b border-border/40 px-5 pb-3 pt-4">
           <DialogTitle className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
             <span
-              className="h-2.5 w-2.5 rounded-full"
+              className="h-2.5 w-2.5 rounded-full shrink-0"
               style={{ background: poi?.color ?? "#34D399" }}
             />
-            {poi?.name ?? "POI"}
+            {editingName ? (
+              <Input
+                autoFocus
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename();
+                  if (e.key === "Escape") setEditingName(false);
+                }}
+                className="h-7 text-[15px] font-semibold"
+              />
+            ) : (
+              <span
+                onDoubleClick={() => {
+                  if (!poi || !onRename) return;
+                  setNameDraft(displayName);
+                  setEditingName(true);
+                }}
+                title={onRename ? "Doble clic para renombrar" : undefined}
+                className={onRename ? "cursor-text" : undefined}
+              >
+                {displayName}
+              </span>
+            )}
           </DialogTitle>
           {poi && (
             <div className="text-[11px] text-muted-foreground">
@@ -509,6 +558,10 @@ type ActiveAggregate = MetricAggregate & {
   lastCompletedYear: number;
 };
 
+const KPI_ORDER_KEY = "poi-detail-kpi-order-v1";
+const DEFAULT_KPI_ORDER = ["latest", "mom", "yoy", "ttm", "avg12", "avgYear"] as const;
+type KpiId = (typeof DEFAULT_KPI_ORDER)[number];
+
 const MetricKpis = ({
   active,
   formatLabel,
@@ -516,17 +569,48 @@ const MetricKpis = ({
   active: ActiveAggregate;
   formatLabel: string;
 }) => {
-  return (
-    <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-      <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+  const [order, setOrder] = useState<KpiId[]>(() => {
+    try {
+      const raw = localStorage.getItem(KPI_ORDER_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as KpiId[];
+        const valid = parsed.filter((k) => DEFAULT_KPI_ORDER.includes(k));
+        const missing = DEFAULT_KPI_ORDER.filter((k) => !valid.includes(k));
+        return [...valid, ...missing] as KpiId[];
+      }
+    } catch { /* noop */ }
+    return [...DEFAULT_KPI_ORDER];
+  });
+  const dragId = useRef<KpiId | null>(null);
+
+  const persist = (next: KpiId[]) => {
+    setOrder(next);
+    try { localStorage.setItem(KPI_ORDER_KEY, JSON.stringify(next)); } catch { /* noop */ }
+  };
+
+  const onDrop = (target: KpiId) => {
+    const src = dragId.current;
+    dragId.current = null;
+    if (!src || src === target) return;
+    const next = order.filter((k) => k !== src);
+    const idx = next.indexOf(target);
+    next.splice(idx, 0, src);
+    persist(next);
+  };
+
+  const cards: Record<KpiId, ReactNode> = {
+    latest: (
+      <>
         <div className="text-[16px] font-semibold leading-none tracking-tight">
           {active.latest ? formatMetricValue(active.latest.value, active.format) : "—"}
         </div>
         <div className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
           {active.latest ? `Último mes · ${formatPeriod(active.latest.period)}` : "Sin datos"}
         </div>
-      </div>
-      <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+      </>
+    ),
+    mom: (
+      <>
         <div className="flex items-center gap-1.5">
           {active.mom != null && active.mom >= 0 ? (
             <TrendingUp className="h-3.5 w-3.5 text-brand-green" />
@@ -536,19 +620,17 @@ const MetricKpis = ({
           <div
             className={[
               "text-[16px] font-semibold leading-none tracking-tight",
-              active.mom == null
-                ? ""
-                : active.mom >= 0
-                  ? "text-brand-green"
-                  : "text-destructive",
+              active.mom == null ? "" : active.mom >= 0 ? "text-brand-green" : "text-destructive",
             ].join(" ")}
           >
             {active.mom != null ? `${active.mom > 0 ? "+" : ""}${active.mom.toFixed(1)}%` : "—"}
           </div>
         </div>
         <div className="mt-1.5 text-[10px] text-muted-foreground">vs mes anterior</div>
-      </div>
-      <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+      </>
+    ),
+    yoy: (
+      <>
         <div className="flex items-center gap-1.5">
           {active.yoy != null && active.yoy >= 0 ? (
             <TrendingUp className="h-3.5 w-3.5 text-brand-green" />
@@ -558,31 +640,33 @@ const MetricKpis = ({
           <div
             className={[
               "text-[16px] font-semibold leading-none tracking-tight",
-              active.yoy == null
-                ? ""
-                : active.yoy >= 0
-                  ? "text-brand-green"
-                  : "text-destructive",
+              active.yoy == null ? "" : active.yoy >= 0 ? "text-brand-green" : "text-destructive",
             ].join(" ")}
           >
             {active.yoy != null ? `${active.yoy > 0 ? "+" : ""}${active.yoy.toFixed(1)}%` : "—"}
           </div>
         </div>
         <div className="mt-1.5 text-[10px] text-muted-foreground">vs mismo mes año anterior</div>
-      </div>
-      <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+      </>
+    ),
+    ttm: (
+      <>
         <div className="text-[16px] font-semibold leading-none tracking-tight">
           {formatMetricValue(active.trailing12Sum, active.format)}
         </div>
         <div className="mt-1.5 text-[10px] text-muted-foreground">{formatLabel} TTM (suma 12m)</div>
-      </div>
-      <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+      </>
+    ),
+    avg12: (
+      <>
         <div className="text-[16px] font-semibold leading-none tracking-tight">
           {active.avgLast12 != null ? formatMetricValue(active.avgLast12, active.format) : "—"}
         </div>
         <div className="mt-1.5 text-[10px] text-muted-foreground">Promedio últimos 12 meses</div>
-      </div>
-      <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+      </>
+    ),
+    avgYear: (
+      <>
         <div className="text-[16px] font-semibold leading-none tracking-tight">
           {active.avgLastCompletedYear != null
             ? formatMetricValue(active.avgLastCompletedYear, active.format)
@@ -591,7 +675,34 @@ const MetricKpis = ({
         <div className="mt-1.5 text-[10px] text-muted-foreground">
           Promedio mensual {active.lastCompletedYear}
         </div>
-      </div>
+      </>
+    ),
+  };
+
+  return (
+    <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+      {order.map((id) => (
+        <div
+          key={id}
+          draggable
+          onDragStart={(e) => {
+            dragId.current = id;
+            e.dataTransfer.effectAllowed = "move";
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            onDrop(id);
+          }}
+          className="cursor-grab rounded-xl bg-surface-2/60 px-3 py-2.5 active:cursor-grabbing transition-shadow hover:ring-1 hover:ring-border/50"
+          title="Arrastra para reordenar"
+        >
+          {cards[id]}
+        </div>
+      ))}
     </div>
   );
 };
