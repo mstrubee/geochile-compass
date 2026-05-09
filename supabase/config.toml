@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.sync-uf-values]
 verify_jwt = true
+
+[functions.compute-poi-features]
+verify_jwt = true

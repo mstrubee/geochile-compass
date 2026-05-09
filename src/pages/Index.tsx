@@ -16,6 +16,8 @@ import { PoiImportDialog } from "@/components/panels/PoiImportDialog";
 import { PoiDetailDialog } from "@/components/panels/PoiDetailDialog";
 import { PoiFolderSchemaDialog } from "@/components/panels/PoiFolderSchemaDialog";
 import { AnalysisConfigDialog } from "@/components/panels/AnalysisConfigDialog";
+import { ComputeFeaturesDialog } from "@/components/panels/ComputeFeaturesDialog";
+import { useAnalysisSettings } from "@/hooks/useAnalysisConfig";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import { usePoiFolderSchemas } from "@/hooks/usePoiMetrics";
 import { Legend } from "@/components/ui-overlays/Legend";
@@ -30,7 +32,7 @@ import { useSavedIsochrones } from "@/hooks/useSavedIsochrones";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
 import { fetchOverpassPreset, fetchOverpassFreeText, bboxAreaDegSq } from "@/services/overpassService";
-import { extractPointPois, countPoints, type PoiInsert, type SavedPoi } from "@/types/pois";
+import { extractPointPois, countPoints, type PoiInsert, type SavedPoi, type PoiFolder } from "@/types/pois";
 import { parseFile, getExtension } from "@/utils/fileParsers";
 import type { NSE, Commune } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
@@ -109,6 +111,7 @@ const Index = () => {
   const [importDialogFolderId, setImportDialogFolderId] = useState<string | null>(null);
   const [schemaDialogFolderId, setSchemaDialogFolderId] = useState<string | null>(null);
   const [analysisConfigFolderId, setAnalysisConfigFolderId] = useState<string | null>(null);
+  const [computeFeaturesFolderId, setComputeFeaturesFolderId] = useState<string | null>(null);
   const [detailPoi, setDetailPoi] = useState<SavedPoi | null>(null);
   /** Modo "elegir POI en mapa" para una fila concreta del importador. */
   const [poiPickContext, setPoiPickContext] = useState<{ rowIndex: number } | null>(null);
@@ -1052,6 +1055,7 @@ const Index = () => {
           onImportToFolder={(folderId) => setImportDialogFolderId(folderId)}
           onConfigureFolderSchema={(folderId) => setSchemaDialogFolderId(folderId)}
           onConfigureAnalysis={(folderId) => setAnalysisConfigFolderId(folderId)}
+          onComputeFeatures={(folderId) => setComputeFeaturesFolderId(folderId)}
         />
 
         <div
@@ -1379,7 +1383,105 @@ const Index = () => {
           allLayers={userLayers.map((l) => ({ id: l.id, name: l.name }))}
         />
       )}
+
+      {/* Compute territorial features (admin) */}
+      {computeFeaturesFolderId && (
+        <ComputeFeaturesWrapper
+          folderId={computeFeaturesFolderId}
+          onClose={() => setComputeFeaturesFolderId(null)}
+          allFolders={folders}
+          allPois={pois}
+          allUserLayers={userLayers}
+        />
+      )}
     </div>
+  );
+};
+
+/**
+ * Wrapper que resuelve dependencias de ComputeFeaturesDialog (settings de
+ * la carpeta + segregación de POIs/layers en internos/competencia/otros)
+ * sin hacer 4 hooks adicionales en el componente principal.
+ */
+interface ComputeFeaturesWrapperProps {
+  folderId: string;
+  onClose: () => void;
+  allFolders: PoiFolder[];
+  allPois: SavedPoi[];
+  allUserLayers: UserLayer[];
+}
+
+const ComputeFeaturesWrapper = ({
+  folderId,
+  onClose,
+  allFolders,
+  allPois,
+  allUserLayers,
+}: ComputeFeaturesWrapperProps) => {
+  const { settings } = useAnalysisSettings(folderId);
+
+  const folder = allFolders.find((f) => f.id === folderId) ?? null;
+  const folderPois = allPois.filter((p) => p.folder_id === folderId);
+
+  const externalCompetitorFolderIds = new Set(
+    settings?.external_competition_folder_ids ?? [],
+  );
+  const externalCompetitorLayerIds = new Set(
+    settings?.external_competition_layer_ids ?? [],
+  );
+
+  const externalCompetitors = allPois.filter((p) =>
+    p.folder_id ? externalCompetitorFolderIds.has(p.folder_id) : false,
+  );
+
+  // POIs en otras carpetas distintas a esta y a las marcadas competencia
+  const otherPois = allPois.filter(
+    (p) =>
+      p.folder_id !== folderId &&
+      (!p.folder_id || !externalCompetitorFolderIds.has(p.folder_id)),
+  );
+
+  // De las user layers: separar features competencia vs complementarias.
+  // UserLayer.data es un FeatureCollection. Extraemos puntos.
+  const flattenLayer = (l: UserLayer) => {
+    const out: Array<{ id: string; lng: number; lat: number; name: string; category?: string }> = [];
+    const features = l.data?.features ?? [];
+    for (const f of features) {
+      const g = f.geometry;
+      if (!g) continue;
+      if (g.type === "Point") {
+        const [lng, lat] = g.coordinates as [number, number];
+        out.push({
+          id: `${l.id}:${(f.properties as { id?: string })?.id ?? Math.random().toString(36).slice(2)}`,
+          lng,
+          lat,
+          name: (f.properties as { name?: string })?.name ?? l.name,
+          category: l.name,
+        });
+      }
+    }
+    return out;
+  };
+
+  const externalCompetitorLayerFeatures = allUserLayers
+    .filter((l) => externalCompetitorLayerIds.has(l.id))
+    .flatMap(flattenLayer);
+
+  const complementaryLayerFeatures = allUserLayers
+    .filter((l) => !externalCompetitorLayerIds.has(l.id))
+    .flatMap(flattenLayer);
+
+  return (
+    <ComputeFeaturesDialog
+      open
+      onClose={onClose}
+      folder={folder}
+      pois={folderPois}
+      externalCompetitors={externalCompetitors}
+      otherPois={otherPois}
+      externalCompetitorLayerFeatures={externalCompetitorLayerFeatures}
+      complementaryLayerFeatures={complementaryLayerFeatures}
+    />
   );
 };
 
