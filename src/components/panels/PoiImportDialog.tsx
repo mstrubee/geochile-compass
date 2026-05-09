@@ -277,18 +277,44 @@ export const PoiImportDialog = ({
                                     {j.rows_unmatched > 0 ? ` · ${j.rows_unmatched} sin asignar` : ""}
                                   </div>
                                 </div>
-                                <span
-                                  className={[
-                                    "inline-flex h-4 items-center rounded px-1.5 text-[9px] font-medium uppercase tracking-wide",
-                                    j.status === "completed"
-                                      ? "bg-brand-green/15 text-brand-green"
-                                      : j.status === "failed"
-                                        ? "bg-destructive/15 text-destructive"
-                                        : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-                                  ].join(" ")}
-                                >
-                                  {j.status}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={[
+                                      "inline-flex h-4 items-center rounded px-1.5 text-[9px] font-medium uppercase tracking-wide",
+                                      j.status === "completed"
+                                        ? "bg-brand-green/15 text-brand-green"
+                                        : j.status === "failed"
+                                          ? "bg-destructive/15 text-destructive"
+                                          : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                                    ].join(" ")}
+                                  >
+                                    {j.status}
+                                  </span>
+                                  <label
+                                    className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-border/40 bg-surface-2/60 px-1.5 text-[10px] text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                                    title={
+                                      j.rows_unmatched > 0
+                                        ? `Re-subir el archivo para asignar las ${j.rows_unmatched} filas pendientes (las ya matcheadas se resuelven solas vía aliases)`
+                                        : "Re-subir el archivo para continuar editando"
+                                    }
+                                  >
+                                    <input
+                                      type="file"
+                                      accept=".xlsx,.xls"
+                                      onChange={handleFile}
+                                      className="hidden"
+                                    />
+                                    <RefreshCw className="h-2.5 w-2.5" />
+                                    Continuar
+                                  </label>
+                                  <button
+                                    onClick={() => handleDeleteJob(j)}
+                                    className="inline-flex h-6 items-center gap-1 rounded-md border border-border/40 bg-surface-2/60 px-1.5 text-[10px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                    title="Eliminar este import (borra sus métricas y atributos)"
+                                  >
+                                    <Trash2 className="h-2.5 w-2.5" />
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>
