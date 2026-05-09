@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MapView } from "@/components/map/MapView";
@@ -1335,6 +1336,17 @@ const Index = () => {
           onRename={async (id, name) => {
             await updatePoi(id, { name });
             setDetailPoi((curr) => (curr && curr.id === id ? { ...curr, name } : curr));
+          }}
+          onKpiOrderChange={async (folderId, order) => {
+            const { error } = await supabase.rpc("set_poi_folder_kpi_order", {
+              _folder_id: folderId,
+              _order: order,
+            });
+            if (error) {
+              toast.error("No se pudo guardar el orden: " + error.message);
+              return;
+            }
+            await refreshSchemas();
           }}
         />
       )}
