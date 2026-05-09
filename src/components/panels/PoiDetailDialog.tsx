@@ -164,21 +164,29 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename }: Props)
     };
   }, [rawActive]);
 
-  // Series anuales (suma por año calendario, sólo años con 12 meses)
+  // Series anuales (suma por año calendario)
   const annualSeries = useMemo(() => {
-    if (!active) return [];
-    const map = new Map<string, { sum: number; count: number }>();
+    if (!active) return [] as Array<{ year: string; value: number; avg: number; complete: boolean; months: { period: string; value: number }[] }>;
+    const map = new Map<string, { sum: number; months: { period: string; value: number }[] }>();
     for (const p of active.series) {
       const y = p.period.slice(0, 4);
-      const cur = map.get(y) ?? { sum: 0, count: 0 };
+      const cur = map.get(y) ?? { sum: 0, months: [] };
       cur.sum += p.value;
-      cur.count += 1;
+      cur.months.push(p);
       map.set(y, cur);
     }
     return Array.from(map.entries())
       .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([year, { sum, count }]) => ({ year, value: sum, complete: count === 12 }));
+      .map(([year, { sum, months }]) => ({
+        year,
+        value: sum,
+        avg: months.length > 0 ? sum / months.length : 0,
+        complete: months.length === 12,
+        months,
+      }));
   }, [active]);
+
+  const [yearDetail, setYearDetail] = useState<typeof annualSeries[number] | null>(null);
 
   const labelByKey = useMemo(() => {
     const out: Record<string, string> = {};
