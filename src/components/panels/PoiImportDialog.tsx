@@ -564,6 +564,29 @@ export const PoiImportDialog = ({
                           onToggleSkip={() => imp.toggleSkip(m.rowIndex)}
                           candidates={m.candidates}
                           onChooseCandidate={(poiId) => imp.assignManual(m.rowIndex, poiId)}
+                          onView={
+                            onViewOnMap
+                              ? () => {
+                                  const assignedId = manualPoi ?? m.assignedPoiId ?? null;
+                                  const poi = assignedId
+                                    ? folderPois.find((p) => p.id === assignedId) ?? null
+                                    : null;
+                                  const target = poi
+                                    ? { lat: poi.lat, lng: poi.lng, label: poi.name }
+                                    : m.geocoded
+                                      ? {
+                                          lat: m.geocoded.lat,
+                                          lng: m.geocoded.lng,
+                                          label:
+                                            row.identity["Nombre Local"] ??
+                                            row.identity["Local"] ??
+                                            row.rawAddress,
+                                        }
+                                      : null;
+                                  if (target) onViewOnMap(target);
+                                }
+                              : undefined
+                          }
                         />
                       );
                     })}
