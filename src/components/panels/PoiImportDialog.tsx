@@ -580,10 +580,14 @@ const Stat = ({
   value,
   label,
   color,
+  onClick,
+  active,
 }: {
   value: string;
   label: string;
   color?: "green" | "amber" | "red";
+  onClick?: () => void;
+  active?: boolean;
 }) => {
   const colorClass =
     color === "green"
@@ -593,14 +597,29 @@ const Stat = ({
         : color === "red"
           ? "text-destructive"
           : "text-foreground";
-  return (
-    <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+  const baseCls =
+    "rounded-xl px-3 py-2.5 text-left transition-all w-full";
+  const stateCls = onClick
+    ? active
+      ? "bg-primary/15 ring-1 ring-primary/40"
+      : "bg-surface-2/60 hover:bg-surface-3/70 cursor-pointer"
+    : "bg-surface-2/60";
+  const Inner = (
+    <>
       <div className={`text-[16px] font-semibold leading-none tracking-tight ${colorClass}`}>
         {value}
       </div>
       <div className="mt-1.5 text-[10px] text-muted-foreground">{label}</div>
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={`${baseCls} ${stateCls}`}>
+        {Inner}
+      </button>
+    );
+  }
+  return <div className={`${baseCls} ${stateCls}`}>{Inner}</div>;
 };
 
 interface RowItemProps {
