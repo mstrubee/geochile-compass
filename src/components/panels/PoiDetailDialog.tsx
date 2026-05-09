@@ -10,6 +10,8 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
@@ -50,6 +52,7 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [activeMetric, setActiveMetric] = useState<string | null>(null);
+  const [chartMode, setChartMode] = useState<"monthly" | "annual">("monthly");
 
   // Reset cuando cambia el POI
   useEffect(() => {
@@ -79,7 +82,78 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
     }
   }, [aggregates, activeMetric]);
 
-  const active = aggregates.find((a) => a.metricKey === activeMetric) ?? aggregates[0] ?? null;
+  const rawActive = aggregates.find((a) => a.metricKey === activeMetric) ?? aggregates[0] ?? null;
+
+  // Sanitiza: descarta meses futuros (no se inventan valores)
+  const active = useMemo(() => {
+    if (!rawActive) return null;
+    const now = new Date();
+    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const series = rawActive.series.filter((p) => p.period <= currentPeriod);
+    const total = series.reduce((s, p) => s + p.value, 0);
+    const latest = series.length ? series[series.length - 1] : null;
+    let mom: number | null = null;
+    if (series.length >= 2) {
+      const prev = series[series.length - 2];
+      const last = series[series.length - 1];
+      if (prev.value > 0) mom = ((last.value - prev.value) / prev.value) * 100;
+    }
+    let yoy: number | null = null;
+    if (latest) {
+      const [y, m] = latest.period.split("-").map(Number);
+      const prevYear = `${y - 1}-${String(m).padStart(2, "0")}-01`;
+      const prev = series.find((p) => p.period === prevYear);
+      if (prev && prev.value > 0) yoy = ((latest.value - prev.value) / prev.value) * 100;
+    }
+    const trailing12 = series.slice(-12);
+    const trailing12Sum = trailing12.reduce((s, p) => s + p.value, 0);
+    const avgLast12 = trailing12.length > 0 ? trailing12Sum / trailing12.length : null;
+
+    // Promedio del último año calendario completado
+    const lastCompletedYear = new Date().getFullYear() - 1;
+    const yearSeries = series.filter((p) => p.period.startsWith(`${lastCompletedYear}-`));
+    const avgLastCompletedYear =
+      yearSeries.length === 12
+        ? yearSeries.reduce((s, p) => s + p.value, 0) / 12
+        : null;
+
+    let best = series[0] ?? null;
+    let worst = series[0] ?? null;
+    for (const p of series) {
+      if (p.value > (best?.value ?? -Infinity)) best = p;
+      if (p.value < (worst?.value ?? Infinity)) worst = p;
+    }
+    return {
+      ...rawActive,
+      series,
+      totalAllTime: total,
+      latest,
+      mom,
+      yoy,
+      trailing12Sum,
+      bestMonth: best,
+      worstMonth: worst,
+      avgLast12,
+      avgLastCompletedYear,
+      lastCompletedYear,
+    };
+  }, [rawActive]);
+
+  // Series anuales (suma por año calendario, sólo años con 12 meses)
+  const annualSeries = useMemo(() => {
+    if (!active) return [];
+    const map = new Map<string, { sum: number; count: number }>();
+    for (const p of active.series) {
+      const y = p.period.slice(0, 4);
+      const cur = map.get(y) ?? { sum: 0, count: 0 };
+      cur.sum += p.value;
+      cur.count += 1;
+      map.set(y, cur);
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([year, { sum, count }]) => ({ year, value: sum, complete: count === 12 }));
+  }, [active]);
 
   const labelByKey = useMemo(() => {
     const out: Record<string, string> = {};
@@ -230,51 +304,113 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
               {/* Gráfico */}
               {active && active.series.length > 0 && (
                 <div className="mt-4 rounded-xl border border-border/30 bg-surface-2/40 p-3">
-                  <div className="mb-2 text-[11px] font-medium text-muted-foreground">
-                    Serie histórica · {active.series.length} períodos
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-[11px] font-medium text-muted-foreground">
+                      {chartMode === "monthly"
+                        ? `Serie mensual · ${active.series.length} períodos`
+                        : `Ventas anuales · ${annualSeries.length} año${annualSeries.length === 1 ? "" : "s"}`}
+                    </div>
+                    <div className="inline-flex rounded-md bg-surface-2/60 p-0.5">
+                      <button
+                        onClick={() => setChartMode("monthly")}
+                        className={[
+                          "rounded px-2 py-0.5 text-[10px] font-medium transition-all",
+                          chartMode === "monthly"
+                            ? "bg-surface-3 text-foreground shadow-apple-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        ].join(" ")}
+                      >
+                        Mensual
+                      </button>
+                      <button
+                        onClick={() => setChartMode("annual")}
+                        className={[
+                          "rounded px-2 py-0.5 text-[10px] font-medium transition-all",
+                          chartMode === "annual"
+                            ? "bg-surface-3 text-foreground shadow-apple-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        ].join(" ")}
+                      >
+                        Anual
+                      </button>
+                    </div>
                   </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={active.series} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                        <CartesianGrid stroke="hsl(var(--border) / 0.3)" strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="period"
-                          tick={{ fontSize: 10 }}
-                          tickFormatter={(v) => formatPeriod(v).replace(/ \d{4}/, (m) => m.slice(-3))}
-                          interval="preserveStartEnd"
-                          minTickGap={24}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 10 }}
-                          tickFormatter={(v) =>
-                            active.format === "clp"
-                              ? `${(v / 1_000_000).toFixed(0)}M`
-                              : v.toLocaleString("es-CL")
-                          }
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            background: "hsl(var(--background))",
-                            border: "1px solid hsl(var(--border) / 0.3)",
-                            borderRadius: 8,
-                            fontSize: 11,
-                          }}
-                          labelFormatter={(v) => formatPeriod(String(v))}
-                          formatter={(v: number) => [formatMetricValue(v, active.format), labelByKey[active.metricKey] ?? active.metricKey]}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="value"
-                          stroke="hsl(217 91% 55%)"
-                          strokeWidth={2}
-                          dot={false}
-                          activeDot={{ r: 4 }}
-                        />
-                      </LineChart>
+                      {chartMode === "monthly" ? (
+                        <LineChart data={active.series} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                          <CartesianGrid stroke="hsl(var(--border) / 0.3)" strokeDasharray="3 3" />
+                          <XAxis
+                            dataKey="period"
+                            tick={{ fontSize: 10 }}
+                            tickFormatter={(v) => formatPeriod(v).replace(/ \d{4}/, (m) => m.slice(-3))}
+                            interval="preserveStartEnd"
+                            minTickGap={24}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 10 }}
+                            tickFormatter={(v) =>
+                              active.format === "clp"
+                                ? `${(v / 1_000_000).toFixed(0)}M`
+                                : v.toLocaleString("es-CL")
+                            }
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              background: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border) / 0.3)",
+                              borderRadius: 8,
+                              fontSize: 11,
+                            }}
+                            labelFormatter={(v) => formatPeriod(String(v))}
+                            formatter={(v: number) => [formatMetricValue(v, active.format), labelByKey[active.metricKey] ?? active.metricKey]}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            stroke="hsl(217 91% 55%)"
+                            strokeWidth={2}
+                            dot={false}
+                            activeDot={{ r: 4 }}
+                          />
+                        </LineChart>
+                      ) : (
+                        <BarChart data={annualSeries} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                          <CartesianGrid stroke="hsl(var(--border) / 0.3)" strokeDasharray="3 3" />
+                          <XAxis dataKey="year" tick={{ fontSize: 10 }} />
+                          <YAxis
+                            tick={{ fontSize: 10 }}
+                            tickFormatter={(v) =>
+                              active.format === "clp"
+                                ? `${(v / 1_000_000).toFixed(0)}M`
+                                : v.toLocaleString("es-CL")
+                            }
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              background: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border) / 0.3)",
+                              borderRadius: 8,
+                              fontSize: 11,
+                            }}
+                            labelFormatter={(v, payload) => {
+                              const p = payload?.[0]?.payload as { year: string; complete: boolean } | undefined;
+                              return p?.complete ? `Año ${p.year}` : `Año ${v} (parcial)`;
+                            }}
+                            formatter={(v: number) => [formatMetricValue(v, active.format), labelByKey[active.metricKey] ?? active.metricKey]}
+                          />
+                          <Bar
+                            dataKey="value"
+                            fill="hsl(217 91% 55%)"
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      )}
                     </ResponsiveContainer>
                   </div>
                 </div>
               )}
+
 
               {/* Resumen ejecutivo */}
               <div className="mt-4 rounded-xl border border-border/30 bg-surface-2/40 p-3">
@@ -367,21 +503,27 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
   );
 };
 
+type ActiveAggregate = MetricAggregate & {
+  avgLast12: number | null;
+  avgLastCompletedYear: number | null;
+  lastCompletedYear: number;
+};
+
 const MetricKpis = ({
   active,
   formatLabel,
 }: {
-  active: MetricAggregate;
+  active: ActiveAggregate;
   formatLabel: string;
 }) => {
   return (
-    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
       <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
         <div className="text-[16px] font-semibold leading-none tracking-tight">
           {active.latest ? formatMetricValue(active.latest.value, active.format) : "—"}
         </div>
         <div className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
-          {active.latest ? formatPeriod(active.latest.period) : "Sin datos"}
+          {active.latest ? `Último mes · ${formatPeriod(active.latest.period)}` : "Sin datos"}
         </div>
       </div>
       <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
@@ -432,11 +574,28 @@ const MetricKpis = ({
         <div className="text-[16px] font-semibold leading-none tracking-tight">
           {formatMetricValue(active.trailing12Sum, active.format)}
         </div>
-        <div className="mt-1.5 text-[10px] text-muted-foreground">{formatLabel} TTM</div>
+        <div className="mt-1.5 text-[10px] text-muted-foreground">{formatLabel} TTM (suma 12m)</div>
+      </div>
+      <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+        <div className="text-[16px] font-semibold leading-none tracking-tight">
+          {active.avgLast12 != null ? formatMetricValue(active.avgLast12, active.format) : "—"}
+        </div>
+        <div className="mt-1.5 text-[10px] text-muted-foreground">Promedio últimos 12 meses</div>
+      </div>
+      <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+        <div className="text-[16px] font-semibold leading-none tracking-tight">
+          {active.avgLastCompletedYear != null
+            ? formatMetricValue(active.avgLastCompletedYear, active.format)
+            : "—"}
+        </div>
+        <div className="mt-1.5 text-[10px] text-muted-foreground">
+          Promedio mensual {active.lastCompletedYear}
+        </div>
       </div>
     </div>
   );
 };
+
 
 /** Render mínimo de markdown — sólo bold (**text**) y bullets (`- `). */
 const SimpleMarkdown = ({ markdown }: { markdown: string }) => {
