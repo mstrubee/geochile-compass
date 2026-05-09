@@ -317,6 +317,21 @@ export const commitImport = async ({
     }
   }
 
+  // -------- Persistir memoria de identidad (folder_id, key_type, key_value) --------
+  if (identityMemoryInserts.length > 0) {
+    const idMap = new Map<string, typeof identityMemoryInserts[number]>();
+    for (const e of identityMemoryInserts) {
+      idMap.set(`${e.folder_id}|${e.key_type}|${e.key_value}`, e);
+    }
+    const dedupIdentity = [...idMap.values()];
+    if (dedupIdentity.length > 0) {
+      const { error: idErr } = await supabase
+        .from("poi_import_identity_memory")
+        .upsert(dedupIdentity, { onConflict: "folder_id,key_type,key_value" });
+      if (idErr) console.warn("[identity memory] upsert failed", idErr);
+    }
+  }
+
   onProgress?.("Finalizando…", 0.95);
 
   // -------- Cerrar el job --------
