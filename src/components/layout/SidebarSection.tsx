@@ -1,11 +1,15 @@
 import { ReactNode, useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
+import type { SectionKey } from "@/config/sections";
 
 interface SidebarSectionProps {
   title: string;
   accent?: "primary" | "teal" | "purple" | "iso" | "orange";
   defaultOpen?: boolean;
   children: ReactNode;
+  /** Si se pasa, la sección se oculta cuando el usuario no tiene permiso de view. */
+  permissionKey?: SectionKey;
 }
 
 const STORAGE_KEY = "sidebar_sections_collapsed_v1";
@@ -18,7 +22,8 @@ const readMap = (): Record<string, boolean> => {
   }
 };
 
-export const SidebarSection = ({ title, defaultOpen = true, children }: SidebarSectionProps) => {
+export const SidebarSection = ({ title, defaultOpen = true, children, permissionKey }: SidebarSectionProps) => {
+  const { canView, loading } = usePermissions();
   const [open, setOpen] = useState<boolean>(() => {
     const map = readMap();
     return typeof map[title] === "boolean" ? map[title] : defaultOpen;
@@ -33,6 +38,8 @@ export const SidebarSection = ({ title, defaultOpen = true, children }: SidebarS
       // ignore
     }
   }, [open, title]);
+
+  if (permissionKey && !loading && !canView(permissionKey)) return null;
 
   return (
     <section className="border-b border-border/40">
