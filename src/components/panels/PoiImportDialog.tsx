@@ -36,6 +36,8 @@ interface Props {
   onConsumeExternalSelection: () => void;
   /** Notifica al padre que el commit fue exitoso para refrescar datos. */
   onCommitSuccess?: () => void;
+  /** Oculta visualmente el modal sin resetear su estado (p.ej. mientras se elige POI en el mapa). */
+  hidden?: boolean;
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
