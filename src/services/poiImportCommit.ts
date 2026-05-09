@@ -142,8 +142,10 @@ export const commitImport = async ({
       });
     }
 
-    // Alias para asignaciones manuales
-    if (manualId && row.rawAddress) {
+    // Alias: guardamos para CUALQUIER fila que terminó asignada (manual, auto o alias)
+    // Así, en la próxima importación del mismo archivo, no hace falta volver a geocodificar
+    // y filas que "ya habían sido asignadas" no aparecen como "Sin geo" si Nominatim falla.
+    if (row.rawAddress) {
       aliasInserts.push({
         poi_id: poiId,
         normalized_address: normalizeAddress(row.rawAddress),
