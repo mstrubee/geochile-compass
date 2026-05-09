@@ -52,6 +52,7 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [activeMetric, setActiveMetric] = useState<string | null>(null);
+  const [chartMode, setChartMode] = useState<"monthly" | "annual">("monthly");
 
   // Reset cuando cambia el POI
   useEffect(() => {
