@@ -51,11 +51,34 @@ interface Props {
 export const PoiDetailDialog = ({ open, onClose, poi, schema }: Props) => {
   const { metrics, loading: metricsLoading } = usePoiMetrics(poi?.id ?? null);
   const { attrs, loading: attrsLoading } = usePoiAttributes(poi?.id ?? null);
+  const { update: updatePoi } = useSavedPois();
   const [insights, setInsights] = useState<string | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [activeMetric, setActiveMetric] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<"monthly" | "annual">("monthly");
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameOverride, setNameOverride] = useState<string | null>(null);
+  const displayName = nameOverride ?? poi?.name ?? "POI";
+
+  useEffect(() => {
+    setNameOverride(null);
+    setEditingName(false);
+  }, [poi?.id]);
+
+  const commitRename = async () => {
+    const next = nameDraft.trim();
+    setEditingName(false);
+    if (!poi || !next || next === displayName) return;
+    setNameOverride(next);
+    try {
+      await updatePoi(poi.id, { name: next });
+    } catch (e) {
+      setNameOverride(null);
+      toast.error(e instanceof Error ? e.message : "No se pudo renombrar");
+    }
+  };
 
   // Reset cuando cambia el POI
   useEffect(() => {
