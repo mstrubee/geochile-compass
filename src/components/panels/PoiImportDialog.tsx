@@ -728,6 +728,7 @@ const RowItem = ({
   onClearManual,
   onToggleSkip,
   onChooseCandidate,
+  onView,
 }: RowItemProps) => {
   const tag = STATUS_TAG[isManual ? "manual_assigned" : status] ?? STATUS_TAG.needs_review;
   return (
