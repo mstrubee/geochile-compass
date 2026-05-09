@@ -135,6 +135,29 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
         });
         if (ctrl.signal.aborted) return;
         setMatches(result);
+        // Auto-omitir filas que en imports anteriores fueron marcadas como omitidas.
+        try {
+          const { data: skipMem } = await supabase
+            .from("poi_import_skip_memory")
+            .select("normalized_key")
+            .eq("folder_id", folderId);
+          if (skipMem && skipMem.length > 0) {
+            const memSet = new Set(skipMem.map((r) => r.normalized_key));
+            const auto = new Set<number>();
+            for (const row of parsed.rows) {
+              if (memSet.has(skipKeyForRow(row))) auto.add(row.rowIndex);
+            }
+            if (auto.size > 0) {
+              setSkippedRows((prev) => {
+                const next = new Set(prev);
+                auto.forEach((i) => next.add(i));
+                return next;
+              });
+            }
+          }
+        } catch {
+          /* ignorar error de memoria de omisiones */
+        }
         setPhase("review");
       } catch (e) {
         if ((e as Error)?.name === "AbortError") {
