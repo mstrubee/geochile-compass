@@ -198,6 +198,26 @@ const AdminCapas = () => {
             <ArrowLeft className="h-4 w-4" /> Volver
           </Button>
           <h1 className="flex-1 text-base font-semibold">Admin</h1>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-5xl space-y-4 p-4">
+        <AdminCollapsible
+          id="users"
+          title="Usuarios y permisos"
+          icon={<UsersIcon className="h-4 w-4" />}
+          description="Roles personalizados y asignación de permisos por sección."
+        >
+          <UsersAdminSection />
+        </AdminCollapsible>
+
+        <AdminCollapsible
+          id="capas"
+          title="Capas territoriales"
+          icon={<MapIcon className="h-4 w-4" />}
+          description="Cargá y administrá capas geográficas agrupadas."
+        >
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="file"
             accept=".html,.htm,.kml"
@@ -239,24 +259,6 @@ const AdminCapas = () => {
             <Upload className="h-4 w-4" /> Cargar capa
           </Button>
         </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl space-y-4 p-4">
-        <AdminCollapsible
-          id="users"
-          title="Usuarios y permisos"
-          icon={<UsersIcon className="h-4 w-4" />}
-          description="Roles personalizados y asignación de permisos por sección."
-        >
-          <UsersAdminSection />
-        </AdminCollapsible>
-
-        <AdminCollapsible
-          id="capas"
-          title="Capas territoriales"
-          icon={<MapIcon className="h-4 w-4" />}
-          description="Cargá y administrá capas geográficas agrupadas."
-        >
         <p className="rounded-md border border-border/40 bg-muted/30 p-3 text-xs text-muted-foreground">
           ¿Tu HTML se subió pero no muestra capas ni puntos? Usá <strong>HTML → GeoJSON</strong> para
           convertirlo en el navegador y luego cargá el .geojson resultante.
