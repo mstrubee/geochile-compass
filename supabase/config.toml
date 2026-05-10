@@ -14,3 +14,6 @@ verify_jwt = true
 
 [functions.compute-poi-features]
 verify_jwt = true
+
+[functions.compute-performance-batch]
+verify_jwt = true

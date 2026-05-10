@@ -157,6 +157,7 @@ interface SidebarProps {
   // Analysis module (admin only)
   onConfigureAnalysis?: (folderId: string) => void;
   onComputeFeatures?: (folderId: string) => void;
+  onRecomputePerformance?: (folderId: string) => void;
 }
 
 interface LayerRow {
@@ -608,6 +609,7 @@ export const Sidebar = ({
   onConfigureFolderSchema,
   onConfigureAnalysis,
   onComputeFeatures,
+  onRecomputePerformance,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Input separado para "Cargar KMZ a esta carpeta" (clic derecho sobre carpeta POI)
@@ -2012,6 +2014,12 @@ export const Sidebar = ({
                                 <ContextMenuItem onSelect={() => onComputeFeatures(f.id)}>
                                   <MapPin className="mr-2 h-3.5 w-3.5" />
                                   Calcular features territoriales…
+                                </ContextMenuItem>
+                              )}
+                              {isAdmin && onRecomputePerformance && (
+                                <ContextMenuItem onSelect={() => onRecomputePerformance(f.id)}>
+                                  <BarChart3 className="mr-2 h-3.5 w-3.5" />
+                                  Recalcular análisis de performance…
                                 </ContextMenuItem>
                               )}
                               {(() => {
