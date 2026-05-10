@@ -21,7 +21,7 @@ export const fetchPoiPerformance = async (
     console.warn("[fetchPoiPerformance]", error.message);
     return null;
   }
-  return (data ?? null) as PoiPerformanceAnalysis | null;
+  return (data ?? null) as unknown as PoiPerformanceAnalysis | null;
 };
 
 export const fetchPerformanceForFolder = async (
