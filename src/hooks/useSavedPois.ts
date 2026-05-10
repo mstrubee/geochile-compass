@@ -123,27 +123,42 @@ export const useSavedPois = () => {
     };
 
     try {
-      const [active, trashed] = await Promise.all([
+      // Cargamos activos y trash en paralelo, pero de forma INDEPENDIENTE:
+      // si la trash falla (timeout, etc.) no debe bloquear el render del mapa.
+      const [activeRes, trashedRes] = await Promise.allSettled([
         fetchAllLight(false),
         fetchAllLight(true),
       ]);
-      setPois(active);
-      setTrashedPois(trashed);
-      // Persistimos snapshot ligero — la próxima carga es instantánea.
-      void savePoiCache(user.id, active, trashed);
 
-      // Enriquecimiento en background (no bloquea el render del mapa).
-      void enrichInBackground(active, "active").then(() => {
-        // Re-persistimos con datos completos al terminar.
-        setPois((curr) => {
-          setTrashedPois((trashedCurr) => {
-            void savePoiCache(user.id, curr, trashedCurr);
-            return trashedCurr;
+      const activeOk = activeRes.status === "fulfilled";
+      const trashedOk = trashedRes.status === "fulfilled";
+      const active = activeOk ? activeRes.value : null;
+      const trashed = trashedOk ? trashedRes.value : [];
+
+      if (activeOk && active) {
+        setPois(active);
+        setTrashedPois(trashed);
+        void savePoiCache(user.id, active, trashed);
+
+        // Enriquecimiento en background (no bloquea el render del mapa).
+        void enrichInBackground(active, "active").then(() => {
+          setPois((curr) => {
+            setTrashedPois((trashedCurr) => {
+              void savePoiCache(user.id, curr, trashedCurr);
+              return trashedCurr;
+            });
+            return curr;
           });
-          return curr;
         });
-      });
-      void enrichInBackground(trashed, "trashed");
+        if (trashedOk) void enrichInBackground(trashed, "trashed");
+      } else {
+        // Activos fallaron: NO pisamos el state (preservamos lo que vino del caché
+        // de IndexedDB). Avisamos en consola para debug.
+        console.error(
+          "[useSavedPois.refresh] active fetch failed, keeping cached state",
+          activeRes.status === "rejected" ? activeRes.reason : null,
+        );
+      }
     } catch (err) {
       console.error("[useSavedPois.refresh] error", err);
     } finally {
