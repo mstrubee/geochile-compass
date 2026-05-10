@@ -341,12 +341,40 @@ serve(async (req) => {
 
     const poiIds = featRows.map((r: any) => r.poi_id as string);
 
-    // 4) Cargar UF
+    // 4) Cargar UF — normalizamos period a "YYYY-MM-DD" porque a veces
+    // Supabase devuelve dates como ISO con timestamp completo según el cliente.
+    const normalizeDateStr = (d: any): string => {
+      if (typeof d !== "string") return String(d).slice(0, 10);
+      // Si tiene 'T' (timestamp ISO) o más de 10 chars, recortar al día
+      return d.length > 10 ? d.slice(0, 10) : d;
+    };
+
     const { data: ufRows, error: ufErr } = await supabase
       .from("uf_values").select("period, value");
     if (ufErr) throw ufErr;
     const ufMap = new Map<string, number>();
-    for (const r of (ufRows ?? []) as any[]) ufMap.set(r.period, Number(r.value));
+    for (const r of (ufRows ?? []) as any[]) {
+      ufMap.set(normalizeDateStr(r.period), Number(r.value));
+    }
+
+    // Helper: lookup con tolerancia ±2 meses si el período exacto no existe.
+    const lookupUfFuzzy = (period: string): number | null => {
+      const exact = ufMap.get(period);
+      if (exact && exact > 0) return exact;
+      const [y, m] = period.split("-").map(Number);
+      if (!isFinite(y) || !isFinite(m)) return null;
+      for (let delta = 1; delta <= 2; delta++) {
+        for (const sign of [-1, 1]) {
+          const ym = y * 12 + (m - 1) + sign * delta;
+          const yy = Math.floor(ym / 12);
+          const mm = (ym % 12) + 1;
+          const candidate = `${yy}-${String(mm).padStart(2, "0")}-01`;
+          const v = ufMap.get(candidate);
+          if (v && v > 0) return v;
+        }
+      }
+      return null;
+    };
 
     // 5) Cargar TODAS las métricas de los POIs (típicamente 'ventas')
     const { data: metricRows, error: metricsErr } = await supabase
@@ -364,51 +392,94 @@ serve(async (req) => {
     let maxCount = 0;
     metricCounts.forEach((c, k) => { if (c > maxCount) { maxCount = c; primaryMetric = k; } });
 
-    // Indexar series por POI
+    // Indexar series por POI — ahora con period normalizado y UF fuzzy
+    let droppedNoUf = 0;
+    let droppedNoValue = 0;
     const seriesByPoi = new Map<string, SeriesPoint[]>();
     for (const r of (metricRows ?? []) as any[]) {
       if (r.metric_key !== primaryMetric) continue;
-      const ufRate = ufMap.get(r.period);
-      if (!ufRate || ufRate <= 0) continue; // Sin UF para ese mes → omitir
+      const period = normalizeDateStr(r.period);
       const clp = Number(r.value);
+      if (!isFinite(clp) || clp <= 0) { droppedNoValue++; continue; }
+      const ufRate = lookupUfFuzzy(period);
+      if (!ufRate) { droppedNoUf++; continue; }
       const arr = seriesByPoi.get(r.poi_id) ?? [];
-      arr.push({ period: r.period, clp, uf: clp / ufRate });
+      arr.push({ period, clp, uf: clp / ufRate });
       seriesByPoi.set(r.poi_id, arr);
     }
     seriesByPoi.forEach((arr) => arr.sort((a, b) => a.period.localeCompare(b.period)));
 
     // 6) Construir target y por POI: promedio mensual UF del último año cerrado.
-    //    Excluir POIs con < 12 meses ese año (datos insuficientes).
+    //    Aceptar al menos 10 de 12 meses (estándar industria, tolerante a 1-2
+    //    meses faltantes por errores operacionales / locales recién abiertos).
     const yearStart = `${targetYear}-01-01`;
     const yearEnd = `${targetYear}-12-31`;
+    const MIN_MONTHS_FOR_TARGET = 10;
 
     interface PoiCalc {
       poi_id: string;
       features: number[]; // ordenados según FEATURE_KEYS
       ufTargetMean: number | null;
       clpTargetMean: number | null;
-      hasFullYear: boolean;
+      monthsInTarget: number;
+      hasValidTarget: boolean;
       series: SeriesPoint[];
     }
+    let droppedNoFeatures = 0;
+    let droppedTooFewMonths = 0;
     const calcs: PoiCalc[] = [];
     for (const f of (featRows ?? []) as any[]) {
       const series = seriesByPoi.get(f.poi_id) ?? [];
       const inYear = series.filter((p) => p.period >= yearStart && p.period <= yearEnd);
       const ufVec: number[] = FEATURE_KEYS.map((k) => Number(f.features?.[k] ?? 0));
+      // Sanity: features completamente cero indican que el POI no tiene info territorial.
+      const allFeaturesZero = ufVec.every((v) => v === 0);
+      if (allFeaturesZero) droppedNoFeatures++;
+      const validTarget = inYear.length >= MIN_MONTHS_FOR_TARGET;
+      if (!validTarget) droppedTooFewMonths++;
       calcs.push({
         poi_id: f.poi_id,
         features: ufVec,
-        ufTargetMean: inYear.length === 12 ? mean(inYear.map(p => p.uf)) : null,
-        clpTargetMean: inYear.length === 12 ? mean(inYear.map(p => p.clp)) : null,
-        hasFullYear: inYear.length === 12,
+        ufTargetMean: validTarget ? mean(inYear.map(p => p.uf)) : null,
+        clpTargetMean: validTarget ? mean(inYear.map(p => p.clp)) : null,
+        monthsInTarget: inYear.length,
+        hasValidTarget: validTarget,
         series,
       });
     }
 
-    // 7) Entrenar el modelo solo con POIs que tienen año completo (target válido)
-    const trainSet = calcs.filter((c) => c.hasFullYear);
+    // 7) Entrenar el modelo solo con POIs que tienen target válido
+    const trainSet = calcs.filter((c) => c.hasValidTarget);
+
+    // Diagnóstico exhaustivo en logs (visibles en Supabase Edge Functions → Logs)
+    console.log(`[performance-batch] Diagnóstico:
+  - Features cacheados: ${featRows?.length ?? 0}
+  - Filas métricas cargadas: ${metricRows?.length ?? 0}
+  - Métrica primaria: ${primaryMetric} (${maxCount} filas)
+  - UF en cache: ${ufMap.size} períodos
+  - Muestras métricas descartadas:
+      sin valor / valor 0: ${droppedNoValue}
+      sin UF (incluso fuzzy ±2m): ${droppedNoUf}
+  - POIs con features todos en 0: ${droppedNoFeatures}
+  - POIs con < ${MIN_MONTHS_FOR_TARGET} meses de target: ${droppedTooFewMonths}
+  - POIs aptos para entrenamiento: ${trainSet.length}
+  - Target year: ${targetYear}`);
+
     if (trainSet.length < 5) {
-      return new Response(JSON.stringify({ error: `Solo ${trainSet.length} POIs tienen año ${targetYear} completo. Mínimo 5.` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({
+        error: `Solo ${trainSet.length} POIs aptos para entrenar (mínimo 5). Ver logs de diagnóstico.`,
+        diagnostic: {
+          features_cached: featRows?.length ?? 0,
+          metrics_rows: metricRows?.length ?? 0,
+          primary_metric: primaryMetric,
+          uf_periods: ufMap.size,
+          dropped_no_value: droppedNoValue,
+          dropped_no_uf: droppedNoUf,
+          dropped_no_features: droppedNoFeatures,
+          dropped_too_few_months: droppedTooFewMonths,
+          target_year: targetYear,
+        }
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const X_train = trainSet.map((c) => c.features);
@@ -482,7 +553,7 @@ serve(async (req) => {
 
         // Temporal decomposition
         const det = detectRegimes(c.series);
-        const state = c.hasFullYear ? classifyState(det) : "insufficient_data";
+        const state = c.hasValidTarget ? classifyState(det) : "insufficient_data";
         const decomposition: any = { regimes: det.regimes, recovery_ratio: det.recoveryRatio, short_term_acceleration: det.shortAccel };
 
         const lastUfRate = c.series.length > 0 ? ufMap.get(c.series[c.series.length - 1].period) ?? 38000 : 38000;
