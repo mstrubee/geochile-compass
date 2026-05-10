@@ -12,6 +12,7 @@ import {
 } from "@/services/analysisSettingsService";
 import type { AnalysisSettings, ComplementWeightRule } from "@/types/analysis";
 import type { GseClass, GseFeature } from "@/types/gse";
+import { resolveCommuneAndRegion } from "@/utils/communeReverseGeocode";
 
 /**
  * Construye el payload para `compute-poi-features` para UN POI.
@@ -309,7 +310,25 @@ const buildRegionCells = async (
   poi: SavedPoi,
   comuna: string | null,
 ): Promise<ManzanaCell[]> => {
-  if (!comuna) return [];
+  // Si por alguna razón no hay comuna, igual devolvemos UNA celda con
+  // valores neutros — preferimos features pobres pero presentes a una
+  // celda vacía que rompe todos los agregados.
+  if (!comuna) {
+    return [
+      {
+        id: `commune-unknown`,
+        pop: 50_000,
+        hh: 15_000,
+        nse: 3,
+        income: NSE_INCOME[3],
+        density: 1_000,
+        traffic: 50,
+        centroid: [poi.lng, poi.lat],
+        area_m2: 50_000_000, // 50 km² aproximado
+      },
+    ];
+  }
+
   const { byName } = await loadComunasIndex();
   const ine = await loadIneIndex();
   const norm = normalizeCommuneName(comuna);
@@ -324,10 +343,10 @@ const buildRegionCells = async (
     : 3;
   const income = ineStats?.ingreso ?? NSE_INCOME[nse];
 
-  const centroidRaw = feature?.geometry
+  const centroidPos = feature?.geometry
     ? polygonCentroid(feature.geometry)
     : [poi.lng, poi.lat];
-  const centroid: [number, number] = [Number(centroidRaw[0] ?? poi.lng), Number(centroidRaw[1] ?? poi.lat)];
+  const centroid: [number, number] = [centroidPos[0] ?? poi.lng, centroidPos[1] ?? poi.lat];
 
   return [
     {
@@ -379,9 +398,20 @@ interface BuildPayloadDeps {
 
 export interface BuildPayloadOptions {
   poi: SavedPoi;
-  comuna: string | null;
-  isoMinutes: number;
-  isRm: boolean;
+  /** Comuna conocida del POI. Si no se entrega, se resuelve por reverse-geocode lat/lng. */
+  comuna?: string | null;
+  /** Flag RM conocido. Si no se entrega, se resuelve por reverse-geocode. */
+  isRm?: boolean;
+  /**
+   * Fallback opcional para detección RM si el reverse-geocode falla. Típicamente
+   * el valor del atributo "Zona" del POI ("RM1", "RM2" → RM; otros → regiones).
+   */
+  zonaFallback?: string | null;
+  /** Tiempo de isócrona en minutos. Si no se entrega, se calcula con isoMinutesForCommune. */
+  isoMinutes?: number;
+  /** Configuración para resolver isoMinutes si no viene explícito. */
+  isoMinutesRm?: number;
+  isoMinutesRegions?: number;
   precomputedIso?: Polygon | MultiPolygon;
   includeCompetitorIsos?: boolean;
   supabaseUrl: string;
@@ -395,16 +425,38 @@ export const buildFeaturePayload = async (
 ): Promise<FeaturePayload> => {
   const {
     poi,
-    comuna,
-    isoMinutes,
-    isRm,
     precomputedIso,
     includeCompetitorIsos = false,
     supabaseUrl,
     supabaseAnonKey,
     bearer,
     deps,
+    zonaFallback = null,
+    isoMinutesRm = 5,
+    isoMinutesRegions = 7,
   } = opts;
+
+  // 0) Resolver comuna y flag RM si no vinieron explícitos
+  let comuna: string | null = opts.comuna ?? null;
+  let isRm: boolean = opts.isRm ?? false;
+  let resolved = false;
+
+  if (comuna == null || opts.isRm == null) {
+    const r = await resolveCommuneAndRegion(poi.lat, poi.lng, zonaFallback);
+    if (comuna == null) comuna = r.comuna;
+    if (opts.isRm == null) isRm = r.isRm;
+    resolved = true;
+  }
+
+  // Resolver minutos según RM/regiones si no vinieron
+  const isoMinutes = opts.isoMinutes ?? (isRm ? isoMinutesRm : isoMinutesRegions);
+
+  // Diagnóstico (visible solo en consola; ayuda al admin a verificar)
+  if (resolved) {
+    console.debug(
+      `[features] poi=${poi.name} resolved: comuna=${comuna ?? "?"}, isRm=${isRm}, iso=${isoMinutes}min`,
+    );
+  }
 
   // 1) Isócrona del POI
   const iso =
@@ -415,12 +467,12 @@ export const buildFeaturePayload = async (
   const bbox = polygonBbox(iso);
   const expanded = expandBbox(bbox, 1500);
 
-  // 3) Celdas: manzanas+GSE en RM, comuna real en regiones
+  // 3) Celdas: manzanas+GSE en RM, comuna real en regiones.
+  //    Si RM y manzanas dan 0 → fallback a celda comuna del IneIndex.
   let cells: ManzanaCell[] = [];
   if (isRm) {
     cells = await buildRmCells(bbox);
     if (!cells.length) {
-      // Fallback: comuna RM sin manzanas (raro)
       cells = await buildRegionCells(poi, comuna);
     }
   } else {
@@ -435,9 +487,7 @@ export const buildFeaturePayload = async (
   const competitors: CompetitorPoi[] = [];
 
   if (includeCompetitorIsos) {
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     for (const p of internalPeers) {
-      await sleep(1600); // ORS ≈ 40/min — throttle conservador entre peers
       try {
         const peerIso = await fetchIsochrone(
           p.lng,
