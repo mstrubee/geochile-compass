@@ -470,7 +470,7 @@ serve(async (req) => {
     // Diagnóstico exhaustivo en logs (visibles en Supabase Edge Functions → Logs)
     console.log(`[performance-batch] Diagnóstico:
   - Features cacheados: ${featRows?.length ?? 0}
-  - Filas métricas cargadas: ${metricRows?.length ?? 0}
+  - Filas métricas cargadas (paginado): ${metricRows.length} en ${metricPages} páginas
   - Métrica primaria: ${primaryMetric} (${maxCount} filas)
   - UF en cache: ${ufMap.size} períodos
   - Muestras métricas descartadas:
