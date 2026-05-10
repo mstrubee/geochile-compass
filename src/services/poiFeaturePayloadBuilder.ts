@@ -343,9 +343,10 @@ const buildRegionCells = async (
     : 3;
   const income = ineStats?.ingreso ?? NSE_INCOME[nse];
 
-  const centroid: [number, number] = feature?.geometry
+  const centroidPos = feature?.geometry
     ? polygonCentroid(feature.geometry)
     : [poi.lng, poi.lat];
+  const centroid: [number, number] = [centroidPos[0] ?? poi.lng, centroidPos[1] ?? poi.lat];
 
   return [
     {
