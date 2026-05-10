@@ -255,10 +255,8 @@ const classifyState = (det: ReturnType<typeof detectRegimes>): string => {
  * Sección 3: handler
  * ============================================================ */
 
-// Features ordenados que entran al modelo. Excluimos algunos que serían
-// redundantes (cells_count, cannibalization_factor) o que están subsumidos
-// por otros (pop_exclusive vs pop_total).
-const FEATURE_KEYS = [
+// Features territoriales (estáticos por POI).
+const TERRITORIAL_FEATURE_KEYS = [
   "pop_total",
   "pop_density_avg",
   "nse_high_pct",
@@ -273,6 +271,22 @@ const FEATURE_KEYS = [
   "n_anchors",
   "n_complement_medium",
   "n_complement_low",
+];
+
+// Features temporales derivados del historial de ventas en UF (deflactado).
+// Estos son los que más explican ventas del año target en cadenas estables
+// (la inercia operativa de un local maduro es la señal más fuerte).
+const TEMPORAL_FEATURE_KEYS = [
+  "uf_mean_y_minus_1",
+  "uf_mean_y_minus_2",
+  "uf_mean_y_minus_3",
+  "uf_mean_h2_y_minus_1",
+  "uf_mean_h1_y_minus_1",
+  "uf_slope_y_minus_1",
+  "uf_slope_24m_pre",
+  "uf_volatility_y_minus_1",
+  "uf_growth_y1_vs_y2",
+  "uf_growth_h2_vs_h1",
 ];
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -290,6 +304,64 @@ const FEATURE_LABELS: Record<string, string> = {
   n_anchors: "Anclas (alto flujo)",
   n_complement_medium: "Complementarios medio",
   n_complement_low: "Complementarios bajo",
+  uf_mean_y_minus_1: "Promedio UF año previo",
+  uf_mean_y_minus_2: "Promedio UF hace 2 años",
+  uf_mean_y_minus_3: "Promedio UF hace 3 años",
+  uf_mean_h2_y_minus_1: "Promedio UF H2 año previo",
+  uf_mean_h1_y_minus_1: "Promedio UF H1 año previo",
+  uf_slope_y_minus_1: "Tendencia mensual año previo",
+  uf_slope_24m_pre: "Tendencia 24m pre-target",
+  uf_volatility_y_minus_1: "Volatilidad año previo",
+  uf_growth_y1_vs_y2: "Crecimiento año previo vs hace 2",
+  uf_growth_h2_vs_h1: "Crecimiento H2 vs H1 año previo",
+};
+
+const computeTemporalFeatures = (
+  series: SeriesPoint[],
+  targetYear: number,
+): Record<string, number> => {
+  const y1 = targetYear - 1;
+  const y2 = targetYear - 2;
+  const y3 = targetYear - 3;
+  const inYear = (yr: number) => series.filter((p) => p.period >= `${yr}-01-01` && p.period <= `${yr}-12-31`).map((p) => p.uf);
+  const inRange = (from: string, to: string) => series.filter((p) => p.period >= from && p.period <= to).map((p) => p.uf);
+  const v_y1 = inYear(y1);
+  const v_y2 = inYear(y2);
+  const v_y3 = inYear(y3);
+  const v_h2_y1 = inRange(`${y1}-07-01`, `${y1}-12-31`);
+  const v_h1_y1 = inRange(`${y1}-01-01`, `${y1}-06-30`);
+  const v_24m_pre = inRange(`${y2}-01-01`, `${y1}-12-31`);
+  const meanArr = (a: number[]) => a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0;
+  const stdArr = (a: number[]) => {
+    if (a.length < 2) return 0;
+    const m = meanArr(a);
+    return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1));
+  };
+  const slope = (a: number[]) => {
+    if (a.length < 3) return 0;
+    const n = a.length;
+    const xm = (n - 1) / 2;
+    const ym = meanArr(a);
+    let num = 0, den = 0;
+    for (let i = 0; i < n; i++) { const dx = i - xm; num += dx * (a[i] - ym); den += dx * dx; }
+    return den > 0 ? num / den : 0;
+  };
+  const m_y1 = meanArr(v_y1);
+  const m_y2 = meanArr(v_y2);
+  const m_h1 = meanArr(v_h1_y1);
+  const m_h2 = meanArr(v_h2_y1);
+  return {
+    uf_mean_y_minus_1: m_y1,
+    uf_mean_y_minus_2: m_y2,
+    uf_mean_y_minus_3: meanArr(v_y3),
+    uf_mean_h2_y_minus_1: m_h2,
+    uf_mean_h1_y_minus_1: m_h1,
+    uf_slope_y_minus_1: slope(v_y1),
+    uf_slope_24m_pre: slope(v_24m_pre),
+    uf_volatility_y_minus_1: stdArr(v_y1),
+    uf_growth_y1_vs_y2: m_y2 > 0 ? m_y1 / m_y2 - 1 : 0,
+    uf_growth_h2_vs_h1: m_h1 > 0 ? m_h2 / m_h1 - 1 : 0,
+  };
 };
 
 serve(async (req) => {
