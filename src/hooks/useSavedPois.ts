@@ -12,7 +12,7 @@ const LIGHT_COLS =
 // Fase de enriquecimiento: trae los campos pesados.
 const HEAVY_COLS = "id,description,properties";
 
-const PAGE = 500;
+const PAGE = 250;
 
 export const useSavedPois = () => {
   const { user } = useAuth();
