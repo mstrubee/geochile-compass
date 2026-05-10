@@ -103,14 +103,18 @@ export type TemporalState =
  * Descomposición temporal en regímenes detectados (z-score).
  * Todos los valores son promedios mensuales en UF (deflactados).
  */
+export interface TemporalRegime {
+  kind: "pre_shock" | "crisis" | "recovery" | "ttm";
+  from: string;
+  to: string;
+  uf_mean: number;
+  clp_mean: number;
+}
+
 export interface TemporalDecomposition {
-  pre_shock?: { from: string; to: string; uf: number; clp: number };
-  crisis?: { from: string; to: string; uf: number; clp: number; drop_pct: number };
-  recovery?: { from: string; to: string; uf: number; clp: number };
-  ttm?: { from: string; to: string; uf: number; clp: number };
-  closed_year?: { year: number; uf: number; clp: number };
-  growth_vs_pre_uf_pct: number | null;
-  acceleration_pct: number | null;
+  regimes: TemporalRegime[];
+  recovery_ratio: number | null;
+  short_term_acceleration: number | null;
 }
 
 export interface PoiPerformanceAnalysis {

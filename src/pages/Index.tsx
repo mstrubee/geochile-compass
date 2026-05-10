@@ -18,6 +18,7 @@ import { PoiFolderSchemaDialog } from "@/components/panels/PoiFolderSchemaDialog
 import { AnalysisConfigDialog } from "@/components/panels/AnalysisConfigDialog";
 import { ComputeFeaturesDialog } from "@/components/panels/ComputeFeaturesDialog";
 import { useAnalysisSettings } from "@/hooks/useAnalysisConfig";
+import { useComputePerformanceBatch } from "@/hooks/usePoiPerformance";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import { usePoiFolderSchemas } from "@/hooks/usePoiMetrics";
 import { Legend } from "@/components/ui-overlays/Legend";
@@ -112,6 +113,7 @@ const Index = () => {
   const [schemaDialogFolderId, setSchemaDialogFolderId] = useState<string | null>(null);
   const [analysisConfigFolderId, setAnalysisConfigFolderId] = useState<string | null>(null);
   const [computeFeaturesFolderId, setComputeFeaturesFolderId] = useState<string | null>(null);
+  const performanceBatch = useComputePerformanceBatch();
   const [detailPoi, setDetailPoi] = useState<SavedPoi | null>(null);
   /** Modo "elegir POI en mapa" para una fila concreta del importador. */
   const [poiPickContext, setPoiPickContext] = useState<{ rowIndex: number } | null>(null);
@@ -1056,6 +1058,16 @@ const Index = () => {
           onConfigureFolderSchema={(folderId) => setSchemaDialogFolderId(folderId)}
           onConfigureAnalysis={(folderId) => setAnalysisConfigFolderId(folderId)}
           onComputeFeatures={(folderId) => setComputeFeaturesFolderId(folderId)}
+          onRecomputePerformance={async (folderId) => {
+            try {
+              const r = await performanceBatch.run(folderId);
+              toast.success(
+                `Análisis recalculado · ${r.upserted}/${r.total_pois} POIs · R²=${(r.r_squared * 100).toFixed(0)}%`,
+              );
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : String(e));
+            }
+          }}
         />
 
         <div
@@ -1355,6 +1367,20 @@ const Index = () => {
             }
             await refreshSchemas();
           }}
+          chainPois={detailPoi ? pois.filter((p) => p.folder_id === detailPoi.folder_id) : []}
+          isAdmin={isAdmin}
+          onRecomputeAnalysis={async () => {
+            if (!detailPoi?.folder_id) return;
+            try {
+              const r = await performanceBatch.run(detailPoi.folder_id);
+              toast.success(
+                `Análisis recalculado · ${r.upserted}/${r.total_pois} POIs · R²=${(r.r_squared * 100).toFixed(0)}%`,
+              );
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : String(e));
+            }
+          }}
+          recomputingAnalysis={performanceBatch.running}
         />
       )}
 

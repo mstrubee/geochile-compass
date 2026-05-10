@@ -39,6 +39,7 @@ import {
 } from "@/utils/poiMetricsAggregate";
 import { fetchPoiInsights } from "@/services/poiInsightsService";
 import type { PoiFolderSchema } from "@/types/poiMetrics";
+import { PoiAnalysisPanel } from "@/components/panels/PoiAnalysisPanel";
 
 interface Props {
   open: boolean;
@@ -47,9 +48,30 @@ interface Props {
   schema: PoiFolderSchema | null;
   onRename?: (id: string, name: string) => Promise<void> | void;
   onKpiOrderChange?: (folderId: string, order: string[]) => Promise<void> | void;
+  /** Lista de POIs del mismo chain para resolver nombres de peers en análisis. */
+  chainPois?: SavedPoi[];
+  /** Si es admin (para mostrar botón de recompute en el panel análisis). */
+  isAdmin?: boolean;
+  /** Callback para disparar recompute del análisis. */
+  onRecomputeAnalysis?: () => void;
+  /** Si el batch de recompute está corriendo. */
+  recomputingAnalysis?: boolean;
 }
 
-export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename, onKpiOrderChange }: Props) => {
+export const PoiDetailDialog = ({
+  open,
+  onClose,
+  poi,
+  schema,
+  onRename,
+  onKpiOrderChange,
+  chainPois = [],
+  isAdmin = false,
+  onRecomputeAnalysis,
+  recomputingAnalysis = false,
+}: Props) => {
+  // Tabs principales: "Resumen" (toda la UI actual) | "Análisis" (panel Ridge)
+  const [mainTab, setMainTab] = useState<"summary" | "analysis">("summary");
   const { metrics, loading: metricsLoading } = usePoiMetrics(poi?.id ?? null);
   const { attrs, loading: attrsLoading } = usePoiAttributes(poi?.id ?? null);
   const [insights, setInsights] = useState<string | null>(null);
@@ -308,8 +330,43 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename, onKpiOrd
           )}
         </DialogHeader>
 
-        <div className="scrollbar-thin flex max-h-[calc(92vh-110px)] flex-col overflow-y-auto">
-          {(metricsLoading || attrsLoading) && metrics.length === 0 ? (
+        {/* Main tabs: Resumen | Análisis */}
+        <div className="border-b border-border/30 px-5 pt-2">
+          <div className="inline-flex rounded-lg bg-surface-2/60 p-0.5">
+            {([
+              { id: "summary" as const, label: "Resumen" },
+              { id: "analysis" as const, label: "Análisis" },
+            ]).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setMainTab(t.id)}
+                className={[
+                  "rounded-md px-3 py-1 text-[11px] font-medium transition-all",
+                  mainTab === t.id
+                    ? "bg-surface-3 text-foreground shadow-apple-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                ].join(" ")}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="scrollbar-thin flex max-h-[calc(92vh-150px)] flex-col overflow-y-auto">
+          {/* === ANALYSIS TAB === */}
+          {mainTab === "analysis" && poi && (
+            <PoiAnalysisPanel
+              poi={poi}
+              chainPois={chainPois}
+              isAdmin={isAdmin}
+              onRecompute={onRecomputeAnalysis}
+              recomputing={recomputingAnalysis}
+            />
+          )}
+
+          {/* === SUMMARY TAB === (UI existente) */}
+          {mainTab === "summary" && ((metricsLoading || attrsLoading) && metrics.length === 0 ? (
             <div className="flex h-72 items-center justify-center text-[11px] text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando datos…
             </div>
@@ -566,7 +623,7 @@ export const PoiDetailDialog = ({ open, onClose, poi, schema, onRename, onKpiOrd
                 </div>
               )}
             </div>
-          )}
+          ))}
         </div>
 
         <div className="flex justify-between border-t border-border/40 bg-surface-2/40 px-5 py-3">
