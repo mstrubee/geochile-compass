@@ -2,7 +2,6 @@ import { useCallback, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { SavedPoi, PoiFolder } from "@/types/pois";
 import type { AnalysisSettings, ComplementWeightRule } from "@/types/analysis";
-import { isoMinutesForCommune } from "@/data/rmCommunes";
 import {
   buildFeaturePayload,
   type FeaturePayload,
@@ -124,6 +123,30 @@ export const usePoiFeaturesBatch = () => {
         }
       }
 
+      // Pre-cargar atributos (Zona, Comuna si existe) de todos los POIs en una
+      // sola query. Estos POIs no traen "Comuna" en properties — pero sí tienen
+      // "Zona" (RM1, RM2, etc.) que usamos como fallback de detección RM.
+      const zonaByPoi = new Map<string, string>();
+      const comunaByPoi = new Map<string, string>();
+      try {
+        const poiIds = opts.pois.map((p) => p.id);
+        if (poiIds.length > 0) {
+          const { data: attrs } = await supabase
+            .from("poi_attributes")
+            .select("poi_id, attr_key, attr_value")
+            .in("poi_id", poiIds);
+          for (const a of (attrs ?? []) as Array<{ poi_id: string; attr_key: string; attr_value: string | null }>) {
+            if (!a.attr_value) continue;
+            const k = a.attr_key.toLowerCase().trim();
+            if (k === "zona") zonaByPoi.set(a.poi_id, a.attr_value);
+            else if (k === "comuna") comunaByPoi.set(a.poi_id, a.attr_value);
+          }
+        }
+      } catch (e) {
+        // No es bloqueante: el reverse-geocode por lat/lng igual funciona.
+        console.warn("[features] no se pudieron cargar poi_attributes:", e);
+      }
+
       let done = 0;
       for (const poi of opts.pois) {
         if (cancelRef.current) break;
@@ -139,23 +162,23 @@ export const usePoiFeaturesBatch = () => {
         updateRow(poi.id, { status: "running" });
 
         try {
-          // Resolver comuna y RM/regiones
-          const comuna =
-            (poi.properties as Record<string, unknown> | null)?.["Comuna"] as string ??
-            (poi.properties as Record<string, unknown> | null)?.["comuna"] as string ??
+          // Comuna desde properties O atributos. Si no hay, el builder hace
+          // reverse-geocode por lat/lng (más confiable que properties).
+          const comunaFromProps =
+            ((poi.properties as Record<string, unknown> | null)?.["Comuna"] as string | undefined) ??
+            ((poi.properties as Record<string, unknown> | null)?.["comuna"] as string | undefined) ??
             null;
-          const { minutes, isRm } = isoMinutesForCommune(
-            comuna,
-            opts.settings.iso_minutes_rm,
-            opts.settings.iso_minutes_regions,
-          );
+          const comunaFromAttrs = comunaByPoi.get(poi.id) ?? null;
+          const comunaHint = comunaFromProps ?? comunaFromAttrs ?? null;
+          const zonaHint = zonaByPoi.get(poi.id) ?? null;
 
-          // Construir payload
+          // Construir payload (el builder resuelve internamente comuna+RM+isoMinutes)
           const payload: FeaturePayload = await buildFeaturePayload({
             poi,
-            comuna,
-            isoMinutes: minutes,
-            isRm,
+            comuna: comunaHint, // hint; si null el builder reverse-geocode
+            zonaFallback: zonaHint, // fallback "RM1"/"RM2" → RM si reverse falla
+            isoMinutesRm: opts.settings.iso_minutes_rm,
+            isoMinutesRegions: opts.settings.iso_minutes_regions,
             includeCompetitorIsos: opts.settings.use_fine_cannibalization,
             supabaseUrl,
             supabaseAnonKey,
