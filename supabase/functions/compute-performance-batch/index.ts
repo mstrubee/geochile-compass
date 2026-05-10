@@ -506,7 +506,7 @@ serve(async (req) => {
 
     interface PoiCalc {
       poi_id: string;
-      features: number[]; // ordenados según FEATURE_KEYS
+      featuresRaw: number[]; // ordenados según ALL_KEYS (territorial + temporal)
       ufTargetMean: number | null;
       clpTargetMean: number | null;
       monthsInTarget: number;
@@ -516,18 +516,22 @@ serve(async (req) => {
     let droppedNoFeatures = 0;
     let droppedTooFewMonths = 0;
     const calcs: PoiCalc[] = [];
+    // Orden completo de features que existen ANTES del filtrado de constantes.
+    const ALL_KEYS_FULL = [...TERRITORIAL_FEATURE_KEYS, ...TEMPORAL_FEATURE_KEYS];
     for (const f of (featRows ?? []) as any[]) {
       const series = seriesByPoi.get(f.poi_id) ?? [];
       const inYear = series.filter((p) => p.period >= yearStart && p.period <= yearEnd);
-      const ufVec: number[] = FEATURE_KEYS.map((k) => Number(f.features?.[k] ?? 0));
-      // Sanity: features completamente cero indican que el POI no tiene info territorial.
-      const allFeaturesZero = ufVec.every((v) => v === 0);
-      if (allFeaturesZero) droppedNoFeatures++;
+      const territorialVec = TERRITORIAL_FEATURE_KEYS.map((k) => Number(f.features?.[k] ?? 0));
+      const temporalFeats = computeTemporalFeatures(series, targetYear);
+      const temporalVec = TEMPORAL_FEATURE_KEYS.map((k) => Number(temporalFeats[k] ?? 0));
+      const fullVec = [...territorialVec, ...temporalVec];
+      const allTerritorialZero = territorialVec.every((v) => v === 0);
+      if (allTerritorialZero) droppedNoFeatures++;
       const validTarget = inYear.length >= MIN_MONTHS_FOR_TARGET;
       if (!validTarget) droppedTooFewMonths++;
       calcs.push({
         poi_id: f.poi_id,
-        features: ufVec,
+        featuresRaw: fullVec,
         ufTargetMean: validTarget ? mean(inYear.map(p => p.uf)) : null,
         clpTargetMean: validTarget ? mean(inYear.map(p => p.clp)) : null,
         monthsInTarget: inYear.length,
@@ -536,8 +540,30 @@ serve(async (req) => {
       });
     }
 
-    // 7) Entrenar el modelo solo con POIs que tienen target válido
+    // 7) Filtrar features constantes o casi-constantes en el set de entrenamiento.
+    //    Una columna sin varianza no aporta información y al estandarizar inflama ruido.
     const trainSet = calcs.filter((c) => c.hasValidTarget);
+
+    const droppedFeatures: string[] = [];
+    const keptFeatureIdx: number[] = [];
+    const keptFeatureKeys: string[] = [];
+    if (trainSet.length > 0) {
+      for (let j = 0; j < ALL_KEYS_FULL.length; j++) {
+        const col = trainSet.map((c) => c.featuresRaw[j]);
+        const m = col.reduce((s, v) => s + v, 0) / col.length;
+        let ss = 0;
+        for (const v of col) ss += (v - m) ** 2;
+        const sd = Math.sqrt(ss / Math.max(1, col.length - 1));
+        // Tolerancia: sd absoluta y relativa a la media.
+        const relSd = Math.abs(m) > 1e-9 ? sd / Math.abs(m) : sd;
+        if (sd < 1e-9 || relSd < 1e-6) {
+          droppedFeatures.push(ALL_KEYS_FULL[j]);
+        } else {
+          keptFeatureIdx.push(j);
+          keptFeatureKeys.push(ALL_KEYS_FULL[j]);
+        }
+      }
+    }
 
     // Diagnóstico exhaustivo en logs (visibles en Supabase Edge Functions → Logs)
     console.log(`[performance-batch] Diagnóstico:
@@ -548,9 +574,12 @@ serve(async (req) => {
   - Muestras métricas descartadas:
       sin valor / valor 0: ${droppedNoValue}
       sin UF (incluso fuzzy ±2m): ${droppedNoUf}
-  - POIs con features todos en 0: ${droppedNoFeatures}
+  - POIs con features territoriales todos en 0: ${droppedNoFeatures}
   - POIs con < ${MIN_MONTHS_FOR_TARGET} meses de target: ${droppedTooFewMonths}
   - POIs aptos para entrenamiento: ${trainSet.length}
+  - Features totales: ${ALL_KEYS_FULL.length} (${TERRITORIAL_FEATURE_KEYS.length} territoriales + ${TEMPORAL_FEATURE_KEYS.length} temporales)
+  - Features descartados por varianza ~0: ${droppedFeatures.length} [${droppedFeatures.join(", ")}]
+  - Features usados en el modelo: ${keptFeatureKeys.length} [${keptFeatureKeys.join(", ")}]
   - Target year: ${targetYear}`);
 
     if (trainSet.length < 5) {
@@ -570,10 +599,15 @@ serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const X_train = trainSet.map((c) => c.features);
+    // Vector reducido por POI usando solo las columnas conservadas.
+    const selectVec = (raw: number[]): number[] => keptFeatureIdx.map((j) => raw[j]);
+
+    const X_train = trainSet.map((c) => selectVec(c.featuresRaw));
     const y_train = trainSet.map((c) => c.ufTargetMean as number);
     const { Xs: Xs_train, means, stds } = standardize(X_train);
     const fit = ridgeFitWithCv(Xs_train, y_train);
+
+    console.log(`[performance-batch] Modelo entrenado: r²=${fit.rSquared.toFixed(4)} cv_rmse=${fit.cvRmse.toFixed(2)} UF lambda=${fit.alpha} sd(y)=${(Math.sqrt(y_train.reduce((s,v)=>s+(v-y_train.reduce((a,b)=>a+b,0)/y_train.length)**2,0)/(y_train.length-1))).toFixed(2)} UF`);
 
     // 8) Helper: estandarizar un punto y predecir
     const standardizePoint = (x: number[]): number[] =>
@@ -586,7 +620,7 @@ serve(async (req) => {
 
     // 9) Calcular contribuciones, peers y temporal_decomposition por cada POI
     //    (incluso los nuevos sin año completo — para ellos solo predecimos drivers)
-    const allXs = calcs.map((c) => standardizePoint(c.features));
+    const allXs = calcs.map((c) => standardizePoint(selectVec(c.featuresRaw)));
     const findPeers = (idx: number, k = 5) => {
       const target = allXs[idx];
       const dists: Array<{ idx: number; distance: number }> = [];
@@ -620,8 +654,8 @@ serve(async (req) => {
           ? (residualUf / c.ufTargetMean) * 100
           : null;
 
-        // Top drivers por contribución absoluta
-        const contributions = FEATURE_KEYS.map((feature, j) => {
+        // Top drivers por contribución absoluta — solo features realmente usados.
+        const contributions = keptFeatureKeys.map((feature, j) => {
           const coef = fit.beta[j];
           const contributionUf = coef * xStd[j];
           const ufRate = ufMap.get(`${targetYear}-12-01`) ?? 38000;
