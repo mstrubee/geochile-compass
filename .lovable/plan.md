@@ -1,38 +1,54 @@
+## Causa raíz
 
-# "Continuar" debe retomar sin re-subir el archivo
+En `supabase/functions/compute-performance-batch/index.ts`, la query a `poi_metrics` (líneas ~380-383) no pagina:
 
-## Por qué hoy obliga a re-subir
+```ts
+const { data: metricRows } = await supabase
+  .from("poi_metrics")
+  .select("poi_id, metric_key, period, value")
+  .in("poi_id", poiIds);
+```
 
-El botón "Continuar" del historial es en realidad un `<input type="file">` disfrazado. La aplicación nunca guarda el Excel original ni el snapshot de filas, así que la única forma de regenerar la vista de revisión es que el usuario vuelva a elegir el archivo desde su disco.
+Supabase aplica límite default de 1000 filas. Hay 5696 filas reales → 4696 se pierden. Como las filas se truncan en orden arbitrario del planner, la mayoría de los 64 POIs queda con <10 meses y son descartados del entrenamiento (regla `< 10 meses → drop`). Resultado: solo 10 POIs entrenan, R²=2%.
 
-## Cambios
+## Fix
 
-### 1. Guardar el Excel en storage al subirlo
-- Crear un bucket privado `poi-imports` con RLS: lectura/escritura sólo para admins.
-- En `usePoiImport.parse(file)`, además de parsear, subir el archivo a `poi-imports/{folder_id}/{uuid}.xlsx` y memorizar la ruta en estado.
-- Al hacer commit, persistir esa ruta en una nueva columna `poi_import_jobs.source_file_path text`.
+Paginar la lectura de `poi_metrics` en chunks de 1000 hasta agotar resultados. Mismo patrón que ya usa `useSavedPois`.
 
-### 2. Mostrar "Continuar" sólo cuando hay archivo recuperable
-- En el listado de imports, si `source_file_path` existe, el botón "Continuar" descarga el archivo desde storage, lo parsea y dispara matching (la nueva memoria de identidad + aliases hará que las filas ya resueltas vuelvan automáticas, y las pendientes queden listas para revisión).
-- Si no hay `source_file_path` (jobs antiguos), el botón cae al comportamiento actual (input de archivo) para no romper compatibilidad.
+```ts
+const PAGE = 1000;
+const metricRows: any[] = [];
+let from = 0;
+while (true) {
+  const { data, error } = await supabase
+    .from("poi_metrics")
+    .select("poi_id, metric_key, period, value")
+    .in("poi_id", poiIds)
+    .order("period", { ascending: true })
+    .range(from, from + PAGE - 1);
+  if (error) throw error;
+  if (!data || data.length === 0) break;
+  metricRows.push(...data);
+  if (data.length < PAGE) break;
+  from += PAGE;
+}
+```
 
-### 3. Etiqueta y tooltip
-- Cambiar el tooltip a "Retomar la revisión usando el archivo original guardado".
-- Quitar el `<input type="file">` cuando el job ya tiene archivo en storage.
+Defensivamente paginar también la lectura de `uf_values` por si crece (hoy son 90 filas, pero el patrón debe ser consistente).
 
-### 4. Limpieza al borrar un import
-- En `handleDeleteJob`, si el job tiene `source_file_path`, borrar también el objeto del bucket.
+Agregar al log de diagnóstico: `Filas métricas cargadas (paginado): N en M páginas` para confirmar que el fix funciona en la próxima corrida.
 
-## Detalles técnicos
+## Validación esperada después del fix
 
-- Migración: `ALTER TABLE poi_import_jobs ADD COLUMN source_file_path text`. Bucket `poi-imports` con políticas: SELECT/INSERT/DELETE sólo si `has_role(auth.uid(),'admin')`.
-- `usePoiImport`:
-  - Nueva función `resumeFromStorage(jobId, path, filename)` que descarga (`supabase.storage.from('poi-imports').download(path)`), construye un `File`, llama a `parse`, y luego `runMatching`.
-  - `parse` upsubre el archivo (no bloqueante respecto del parseo) y guarda `sourceFilePath` en estado.
-  - `commit` incluye `source_file_path` al insertar/actualizar el job.
-- `PoiImportDialog`:
-  - El render del item de historial usa un `<button>` real cuando `j.source_file_path` está presente, llamando a `imp.resumeFromStorage(j.id, j.source_file_path, j.filename)`.
+- "Filas métricas cargadas" debería pasar de 1000 → ~5696
+- "POIs con < 10 meses de target" debería caer cerca de 0
+- "POIs aptos para entrenamiento" debería subir a ~60+
+- R² debería subir significativamente (escenario B real: si sigue bajo después de esto, ahí sí es señal de que los features territoriales no explican ventas de AutoPlanet y pasamos a análisis de residuos)
 
-## Resultado
+## Archivos
 
-Tras un import (terminado o no), el usuario presiona "Continuar" y vuelve directo a la pantalla de revisión con todas las filas, sin tocar su disco. Las que ya estaban asignadas siguen marcadas como `alias_matched`/`auto_matched` gracias a la memoria de identidad y los aliases existentes.
+- `supabase/functions/compute-performance-batch/index.ts` — paginar lecturas y mejorar log
+
+## Después del deploy
+
+Re-correr el batch desde el panel y mandar el bloque "[performance-batch] Diagnóstico:" actualizado.
