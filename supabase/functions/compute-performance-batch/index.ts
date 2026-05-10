@@ -376,12 +376,28 @@ serve(async (req) => {
       return null;
     };
 
-    // 5) Cargar TODAS las métricas de los POIs (típicamente 'ventas')
-    const { data: metricRows, error: metricsErr } = await supabase
-      .from("poi_metrics")
-      .select("poi_id, metric_key, period, value")
-      .in("poi_id", poiIds);
-    if (metricsErr) throw metricsErr;
+    // 5) Cargar TODAS las métricas de los POIs (típicamente 'ventas').
+    // Paginar: Supabase corta a 1000 filas por defecto y aquí hay miles.
+    const PAGE = 1000;
+    const metricRows: any[] = [];
+    let metricPages = 0;
+    {
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("poi_metrics")
+          .select("poi_id, metric_key, period, value")
+          .in("poi_id", poiIds)
+          .order("period", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        metricRows.push(...data);
+        metricPages++;
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+    }
 
     // Determinar la métrica primaria: la más frecuente. Casi siempre 'ventas'.
     const metricCounts = new Map<string, number>();
