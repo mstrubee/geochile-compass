@@ -35,7 +35,7 @@ export const fetchPerformanceForFolder = async (
     console.warn("[fetchPerformanceForFolder]", error.message);
     return [];
   }
-  return (data ?? []) as PoiPerformanceAnalysis[];
+  return (data ?? []) as unknown as PoiPerformanceAnalysis[];
 };
 
 export interface ComputeBatchResult {
