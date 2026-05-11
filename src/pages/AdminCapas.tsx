@@ -745,13 +745,38 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
       setUploading(false);
 
       setScanning(true);
-      const { data: scanRes, error: scanErr } = await supabase.functions.invoke(
-        "scan-territorial-html",
-        { body: { source_file_id: sf.id } },
-      );
+      // Escaneo client-side para evitar el límite de CPU del edge function
+      // en archivos grandes (KMZ/KML/GeoJSON/HTML).
+      let layers: Array<{ name: string; count: number }> = [];
+      try {
+        if (fileType === "html") {
+          const text = await file.text();
+          const fc = htmlToGeoJson(text);
+          const counts = new Map<string, number>();
+          for (const ft of fc.features) {
+            const folder = (ft.properties as Record<string, unknown> | null)?.folder;
+            const name = typeof folder === "string" && folder ? folder : "Capa";
+            counts.set(name, (counts.get(name) ?? 0) + 1);
+          }
+          layers = [...counts.entries()].map(([name, count]) => ({ name, count }));
+        } else {
+          const fc = await parseFile(file);
+          const buckets = splitByFolderPath(fc);
+          layers = buckets.map((b) => ({
+            name: b.path.length ? b.path.join(" / ") : "Sin carpeta",
+            count: b.features.length,
+          }));
+        }
+      } catch (e) {
+        setScanning(false);
+        throw e;
+      }
+      const { error: updErr } = await supabase
+        .from("territorial_source_files")
+        .update({ status: "scanned", layers_summary: layers } as never)
+        .eq("id", sf.id);
       setScanning(false);
-      if (scanErr) throw scanErr;
-      const layers = (scanRes?.layers ?? []) as Array<{ name: string; count: number }>;
+      if (updErr) throw updErr;
       if (!layers.length) {
         toast.error("No se detectaron capas en el archivo");
         return;
