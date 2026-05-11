@@ -258,14 +258,14 @@ export const useSavedPois = () => {
         from += PAGE;
       }
 
-      let nextPois = pois;
-      let nextTrash = trashedPois;
+      let nextPois = poisRef.current;
+      let nextTrash = trashedRef.current;
       if (changed.length) {
         const activeIncoming = changed.filter((r) => !r.deleted_at);
         const trashedIncoming = changed.filter((r) => !!r.deleted_at);
         const incomingIds = new Set(changed.map((r) => r.id));
-        nextPois = [...activeIncoming, ...pois.filter((p) => !incomingIds.has(p.id))];
-        nextTrash = [...trashedIncoming, ...trashedPois.filter((p) => !incomingIds.has(p.id))];
+        nextPois = [...activeIncoming, ...poisRef.current.filter((p) => !incomingIds.has(p.id))];
+        nextTrash = [...trashedIncoming, ...trashedRef.current.filter((p) => !incomingIds.has(p.id))];
         setPois(nextPois);
         setTrashedPois(nextTrash);
         if (activeIncoming.length) void enrichInBackground(activeIncoming, setPois);
@@ -273,6 +273,8 @@ export const useSavedPois = () => {
       }
 
       // Verificación de integridad: detecta hard-deletes y desincronías.
+      // Usa refs vivas (post-setState el ref aún no se actualiza, pero nextPois
+      // ya refleja el estado que acabamos de aplicar).
       const ok = await verifyIntegrity(nextPois, nextTrash);
       if (!ok) {
         // Evitar bucle: solo un fullRefresh cada 30s como mucho.
@@ -286,7 +288,7 @@ export const useSavedPois = () => {
     } catch (err) {
       console.warn("[useSavedPois.syncDelta] threw, ignoring", err);
     }
-  }, [user, pois, trashedPois, fullRefreshImpl, verifyIntegrity]);
+  }, [user, fullRefreshImpl, verifyIntegrity]);
 
   // ===== Wrappers que serializan ejecuciones =====
   const runSerialized = useCallback(
