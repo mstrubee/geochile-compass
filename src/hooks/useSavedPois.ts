@@ -392,7 +392,7 @@ export const useSavedPois = () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, authLoading]);
 
   // Public refresh = sync delta. Para forzar full → forceFullRefresh.
   const refresh = useCallback(async () => {
