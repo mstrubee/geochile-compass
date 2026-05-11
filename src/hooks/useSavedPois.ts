@@ -59,7 +59,7 @@ const fetchSyncSummary = async (): Promise<SyncSummary | null> => {
 };
 
 export const useSavedPois = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [pois, setPois] = useState<SavedPoi[]>([]);
   const [trashedPois, setTrashedPois] = useState<SavedPoi[]>([]);
   const [loading, setLoading] = useState(false);
