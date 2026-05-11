@@ -181,6 +181,17 @@ export const useSavedPois = () => {
         return;
       }
 
+      // SOSPECHOSO: el servidor devuelve 0 POI activos pero localmente tenemos
+      // datos. Casi seguro es una consulta hecha sin sesión válida (token
+      // anónimo) o un error transitorio. Conservamos el snapshot bueno y
+      // reintentamos en el próximo ciclo en vez de borrar la UI.
+      if (active.length === 0 && poisRef.current.length > 0) {
+        console.warn(
+          `[useSavedPois.fullRefresh] server returned 0 active POIs but local has ${poisRef.current.length}; keeping local snapshot`,
+        );
+        return;
+      }
+
       // Confirmar lastSyncAt con el max real desde el servidor (evita drift de reloj).
       const summary = await fetchSyncSummary();
       const stamp =
