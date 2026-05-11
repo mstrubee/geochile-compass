@@ -225,6 +225,15 @@ export const useSavedPois = () => {
       const summary = await fetchSyncSummary();
       if (!summary) return true; // si la RPC falla, no forzamos refresh
       const localCount = currentPois.length + currentTrashed.length;
+      // SOSPECHOSO: el servidor dice 0 pero local tiene datos. Casi seguro la
+      // RPC corrió sin sesión válida (auth.uid() = null). NO forzamos refresh
+      // ni borramos nada — esperamos al próximo ciclo con sesión correcta.
+      if (summary.row_count === 0 && localCount > 0) {
+        console.warn(
+          `[useSavedPois] integrity check returned 0 but local has ${localCount}; ignoring (likely missing auth)`,
+        );
+        return true;
+      }
       if (summary.row_count !== localCount) {
         console.warn(
           `[useSavedPois] integrity mismatch: server=${summary.row_count} local=${localCount} → fullRefresh`,
