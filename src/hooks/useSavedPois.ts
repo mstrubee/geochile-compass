@@ -74,6 +74,15 @@ export const useSavedPois = () => {
   const lastFullRefreshAtRef = useRef(0);
   // Cancelación de hidrataciones cruzadas entre cambios de user.
   const userIdRef = useRef<string | null>(null);
+  // Refs vivas de pois/trashed para que syncDelta no use closures stale.
+  const poisRef = useRef<SavedPoi[]>([]);
+  const trashedRef = useRef<SavedPoi[]>([]);
+  useEffect(() => {
+    poisRef.current = pois;
+  }, [pois]);
+  useEffect(() => {
+    trashedRef.current = trashedPois;
+  }, [trashedPois]);
 
   // ===== Persistencia única en cada cambio de state (debounced) =====
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -177,6 +186,8 @@ export const useSavedPois = () => {
           new Date(0).toISOString(),
         );
       lastSyncAtRef.current = stamp;
+      poisRef.current = active;
+      trashedRef.current = trashed;
       setPois(active);
       setTrashedPois(trashed);
 
@@ -249,14 +260,14 @@ export const useSavedPois = () => {
         from += PAGE;
       }
 
-      let nextPois = pois;
-      let nextTrash = trashedPois;
+      let nextPois = poisRef.current;
+      let nextTrash = trashedRef.current;
       if (changed.length) {
         const activeIncoming = changed.filter((r) => !r.deleted_at);
         const trashedIncoming = changed.filter((r) => !!r.deleted_at);
         const incomingIds = new Set(changed.map((r) => r.id));
-        nextPois = [...activeIncoming, ...pois.filter((p) => !incomingIds.has(p.id))];
-        nextTrash = [...trashedIncoming, ...trashedPois.filter((p) => !incomingIds.has(p.id))];
+        nextPois = [...activeIncoming, ...poisRef.current.filter((p) => !incomingIds.has(p.id))];
+        nextTrash = [...trashedIncoming, ...trashedRef.current.filter((p) => !incomingIds.has(p.id))];
         setPois(nextPois);
         setTrashedPois(nextTrash);
         if (activeIncoming.length) void enrichInBackground(activeIncoming, setPois);
@@ -264,6 +275,8 @@ export const useSavedPois = () => {
       }
 
       // Verificación de integridad: detecta hard-deletes y desincronías.
+      // Usa refs vivas (post-setState el ref aún no se actualiza, pero nextPois
+      // ya refleja el estado que acabamos de aplicar).
       const ok = await verifyIntegrity(nextPois, nextTrash);
       if (!ok) {
         // Evitar bucle: solo un fullRefresh cada 30s como mucho.
@@ -277,7 +290,7 @@ export const useSavedPois = () => {
     } catch (err) {
       console.warn("[useSavedPois.syncDelta] threw, ignoring", err);
     }
-  }, [user, pois, trashedPois, fullRefreshImpl, verifyIntegrity]);
+  }, [user, fullRefreshImpl, verifyIntegrity]);
 
   // ===== Wrappers que serializan ejecuciones =====
   const runSerialized = useCallback(
@@ -328,9 +341,12 @@ export const useSavedPois = () => {
       if (cached) {
         setPois(cached.pois);
         setTrashedPois(cached.trashedPois);
+        // Sincronizar refs inmediatamente para que el syncDelta que disparemos
+        // a continuación NO vea poisRef.current = [] (closure stale del primer render).
+        poisRef.current = cached.pois;
+        trashedRef.current = cached.trashedPois;
         lastSyncAtRef.current = cached.lastSyncAt;
         const stale = Date.now() - cached.cachedAt > CACHE_FULL_REFRESH_TTL_MS;
-        // Sanidad: si lastSyncAt está en el futuro (reloj raro) → full.
         const futureClock =
           cached.lastSyncAt && new Date(cached.lastSyncAt).getTime() > Date.now() + 60_000;
         if (cached.lastSyncAt && !stale && !futureClock) {

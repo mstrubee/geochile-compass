@@ -284,29 +284,13 @@ const Index = () => {
     refresh: refreshFolders,
   } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
-  // Por defecto TODAS las carpetas (y los POIs huérfanos) arrancan ocultas:
-  // el usuario decide qué activar. Marcamos también las carpetas nuevas que
-  // aparezcan después como ocultas, sin tocar las que el usuario ya cambió.
+  // Por defecto NO ocultamos ninguna carpeta: el usuario puede ocultar lo que
+  // quiera con el checkbox de cada carpeta. Las nuevas carpetas que aparezcan
+  // (importación, sync) se mantienen visibles por defecto para evitar que los
+  // POI parezcan "desaparecer" tras un refresh.
   const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(
-    () => new Set(["__orphan__"]),
+    () => new Set(),
   );
-  const seenFolderIdsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const seen = seenFolderIdsRef.current;
-    const newOnes: string[] = [];
-    for (const f of folders) {
-      if (!seen.has(f.id)) {
-        seen.add(f.id);
-        newOnes.push(f.id);
-      }
-    }
-    if (newOnes.length === 0) return;
-    setHiddenPoiFolders((prev) => {
-      const next = new Set(prev);
-      for (const id of newOnes) next.add(id);
-      return next;
-    });
-  }, [folders]);
 
   // Filtra POIs visibles según la jerarquía: si una carpeta padre está oculta,
   // todos sus descendientes también lo están. La clave "__orphan__" controla los POIs sin carpeta.
