@@ -6,6 +6,8 @@
  * - En background hacemos un sync incremental contra Supabase usando
  *   `updated_at` (ver useSavedPois.syncDelta). Solo bajamos las filas que
  *   cambiaron desde la última sincronización exitosa.
+ * - Después de cada sync verificamos integridad (count + checksum) contra el
+ *   servidor; si difieren, fallback automático a fullRefresh.
  * - Las mutaciones locales escriben el caché inmediatamente para que un
  *   reload posterior tenga el dato sin esperar a Supabase.
  */

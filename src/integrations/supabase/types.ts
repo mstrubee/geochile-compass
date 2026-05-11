@@ -1053,6 +1053,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      poi_sync_summary: {
+        Args: never
+        Returns: {
+          checksum: string
+          max_updated_at: string
+          row_count: number
+        }[]
+      }
       purge_deleted_pois: { Args: never; Returns: undefined }
       set_poi_folder_kpi_order: {
         Args: { _folder_id: string; _order: Json }
