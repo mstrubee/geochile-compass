@@ -23,6 +23,7 @@ import { ISO_MODE_LABEL } from "@/types/isochrones";
 import { parseFile, getExtension, splitByFolderPath } from "@/utils/fileParsers";
 import { OVERPASS_PRESETS } from "@/services/overpassService";
 import { exportPoiAsKmz, exportFolderAsKmz } from "@/utils/kmzExport";
+import { exportFolderDataset } from "@/services/exportFolderDataset";
 import { CommuneSearch } from "./CommuneSearch";
 import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
