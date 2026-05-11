@@ -5,6 +5,7 @@ import {
   loadPoiCache,
   rowSyncStamp,
   savePoiCache,
+  setLastSyncAt,
 } from "@/services/poiCache";
 import type { PoiInsert, PoiUpdate, SavedPoi } from "@/types/pois";
 
