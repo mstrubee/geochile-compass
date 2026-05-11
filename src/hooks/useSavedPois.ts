@@ -384,11 +384,23 @@ export const useSavedPois = () => {
         // a continuación NO vea poisRef.current = [] (closure stale del primer render).
         poisRef.current = cached.pois;
         trashedRef.current = cached.trashedPois;
-        lastSyncAtRef.current = cached.lastSyncAt;
+
+        // Sanear lastSyncAt: descarta valores inválidos (epoch, año <2000),
+        // muy antiguos (>7 días) o futuros, y fuerza fullRefresh.
+        const syncMs = cached.lastSyncAt ? new Date(cached.lastSyncAt).getTime() : 0;
         const stale = Date.now() - cached.cachedAt > CACHE_FULL_REFRESH_TTL_MS;
-        const futureClock =
-          cached.lastSyncAt && new Date(cached.lastSyncAt).getTime() > Date.now() + 60_000;
-        if (cached.lastSyncAt && !stale && !futureClock) {
+        const futureClock = syncMs > Date.now() + 60_000;
+        const tooOld = syncMs > 0 && Date.now() - syncMs > 7 * 24 * 60 * 60 * 1000;
+        const invalidStamp = !cached.lastSyncAt || syncMs < new Date("2000-01-01").getTime();
+        if (invalidStamp) {
+          // Limpia el storage local del usuario para no arrastrar el valor corrupto.
+          void setLastSyncAt(user.id, null);
+          lastSyncAtRef.current = null;
+        } else {
+          lastSyncAtRef.current = cached.lastSyncAt;
+        }
+
+        if (!invalidStamp && !stale && !futureClock && !tooOld) {
           void syncDelta();
         } else {
           void fullRefresh();
