@@ -7,7 +7,7 @@ import type { PoiFolder } from "@/types/pois";
 const SELECT_COLS = "id,name,parent_id,color,created_at,deleted_at";
 
 export const usePoiFolders = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [folders, setFolders] = useState<PoiFolder[]>([]);
   const [trashedFolders, setTrashedFolders] = useState<PoiFolder[]>([]);
   const [loading, setLoading] = useState(false);
@@ -37,10 +37,18 @@ export const usePoiFolders = () => {
       return;
     }
     const fresh = (active.data ?? []) as PoiFolder[];
+    // SOSPECHOSO: el servidor devuelve 0 carpetas pero localmente tenemos
+    // datos. Probable consulta sin sesión válida — conservamos el estado.
+    if (fresh.length === 0 && folders.length > 0) {
+      console.warn(
+        `[usePoiFolders] server returned 0 folders but local has ${folders.length}; keeping local snapshot`,
+      );
+      return;
+    }
     setFolders(fresh);
     setTrashedFolders((trashed.data ?? []) as PoiFolder[]);
-    void saveFoldersCache(user.id, fresh);
-  }, [user]);
+    if (fresh.length > 0) void saveFoldersCache(user.id, fresh);
+  }, [user, folders.length]);
 
   // Hidratación inmediata desde caché local (offline / arranque rápido).
   useEffect(() => {
@@ -61,8 +69,11 @@ export const usePoiFolders = () => {
   }, [user]);
 
   useEffect(() => {
+    // No correr el refresh hasta que la sesión esté resuelta para evitar
+    // consultas con token anónimo que devuelven [] y borran las carpetas.
+    if (authLoading) return;
     refresh();
-  }, [refresh]);
+  }, [refresh, authLoading]);
 
   const create = useCallback(
     async (name: string, parent_id: string | null = null, color: string | null = null) => {
