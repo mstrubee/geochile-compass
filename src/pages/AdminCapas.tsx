@@ -630,6 +630,8 @@ interface UploadDialogProps {
 const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps) => {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [uploadedBytes, setUploadedBytes] = useState(0);
   const [scanning, setScanning] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [sourceFileId, setSourceFileId] = useState<string | null>(null);
@@ -648,6 +650,8 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     setScanned([]);
     setExcluded(new Set());
     setUploading(false);
+    setUploadPct(0);
+    setUploadedBytes(0);
     setScanning(false);
     setProcessing(false);
   };
@@ -665,9 +669,54 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     return "html";
   };
 
+  /** Sube el archivo a Storage usando XHR para reportar progreso. Sin límite de tamaño impuesto por el cliente. */
+  const uploadWithProgress = (path: string, mime: string): Promise<void> =>
+    new Promise(async (resolve, reject) => {
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const token = sess.session?.access_token;
+        if (!token) throw new Error("Sesión expirada. Iniciá sesión de nuevo.");
+        const supaUrl = import.meta.env.VITE_SUPABASE_URL as string;
+        const anon = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+        const url = `${supaUrl}/storage/v1/object/territorial-sources/${encodeURIComponent(path)}`;
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", url, true);
+        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+        xhr.setRequestHeader("apikey", anon);
+        xhr.setRequestHeader("x-upsert", "false");
+        xhr.setRequestHeader("Content-Type", mime);
+        xhr.upload.onprogress = (ev) => {
+          if (!ev.lengthComputable) return;
+          setUploadedBytes(ev.loaded);
+          setUploadPct(Math.min(100, Math.round((ev.loaded / ev.total) * 100)));
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            setUploadPct(100);
+            resolve();
+          } else {
+            let msg = `Upload failed (${xhr.status})`;
+            try {
+              const j = JSON.parse(xhr.responseText);
+              if (j?.message) msg = j.message;
+              else if (j?.error) msg = j.error;
+            } catch { /* ignore */ }
+            reject(new Error(msg));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Error de red al subir el archivo"));
+        xhr.onabort = () => reject(new Error("Subida cancelada"));
+        xhr.send(file as File);
+      } catch (e) {
+        reject(e);
+      }
+    });
+
   const handleUpload = async () => {
     if (!file || !groupId) return;
     setUploading(true);
+    setUploadPct(0);
+    setUploadedBytes(0);
     try {
       const fileType = detectFileType(file);
       const mime =
@@ -676,10 +725,7 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
         : fileType === "geojson" ? "application/geo+json"
         : "text/html";
       const path = `${Date.now()}-${file.name.replace(/[^\w.-]+/g, "_")}`;
-      const up = await supabase.storage
-        .from("territorial-sources")
-        .upload(path, file, { contentType: mime, upsert: false });
-      if (up.error) throw up.error;
+      await uploadWithProgress(path, mime);
 
       const { data: sf, error: sfErr } = await supabase
         .from("territorial_source_files")
