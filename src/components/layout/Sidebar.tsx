@@ -1941,6 +1941,27 @@ export const Sidebar = ({
                                 Guardar como KMZ
                               </ContextMenuItem>
                               <ContextMenuItem
+                                onSelect={async () => {
+                                  const tId = toast.loading("Generando dataset CSV…");
+                                  try {
+                                    const schema = poiFolderSchemas.find((s) => s.folder_id === f.id);
+                                    const res = await exportFolderDataset(f, poiFolders, savedPois, schema);
+                                    toast.success(
+                                      `Dataset exportado · ${res.rows} POIs × ${res.columns} columnas`,
+                                      { id: tId },
+                                    );
+                                  } catch (err) {
+                                    toast.error(
+                                      err instanceof Error ? err.message : "Error al exportar dataset",
+                                      { id: tId },
+                                    );
+                                  }
+                                }}
+                              >
+                                <FileText className="mr-2 h-3.5 w-3.5" />
+                                Exportar dataset (CSV)…
+                              </ContextMenuItem>
+                              <ContextMenuItem
                                 disabled={!canPasteHere}
                                 onSelect={() => handlePaste(f.id)}
                               >
