@@ -339,9 +339,12 @@ export const useSavedPois = () => {
       if (cached) {
         setPois(cached.pois);
         setTrashedPois(cached.trashedPois);
+        // Sincronizar refs inmediatamente para que el syncDelta que disparemos
+        // a continuación NO vea poisRef.current = [] (closure stale del primer render).
+        poisRef.current = cached.pois;
+        trashedRef.current = cached.trashedPois;
         lastSyncAtRef.current = cached.lastSyncAt;
         const stale = Date.now() - cached.cachedAt > CACHE_FULL_REFRESH_TTL_MS;
-        // Sanidad: si lastSyncAt está en el futuro (reloj raro) → full.
         const futureClock =
           cached.lastSyncAt && new Date(cached.lastSyncAt).getTime() > Date.now() + 60_000;
         if (cached.lastSyncAt && !stale && !futureClock) {
