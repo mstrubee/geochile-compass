@@ -1,51 +1,41 @@
-## Diagnóstico
+## Objetivo
 
-La sesión de auth ahora funciona correctamente (`/token` 200, `/user` 200, JWT del usuario presente). El problema actual es distinto:
+Agregar al menú contextual (click derecho) de cada carpeta POI en el Sidebar la opción **"Exportar dataset (CSV)…"**, que descarga en un único archivo los POIs de esa carpeta con sus features territoriales y sus métricas de ventas — equivalente a lo que hoy se hace manualmente entrando al backend.
 
-- El cliente está llamando `pois?updated_at=gt.1970-01-01T00:00:00.000Z&order=updated_at.asc&limit=250`.
-- Postgres responde **500 con `57014: canceling statement due to statement timeout`**.
-- `syncDeltaImpl` captura el error y aborta sin reintentar con `fullRefresh`.
-- Resultado: estado queda en `[]` y la UI muestra “Aún no hay POIs”.
+## Comportamiento esperado
 
-Causa raíz: `lastSyncAt` quedó persistido en caché como **epoch (1970)**. Esto ocurre porque cuando un `fullRefresh` corre en condiciones degradadas (sin sesión real, antes del fix de auth) y devuelve 0 filas con `summary` null, el código calcula:
+1. Click derecho sobre una carpeta POI → nuevo ítem "Exportar dataset (CSV)…" (justo debajo de "Guardar como KMZ").
+2. Al seleccionarlo:
+   - Toast "Generando dataset…".
+   - Lee desde el backend, sólo para los POIs activos de esa carpeta (incluyendo subcarpetas):
+     - `pois`: id, name, lat, lng, address (de `properties`), folder path.
+     - `poi_attributes`: pares `attr_key → attr_value` (estáticos).
+     - `poi_features_cache.features`: un campo por feature (`pop_total`, `income_avg`, `nse_low_pct`, `traffic_idx`, etc.).
+     - `poi_metrics`: una columna por `metric_key + período` en formato `ventas_YYYY-MM`.
+   - Construye CSV en formato **wide** (una fila por POI) con columnas en orden estable:
+     1. `poi_id, name, folder, lat, lng, address`
+     2. atributos estáticos del schema (orden de `static_columns`)
+     3. features (`feat_*`) en orden alfabético
+     4. métricas por período (`<metric_key>_<YYYY-MM>`) ordenadas cronológicamente
+   - Descarga el archivo: `dataset_<folder-slug>_<YYYYMMDD>.csv`.
+3. Toast de éxito con número de POIs y columnas exportadas, o de error si falla.
 
-```
-stamp = summary?.max_updated_at ?? reduce(..., new Date(0).toISOString())
-```
+## Cambios técnicos
 
-→ se guarda epoch como `lastSyncAt`. En el próximo arranque, `syncDelta` pide *todas* las filas del usuario ordenadas por `updated_at asc` (5.708 POIs con RLS), lo que excede el statement timeout del servidor.
+- **Nuevo:** `src/services/exportFolderDataset.ts`
+  - `exportFolderDataset(folder, allFolders, allPois, schema?)` 
+  - Recorre subcarpetas con `descendantsOfFolder` (igual que ya hace `exportFolderAsKmz`).
+  - Hace tres queries paginadas (`poi_attributes`, `poi_features_cache`, `poi_metrics`) filtradas por `poi_id IN (...)` (en lotes de ~500 ids para no exceder URL).
+  - Pivot en memoria.
+  - Escapa CSV correctamente (comillas, comas, saltos de línea, BOM UTF-8 para Excel).
+  - Usa `URL.createObjectURL` + `<a download>` para disparar descarga.
 
-Además, aunque `syncDelta` falle, no hay fallback a `fullRefresh`, así que la UI nunca recupera los datos.
+- **Editado:** `src/components/layout/Sidebar.tsx`
+  - Inmediatamente después del `ContextMenuItem` de "Guardar como KMZ" (línea ~1942), agregar nuevo `ContextMenuItem` "Exportar dataset (CSV)…" con icono `FileDown` (ya hay `Download`/`FileText` importados; reutilizar `FileText`).
+  - Llama a `exportFolderDataset(f, poiFolders, savedPois, poiFolderSchemas.find(s => s.folder_id === f.id))`.
 
-## Plan
+## Notas
 
-1. **No persistir nunca un `lastSyncAt` inválido**
-   - En `fullRefreshImpl`, si `summary?.max_updated_at` es null y no hay filas reales, dejar `lastSyncAtRef.current = null` en lugar de epoch.
-   - Esto evita que un arranque degradado contamine el caché para siempre.
-
-2. **Sanitizar `lastSyncAt` al cargar caché**
-   - En el bootstrap de `useSavedPois`, si `cached.lastSyncAt` es null, epoch (≤ año 2000), o muy antiguo (> 7 días), descartarlo y forzar `fullRefresh` en vez de `syncDelta`.
-   - Tratamiento idéntico cuando el reloj está al futuro (ya existe).
-
-3. **Fallback de `syncDelta` a `fullRefresh` ante errores de servidor**
-   - Cuando el page query del delta devuelve error (timeout, 500, red), en vez de sólo loguear y volver, programar un `fullRefresh` (respetando el rate limit de 30s ya existente).
-   - Así, aunque un delta grande falle, la UI converge en lugar de quedarse vacía.
-
-4. **Acotar el tamaño del delta**
-   - Si `since` corresponde a más de ~24h atrás, preferir directamente `fullRefresh` (paginado por `created_at desc` con índice natural) en vez de `syncDelta` (que ordena por `updated_at asc` sobre toda la historia del usuario).
-   - Reduce drásticamente el riesgo de timeout cuando el caché quedó muy desactualizado.
-
-5. **Reset puntual del `lastSyncAt` corrupto del usuario actual**
-   - Como parte del fix, si al hidratar detectamos `lastSyncAt = epoch`, escribir null en el caché (`setLastSyncAt(uid, null)`) para sanear el storage local del usuario afectado en su próximo arranque.
-
-## Verificación
-
-- Tras el cambio, el primer arranque de un usuario con caché contaminado debe disparar `fullRefresh` y mostrar los 5.708 POIs sin pedir el delta epoch.
-- Confirmar en network que ya no aparece `updated_at=gt.1970-...` y que los pages de `fullRefresh` (`order=created_at.desc`) responden 200.
-- Confirmar que el contador del Sidecar refleja los POIs activos y que las carpetas siguen visibles.
-
-## Detalles técnicos
-
-- Archivo principal: `src/hooks/useSavedPois.ts` (bootstrap effect, `fullRefreshImpl`, `syncDeltaImpl`).
-- Helper a usar de `src/services/poiCache.ts`: `setLastSyncAt(uid, null)` para limpiar el valor corrupto.
-- No requiere cambios de SQL, RLS ni edge functions.
+- No requiere migraciones SQL ni cambios de RLS: las tablas `poi_features_cache`, `poi_metrics`, `poi_attributes` ya son legibles para usuarios autenticados.
+- Sin dependencias nuevas (CSV armado a mano).
+- Disponible para todos los usuarios (no se restringe a admin), ya que la idea es facilitar la descarga del dataset cuando exista. Si una carpeta no tiene features/metrics, el CSV igual incluye los POIs con las columnas presentes.
