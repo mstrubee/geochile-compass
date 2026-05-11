@@ -5,7 +5,6 @@ import {
   loadPoiCache,
   rowSyncStamp,
   savePoiCache,
-  setLastSyncAt as persistLastSyncAt,
 } from "@/services/poiCache";
 import type { PoiInsert, PoiUpdate, SavedPoi } from "@/types/pois";
 
@@ -17,6 +16,8 @@ const LIGHT_COLS =
 const PAGE = 250;
 // TTL del caché: si el snapshot es más viejo que esto, hacemos refresh full.
 const CACHE_FULL_REFRESH_TTL_MS = 24 * 60 * 60 * 1000;
+// Debounce para escritura del caché en IndexedDB.
+const PERSIST_DEBOUNCE_MS = 250;
 
 type LightRow = Record<string, unknown>;
 const toSavedPoi = (row: LightRow): SavedPoi =>
@@ -26,6 +27,37 @@ const toSavedPoi = (row: LightRow): SavedPoi =>
     properties: {},
   }) as SavedPoi;
 
+interface SyncSummary {
+  row_count: number;
+  max_updated_at: string | null;
+  checksum: string;
+}
+
+const fetchSyncSummary = async (): Promise<SyncSummary | null> => {
+  try {
+    // RPC tipado dinámicamente: la función no está aún en types.ts pero existe en BD.
+    const { data, error } = await (
+      supabase.rpc as unknown as (
+        fn: string,
+      ) => Promise<{ data: SyncSummary[] | null; error: { message: string } | null }>
+    )("poi_sync_summary");
+    if (error) {
+      console.warn("[useSavedPois] poi_sync_summary RPC failed", error.message);
+      return null;
+    }
+    const row = Array.isArray(data) ? data[0] : null;
+    if (!row) return null;
+    return {
+      row_count: Number(row.row_count ?? 0),
+      max_updated_at: row.max_updated_at ?? null,
+      checksum: row.checksum ?? "",
+    };
+  } catch (err) {
+    console.warn("[useSavedPois] poi_sync_summary threw", err);
+    return null;
+  }
+};
+
 export const useSavedPois = () => {
   const { user } = useAuth();
   const [pois, setPois] = useState<SavedPoi[]>([]);
@@ -34,42 +66,43 @@ export const useSavedPois = () => {
 
   // Snapshot interno del último lastSyncAt confirmado para este user.
   const lastSyncAtRef = useRef<string | null>(null);
+  // Cola de sync: garantiza que solo corre uno a la vez.
+  const syncInFlightRef = useRef<Promise<void> | null>(null);
+  // Contador de mutaciones en vuelo: el sync espera a que llegue a 0.
+  const pendingMutationsRef = useRef(0);
+  // Para detectar bucles fullRefresh→summary mismatch→fullRefresh.
+  const lastFullRefreshAtRef = useRef(0);
+  // Cancelación de hidrataciones cruzadas entre cambios de user.
+  const userIdRef = useRef<string | null>(null);
 
-  /** Persiste el state actual + lastSyncAt al caché local. */
-  const persistCache = useCallback(
-    (nextPois: SavedPoi[], nextTrashed: SavedPoi[], syncAt?: string | null) => {
-      if (!user) return;
-      void savePoiCache(user.id, nextPois, nextTrashed, syncAt);
-      if (syncAt !== undefined) lastSyncAtRef.current = syncAt;
-    },
-    [user],
-  );
-
-  /** Avanza lastSyncAt al máximo entre el actual y los timestamps de las filas dadas. */
-  const advanceSyncStamp = useCallback(
-    (rows: Array<Pick<SavedPoi, "updated_at" | "created_at" | "deleted_at">>) => {
-      if (!user || !rows.length) return lastSyncAtRef.current;
-      let maxStamp = lastSyncAtRef.current ?? new Date(0).toISOString();
-      for (const r of rows) {
-        const s = rowSyncStamp(r as SavedPoi);
-        if (s > maxStamp) maxStamp = s;
+  // ===== Persistencia única en cada cambio de state (debounced) =====
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    const uid = user.id;
+    const snapshotPois = pois;
+    const snapshotTrash = trashedPois;
+    const snapshotSync = lastSyncAtRef.current;
+    persistTimerRef.current = setTimeout(() => {
+      void savePoiCache(uid, snapshotPois, snapshotTrash, snapshotSync);
+    }, PERSIST_DEBOUNCE_MS);
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
       }
-      if (maxStamp !== lastSyncAtRef.current) {
-        lastSyncAtRef.current = maxStamp;
-        void persistLastSyncAt(user.id, maxStamp);
-      }
-      return maxStamp;
-    },
-    [user],
-  );
+    };
+  }, [user, pois, trashedPois]);
 
   // ===== Refresh full (paginado, fallback / primera vez / botón manual) =====
-  const fullRefresh = useCallback(async (): Promise<void> => {
+  const fullRefreshImpl = useCallback(async (): Promise<void> => {
     if (!user) {
       setPois([]);
       setTrashedPois([]);
       return;
     }
+    lastFullRefreshAtRef.current = Date.now();
     setLoading(true);
 
     const fetchAllLight = async (deleted: boolean): Promise<SavedPoi[]> => {
@@ -124,97 +157,159 @@ export const useSavedPois = () => {
       const active = activeOk ? activeRes.value : null;
       const trashed = trashedOk ? trashedRes.value : [];
 
-      if (activeOk && active) {
-        setPois(active);
-        setTrashedPois(trashed);
-        // Avanza lastSyncAt al máximo de todo lo cargado.
-        const all = [...active, ...trashed];
-        const stamp = all.reduce(
+      if (!activeOk || !active) {
+        console.error(
+          "[useSavedPois.fullRefresh] active fetch failed, keeping cached state",
+          activeRes.status === "rejected" ? activeRes.reason : null,
+        );
+        return;
+      }
+
+      // Confirmar lastSyncAt con el max real desde el servidor (evita drift de reloj).
+      const summary = await fetchSyncSummary();
+      const stamp =
+        summary?.max_updated_at ??
+        [...active, ...trashed].reduce(
           (m, r) => {
             const s = rowSyncStamp(r);
             return s > m ? s : m;
           },
           new Date(0).toISOString(),
         );
-        lastSyncAtRef.current = stamp;
-        persistCache(active, trashed, stamp);
+      lastSyncAtRef.current = stamp;
+      setPois(active);
+      setTrashedPois(trashed);
 
-        // Enriquecimiento heavy en background: solo lo que no tiene properties cargado.
-        void enrichInBackground(active, "active", setPois, persistCache);
-        if (trashedOk) void enrichInBackground(trashed, "trashed", setTrashedPois, persistCache);
-      } else {
-        console.error(
-          "[useSavedPois.fullRefresh] active fetch failed, keeping cached state",
-          activeRes.status === "rejected" ? activeRes.reason : null,
-        );
-      }
+      // Enriquecimiento heavy en background.
+      void enrichInBackground(active, setPois);
+      if (trashedOk) void enrichInBackground(trashed, setTrashedPois);
     } catch (err) {
       console.error("[useSavedPois.fullRefresh] error", err);
     } finally {
       setLoading(false);
     }
-  }, [user, persistCache]);
+  }, [user]);
 
-  // ===== Sync delta (rápido: 1 query con updated_at > lastSyncAt) =====
-  const syncDelta = useCallback(async (): Promise<void> => {
+  // ===== Verificación de integridad (count + checksum) =====
+  const verifyIntegrity = useCallback(
+    async (currentPois: SavedPoi[], currentTrashed: SavedPoi[]): Promise<boolean> => {
+      const summary = await fetchSyncSummary();
+      if (!summary) return true; // si la RPC falla, no forzamos refresh
+      const localCount = currentPois.length + currentTrashed.length;
+      if (summary.row_count !== localCount) {
+        console.warn(
+          `[useSavedPois] integrity mismatch: server=${summary.row_count} local=${localCount} → fullRefresh`,
+        );
+        return false;
+      }
+      // Confirmar lastSyncAt al max del servidor.
+      if (summary.max_updated_at) {
+        lastSyncAtRef.current = summary.max_updated_at;
+      }
+      return true;
+    },
+    [],
+  );
+
+  // ===== Sync delta (paginado) =====
+  const syncDeltaImpl = useCallback(async (): Promise<void> => {
     if (!user) return;
+    // Si hay mutaciones en vuelo, esperamos un tick para no pisar updates locales.
+    if (pendingMutationsRef.current > 0) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (pendingMutationsRef.current > 0) return; // skip; se reintentará
+    }
+
     const since = lastSyncAtRef.current;
     if (!since) {
-      // Sin baseline → caemos al fullRefresh.
-      await fullRefresh();
+      await fullRefreshImpl();
       return;
     }
+
     try {
-      // Trae filas cambiadas (incluye soft-deletes y restores) desde la última sync.
-      // Sin filtro de deleted_at: queremos también las eliminadas para mover a trash.
-      const { data, error } = await supabase
-        .from("pois")
-        .select(LIGHT_COLS)
-        .gt("updated_at", since)
-        .order("updated_at", { ascending: true })
-        .limit(5000);
-      if (error) {
-        console.warn("[useSavedPois.syncDelta] error, ignoring", error.message);
-        return;
+      // Paginar el delta: filas con updated_at > since, ordenadas asc.
+      const changed: SavedPoi[] = [];
+      let from = 0;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { data, error } = await supabase
+          .from("pois")
+          .select(LIGHT_COLS)
+          .gt("updated_at", since)
+          .order("updated_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) {
+          console.warn("[useSavedPois.syncDelta] page error, abort delta", error.message);
+          return;
+        }
+        const page = (data ?? []).map((r) => toSavedPoi(r as LightRow));
+        changed.push(...page);
+        if (page.length < PAGE) break;
+        from += PAGE;
       }
-      const changed = (data ?? []).map((r) => toSavedPoi(r as LightRow));
-      if (!changed.length) return;
 
-      // Merge en active / trash.
-      const activeIncoming = changed.filter((r) => !r.deleted_at);
-      const trashedIncoming = changed.filter((r) => !!r.deleted_at);
-      const incomingIds = new Set(changed.map((r) => r.id));
-
-      setPois((prev) => {
-        const kept = prev.filter((p) => !incomingIds.has(p.id));
-        return [...activeIncoming, ...kept];
-      });
-      setTrashedPois((prev) => {
-        const kept = prev.filter((p) => !incomingIds.has(p.id));
-        return [...trashedIncoming, ...kept];
-      });
-      advanceSyncStamp(changed);
-
-      // Persistencia diferida: leemos el último state vía setters para snapshot consistente.
-      setPois((curr) => {
-        setTrashedPois((trashCurr) => {
-          persistCache(curr, trashCurr, lastSyncAtRef.current);
-          return trashCurr;
-        });
-        return curr;
-      });
-
-      // Enriquecimiento heavy solo para las activas que llegaron en el delta.
-      if (activeIncoming.length) {
-        void enrichInBackground(activeIncoming, "active", setPois, persistCache);
+      let nextPois = pois;
+      let nextTrash = trashedPois;
+      if (changed.length) {
+        const activeIncoming = changed.filter((r) => !r.deleted_at);
+        const trashedIncoming = changed.filter((r) => !!r.deleted_at);
+        const incomingIds = new Set(changed.map((r) => r.id));
+        nextPois = [...activeIncoming, ...pois.filter((p) => !incomingIds.has(p.id))];
+        nextTrash = [...trashedIncoming, ...trashedPois.filter((p) => !incomingIds.has(p.id))];
+        setPois(nextPois);
+        setTrashedPois(nextTrash);
+        if (activeIncoming.length) void enrichInBackground(activeIncoming, setPois);
+        if (trashedIncoming.length) void enrichInBackground(trashedIncoming, setTrashedPois);
       }
-      if (trashedIncoming.length) {
-        void enrichInBackground(trashedIncoming, "trashed", setTrashedPois, persistCache);
+
+      // Verificación de integridad: detecta hard-deletes y desincronías.
+      const ok = await verifyIntegrity(nextPois, nextTrash);
+      if (!ok) {
+        // Evitar bucle: solo un fullRefresh cada 30s como mucho.
+        const sinceLast = Date.now() - lastFullRefreshAtRef.current;
+        if (sinceLast > 30_000) {
+          await fullRefreshImpl();
+        } else {
+          console.warn("[useSavedPois] integrity mismatch but recent fullRefresh, skipping");
+        }
       }
     } catch (err) {
       console.warn("[useSavedPois.syncDelta] threw, ignoring", err);
     }
-  }, [user, fullRefresh, persistCache, advanceSyncStamp]);
+  }, [user, pois, trashedPois, fullRefreshImpl, verifyIntegrity]);
+
+  // ===== Wrappers que serializan ejecuciones =====
+  const runSerialized = useCallback(
+    async (job: () => Promise<void>): Promise<void> => {
+      while (syncInFlightRef.current) {
+        try {
+          await syncInFlightRef.current;
+        } catch {
+          /* noop */
+        }
+      }
+      const p = (async () => {
+        try {
+          await job();
+        } finally {
+          syncInFlightRef.current = null;
+        }
+      })();
+      syncInFlightRef.current = p;
+      await p;
+    },
+    [],
+  );
+
+  const syncDelta = useCallback(
+    () => runSerialized(syncDeltaImpl),
+    [runSerialized, syncDeltaImpl],
+  );
+  const fullRefresh = useCallback(
+    () => runSerialized(fullRefreshImpl),
+    [runSerialized, fullRefreshImpl],
+  );
 
   // ===== Bootstrap: hidratar desde caché + decidir delta vs full =====
   useEffect(() => {
@@ -222,36 +317,38 @@ export const useSavedPois = () => {
       setPois([]);
       setTrashedPois([]);
       lastSyncAtRef.current = null;
+      userIdRef.current = null;
       return;
     }
+    userIdRef.current = user.id;
     let cancelled = false;
     (async () => {
       const cached = await loadPoiCache(user.id);
-      if (cancelled) return;
+      if (cancelled || userIdRef.current !== user.id) return;
       if (cached) {
         setPois(cached.pois);
         setTrashedPois(cached.trashedPois);
         lastSyncAtRef.current = cached.lastSyncAt;
         const stale = Date.now() - cached.cachedAt > CACHE_FULL_REFRESH_TTL_MS;
-        // Si tenemos baseline y caché fresco → solo delta (rápido).
-        if (cached.lastSyncAt && !stale) {
+        // Sanidad: si lastSyncAt está en el futuro (reloj raro) → full.
+        const futureClock =
+          cached.lastSyncAt && new Date(cached.lastSyncAt).getTime() > Date.now() + 60_000;
+        if (cached.lastSyncAt && !stale && !futureClock) {
           void syncDelta();
         } else {
-          // Sin baseline o caché vencido → refresh completo en background.
           void fullRefresh();
         }
       } else {
-        // Sin caché → primera vez: refresh completo bloqueante.
         await fullRefresh();
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [user, syncDelta, fullRefresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
-  // Public refresh = sync delta (no bloqueante, normal). Para forzar el full
-  // se usa forceFullRefresh.
+  // Public refresh = sync delta. Para forzar full → forceFullRefresh.
   const refresh = useCallback(async () => {
     await syncDelta();
   }, [syncDelta]);
@@ -260,23 +357,26 @@ export const useSavedPois = () => {
     await fullRefresh();
   }, [fullRefresh]);
 
-  // Debounce para encadenar mutaciones sin disparar varios delta.
-  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleRefresh = useCallback(() => {
-    if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    refreshTimer.current = setTimeout(() => {
-      refreshTimer.current = null;
-      void syncDelta();
-    }, 300);
-  }, [syncDelta]);
-  useEffect(
-    () => () => {
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+  // ===== Helper para envolver mutaciones (counter + advance lastSyncAt) =====
+  const trackMutation = useCallback(
+    async <T,>(fn: () => Promise<T>): Promise<T> => {
+      pendingMutationsRef.current += 1;
+      try {
+        return await fn();
+      } finally {
+        pendingMutationsRef.current = Math.max(0, pendingMutationsRef.current - 1);
+      }
     },
     [],
   );
 
-  // ===== Mutaciones (optimistas + persistencia inmediata al caché) =====
+  const bumpSync = useCallback((iso: string) => {
+    if (!lastSyncAtRef.current || iso > lastSyncAtRef.current) {
+      lastSyncAtRef.current = iso;
+    }
+  }, []);
+
+  // ===== Mutaciones (optimistas; persistencia vía effect) =====
 
   const addMany = useCallback(
     async (
@@ -286,212 +386,187 @@ export const useSavedPois = () => {
     ) => {
       if (!user) throw new Error("Debes iniciar sesión");
       if (!items.length) return 0;
-
-      const sanitize = (p: PoiInsert) => {
-        const props = { ...((p.properties ?? {}) as Record<string, unknown>) };
-        delete props.icon;
-        delete props._folderPath;
-        return {
-          ...p,
-          folder_id: p.folder_id ?? folder_id,
-          properties: props as never,
-          user_id: user.id,
+      return trackMutation(async () => {
+        const sanitize = (p: PoiInsert) => {
+          const props = { ...((p.properties ?? {}) as Record<string, unknown>) };
+          delete props.icon;
+          delete props._folderPath;
+          return {
+            ...p,
+            folder_id: p.folder_id ?? folder_id,
+            properties: props as never,
+            user_id: user.id,
+          };
         };
-      };
-      const rows = items.map(sanitize);
-
-      const CHUNK_SIZE = 200;
-      let totalInserted = 0;
-      const inserted: SavedPoi[] = [];
-      const errors: string[] = [];
-      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
-        const slice = rows.slice(i, i + CHUNK_SIZE);
-        const { data, error, count } = await supabase
-          .from("pois")
-          .insert(slice, { count: "exact" })
-          .select(LIGHT_COLS);
-        if (error) {
-          console.error(`[addMany] chunk ${i}-${i + slice.length} falló:`, error);
-          errors.push(error.message);
-          continue;
+        const rows = items.map(sanitize);
+        const CHUNK_SIZE = 200;
+        let totalInserted = 0;
+        const inserted: SavedPoi[] = [];
+        const errors: string[] = [];
+        for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+          const slice = rows.slice(i, i + CHUNK_SIZE);
+          const { data, error, count } = await supabase
+            .from("pois")
+            .insert(slice, { count: "exact" })
+            .select(LIGHT_COLS);
+          if (error) {
+            console.error(`[addMany] chunk ${i}-${i + slice.length} falló:`, error);
+            errors.push(error.message);
+            continue;
+          }
+          totalInserted += count ?? slice.length;
+          if (data) {
+            for (const row of data as LightRow[]) inserted.push(toSavedPoi(row));
+          }
         }
-        totalInserted += count ?? slice.length;
-        if (data) {
-          for (const row of data as LightRow[]) inserted.push(toSavedPoi(row));
+        if (inserted.length) {
+          for (const r of inserted) bumpSync(rowSyncStamp(r));
+          setPois((prev) => [...inserted, ...prev]);
         }
-      }
-      if (inserted.length) {
-        setPois((prev) => {
-          const next = [...inserted, ...prev];
-          setTrashedPois((trash) => {
-            advanceSyncStamp(inserted);
-            persistCache(next, trash, lastSyncAtRef.current);
-            return trash;
-          });
-          return next;
-        });
-      }
-      if (totalInserted === 0 && errors.length) throw new Error(errors[0]);
-      return totalInserted;
+        if (totalInserted === 0 && errors.length) throw new Error(errors[0]);
+        return totalInserted;
+      });
     },
-    [user, persistCache, advanceSyncStamp],
+    [user, trackMutation, bumpSync],
   );
 
   const update = useCallback(
     async (id: string, patch: PoiUpdate) => {
-      const { error } = await supabase
-        .from("pois")
-        .update(patch as never)
-        .eq("id", id);
-      if (error) throw new Error(error.message);
-      const nowIso = new Date().toISOString();
-      setPois((prev) => {
-        const next = prev.map((p) =>
-          p.id === id ? ({ ...p, ...patch, updated_at: nowIso } as SavedPoi) : p,
+      return trackMutation(async () => {
+        const { data, error } = await supabase
+          .from("pois")
+          .update(patch as never)
+          .eq("id", id)
+          .select("updated_at")
+          .single();
+        if (error) throw new Error(error.message);
+        const nowIso = (data?.updated_at as string) ?? new Date().toISOString();
+        bumpSync(nowIso);
+        setPois((prev) =>
+          prev.map((p) =>
+            p.id === id ? ({ ...p, ...patch, updated_at: nowIso } as SavedPoi) : p,
+          ),
         );
-        setTrashedPois((trash) => {
-          persistCache(next, trash, nowIso > (lastSyncAtRef.current ?? "") ? nowIso : lastSyncAtRef.current);
-          return trash;
-        });
-        return next;
       });
-      lastSyncAtRef.current = nowIso > (lastSyncAtRef.current ?? "") ? nowIso : lastSyncAtRef.current;
-      void persistLastSyncAt(user!.id, lastSyncAtRef.current);
     },
-    [user, persistCache],
+    [trackMutation, bumpSync],
   );
 
   const moveMany = useCallback(
     async (ids: string[], folder_id: string | null) => {
       if (!ids.length) return;
-      const { error } = await supabase
-        .from("pois")
-        .update({ folder_id })
-        .in("id", ids);
-      if (error) throw new Error(error.message);
-      const nowIso = new Date().toISOString();
-      const idSet = new Set(ids);
-      setPois((prev) => {
-        const next = prev.map((p) =>
-          idSet.has(p.id) ? ({ ...p, folder_id, updated_at: nowIso } as SavedPoi) : p,
+      return trackMutation(async () => {
+        const { error } = await supabase
+          .from("pois")
+          .update({ folder_id })
+          .in("id", ids);
+        if (error) throw new Error(error.message);
+        const nowIso = new Date().toISOString();
+        bumpSync(nowIso);
+        const idSet = new Set(ids);
+        setPois((prev) =>
+          prev.map((p) =>
+            idSet.has(p.id) ? ({ ...p, folder_id, updated_at: nowIso } as SavedPoi) : p,
+          ),
         );
-        setTrashedPois((trash) => {
-          persistCache(next, trash, nowIso);
-          return trash;
-        });
-        return next;
       });
-      lastSyncAtRef.current = nowIso;
-      if (user) void persistLastSyncAt(user.id, nowIso);
     },
-    [user, persistCache],
+    [trackMutation, bumpSync],
   );
 
   const remove = useCallback(
     async (id: string) => {
-      const { error } = await supabase
-        .from("pois")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw new Error(error.message);
-      const nowIso = new Date().toISOString();
-      setPois((prev) => {
-        const moving = prev.find((p) => p.id === id);
-        const next = prev.filter((p) => p.id !== id);
-        setTrashedPois((trash) => {
-          const newTrash = moving
-            ? [{ ...moving, deleted_at: nowIso, updated_at: nowIso }, ...trash]
-            : trash;
-          persistCache(next, newTrash, nowIso);
-          return newTrash;
+      return trackMutation(async () => {
+        const nowIso = new Date().toISOString();
+        const { error } = await supabase
+          .from("pois")
+          .update({ deleted_at: nowIso })
+          .eq("id", id);
+        if (error) throw new Error(error.message);
+        bumpSync(nowIso);
+        let moving: SavedPoi | undefined;
+        setPois((prev) => {
+          moving = prev.find((p) => p.id === id);
+          return prev.filter((p) => p.id !== id);
         });
-        return next;
+        setTrashedPois((trash) =>
+          moving
+            ? [{ ...moving, deleted_at: nowIso, updated_at: nowIso }, ...trash]
+            : trash,
+        );
       });
-      lastSyncAtRef.current = nowIso;
-      if (user) void persistLastSyncAt(user.id, nowIso);
     },
-    [user, persistCache],
+    [trackMutation, bumpSync],
   );
 
   const removeMany = useCallback(
     async (ids: string[]) => {
       if (!ids.length) return;
-      const nowIso = new Date().toISOString();
-      const { error } = await supabase
-        .from("pois")
-        .update({ deleted_at: nowIso })
-        .in("id", ids);
-      if (error) throw new Error(error.message);
-      const idSet = new Set(ids);
-      setPois((prev) => {
-        const moving = prev.filter((p) => idSet.has(p.id));
-        const next = prev.filter((p) => !idSet.has(p.id));
-        setTrashedPois((trash) => {
-          const newTrash = [
-            ...moving.map((m) => ({ ...m, deleted_at: nowIso, updated_at: nowIso })),
-            ...trash,
-          ];
-          persistCache(next, newTrash, nowIso);
-          return newTrash;
+      return trackMutation(async () => {
+        const nowIso = new Date().toISOString();
+        const { error } = await supabase
+          .from("pois")
+          .update({ deleted_at: nowIso })
+          .in("id", ids);
+        if (error) throw new Error(error.message);
+        bumpSync(nowIso);
+        const idSet = new Set(ids);
+        let moving: SavedPoi[] = [];
+        setPois((prev) => {
+          moving = prev.filter((p) => idSet.has(p.id));
+          return prev.filter((p) => !idSet.has(p.id));
         });
-        return next;
+        setTrashedPois((trash) => [
+          ...moving.map((m) => ({ ...m, deleted_at: nowIso, updated_at: nowIso })),
+          ...trash,
+        ]);
       });
-      lastSyncAtRef.current = nowIso;
-      if (user) void persistLastSyncAt(user.id, nowIso);
     },
-    [user, persistCache],
+    [trackMutation, bumpSync],
   );
 
   const restore = useCallback(
     async (ids: string[]) => {
       if (!ids.length) return;
-      const { error } = await supabase
-        .from("pois")
-        .update({ deleted_at: null })
-        .in("id", ids);
-      if (error) throw new Error(error.message);
-      const nowIso = new Date().toISOString();
-      const idSet = new Set(ids);
-      setTrashedPois((trash) => {
-        const moving = trash.filter((p) => idSet.has(p.id));
-        const newTrash = trash.filter((p) => !idSet.has(p.id));
-        setPois((prev) => {
-          const next = [
-            ...moving.map((m) => ({ ...m, deleted_at: null, updated_at: nowIso })),
-            ...prev,
-          ];
-          persistCache(next, newTrash, nowIso);
-          return next;
+      return trackMutation(async () => {
+        const { error } = await supabase
+          .from("pois")
+          .update({ deleted_at: null })
+          .in("id", ids);
+        if (error) throw new Error(error.message);
+        const nowIso = new Date().toISOString();
+        bumpSync(nowIso);
+        const idSet = new Set(ids);
+        let moving: SavedPoi[] = [];
+        setTrashedPois((trash) => {
+          moving = trash.filter((p) => idSet.has(p.id));
+          return trash.filter((p) => !idSet.has(p.id));
         });
-        return newTrash;
+        setPois((prev) => [
+          ...moving.map((m) => ({ ...m, deleted_at: null, updated_at: nowIso })),
+          ...prev,
+        ]);
       });
-      lastSyncAtRef.current = nowIso;
-      if (user) void persistLastSyncAt(user.id, nowIso);
     },
-    [user, persistCache],
+    [trackMutation, bumpSync],
   );
 
   const purgePermanently = useCallback(
     async (ids: string[]) => {
       if (!ids.length) return;
-      const CHUNK = 100;
-      for (let i = 0; i < ids.length; i += CHUNK) {
-        const slice = ids.slice(i, i + CHUNK);
-        const { error } = await supabase.from("pois").delete().in("id", slice);
-        if (error) throw new Error(error.message);
-      }
-      const idSet = new Set(ids);
-      setPois((prev) => {
-        const next = prev.filter((p) => !idSet.has(p.id));
-        setTrashedPois((trash) => {
-          const newTrash = trash.filter((p) => !idSet.has(p.id));
-          persistCache(next, newTrash, lastSyncAtRef.current);
-          return newTrash;
-        });
-        return next;
+      return trackMutation(async () => {
+        const CHUNK = 100;
+        for (let i = 0; i < ids.length; i += CHUNK) {
+          const slice = ids.slice(i, i + CHUNK);
+          const { error } = await supabase.from("pois").delete().in("id", slice);
+          if (error) throw new Error(error.message);
+        }
+        const idSet = new Set(ids);
+        setPois((prev) => prev.filter((p) => !idSet.has(p.id)));
+        setTrashedPois((trash) => trash.filter((p) => !idSet.has(p.id)));
       });
     },
-    [persistCache],
+    [trackMutation],
   );
 
   const clearAll = useCallback(async () => {
@@ -532,9 +607,7 @@ export const useSavedPois = () => {
 
 const enrichInBackground = async (
   rows: SavedPoi[],
-  target: "active" | "trashed",
   setter: React.Dispatch<React.SetStateAction<SavedPoi[]>>,
-  persistCache: (a: SavedPoi[], b: SavedPoi[], s?: string | null) => void,
 ) => {
   if (!rows.length) return;
   const CHUNK = 500;
@@ -560,23 +633,14 @@ const enrichInBackground = async (
           properties: row.properties ?? {},
         });
       }
-      setter((prev) => {
-        const next = prev.map((p) => {
+      setter((prev) =>
+        prev.map((p) => {
           const extra = byId.get(p.id);
           return extra ? { ...p, ...extra } : p;
-        });
-        // Persistir snapshot tras enriquecer.
-        if (target === "active") {
-          // Need trashed too — but we don't have it here. Skip persist on enrich
-          // to keep this helper local. The next mutation/sync will persist.
-        }
-        return next;
-      });
+        }),
+      );
     } catch (err) {
       console.warn("[useSavedPois] enrich chunk failed", err);
     }
   }
-  // Trigger one persist after all chunks done — we don't have both lists here,
-  // so we leave it: the next sync/mutation will persist enriched data.
-  void persistCache;
 };
