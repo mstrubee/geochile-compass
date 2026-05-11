@@ -13,6 +13,7 @@ export interface SavedPoi {
   source_layer: string | null;
   folder_id: string | null;
   created_at: string;
+  updated_at?: string | null;
   deleted_at?: string | null;
 }
 
