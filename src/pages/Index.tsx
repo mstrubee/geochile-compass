@@ -1066,6 +1066,18 @@ const Index = () => {
             .filter(Boolean)
             .join(" ")}
         >
+          {(poisLoading || foldersLoading) && (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-[1000] -translate-x-1/2">
+              <div className="flex items-center gap-2 rounded-full border border-border/60 bg-surface/95 px-3 py-1.5 text-[12px] font-medium text-foreground shadow-apple-md backdrop-blur-xl">
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                {poisLoading && foldersLoading
+                  ? "Sincronizando POIs y carpetas…"
+                  : poisLoading
+                    ? "Sincronizando POIs…"
+                    : "Sincronizando carpetas…"}
+              </div>
+            </div>
+          )}
           <MapView
             basemap={basemap}
             onMouseMove={setCoords}
