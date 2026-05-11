@@ -85,9 +85,16 @@ export const useSavedPois = () => {
   }, [trashedPois]);
 
   // ===== Persistencia única en cada cambio de state (debounced) =====
+  // CRÍTICO: nunca escribir un snapshot vacío encima de uno con datos.
+  // Si el estado actual está vacío, dejamos el caché como estaba para que un
+  // arranque posterior pueda recuperar los datos reales.
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!user) return;
+    if (authLoading) return;
+    // No persistir snapshots vacíos: probablemente venimos de un arranque
+    // sin sesión o de un error de red. Esperamos a tener datos reales.
+    if (pois.length === 0 && trashedPois.length === 0) return;
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     const uid = user.id;
     const snapshotPois = pois;
@@ -102,7 +109,7 @@ export const useSavedPois = () => {
         persistTimerRef.current = null;
       }
     };
-  }, [user, pois, trashedPois]);
+  }, [user, authLoading, pois, trashedPois]);
 
   // ===== Refresh full (paginado, fallback / primera vez / botón manual) =====
   const fullRefreshImpl = useCallback(async (): Promise<void> => {
