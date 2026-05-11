@@ -642,8 +642,23 @@ export const Sidebar = ({
       return changed ? next : prev;
     });
   }, [userLayers]);
-  // Carpetas expandidas en el árbol de POIs guardados (por defecto: todas las raíz + "sin carpeta")
+  // Carpetas expandidas en el árbol de POIs guardados.
+  // Por defecto: "__root__" (POIs sin carpeta) abierto. Las carpetas raíz que
+  // van apareciendo desde backend/caché se auto-expanden la PRIMERA vez que
+  // las vemos, sin tocar las que el usuario haya colapsado manualmente.
   const [expandedPoiFolders, setExpandedPoiFolders] = useState<Set<string>>(new Set(["__root__"]));
+  const seenRootFoldersRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const rootIds = poiFolders.filter((f) => f.parent_id === null).map((f) => f.id);
+    const fresh = rootIds.filter((id) => !seenRootFoldersRef.current.has(id));
+    if (fresh.length === 0) return;
+    fresh.forEach((id) => seenRootFoldersRef.current.add(id));
+    setExpandedPoiFolders((prev) => {
+      const next = new Set(prev);
+      fresh.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [poiFolders]);
   const [trashSearch, setTrashSearch] = useState("");
   const togglePoiFolder = (id: string) =>
     setExpandedPoiFolders((prev) => {
