@@ -74,6 +74,15 @@ export const useSavedPois = () => {
   const lastFullRefreshAtRef = useRef(0);
   // Cancelación de hidrataciones cruzadas entre cambios de user.
   const userIdRef = useRef<string | null>(null);
+  // Refs vivas de pois/trashed para que syncDelta no use closures stale.
+  const poisRef = useRef<SavedPoi[]>([]);
+  const trashedRef = useRef<SavedPoi[]>([]);
+  useEffect(() => {
+    poisRef.current = pois;
+  }, [pois]);
+  useEffect(() => {
+    trashedRef.current = trashedPois;
+  }, [trashedPois]);
 
   // ===== Persistencia única en cada cambio de state (debounced) =====
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

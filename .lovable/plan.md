@@ -1,69 +1,34 @@
-# Sync de POIs robusto y confiable
-
 ## Diagnóstico
 
-El delta sync funciona "la mayoría de las veces", pero tiene varios puntos donde puede dejar el caché desincronizado de forma silenciosa. Los identifiqué leyendo `useSavedPois.ts`:
+Hay dos causas probables del comportamiento errático:
 
-1. **Límite duro de 5.000 filas en el delta** (`syncDelta` usa `.limit(5000)` sin paginar). Si en una sesión cambian más filas que eso, el resto se pierde hasta el siguiente full refresh (24 h).
-2. **No hay detección de hard-deletes**. Si un POI se borra definitivamente desde otra sesión (purga manual o cron `purge_deleted_pois` a los 30 días), el caché local lo sigue mostrando indefinidamente.
-3. **No hay verificación de integridad**. Nunca comparamos "cuántas filas tengo en caché" vs "cuántas hay en BD". Cualquier divergencia (página fallida, mutación perdida, race) queda invisible.
-4. **Race conditions en mutaciones optimistas**. Varias mutaciones (`update`, `remove`, `restore`...) hacen `setPois(prev => { setTrashedPois(trash => { persistCache(...); ... }); ... })` — anidar setters provoca que React (en StrictMode o bajo concurrencia) ejecute el updater dos veces, escribiendo cachés inconsistentes.
-5. **`syncDelta` puede pisar mutaciones recientes**. Si el usuario crea un POI mientras un `syncDelta` está en vuelo, el sync trae el POI desde BD y lo prepende, pero el `setPois` optimista del addMany pudo haber corrido entremedio → duplicados o pérdidas.
-6. **El bootstrap dispara delta inmediatamente**. Si el cache tiene `lastSyncAt` corrupto (ej. en el futuro por reloj desincronizado), el delta nunca trae nada hasta el TTL.
+1. **Sync de POI con estado stale:** `syncDeltaImpl` usa `pois` y `trashedPois` capturados por closure. Durante bootstrap se hace `setPois(cached.pois)` y acto seguido se dispara `syncDelta()`, pero esa función puede seguir viendo `pois=[]`, generando logs como `server=8454 local=0` y refreshes innecesarios.
+2. **Sidecar/árbol inestable:** la visibilidad de carpetas parte ocultando automáticamente todas las carpetas nuevas, y el árbol de carpetas POI arranca sólo con `__root__` expandido. Al llegar carpetas/POIs en fases distintas desde caché + backend, puede parecer que faltan POI o que el Sidecar “cambia solo”.
 
-Estos seis puntos juntos producen exactamente el comportamiento que describes: a veces faltan POIs, a veces aparecen al recargar, sin patrón claro.
+## Plan de implementación
 
-## Estrategia
+### 1. Hacer el sync de POI independiente de closures stale
+- Mantener refs sincronizadas para `pois` y `trashedPois`.
+- Hacer que `syncDeltaImpl` lea siempre desde esas refs, no desde el render anterior.
+- En bootstrap, después de hidratar caché, pasar explícitamente el snapshot cacheado al delta o refrescar desde el estado real.
+- Ajustar la verificación de integridad para comparar contra el snapshot vigente y evitar falsos `local=0` / `local=500`.
 
-Pasamos de "delta optimista y rezamos" a **"delta + verificación de integridad ligera + auto-corrección"**:
+### 2. Evitar refreshes completos falsos y carreras
+- Cuando no hay cambios delta, verificar contra el estado actual real.
+- Si un `fullRefresh` acaba de ocurrir, no disparar otro por un mismatch producido por estado transitorio.
+- Mantener la serialización, pero simplificar el camino de bootstrap para que no mezcle caché vacío con estado ya cargado.
 
-1. **Integridad por conteo + checksum** después de cada delta. Si no coinciden con el servidor → fallback automático a fullRefresh, sin que el usuario tenga que hacer nada.
-2. **Paginación del delta** (sin límite duro).
-3. **Detectar hard-deletes** comparando IDs locales vs IDs presentes en BD (vía un endpoint liviano que solo trae `id`).
-4. **Eliminar setters anidados** y mover toda la persistencia del caché a un `useEffect` que reacciona a cambios en `pois`/`trashedPois`. Una sola escritura por cambio, sin condiciones de carrera.
-5. **Cola serializada de syncs**: si llega un `syncDelta` mientras hay otro en curso, encolar (no correr en paralelo). Mutaciones tienen prioridad y bloquean el siguiente sync hasta que terminen.
+### 3. Corregir comportamiento visible de POI en mapa
+- Cambiar el valor inicial de `hiddenPoiFolders` para que **no oculte carpetas por defecto**.
+- Eliminar el efecto que auto-oculta carpetas nuevas al cargarse desde caché/backend.
+- Mantener el control manual de visibilidad por carpeta: si el usuario desmarca una carpeta, se sigue ocultando esa rama.
 
-## Cambios concretos
+### 4. Estabilizar el árbol POI del Sidecar
+- Auto-expandir carpetas raíz cuando llegan por primera vez, sin cerrar manualmente las que el usuario ya abrió/cerró.
+- Preservar `__root__` para “Sin carpeta”.
+- Evitar que la llegada tardía de carpetas desde backend haga parecer que los POI desaparecen.
 
-### Backend (1 migración chica)
-
-Crear función SQL `public.poi_sync_summary(p_user_id uuid)` que devuelve:
-- `count` = nº de filas (activas + papelera) del usuario
-- `max_updated_at` = mayor `updated_at` visible
-- `checksum` = `md5(string_agg(id::text, ',' ORDER BY id))` truncado
-
-Es una sola query barata (índice ya existe sobre `user_id`). La frontend la llama después de cada delta para verificar.
-
-### Frontend
-
-**`src/services/poiCache.ts`**
-- Añadir `getCacheChecksum(pois, trashed)` que computa el mismo checksum (md5 de IDs ordenados) en cliente, para comparar contra el del servidor.
-
-**`src/hooks/useSavedPois.ts`** — refactor de `syncDelta` y persistencia:
-
-1. Reemplazar el `setPois(prev => { setTrashedPois(...) })` anidado por dos `setX` consecutivos + un `useEffect([pois, trashedPois, user])` que persiste al caché. Una sola fuente de escritura.
-2. Paginar el delta con `range()` igual que `fullRefresh` (sin `limit(5000)`).
-3. Después de aplicar el delta, llamar a `poi_sync_summary` y comparar:
-   - Si `count` o `checksum` divergen → log + `fullRefresh()` automático.
-   - Si coinciden → confirmar `lastSyncAt = max_updated_at` del servidor (no del cliente; evita drift de reloj).
-4. Cola simple con `useRef<Promise|null>` para serializar syncs. Mutaciones setean un flag "dirty pending" para que el siguiente sync espere la confirmación de BD.
-5. En el bootstrap, si `lastSyncAt > now()` (reloj raro) o si la diferencia de count caché vs servidor es > 0 → forzar fullRefresh.
-
-**Lo que NO cambia**
-- Estructura del caché en IndexedDB (mismas keys, retro-compatible).
-- API pública del hook (`pois`, `trashedPois`, `refresh`, `forceFullRefresh`, mutaciones) — sin cambios para los consumidores.
-- TTL de 24 h del caché — se mantiene como red de seguridad.
-
-## Resultado esperado
-
-- Carga inicial sigue siendo instantánea (lectura IndexedDB, < 200 ms).
-- Después del delta hay 1 query extra (`poi_sync_summary`) súper barata; si todo coincide → listo.
-- Si algo divergió (hard-delete remoto, mutación perdida, página fallida) → fullRefresh transparente, el usuario ve los datos correctos sin tener que hacer nada.
-- Sin límites artificiales: maneja N POIs (paginación real).
-- Sin race conditions de cache: una sola ruta de escritura.
-
-## Notas técnicas
-
-- El checksum es md5(IDs ordenados), no md5 del payload entero. Detecta inserciones/borrados pero no edits — eso ya lo cubre `max_updated_at`. Combinados detectan cualquier divergencia estructural.
-- La función SQL es `STABLE SECURITY DEFINER` con filtro `WHERE user_id = auth.uid()` (no recibe el uid como parámetro, lo toma de `auth.uid()` para evitar suplantación).
-- Si el usuario tiene 50.000 POIs, el checksum tarda < 50 ms en Postgres y la transferencia es 32 bytes. Escalable.
+### 5. Verificación
+- Revisar que los logs de integridad ya no muestren `server=8454 local=0` durante carga normal.
+- Validar que el contador del Sidecar y los POI en mapa usen la lista completa (`pois`) sin límite artificial.
+- Confirmar que el toggle “Mostrar en mapa” y los checkbox por carpeta sigan funcionando.
