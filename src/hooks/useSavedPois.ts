@@ -186,6 +186,8 @@ export const useSavedPois = () => {
           new Date(0).toISOString(),
         );
       lastSyncAtRef.current = stamp;
+      poisRef.current = active;
+      trashedRef.current = trashed;
       setPois(active);
       setTrashedPois(trashed);
 
