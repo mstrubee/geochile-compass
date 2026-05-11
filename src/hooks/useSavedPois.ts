@@ -195,15 +195,19 @@ export const useSavedPois = () => {
 
       // Confirmar lastSyncAt con el max real desde el servidor (evita drift de reloj).
       const summary = await fetchSyncSummary();
-      const stamp =
-        summary?.max_updated_at ??
-        [...active, ...trashed].reduce(
+      let stamp: string | null = summary?.max_updated_at ?? null;
+      if (!stamp && (active.length > 0 || trashed.length > 0)) {
+        stamp = [...active, ...trashed].reduce(
           (m, r) => {
             const s = rowSyncStamp(r);
             return s > m ? s : m;
           },
           new Date(0).toISOString(),
         );
+      }
+      // Si no hay filas y la RPC no devolvió stamp, NO persistir epoch:
+      // dejaríamos el caché contaminado y el próximo arranque pediría un
+      // delta sobre toda la historia, garantizado a hacer timeout.
       lastSyncAtRef.current = stamp;
       poisRef.current = active;
       trashedRef.current = trashed;
