@@ -1,48 +1,53 @@
-Diagnóstico encontrado:
+# Acelerar carga de POIs con caché local cache-first
 
-- El patch anterior sí se desplegó: el log muestra 5.696 métricas paginadas, 64 POIs aptos, 0 sin UF y 0 con features todos en cero.
-- El R² sigue bajo porque el modelo actual usa solo features territoriales estáticos. En los datos reales esos features tienen correlación muy débil con ventas 2025: la mejor correlación individual está cerca de 0,17.
-- Además hay señales territoriales degeneradas: `n_anchors` y `n_complement_medium` están en 0 para todos los POIs, por lo que no aportan nada al modelo.
-- El modelo actual elige `lambda=500` por LOO, lo que aplana predicciones: `sd(predicted_uf)` ≈ 40 UF contra `sd(actual_uf)` ≈ 569 UF. Resultado: predice casi el promedio para todos y queda en R² ≈ 2%.
-- Probé el historial de ventas: el promedio 2024 por local explica 2025 con R² ≈ 93%; un modelo con features temporales simples llega a R² in-sample ≈ 96% y LOO ≈ 93%.
+## Diagnóstico
 
-Plan de solución:
+Hoy `useSavedPois` ya hidrata desde IndexedDB al instante, pero **siempre** dispara después un `refresh()` que pagina toda la tabla `pois` desde Supabase (≈5.700 filas en chunks de 250 → ~23 requests + enriquecimiento pesado en background). Eso es lo que se siente lento: aunque el mapa se pinta rápido del caché, la app queda en "loading" y los siguientes renders se bloquean cuando llegan los datos frescos.
 
-1. Cambiar `compute-performance-batch` de modelo puramente territorial a modelo híbrido temporal + territorial.
-   - Mantener los features territoriales actuales para drivers de entorno.
-   - Agregar features históricos por POI calculados desde `poi_metrics`:
-     - promedio UF 2024
-     - promedio UF 2023
-     - promedio UF 2022
-     - promedio últimos 6 meses 2024
-     - promedio primeros 6 meses 2024
-     - pendiente mensual 2024
-     - pendiente últimos 24 meses pre-target
-     - volatilidad 2024
-     - crecimiento 2024 vs 2023
-     - crecimiento H2 2024 vs H1 2024
+El objetivo es invertir la prioridad: **el caché local es la fuente de verdad para mostrar**, y Supabase solo se usa para sincronizar cambios (delta), no para recargar todo cada vez.
 
-2. Ajustar entrenamiento para evitar predicciones aplanadas.
-   - Entrenar Ridge sobre el set híbrido.
-   - Excluir features constantes o casi constantes antes de estandarizar, para evitar columnas inútiles (`n_anchors`, `n_complement_medium`).
-   - Mantener validación LOO y devolver en logs `r_squared`, `cv_rmse`, `lambda`, cantidad de features usados y features descartados.
+## Estrategia
 
-3. Corregir drivers mostrados al usuario.
-   - Separar drivers temporales de drivers territoriales en `top_drivers` usando labels claros.
-   - Evitar que un coeficiente de feature constante aparezca como driver.
-   - Conservar el formato existente de `top_drivers` para no romper la UI.
+1. **Cache-first real**: si hay snapshot local válido, lo usamos y NO disparamos refresh completo. La UI nunca espera a Supabase para mostrar POIs.
+2. **Sincronización delta** en background, usando `updated_at` y `deleted_at`:
+   - Traer solo filas con `updated_at > lastSyncAt` (incluye nuevas, editadas, y soft-deleted recientes).
+   - Mergear contra el caché: insertar nuevas, actualizar existentes, mover a papelera las que tengan `deleted_at`.
+   - Detectar borrados duros con un conteo + checksum liviano cada N min (opcional, fase 2).
+3. **Trigger en BD** para que `updated_at` se actualice automáticamente en cada UPDATE (hoy solo tiene default `now()` en INSERT, sin trigger → un edit no la mueve, lo que rompería el delta).
+4. **Sync manual**: botón/acción "Recargar desde servidor" que fuerza el refresh completo actual (mantenemos la lógica vieja como fallback explícito).
+5. **TTL del caché**: si `cachedAt` tiene > 24h o cambió el `user.id`, hacer refresh completo automáticamente la primera vez.
+6. **Mutaciones locales optimistas**: las mutaciones (`addMany`, `update`, `remove`, etc.) ya actualizan el state; ahora también deben escribir el caché inmediatamente y avanzar `lastSyncAt`, en vez de programar un `refresh()` paginado.
 
-4. Validar con ejecución real.
-   - Desplegar la función `compute-performance-batch`.
-   - Ejecutarla contra la carpeta Autoplanet.
-   - Revisar logs y respuesta: esperamos R² > 30%; por los datos medidos debería quedar muy por encima si el historial entra correctamente.
-   - Confirmar que se reescriben las 68 filas de `poi_performance_analysis` y que no hay errores de upsert.
+## Cambios concretos
 
-Archivos a tocar:
+### Backend (1 migración chica)
+- Crear trigger `BEFORE UPDATE` en `public.pois` que setee `NEW.updated_at = now()`. Reusar `public.update_updated_at_column()` que ya existe.
+- (Opcional) Mismo trigger en `poi_folders` para consistencia.
 
-- `supabase/functions/compute-performance-batch/index.ts`
-  - agregar construcción de features temporales
-  - filtrado de columnas constantes
-  - labels nuevos
-  - logs diagnósticos ampliados
-  - cálculo de contribuciones con el set final de features
+### Frontend
+- `src/services/poiCache.ts`:
+  - Guardar `lastSyncAt` (max `updated_at` visto) además de `cachedAt`.
+  - API nueva: `getLastSyncAt(userId)`, `setLastSyncAt(userId, iso)`, `mergePoiDelta(userId, changes)`.
+- `src/hooks/useSavedPois.ts`:
+  - Reemplazar el `refresh()` automático tras hidratar caché por `syncDelta()`:
+    - Si no hay caché → refresh completo (igual que hoy).
+    - Si hay caché → `select * from pois where user_id = ? and updated_at > lastSyncAt` (sin paginar a menos que el delta sea grande), aplicar merge, actualizar `lastSyncAt`.
+  - Borrar el enriquecimiento en background "siempre": ahora solo enriquecemos los IDs que vienen en el delta o que aún no tienen `properties`/`description` cargados.
+  - Mutaciones (`addMany`, `update`, `remove`, `moveMany`, `restore`): ya hacen update optimista del state → además escribir caché en ese momento y NO encadenar un `refresh()` completo. Solo `purgePermanently` y `clearAll` siguen forzando refresh.
+  - Exponer `forceFullRefresh()` para el botón manual.
+
+### UI mínima
+- En el panel de POIs (donde hoy aparece "Recargar"/loading), añadir botón "Sincronizar con servidor" que llama a `forceFullRefresh()`. Sin cambios visuales mayores.
+
+## Resultado esperado
+
+- Apertura de la app: POIs visibles en < 200 ms (lectura IndexedDB), sin esperar Supabase.
+- Sincronización en background: 1 request en lugar de ~23, normalmente con 0–N filas.
+- Edits/inserts/borrados: instantáneos, persistidos al caché en el mismo tick.
+- Recarga manual disponible cuando el usuario sospeche desincronía.
+
+## Notas técnicas
+
+- El delta no detecta "hard deletes" hechos fuera de la app (solo soft-deletes vía `deleted_at`). Para POIs eso es ok porque la app usa soft-delete + purga programada. Si hace falta, una segunda fase puede comparar `count(*)` con el tamaño del caché y forzar refresh si difieren.
+- Tamaño del caché en IndexedDB: ~5.700 POIs ligeros + heavies cabe sin problema (idb-keyval no tiene límite práctico para esto).
+- Hay que invalidar el caché si el `user.id` cambia (logout/login con otro usuario): ya está cubierto porque la key incluye `userId`.
