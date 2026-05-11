@@ -8,7 +8,29 @@ import { supabase } from "@/integrations/supabase/client";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
 import type { PoiFolderSchema } from "@/types/poiMetrics";
 
-const CHUNK = 400;
+const CHUNK = 200;
+const PAGE = 1000;
+
+/** Pagina una query filtrada por un set de poi_ids para sobrepasar el límite de 1000 filas de PostgREST. */
+const fetchPaginated = async <T,>(
+  ids: string[],
+  runPage: (chunk: string[], from: number, to: number) => Promise<T[]>,
+): Promise<T[]> => {
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK);
+    let from = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const to = from + PAGE - 1;
+      const rows = await runPage(slice, from, to);
+      out.push(...rows);
+      if (rows.length < PAGE) break;
+      from += PAGE;
+    }
+  }
+  return out;
+};
 
 const collectFolderIds = (rootId: string, allFolders: PoiFolder[]): Set<string> => {
   const out = new Set<string>([rootId]);
