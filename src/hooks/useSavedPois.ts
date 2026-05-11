@@ -59,7 +59,7 @@ const fetchSyncSummary = async (): Promise<SyncSummary | null> => {
 };
 
 export const useSavedPois = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [pois, setPois] = useState<SavedPoi[]>([]);
   const [trashedPois, setTrashedPois] = useState<SavedPoi[]>([]);
   const [loading, setLoading] = useState(false);
@@ -85,9 +85,16 @@ export const useSavedPois = () => {
   }, [trashedPois]);
 
   // ===== Persistencia única en cada cambio de state (debounced) =====
+  // CRÍTICO: nunca escribir un snapshot vacío encima de uno con datos.
+  // Si el estado actual está vacío, dejamos el caché como estaba para que un
+  // arranque posterior pueda recuperar los datos reales.
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!user) return;
+    if (authLoading) return;
+    // No persistir snapshots vacíos: probablemente venimos de un arranque
+    // sin sesión o de un error de red. Esperamos a tener datos reales.
+    if (pois.length === 0 && trashedPois.length === 0) return;
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     const uid = user.id;
     const snapshotPois = pois;
@@ -102,7 +109,7 @@ export const useSavedPois = () => {
         persistTimerRef.current = null;
       }
     };
-  }, [user, pois, trashedPois]);
+  }, [user, authLoading, pois, trashedPois]);
 
   // ===== Refresh full (paginado, fallback / primera vez / botón manual) =====
   const fullRefreshImpl = useCallback(async (): Promise<void> => {
@@ -174,6 +181,17 @@ export const useSavedPois = () => {
         return;
       }
 
+      // SOSPECHOSO: el servidor devuelve 0 POI activos pero localmente tenemos
+      // datos. Casi seguro es una consulta hecha sin sesión válida (token
+      // anónimo) o un error transitorio. Conservamos el snapshot bueno y
+      // reintentamos en el próximo ciclo en vez de borrar la UI.
+      if (active.length === 0 && poisRef.current.length > 0) {
+        console.warn(
+          `[useSavedPois.fullRefresh] server returned 0 active POIs but local has ${poisRef.current.length}; keeping local snapshot`,
+        );
+        return;
+      }
+
       // Confirmar lastSyncAt con el max real desde el servidor (evita drift de reloj).
       const summary = await fetchSyncSummary();
       const stamp =
@@ -207,6 +225,15 @@ export const useSavedPois = () => {
       const summary = await fetchSyncSummary();
       if (!summary) return true; // si la RPC falla, no forzamos refresh
       const localCount = currentPois.length + currentTrashed.length;
+      // SOSPECHOSO: el servidor dice 0 pero local tiene datos. Casi seguro la
+      // RPC corrió sin sesión válida (auth.uid() = null). NO forzamos refresh
+      // ni borramos nada — esperamos al próximo ciclo con sesión correcta.
+      if (summary.row_count === 0 && localCount > 0) {
+        console.warn(
+          `[useSavedPois] integrity check returned 0 but local has ${localCount}; ignoring (likely missing auth)`,
+        );
+        return true;
+      }
       if (summary.row_count !== localCount) {
         console.warn(
           `[useSavedPois] integrity mismatch: server=${summary.row_count} local=${localCount} → fullRefresh`,
@@ -326,6 +353,9 @@ export const useSavedPois = () => {
 
   // ===== Bootstrap: hidratar desde caché + decidir delta vs full =====
   useEffect(() => {
+    // Mientras la sesión todavía se está resolviendo no hacemos nada para
+    // evitar consultas con token anónimo que devuelven [] y contaminan el caché.
+    if (authLoading) return;
     if (!user) {
       setPois([]);
       setTrashedPois([]);
@@ -362,7 +392,7 @@ export const useSavedPois = () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, authLoading]);
 
   // Public refresh = sync delta. Para forzar full → forceFullRefresh.
   const refresh = useCallback(async () => {
