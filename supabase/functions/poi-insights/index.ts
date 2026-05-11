@@ -51,12 +51,22 @@ serve(async (req) => {
     }
     const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
 
-    const payload = (await req.json()) as PoiSummaryPayload;
-    if (!payload?.poi || !payload?.aggregates) {
+    let payload: PoiSummaryPayload;
+    try {
+      const raw = await req.text();
+      payload = raw ? (JSON.parse(raw) as PoiSummaryPayload) : ({} as PoiSummaryPayload);
+    } catch (_err) {
+      payload = {} as PoiSummaryPayload;
+    }
+    if (!payload?.poi) {
+      console.error("poi-insights: missing poi in payload", payload);
       return new Response(
-        JSON.stringify({ error: "Missing payload" }),
+        JSON.stringify({ error: "Missing payload: poi is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
+    }
+    if (!Array.isArray(payload.aggregates)) {
+      payload.aggregates = [];
     }
 
     const systemPrompt = `Eres un analista comercial experto en retail chileno.
