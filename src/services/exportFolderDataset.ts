@@ -119,11 +119,12 @@ export const exportFolderDataset = async (
   const poiIds = poisInScope.map((p) => p.id);
 
   // 1) Atributos estáticos
-  const attrRows = await fetchInChunks(poiIds, async (chunk) => {
+  const attrRows = await fetchPaginated(poiIds, async (chunk, from, to) => {
     const { data, error } = await supabase
       .from("poi_attributes")
       .select("poi_id,attr_key,attr_value")
-      .in("poi_id", chunk);
+      .in("poi_id", chunk)
+      .range(from, to);
     if (error) throw new Error(`poi_attributes: ${error.message}`);
     return (data ?? []) as Array<{ poi_id: string; attr_key: string; attr_value: string | null }>;
   });
@@ -140,11 +141,12 @@ export const exportFolderDataset = async (
   }
 
   // 2) Features (poi_features_cache)
-  const featRows = await fetchInChunks(poiIds, async (chunk) => {
+  const featRows = await fetchPaginated(poiIds, async (chunk, from, to) => {
     const { data, error } = await supabase
       .from("poi_features_cache")
       .select("poi_id,features,iso_minutes,is_rm,config_version,computed_at")
-      .in("poi_id", chunk);
+      .in("poi_id", chunk)
+      .range(from, to);
     if (error) throw new Error(`poi_features_cache: ${error.message}`);
     return (data ?? []) as Array<{
       poi_id: string;
@@ -175,11 +177,12 @@ export const exportFolderDataset = async (
   }
 
   // 3) Métricas (pivot por metric_key + period)
-  const metricRows = await fetchInChunks(poiIds, async (chunk) => {
+  const metricRows = await fetchPaginated(poiIds, async (chunk, from, to) => {
     const { data, error } = await supabase
       .from("poi_metrics")
       .select("poi_id,metric_key,period,value")
-      .in("poi_id", chunk);
+      .in("poi_id", chunk)
+      .range(from, to);
     if (error) throw new Error(`poi_metrics: ${error.message}`);
     return (data ?? []) as Array<{
       poi_id: string;
@@ -187,6 +190,12 @@ export const exportFolderDataset = async (
       period: string;
       value: number;
     }>;
+  });
+  console.info("[exportFolderDataset]", {
+    pois: poiIds.length,
+    attrRows: attrRows.length,
+    featRows: featRows.length,
+    metricRows: metricRows.length,
   });
   const metricByPoi = new Map<string, Map<string, number>>();
   const metricColSet = new Set<string>();
