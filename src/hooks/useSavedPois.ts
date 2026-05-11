@@ -283,7 +283,11 @@ export const useSavedPois = () => {
           .order("id", { ascending: true })
           .range(from, from + PAGE - 1);
         if (error) {
-          console.warn("[useSavedPois.syncDelta] page error, abort delta", error.message);
+          console.warn("[useSavedPois.syncDelta] page error → fullRefresh fallback", error.message);
+          const sinceLast = Date.now() - lastFullRefreshAtRef.current;
+          if (sinceLast > 30_000) {
+            await fullRefreshImpl();
+          }
           return;
         }
         const page = (data ?? []).map((r) => toSavedPoi(r as LightRow));
