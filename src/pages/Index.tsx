@@ -271,6 +271,7 @@ const Index = () => {
     restore: restorePois,
     purgePermanently: purgePois,
     clearAll: clearAllPois,
+    loading: poisLoading,
   } = useSavedPois();
   const {
     folders,
@@ -282,6 +283,7 @@ const Index = () => {
     purgePermanently: purgeFolder,
     move: moveFolder,
     refresh: refreshFolders,
+    loading: foldersLoading,
   } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(true);
   // Por defecto NO ocultamos ninguna carpeta: el usuario puede ocultar lo que
