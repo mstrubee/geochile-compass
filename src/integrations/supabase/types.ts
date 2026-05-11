@@ -14,24 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      _tmp_users_diag: {
-        Row: {
-          created_at: string | null
-          email: string | null
-          id: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          email?: string | null
-          id?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          email?: string | null
-          id?: string | null
-        }
-        Relationships: []
-      }
       analysis_settings: {
         Row: {
           config_version: number
