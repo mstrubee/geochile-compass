@@ -852,7 +852,7 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
                 ) : (
                   <>
                     <div className="text-sm font-medium">Hacé click para seleccionar un archivo</div>
-                    <div className="text-xs text-muted-foreground">GeoJSON · HTML · KML · KMZ (hasta 1 GB)</div>
+                    <div className="text-xs text-muted-foreground">GeoJSON · HTML · KML · KMZ (sin límite de tamaño)</div>
                   </>
                 )}
                 <input
@@ -865,11 +865,31 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
               </label>
             </div>
 
+            {(uploading || (uploadPct > 0 && uploadPct < 100)) && file && (
+              <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium">Subiendo {file.name}</span>
+                  <span className="font-mono text-muted-foreground">{uploadPct}%</span>
+                </div>
+                <Progress value={uploadPct} className="h-2" />
+                <div className="text-[11px] text-muted-foreground">
+                  {(uploadedBytes / 1024 / 1024).toFixed(2)} MB / {(file.size / 1024 / 1024).toFixed(2)} MB
+                </div>
+              </div>
+            )}
+
+            {scanning && (
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Analizando capas del archivo…
+              </div>
+            )}
+
             <DialogFooter>
               <Button variant="outline" onClick={close}>Cancelar</Button>
               <Button onClick={handleUpload} disabled={!file || uploading || scanning}>
                 {(uploading || scanning) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {uploading ? "Subiendo…" : scanning ? "Analizando…" : "Subir y analizar"}
+                {uploading ? `Subiendo… ${uploadPct}%` : scanning ? "Analizando…" : "Subir y analizar"}
               </Button>
             </DialogFooter>
           </div>
