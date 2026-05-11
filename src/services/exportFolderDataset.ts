@@ -8,7 +8,29 @@ import { supabase } from "@/integrations/supabase/client";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
 import type { PoiFolderSchema } from "@/types/poiMetrics";
 
-const CHUNK = 400;
+const CHUNK = 200;
+const PAGE = 1000;
+
+/** Pagina una query filtrada por un set de poi_ids para sobrepasar el límite de 1000 filas de PostgREST. */
+const fetchPaginated = async <T,>(
+  ids: string[],
+  runPage: (chunk: string[], from: number, to: number) => Promise<T[]>,
+): Promise<T[]> => {
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK);
+    let from = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const to = from + PAGE - 1;
+      const rows = await runPage(slice, from, to);
+      out.push(...rows);
+      if (rows.length < PAGE) break;
+      from += PAGE;
+    }
+  }
+  return out;
+};
 
 const collectFolderIds = (rootId: string, allFolders: PoiFolder[]): Set<string> => {
   const out = new Set<string>([rootId]);
@@ -73,19 +95,6 @@ const slugify = (s: string): string =>
     .toLowerCase()
     .slice(0, 60) || "carpeta";
 
-const fetchInChunks = async <T,>(
-  ids: string[],
-  fn: (chunk: string[]) => Promise<T[]>,
-): Promise<T[]> => {
-  const out: T[] = [];
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const slice = ids.slice(i, i + CHUNK);
-    const rows = await fn(slice);
-    out.push(...rows);
-  }
-  return out;
-};
-
 export interface ExportResult {
   rows: number;
   columns: number;
@@ -110,11 +119,12 @@ export const exportFolderDataset = async (
   const poiIds = poisInScope.map((p) => p.id);
 
   // 1) Atributos estáticos
-  const attrRows = await fetchInChunks(poiIds, async (chunk) => {
+  const attrRows = await fetchPaginated(poiIds, async (chunk, from, to) => {
     const { data, error } = await supabase
       .from("poi_attributes")
       .select("poi_id,attr_key,attr_value")
-      .in("poi_id", chunk);
+      .in("poi_id", chunk)
+      .range(from, to);
     if (error) throw new Error(`poi_attributes: ${error.message}`);
     return (data ?? []) as Array<{ poi_id: string; attr_key: string; attr_value: string | null }>;
   });
@@ -131,11 +141,12 @@ export const exportFolderDataset = async (
   }
 
   // 2) Features (poi_features_cache)
-  const featRows = await fetchInChunks(poiIds, async (chunk) => {
+  const featRows = await fetchPaginated(poiIds, async (chunk, from, to) => {
     const { data, error } = await supabase
       .from("poi_features_cache")
       .select("poi_id,features,iso_minutes,is_rm,config_version,computed_at")
-      .in("poi_id", chunk);
+      .in("poi_id", chunk)
+      .range(from, to);
     if (error) throw new Error(`poi_features_cache: ${error.message}`);
     return (data ?? []) as Array<{
       poi_id: string;
@@ -166,11 +177,12 @@ export const exportFolderDataset = async (
   }
 
   // 3) Métricas (pivot por metric_key + period)
-  const metricRows = await fetchInChunks(poiIds, async (chunk) => {
+  const metricRows = await fetchPaginated(poiIds, async (chunk, from, to) => {
     const { data, error } = await supabase
       .from("poi_metrics")
       .select("poi_id,metric_key,period,value")
-      .in("poi_id", chunk);
+      .in("poi_id", chunk)
+      .range(from, to);
     if (error) throw new Error(`poi_metrics: ${error.message}`);
     return (data ?? []) as Array<{
       poi_id: string;
@@ -178,6 +190,12 @@ export const exportFolderDataset = async (
       period: string;
       value: number;
     }>;
+  });
+  console.info("[exportFolderDataset]", {
+    pois: poiIds.length,
+    attrRows: attrRows.length,
+    featRows: featRows.length,
+    metricRows: metricRows.length,
   });
   const metricByPoi = new Map<string, Map<string, number>>();
   const metricColSet = new Set<string>();

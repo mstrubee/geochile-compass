@@ -1,41 +1,28 @@
-## Objetivo
+## Diagnóstico
 
-Agregar al menú contextual (click derecho) de cada carpeta POI en el Sidebar la opción **"Exportar dataset (CSV)…"**, que descarga en un único archivo los POIs de esa carpeta con sus features territoriales y sus métricas de ventas — equivalente a lo que hoy se hace manualmente entrando al backend.
+El CSV exportado vino incompleto porque `exportFolderDataset.ts` ignora el **límite de 1000 filas por defecto** de Supabase / PostgREST.
 
-## Comportamiento esperado
+Con la carpeta Autoplanet:
+- 64 POIs con métricas × 89 períodos = **5.696 filas** en `poi_metrics`.
+- El código actual hace `.in("poi_id", chunk)` con `chunk = 400 ids`, sin paginación interna.
+- Resultado: cada query devuelve **máximo 1000 filas** y se descartan silenciosamente las restantes (~4.700 valores de ventas perdidos).
 
-1. Click derecho sobre una carpeta POI → nuevo ítem "Exportar dataset (CSV)…" (justo debajo de "Guardar como KMZ").
-2. Al seleccionarlo:
-   - Toast "Generando dataset…".
-   - Lee desde el backend, sólo para los POIs activos de esa carpeta (incluyendo subcarpetas):
-     - `pois`: id, name, lat, lng, address (de `properties`), folder path.
-     - `poi_attributes`: pares `attr_key → attr_value` (estáticos).
-     - `poi_features_cache.features`: un campo por feature (`pop_total`, `income_avg`, `nse_low_pct`, `traffic_idx`, etc.).
-     - `poi_metrics`: una columna por `metric_key + período` en formato `ventas_YYYY-MM`.
-   - Construye CSV en formato **wide** (una fila por POI) con columnas en orden estable:
-     1. `poi_id, name, folder, lat, lng, address`
-     2. atributos estáticos del schema (orden de `static_columns`)
-     3. features (`feat_*`) en orden alfabético
-     4. métricas por período (`<metric_key>_<YYYY-MM>`) ordenadas cronológicamente
-   - Descarga el archivo: `dataset_<folder-slug>_<YYYYMMDD>.csv`.
-3. Toast de éxito con número de POIs y columnas exportadas, o de error si falla.
+El mismo bug afecta potencialmente a `poi_attributes` (varios atributos por POI) y a `poi_features_cache` (varias filas por POI si hay múltiples isócronas / RM vs regiones), aunque ahí el volumen suele caber bajo 1000.
 
-## Cambios técnicos
+## Cambios
 
-- **Nuevo:** `src/services/exportFolderDataset.ts`
-  - `exportFolderDataset(folder, allFolders, allPois, schema?)` 
-  - Recorre subcarpetas con `descendantsOfFolder` (igual que ya hace `exportFolderAsKmz`).
-  - Hace tres queries paginadas (`poi_attributes`, `poi_features_cache`, `poi_metrics`) filtradas por `poi_id IN (...)` (en lotes de ~500 ids para no exceder URL).
-  - Pivot en memoria.
-  - Escapa CSV correctamente (comillas, comas, saltos de línea, BOM UTF-8 para Excel).
-  - Usa `URL.createObjectURL` + `<a download>` para disparar descarga.
+**Editar `src/services/exportFolderDataset.ts`:**
 
-- **Editado:** `src/components/layout/Sidebar.tsx`
-  - Inmediatamente después del `ContextMenuItem` de "Guardar como KMZ" (línea ~1942), agregar nuevo `ContextMenuItem` "Exportar dataset (CSV)…" con icono `FileDown` (ya hay `Download`/`FileText` importados; reutilizar `FileText`).
-  - Llama a `exportFolderDataset(f, poiFolders, savedPois, poiFolderSchemas.find(s => s.folder_id === f.id))`.
+1. Agregar helper `fetchAllRows(table, columns, ids)` que para cada chunk de POIs pagine con `.range(from, from + PAGE - 1)` (PAGE = 1000) hasta que la query devuelva menos filas que el tamaño de página.
+2. Reducir `CHUNK` a 200 ids por seguridad (URL más corta y menos páginas por chunk).
+3. Reemplazar las tres llamadas (`poi_attributes`, `poi_features_cache`, `poi_metrics`) por la nueva versión paginada.
+4. Agregar un `console.info` con el conteo final de filas leídas por tabla, para verificar en consola que se traen las 5.696 esperadas.
+5. Mantener el toast de éxito existente (ya muestra `rows` y `columns`).
 
-## Notas
+**Sin cambios** en SQL, RLS, tipos, ni en `Sidebar.tsx`. Sin nuevas dependencias.
 
-- No requiere migraciones SQL ni cambios de RLS: las tablas `poi_features_cache`, `poi_metrics`, `poi_attributes` ya son legibles para usuarios autenticados.
-- Sin dependencias nuevas (CSV armado a mano).
-- Disponible para todos los usuarios (no se restringe a admin), ya que la idea es facilitar la descarga del dataset cuando exista. Si una carpeta no tiene features/metrics, el CSV igual incluye los POIs con las columnas presentes.
+## Verificación
+
+Tras el fix, exportar la carpeta Autoplanet debería producir un CSV con:
+- 68 filas (POIs activos de la carpeta).
+- 64 de esas filas con valores no vacíos en columnas `ventas_2019-01` … `ventas_2026-04` (~88 columnas reales + 1 espuria del bug del parser que ya identificamos previamente).
