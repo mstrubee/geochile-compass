@@ -95,19 +95,6 @@ const slugify = (s: string): string =>
     .toLowerCase()
     .slice(0, 60) || "carpeta";
 
-const fetchInChunks = async <T,>(
-  ids: string[],
-  fn: (chunk: string[]) => Promise<T[]>,
-): Promise<T[]> => {
-  const out: T[] = [];
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const slice = ids.slice(i, i + CHUNK);
-    const rows = await fn(slice);
-    out.push(...rows);
-  }
-  return out;
-};
-
 export interface ExportResult {
   rows: number;
   columns: number;
