@@ -13,7 +13,6 @@ import type { PoiInsert, PoiUpdate, SavedPoi } from "@/types/pois";
 // `description` que pueden ser blobs gigantes con KMZ con logos embebidos).
 const LIGHT_COLS =
   "id,name,category,color,icon,lat,lng,source_layer,folder_id,created_at,updated_at,deleted_at";
-const HEAVY_COLS = "id,description,properties";
 
 const PAGE = 250;
 // TTL del caché: si el snapshot es más viejo que esto, hacemos refresh full.
