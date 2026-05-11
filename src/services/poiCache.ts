@@ -1,26 +1,27 @@
 /**
- * Caché offline de POIs y carpetas en IndexedDB (vía idb-keyval).
+ * Caché offline cache-first de POIs y carpetas en IndexedDB (idb-keyval).
  *
- * Estrategia: cuando el usuario abre la app, leemos el snapshot local
- * inmediatamente para que los POIs aparezcan al instante (incluso sin red).
- * En paralelo, lanzamos la consulta normal a Supabase y, cuando llega,
- * sobrescribimos el caché. Esto evita la sensación de "tengo que recargar
- * los POIs cada vez" cuando la red está lenta o caída.
- *
- * Es solo lectura offline — las mutaciones (insert/update/delete) siguen
- * yendo directo a la BD y requieren conexión.
+ * Estrategia:
+ * - Al iniciar, leemos el snapshot local y lo usamos como fuente de verdad.
+ * - En background hacemos un sync incremental contra Supabase usando
+ *   `updated_at` (ver useSavedPois.syncDelta). Solo bajamos las filas que
+ *   cambiaron desde la última sincronización exitosa.
+ * - Las mutaciones locales escriben el caché inmediatamente para que un
+ *   reload posterior tenga el dato sin esperar a Supabase.
  */
 import { get, set } from "idb-keyval";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
 
 const POIS_KEY = (uid: string) => `lovable.cache.pois.${uid}`;
 const TRASH_KEY = (uid: string) => `lovable.cache.trashed.${uid}`;
+const SYNC_KEY = (uid: string) => `lovable.cache.pois.lastSyncAt.${uid}`;
 const FOLDERS_KEY = (uid: string) => `lovable.cache.folders.${uid}`;
 
 export interface PoiCacheSnapshot {
   pois: SavedPoi[];
   trashedPois: SavedPoi[];
   cachedAt: number;
+  lastSyncAt: string | null;
 }
 
 export interface FoldersCacheSnapshot {
@@ -32,15 +33,17 @@ export const loadPoiCache = async (
   userId: string,
 ): Promise<PoiCacheSnapshot | null> => {
   try {
-    const [pois, trashed] = await Promise.all([
+    const [pois, trashed, lastSyncAt] = await Promise.all([
       get<{ rows: SavedPoi[]; at: number }>(POIS_KEY(userId)),
       get<{ rows: SavedPoi[]; at: number }>(TRASH_KEY(userId)),
+      get<string>(SYNC_KEY(userId)),
     ]);
     if (!pois) return null;
     return {
       pois: pois.rows ?? [],
       trashedPois: trashed?.rows ?? [],
       cachedAt: pois.at ?? 0,
+      lastSyncAt: lastSyncAt ?? null,
     };
   } catch (err) {
     console.warn("[poiCache] no se pudo leer caché", err);
@@ -52,16 +55,41 @@ export const savePoiCache = async (
   userId: string,
   pois: SavedPoi[],
   trashedPois: SavedPoi[],
+  lastSyncAt?: string | null,
 ): Promise<void> => {
   try {
     const at = Date.now();
-    await Promise.all([
+    const writes: Promise<unknown>[] = [
       set(POIS_KEY(userId), { rows: pois, at }),
       set(TRASH_KEY(userId), { rows: trashedPois, at }),
-    ]);
+    ];
+    if (lastSyncAt !== undefined) {
+      writes.push(set(SYNC_KEY(userId), lastSyncAt));
+    }
+    await Promise.all(writes);
   } catch (err) {
     console.warn("[poiCache] no se pudo escribir caché", err);
   }
+};
+
+export const setLastSyncAt = async (
+  userId: string,
+  iso: string | null,
+): Promise<void> => {
+  try {
+    await set(SYNC_KEY(userId), iso);
+  } catch (err) {
+    console.warn("[poiCache] no se pudo escribir lastSyncAt", err);
+  }
+};
+
+/** Devuelve el max(updated_at, created_at, deleted_at) de una fila como ISO. */
+export const rowSyncStamp = (row: SavedPoi): string => {
+  const candidates = [row.updated_at, row.deleted_at, row.created_at].filter(
+    (v): v is string => typeof v === "string" && v.length > 0,
+  );
+  if (!candidates.length) return new Date(0).toISOString();
+  return candidates.reduce((a, b) => (a > b ? a : b));
 };
 
 export const loadFoldersCache = async (
