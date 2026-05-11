@@ -353,6 +353,9 @@ export const useSavedPois = () => {
 
   // ===== Bootstrap: hidratar desde caché + decidir delta vs full =====
   useEffect(() => {
+    // Mientras la sesión todavía se está resolviendo no hacemos nada para
+    // evitar consultas con token anónimo que devuelven [] y contaminan el caché.
+    if (authLoading) return;
     if (!user) {
       setPois([]);
       setTrashedPois([]);
