@@ -132,6 +132,42 @@ export type Database = {
         }
         Relationships: []
       }
+      evaluation_dimensions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          display_order: number
+          id: string
+          is_active: boolean
+          title: string
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          title: string
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          title?: string
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: []
+      }
       isochrone_folders: {
         Row: {
           color: string | null
@@ -230,6 +266,54 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "poi_attributes_poi_id_fkey"
+            columns: ["poi_id"]
+            isOneToOne: false
+            referencedRelation: "pois"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      poi_evaluations: {
+        Row: {
+          created_at: string
+          dimension_id: string
+          evaluator_id: string | null
+          id: string
+          notes: string | null
+          poi_id: string
+          score: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          dimension_id: string
+          evaluator_id?: string | null
+          id?: string
+          notes?: string | null
+          poi_id: string
+          score: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          dimension_id?: string
+          evaluator_id?: string | null
+          id?: string
+          notes?: string | null
+          poi_id?: string
+          score?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poi_evaluations_dimension_id_fkey"
+            columns: ["dimension_id"]
+            isOneToOne: false
+            referencedRelation: "evaluation_dimensions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "poi_evaluations_poi_id_fkey"
             columns: ["poi_id"]
             isOneToOne: false
             referencedRelation: "pois"
@@ -537,12 +621,24 @@ export type Database = {
           computed_at: string
           config_version: number
           folder_id: string
+          interpretation: string | null
+          model_a_features_used: Json | null
+          model_a_r2: number | null
+          model_b_features_used: Json | null
+          model_b_n_evaluated: number | null
+          model_b_r2: number | null
           peer_poi_ids: string[]
           poi_id: string
           predicted_monthly_clp: number | null
           predicted_monthly_uf: number | null
+          predicted_monthly_uf_model_a: number | null
+          predicted_monthly_uf_model_b: number | null
           residual_clp: number | null
           residual_pct: number | null
+          residual_pct_model_a: number | null
+          residual_pct_model_b: number | null
+          residual_uf_model_a: number | null
+          residual_uf_model_b: number | null
           target_year: number
           temporal_decomposition: Json
           temporal_state: string | null
@@ -554,12 +650,24 @@ export type Database = {
           computed_at?: string
           config_version: number
           folder_id: string
+          interpretation?: string | null
+          model_a_features_used?: Json | null
+          model_a_r2?: number | null
+          model_b_features_used?: Json | null
+          model_b_n_evaluated?: number | null
+          model_b_r2?: number | null
           peer_poi_ids?: string[]
           poi_id: string
           predicted_monthly_clp?: number | null
           predicted_monthly_uf?: number | null
+          predicted_monthly_uf_model_a?: number | null
+          predicted_monthly_uf_model_b?: number | null
           residual_clp?: number | null
           residual_pct?: number | null
+          residual_pct_model_a?: number | null
+          residual_pct_model_b?: number | null
+          residual_uf_model_a?: number | null
+          residual_uf_model_b?: number | null
           target_year: number
           temporal_decomposition?: Json
           temporal_state?: string | null
@@ -571,12 +679,24 @@ export type Database = {
           computed_at?: string
           config_version?: number
           folder_id?: string
+          interpretation?: string | null
+          model_a_features_used?: Json | null
+          model_a_r2?: number | null
+          model_b_features_used?: Json | null
+          model_b_n_evaluated?: number | null
+          model_b_r2?: number | null
           peer_poi_ids?: string[]
           poi_id?: string
           predicted_monthly_clp?: number | null
           predicted_monthly_uf?: number | null
+          predicted_monthly_uf_model_a?: number | null
+          predicted_monthly_uf_model_b?: number | null
           residual_clp?: number | null
           residual_pct?: number | null
+          residual_pct_model_a?: number | null
+          residual_pct_model_b?: number | null
+          residual_uf_model_a?: number | null
+          residual_uf_model_b?: number | null
           target_year?: number
           temporal_decomposition?: Json
           temporal_state?: string | null
@@ -1018,6 +1138,26 @@ export type Database = {
       }
     }
     Views: {
+      poi_evaluation_summary: {
+        Row: {
+          breakdown: Json | null
+          dimensions_evaluated: number | null
+          dimensions_total_active: number | null
+          last_evaluated_at: string | null
+          last_evaluator_id: string | null
+          poi_id: string | null
+          weighted_score: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poi_evaluations_poi_id_fkey"
+            columns: ["poi_id"]
+            isOneToOne: false
+            referencedRelation: "pois"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       poi_metrics_latest: {
         Row: {
           metric_key: string | null
