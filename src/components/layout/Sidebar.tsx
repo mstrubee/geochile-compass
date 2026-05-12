@@ -579,6 +579,7 @@ export const Sidebar = ({
   onOpenPoiManager,
   poiFolderCount = 0,
   poiFolders = [],
+  poiFolderCounts,
   onMoveFolder,
   onMovePois,
   onImportFilesIntoFolder,
