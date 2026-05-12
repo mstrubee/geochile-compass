@@ -1,0 +1,1 @@
+ALTER VIEW public.poi_evaluation_summary SET (security_invoker = true);
