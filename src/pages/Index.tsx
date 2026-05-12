@@ -262,6 +262,7 @@ const Index = () => {
   const {
     pois,
     trashedPois,
+    folderCounts: poiFolderCounts,
     addMany,
     addOne: addOnePoi,
     update: updatePoi,
@@ -319,6 +320,11 @@ const Index = () => {
     (next: Set<string>) => {
       const activated = Array.from(hiddenPoiFolders).filter((id) => !next.has(id));
       setHiddenPoiFolders(next);
+      // Si el usuario enciende al menos una carpeta y el toggle global está apagado,
+      // lo encendemos automáticamente para que los markers aparezcan en el mapa.
+      if (activated.length > 0) {
+        setSavedPoisVisible((v) => (v ? v : true));
+      }
       const childrenByParent = new Map<string | null, string[]>();
       folders.forEach((f) => {
         const arr = childrenByParent.get(f.parent_id) ?? [];
@@ -1044,6 +1050,7 @@ const Index = () => {
           onOpenPoiManager={() => setManagerOpen(true)}
           poiFolderCount={folders.length}
           poiFolders={folders}
+          poiFolderCounts={poiFolderCounts}
           onMoveFolder={moveFolder}
           onMovePois={movePois}
           onImportFilesIntoFolder={importFilesIntoFolder}

@@ -56,6 +56,9 @@ export const useSavedPois = () => {
   const { user, loading: authLoading } = useAuth();
   const [pois, setPois] = useState<SavedPoi[]>([]);
   const [trashedPois, setTrashedPois] = useState<SavedPoi[]>([]);
+  const [folderCounts, setFolderCounts] = useState<Map<string | null, number>>(
+    () => new Map(),
+  );
   const [loading, setLoading] = useState(false);
 
   // Snapshot interno del último lastSyncAt confirmado para este user.
@@ -398,12 +401,39 @@ export const useSavedPois = () => {
     [user],
   );
 
+  // ===== Conteos por carpeta (RPC agregada, no carga POIs) =====
+  const loadFolderCounts = useCallback(async (): Promise<void> => {
+    if (!user) return;
+    try {
+      const { data, error } = await (
+        supabase.rpc as unknown as (
+          fn: string,
+        ) => Promise<{
+          data: Array<{ folder_id: string | null; cnt: number | string }> | null;
+          error: { message: string } | null;
+        }>
+      )("poi_counts_by_folder");
+      if (error) {
+        console.warn("[useSavedPois] poi_counts_by_folder failed", error.message);
+        return;
+      }
+      const m = new Map<string | null, number>();
+      (data ?? []).forEach((row) => {
+        m.set(row.folder_id ?? null, Number(row.cnt ?? 0));
+      });
+      setFolderCounts(m);
+    } catch (err) {
+      console.warn("[useSavedPois] poi_counts_by_folder threw", err);
+    }
+  }, [user]);
+
   // ===== Bootstrap ligero: no cargamos POIs al iniciar =====
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
       setPois([]);
       setTrashedPois([]);
+      setFolderCounts(new Map());
       lastSyncAtRef.current = null;
       userIdRef.current = null;
       return;
@@ -414,7 +444,8 @@ export const useSavedPois = () => {
     poisRef.current = [];
     trashedRef.current = [];
     lastSyncAtRef.current = null;
-  }, [user, authLoading]);
+    void loadFolderCounts();
+  }, [user, authLoading, loadFolderCounts]);
 
   // Public refresh = sync delta. Para forzar full → forceFullRefresh.
   const refresh = useCallback(async () => {
@@ -433,9 +464,11 @@ export const useSavedPois = () => {
         return await fn();
       } finally {
         pendingMutationsRef.current = Math.max(0, pendingMutationsRef.current - 1);
+        // Refrescar conteos por carpeta tras cualquier mutación.
+        void loadFolderCounts();
       }
     },
-    [],
+    [loadFolderCounts],
   );
 
   const bumpSync = useCallback((iso: string) => {
@@ -646,7 +679,8 @@ export const useSavedPois = () => {
       .is("deleted_at", null);
     if (error) throw new Error(error.message);
     await fullRefresh();
-  }, [user, fullRefresh]);
+    void loadFolderCounts();
+  }, [user, fullRefresh, loadFolderCounts]);
 
   const addOne = useCallback(
     async (item: PoiInsert) => addMany([item], item.folder_id ?? null),
@@ -656,6 +690,7 @@ export const useSavedPois = () => {
   return {
     pois,
     trashedPois,
+    folderCounts,
     loading,
     addMany,
     addOne,
@@ -669,6 +704,7 @@ export const useSavedPois = () => {
     refresh,
     forceFullRefresh,
     loadFolders,
+    loadFolderCounts,
   };
 };
 
