@@ -1325,6 +1325,7 @@ export const Sidebar = ({
               </p>
             </div>
           )}
+          <ParqueToggleRow />
           <div className="mt-3 border-t border-border/40 pt-2">
             <div className="mb-1 px-1 text-[10px] uppercase tracking-wider text-text-muted">
               Capas personalizadas
