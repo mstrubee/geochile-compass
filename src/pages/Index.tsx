@@ -271,6 +271,7 @@ const Index = () => {
     restore: restorePois,
     purgePermanently: purgePois,
     clearAll: clearAllPois,
+    loadFolders: loadPoiFolders,
     loading: poisLoading,
   } = useSavedPois();
   const {
@@ -286,12 +287,42 @@ const Index = () => {
     loading: foldersLoading,
   } = usePoiFolders();
   const [savedPoisVisible, setSavedPoisVisible] = useState(false);
-  // Por defecto NO ocultamos ninguna carpeta: el usuario puede ocultar lo que
-  // quiera con el checkbox de cada carpeta. Las nuevas carpetas que aparezcan
-  // (importación, sync) se mantienen visibles por defecto para evitar que los
-  // POI parezcan "desaparecer" tras un refresh.
   const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(
-    () => new Set(),
+    () => new Set(["__orphan__"]),
+  );
+  const [loadedPoiFolderIds, setLoadedPoiFolderIds] = useState<Set<string | null>>(new Set());
+
+  useEffect(() => {
+    if (folders.length === 0) return;
+    setHiddenPoiFolders((prev) => {
+      const next = new Set(prev);
+      folders.forEach((f) => next.add(f.id));
+      return next;
+    });
+  }, [folders]);
+
+  const loadPoiFoldersOnce = useCallback(
+    async (ids: Array<string | null>) => {
+      const fresh = ids.filter((id) => !loadedPoiFolderIds.has(id));
+      if (fresh.length === 0) return;
+      await loadPoiFolders(fresh);
+      setLoadedPoiFolderIds((prev) => {
+        const next = new Set(prev);
+        fresh.forEach((id) => next.add(id));
+        return next;
+      });
+    },
+    [loadPoiFolders, loadedPoiFolderIds],
+  );
+
+  const handleHiddenPoiFoldersChange = useCallback(
+    (next: Set<string>) => {
+      const activated = Array.from(hiddenPoiFolders).filter((id) => !next.has(id));
+      setHiddenPoiFolders(next);
+      const folderIds = activated.map((id) => (id === "__orphan__" ? null : id));
+      if (folderIds.length > 0) void loadPoiFoldersOnce(folderIds);
+    },
+    [hiddenPoiFolders, loadPoiFoldersOnce],
   );
 
   // Filtra POIs visibles según la jerarquía: si una carpeta padre está oculta,
