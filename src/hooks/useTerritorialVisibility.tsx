@@ -53,21 +53,16 @@ export const TerritorialVisibilityProvider = ({ children }: { children: ReactNod
 
   const ensureVisibleDefaults = useCallback((ids: string[]) => {
     if (!ids.length) return;
-    let unseen = ids;
     try {
       const seen = JSON.parse(localStorage.getItem(SEEN_LAYERS_KEY) || "[]");
       const seenSet = new Set(Array.isArray(seen) ? seen : []);
-      unseen = ids.filter((id) => !seenSet.has(id));
+      const unseen = ids.filter((id) => !seenSet.has(id));
       if (!unseen.length) return;
       localStorage.setItem(SEEN_LAYERS_KEY, JSON.stringify(Array.from(new Set([...seenSet, ...ids]))));
     } catch {
       // ignore
     }
-    setVisible((prev) => {
-      const next = new Set(prev);
-      ids.forEach((id) => next.add(id));
-      return next;
-    });
+    // Por defecto las capas territoriales quedan apagadas; el usuario las activa manualmente.
   }, []);
 
   const isVisible = useCallback((id: string) => visibleLayerIds.has(id), [visibleLayerIds]);
