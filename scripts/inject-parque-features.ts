@@ -42,7 +42,8 @@ export async function injectParqueFeatures() {
     for (const pid of slice) if (!found.has(pid)) notFound++;
 
     const updates = (rows ?? []).map(r => {
-      const merged = { ...(r.features ?? {}), ...parqueByPoi[r.poi_id] };
+      const existing = (r.features ?? {}) as Record<string, unknown>;
+      const merged = { ...existing, ...parqueByPoi[r.poi_id] };
       return { poi_id: r.poi_id, features: merged };
     });
 
