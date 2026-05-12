@@ -593,7 +593,9 @@ serve(async (req) => {
 
       upsertRows.push({
         poi_id: calc.poi_id,
+        folder_id: folderId,
         target_year: targetYear,
+        config_version: 1,
         actual_monthly_uf: actual,
         // Compatibilidad: predicted_monthly_uf y residual_* apuntan al Modelo A
         predicted_monthly_uf: predA,
@@ -620,7 +622,7 @@ serve(async (req) => {
 
     const { error: upsertError } = await supabase
       .from("poi_performance_analysis")
-      .upsert(upsertRows, { onConflict: "poi_id,target_year" });
+      .upsert(upsertRows, { onConflict: "poi_id" });
     if (upsertError) throw upsertError;
 
     // ----------------------------------------------------------------------
