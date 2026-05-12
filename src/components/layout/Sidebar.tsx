@@ -722,11 +722,18 @@ export const Sidebar = ({
     });
     return m;
   }, [savedPois]);
-  // Recuento total (incluye descendientes)
+  // Recuento total (incluye descendientes). Usa el max entre el array cargado
+  // (refleja mutaciones locales optimistas) y el conteo agregado del servidor
+  // (refleja carpetas aún no cargadas en memoria por el lazy-load).
   const totalCounts = useMemo(() => {
     const counts = new Map<string, number>();
+    const ownCount = (id: string): number => {
+      const arr = (poisByFolderMap.get(id) ?? []).length;
+      const srv = poiFolderCounts?.get(id) ?? 0;
+      return Math.max(arr, srv);
+    };
     const visit = (id: string): number => {
-      const own = (poisByFolderMap.get(id) ?? []).length;
+      const own = ownCount(id);
       const subs = poiChildrenMap.get(id) ?? [];
       const total = own + subs.reduce((acc, s) => acc + visit(s.id), 0);
       counts.set(id, total);
@@ -734,7 +741,7 @@ export const Sidebar = ({
     };
     (poiChildrenMap.get(null) ?? []).forEach((f) => visit(f.id));
     return counts;
-  }, [poiChildrenMap, poisByFolderMap]);
+  }, [poiChildrenMap, poisByFolderMap, poiFolderCounts]);
 
   // Descendientes de una carpeta (para evitar pegar en sí misma o sus hijas)
   const descendantsOfFolder = (id: string): Set<string> => {
