@@ -464,9 +464,11 @@ export const useSavedPois = () => {
         return await fn();
       } finally {
         pendingMutationsRef.current = Math.max(0, pendingMutationsRef.current - 1);
+        // Refrescar conteos por carpeta tras cualquier mutación.
+        void loadFolderCounts();
       }
     },
-    [],
+    [loadFolderCounts],
   );
 
   const bumpSync = useCallback((iso: string) => {
