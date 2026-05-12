@@ -319,10 +319,22 @@ const Index = () => {
     (next: Set<string>) => {
       const activated = Array.from(hiddenPoiFolders).filter((id) => !next.has(id));
       setHiddenPoiFolders(next);
-      const folderIds = activated.map((id) => (id === "__orphan__" ? null : id));
+      const childrenByParent = new Map<string | null, string[]>();
+      folders.forEach((f) => {
+        const arr = childrenByParent.get(f.parent_id) ?? [];
+        arr.push(f.id);
+        childrenByParent.set(f.parent_id, arr);
+      });
+      const folderIds = new Set<string | null>();
+      const addWithDescendants = (id: string | null) => {
+        folderIds.add(id);
+        if (!id) return;
+        (childrenByParent.get(id) ?? []).forEach(addWithDescendants);
+      };
+      activated.forEach((id) => addWithDescendants(id === "__orphan__" ? null : id));
       if (folderIds.length > 0) void loadPoiFoldersOnce(folderIds);
     },
-    [hiddenPoiFolders, loadPoiFoldersOnce],
+    [folders, hiddenPoiFolders, loadPoiFoldersOnce],
   );
 
   // Filtra POIs visibles según la jerarquía: si una carpeta padre está oculta,
