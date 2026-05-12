@@ -11,6 +11,8 @@ import { UserLayersLayer } from "./UserLayersLayer";
 import { IsochroneLayer } from "./IsochroneLayer";
 import { SavedPoisLayer } from "./SavedPoisLayer";
 import { TerritorialLayersLayer } from "./TerritorialLayersLayer";
+import ParqueHeatmapLayer from "./ParqueHeatmapLayer";
+import { useParqueLayer } from "@/hooks/useParqueLayer";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
 import { MicrozoneLayer } from "./MicrozoneLayer";
