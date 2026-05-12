@@ -360,10 +360,53 @@ export const useSavedPois = () => {
     [runSerialized, fullRefreshImpl],
   );
 
-  // ===== Bootstrap: hidratar desde caché + decidir delta vs full =====
+  const loadFolders = useCallback(
+    async (folderIds: Array<string | null>): Promise<void> => {
+      if (!user) return;
+      const unique = Array.from(new Set(folderIds));
+      if (unique.length === 0) return;
+      setLoading(true);
+      try {
+        const loaded: SavedPoi[] = [];
+        const fetchPage = async (ids: string[], nullFolder: boolean) => {
+          let from = 0;
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            let q = supabase
+              .from("pois")
+              .select(LIGHT_COLS)
+              .is("deleted_at", null)
+              .order("created_at", { ascending: false })
+              .order("id", { ascending: true })
+              .range(from, from + PAGE - 1);
+            q = nullFolder ? q.is("folder_id", null) : q.in("folder_id", ids);
+            const { data, error } = await q;
+            if (error) throw new Error(error.message);
+            const page = (data ?? []).map((row) => toSavedPoi(row as LightRow));
+            loaded.push(...page);
+            if (page.length < PAGE) break;
+            from += PAGE;
+          }
+        };
+        const ids = unique.filter((id): id is string => typeof id === "string");
+        for (let i = 0; i < ids.length; i += 100) {
+          await fetchPage(ids.slice(i, i + 100), false);
+        }
+        if (unique.includes(null)) await fetchPage([], true);
+        const requested = new Set(unique);
+        setPois((prev) => {
+          const kept = prev.filter((p) => !requested.has(p.folder_id));
+          return [...kept, ...loaded];
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [user],
+  );
+
+  // ===== Bootstrap ligero: no cargamos POIs al iniciar =====
   useEffect(() => {
-    // Mientras la sesión todavía se está resolviendo no hacemos nada para
-    // evitar consultas con token anónimo que devuelven [] y contaminan el caché.
     if (authLoading) return;
     if (!user) {
       setPois([]);
@@ -373,46 +416,11 @@ export const useSavedPois = () => {
       return;
     }
     userIdRef.current = user.id;
-    let cancelled = false;
-    (async () => {
-      const cached = await loadPoiCache(user.id);
-      if (cancelled || userIdRef.current !== user.id) return;
-      if (cached) {
-        setPois(cached.pois);
-        setTrashedPois(cached.trashedPois);
-        // Sincronizar refs inmediatamente para que el syncDelta que disparemos
-        // a continuación NO vea poisRef.current = [] (closure stale del primer render).
-        poisRef.current = cached.pois;
-        trashedRef.current = cached.trashedPois;
-
-        // Sanear lastSyncAt: descarta valores inválidos (epoch, año <2000),
-        // muy antiguos (>7 días) o futuros, y fuerza fullRefresh.
-        const syncMs = cached.lastSyncAt ? new Date(cached.lastSyncAt).getTime() : 0;
-        const stale = Date.now() - cached.cachedAt > CACHE_FULL_REFRESH_TTL_MS;
-        const futureClock = syncMs > Date.now() + 60_000;
-        const tooOld = syncMs > 0 && Date.now() - syncMs > 7 * 24 * 60 * 60 * 1000;
-        const invalidStamp = !cached.lastSyncAt || syncMs < new Date("2000-01-01").getTime();
-        if (invalidStamp) {
-          // Limpia el storage local del usuario para no arrastrar el valor corrupto.
-          void setLastSyncAt(user.id, null);
-          lastSyncAtRef.current = null;
-        } else {
-          lastSyncAtRef.current = cached.lastSyncAt;
-        }
-
-        if (!invalidStamp && !stale && !futureClock && !tooOld) {
-          void syncDelta();
-        } else {
-          void fullRefresh();
-        }
-      } else {
-        await fullRefresh();
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setPois([]);
+    setTrashedPois([]);
+    poisRef.current = [];
+    trashedRef.current = [];
+    lastSyncAtRef.current = null;
   }, [user, authLoading]);
 
   // Public refresh = sync delta. Para forzar full → forceFullRefresh.
@@ -667,6 +675,7 @@ export const useSavedPois = () => {
     clearAll,
     refresh,
     forceFullRefresh,
+    loadFolders,
   };
 };
 
