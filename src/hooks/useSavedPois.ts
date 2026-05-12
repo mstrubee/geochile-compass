@@ -679,7 +679,8 @@ export const useSavedPois = () => {
       .is("deleted_at", null);
     if (error) throw new Error(error.message);
     await fullRefresh();
-  }, [user, fullRefresh]);
+    void loadFolderCounts();
+  }, [user, fullRefresh, loadFolderCounts]);
 
   const addOne = useCallback(
     async (item: PoiInsert) => addMany([item], item.folder_id ?? null),
@@ -689,6 +690,7 @@ export const useSavedPois = () => {
   return {
     pois,
     trashedPois,
+    folderCounts,
     loading,
     addMany,
     addOne,
@@ -702,6 +704,7 @@ export const useSavedPois = () => {
     refresh,
     forceFullRefresh,
     loadFolders,
+    loadFolderCounts,
   };
 };
 
