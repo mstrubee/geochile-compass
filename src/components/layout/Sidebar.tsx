@@ -2461,4 +2461,40 @@ export const Sidebar = ({
   );
 };
 
+const ParqueToggleRow = () => {
+  const { visible, toggle } = useParqueLayer();
+  const [injecting, setInjecting] = useState(false);
+  const handleInject = async () => {
+    setInjecting(true);
+    try {
+      const res = await injectParqueFeatures();
+      toast.success(`Parque inyectado: ${res.updated} POIs (${res.errors} errores)`);
+    } catch (e) {
+      toast.error("Error inyectando parque: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setInjecting(false);
+    }
+  };
+  return (
+    <div className="mt-3 rounded-lg border border-border/40 bg-surface-2/40 p-2">
+      <div className="flex items-center justify-between">
+        <button onClick={toggle} className="flex items-center gap-2 flex-1 text-left">
+          <IOSSwitch on={visible} />
+          <div>
+            <div className="text-[12px] font-medium">Parque automotor</div>
+            <div className="text-[10px] text-text-muted">Heatmap H3 · 11.810 hexágonos</div>
+          </div>
+        </button>
+      </div>
+      <button
+        onClick={handleInject}
+        disabled={injecting}
+        className="mt-2 w-full rounded-md bg-surface-3 px-2 py-1.5 text-[10px] font-medium text-foreground transition-colors hover:bg-surface-3/70 disabled:opacity-50"
+      >
+        {injecting ? "Inyectando…" : "Inyectar features de parque a POIs (admin)"}
+      </button>
+    </div>
+  );
+};
+
 void Search;
