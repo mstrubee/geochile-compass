@@ -369,3 +369,8 @@ const TerritorialLayersHost = () => {
   return <TerritorialLayersLayer layers={layers} visibleLayerIds={visibleLayerIds} heatmap={heatmapEnabled} />;
 };
 
+const ParqueLayerHost = () => {
+  const { visible } = useParqueLayer();
+  return <ParqueHeatmapLayer visible={visible} />;
+};
+
