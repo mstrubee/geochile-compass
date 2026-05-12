@@ -332,7 +332,8 @@ const Index = () => {
         (childrenByParent.get(id) ?? []).forEach(addWithDescendants);
       };
       activated.forEach((id) => addWithDescendants(id === "__orphan__" ? null : id));
-      if (folderIds.length > 0) void loadPoiFoldersOnce(folderIds);
+      const folderIdsToLoad = Array.from(folderIds);
+      if (folderIdsToLoad.length > 0) void loadPoiFoldersOnce(folderIdsToLoad);
     },
     [folders, hiddenPoiFolders, loadPoiFoldersOnce],
   );
