@@ -394,8 +394,14 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const folderId: string = body.folderId;
-    const targetYear: number = body.targetYear ?? 2025;
+    // Aceptar folder_id (snake_case, viene del cliente actual) o folderId (camelCase)
+    const folderId: string = body.folder_id ?? body.folderId;
+    const targetYear: number = body.target_year ?? body.targetYear ?? 2025;
+    if (!folderId) {
+      return new Response(JSON.stringify({ error: "folder_id is required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
