@@ -29,6 +29,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/comunas" element={<MapaComunasPage />} />
             <Route path="/admin/capas" element={<AdminCapas />} />
+            <Route path="/admin/evaluation-dimensions" element={<EvaluationDimensionsAdmin />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
