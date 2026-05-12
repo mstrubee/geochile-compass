@@ -1193,6 +1193,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      poi_counts_by_folder: {
+        Args: never
+        Returns: {
+          cnt: number
+          folder_id: string
+        }[]
+      }
       poi_sync_summary: {
         Args: never
         Returns: {
