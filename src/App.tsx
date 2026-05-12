@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound.tsx";
 import Auth from "./pages/Auth.tsx";
 import MapaComunasPage from "./pages/MapaComunasPage.tsx";
 import AdminCapas from "./pages/AdminCapas.tsx";
+import EvaluationDimensionsAdmin from "@/components/admin/EvaluationDimensionsAdmin";
 import { TerritorialVisibilityProvider } from "@/hooks/useTerritorialVisibility";
 import { AuthProvider } from "@/hooks/useAuth";
 import { PermissionsProvider } from "@/hooks/usePermissions";
