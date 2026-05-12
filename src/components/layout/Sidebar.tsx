@@ -102,6 +102,8 @@ interface SidebarProps {
   onOpenPoiManager: () => void;
   poiFolderCount: number;
   poiFolders: PoiFolder[];
+  /** Conteos reales por carpeta provenientes del backend (independientes del lazy-load). */
+  poiFolderCounts?: Map<string | null, number>;
   onMoveFolder: (id: string, parentId: string | null) => Promise<void>;
   onMovePois: (ids: string[], folderId: string | null) => Promise<void>;
   /** Importa archivos KMZ/KML/GeoJSON directamente a una carpeta destino (sin diálogo). */
