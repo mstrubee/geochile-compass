@@ -1042,7 +1042,7 @@ const Index = () => {
           onRequestCreatePoiInFolder={(folder) => openCreatePoiAt(null, folder?.id ?? null)}
           onEditPoi={(poi) => setPoiEditor({ mode: "edit", poi, defaultDraft: {} })}
           hiddenPoiFolders={hiddenPoiFolders}
-          onHiddenPoiFoldersChange={setHiddenPoiFolders}
+          onHiddenPoiFoldersChange={handleHiddenPoiFoldersChange}
           trashedPois={trashedPois}
           trashedFolders={trashedFolders}
           onRestorePois={restorePois}
