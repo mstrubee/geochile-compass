@@ -597,9 +597,8 @@ serve(async (req) => {
         target_year: targetYear,
         config_version: 1,
         actual_monthly_uf: actual,
-        // Compatibilidad: predicted_monthly_uf y residual_* apuntan al Modelo A
+        // Compatibilidad: predicted_monthly_uf y residual_pct apuntan al Modelo A
         predicted_monthly_uf: predA,
-        residual_uf: residA,
         residual_pct: residAPct,
         // Modelo A explícito
         predicted_monthly_uf_model_a: predA,
