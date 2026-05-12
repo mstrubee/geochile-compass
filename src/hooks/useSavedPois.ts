@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
-import {
-  loadPoiCache,
-  rowSyncStamp,
-  savePoiCache,
-  setLastSyncAt,
-} from "@/services/poiCache";
+import { rowSyncStamp, savePoiCache } from "@/services/poiCache";
 import type { PoiInsert, PoiUpdate, SavedPoi } from "@/types/pois";
 
 // Columnas ligeras para pintar el mapa rápido (sin `properties` ni
@@ -15,8 +10,6 @@ const LIGHT_COLS =
   "id,name,category,color,icon,lat,lng,source_layer,folder_id,created_at,updated_at,deleted_at";
 
 const PAGE = 250;
-// TTL del caché: si el snapshot es más viejo que esto, hacemos refresh full.
-const CACHE_FULL_REFRESH_TTL_MS = 24 * 60 * 60 * 1000;
 // Debounce para escritura del caché en IndexedDB.
 const PERSIST_DEBOUNCE_MS = 250;
 
