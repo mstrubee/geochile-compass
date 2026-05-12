@@ -262,6 +262,7 @@ const Index = () => {
   const {
     pois,
     trashedPois,
+    folderCounts: poiFolderCounts,
     addMany,
     addOne: addOnePoi,
     update: updatePoi,
