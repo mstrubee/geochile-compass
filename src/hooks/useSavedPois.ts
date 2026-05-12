@@ -56,6 +56,9 @@ export const useSavedPois = () => {
   const { user, loading: authLoading } = useAuth();
   const [pois, setPois] = useState<SavedPoi[]>([]);
   const [trashedPois, setTrashedPois] = useState<SavedPoi[]>([]);
+  const [folderCounts, setFolderCounts] = useState<Map<string | null, number>>(
+    () => new Map(),
+  );
   const [loading, setLoading] = useState(false);
 
   // Snapshot interno del último lastSyncAt confirmado para este user.
