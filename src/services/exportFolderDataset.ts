@@ -197,9 +197,13 @@ export const exportFolderDataset = async (
     featRows: featRows.length,
     metricRows: metricRows.length,
   });
+  // Períodos espurios generados por columnas resumen del Excel mal interpretadas
+  // por el parser (e.g. "Promedio Abr-Jun 2026" → period 2026-06-01).
+  const SPURIOUS_PERIODS = new Set<string>(["2026-06-01"]);
   const metricByPoi = new Map<string, Map<string, number>>();
   const metricColSet = new Set<string>();
   for (const r of metricRows) {
+    if (r.metric_key === "ventas" && SPURIOUS_PERIODS.has(r.period)) continue;
     const ym = r.period.slice(0, 7); // YYYY-MM
     const col = `${r.metric_key}_${ym}`;
     metricColSet.add(col);
