@@ -1050,6 +1050,7 @@ const Index = () => {
           onOpenPoiManager={() => setManagerOpen(true)}
           poiFolderCount={folders.length}
           poiFolders={folders}
+          poiFolderCounts={poiFolderCounts}
           onMoveFolder={moveFolder}
           onMovePois={movePois}
           onImportFilesIntoFolder={importFilesIntoFolder}
