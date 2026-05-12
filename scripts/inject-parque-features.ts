@@ -50,7 +50,7 @@ export async function injectParqueFeatures() {
     for (const u of updates) {
       const { error: upErr } = await supabase
         .from("poi_features_cache")
-        .update({ features: u.features })
+        .update({ features: u.features as never })
         .eq("poi_id", u.poi_id);
       if (upErr) { console.error(upErr); errors++; } else { updated++; }
     }
