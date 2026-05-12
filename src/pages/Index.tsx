@@ -285,7 +285,7 @@ const Index = () => {
     refresh: refreshFolders,
     loading: foldersLoading,
   } = usePoiFolders();
-  const [savedPoisVisible, setSavedPoisVisible] = useState(true);
+  const [savedPoisVisible, setSavedPoisVisible] = useState(false);
   // Por defecto NO ocultamos ninguna carpeta: el usuario puede ocultar lo que
   // quiera con el checkbox de cada carpeta. Las nuevas carpetas que aparezcan
   // (importación, sync) se mantienen visibles por defecto para evitar que los
