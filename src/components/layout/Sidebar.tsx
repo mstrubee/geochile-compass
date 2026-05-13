@@ -1770,7 +1770,7 @@ export const Sidebar = ({
               >
                 <MapPin className="h-3.5 w-3.5 text-brand-green" />
                 <span className="flex-1 text-[12px] text-foreground">Mostrar en mapa</span>
-                <span className="font-mono text-[10px] text-text-muted">{savedPois.length}</span>
+                <span className="font-mono text-[10px] text-text-muted">{totalPoisServer}</span>
                 <IOSSwitch on={savedPoisVisible} />
               </button>
               {clipboard && (
