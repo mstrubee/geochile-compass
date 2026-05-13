@@ -743,6 +743,18 @@ export const Sidebar = ({
     return counts;
   }, [poiChildrenMap, poisByFolderMap, poiFolderCounts]);
 
+  // Total global de POIs derivado del RPC `poi_counts_by_folder`. Con
+  // lazy-load `savedPois` arranca vacío, así que mostrar `savedPois.length`
+  // resultaría en "0" hasta que el usuario abra una carpeta.
+  const totalPoisServer = useMemo(() => {
+    if (!poiFolderCounts || poiFolderCounts.size === 0) return savedPois.length;
+    let n = 0;
+    poiFolderCounts.forEach((v) => {
+      n += v;
+    });
+    return Math.max(n, savedPois.length);
+  }, [poiFolderCounts, savedPois.length]);
+
   // Descendientes de una carpeta (para evitar pegar en sí misma o sus hijas)
   const descendantsOfFolder = (id: string): Set<string> => {
     const out = new Set<string>();
@@ -1758,7 +1770,7 @@ export const Sidebar = ({
               >
                 <MapPin className="h-3.5 w-3.5 text-brand-green" />
                 <span className="flex-1 text-[12px] text-foreground">Mostrar en mapa</span>
-                <span className="font-mono text-[10px] text-text-muted">{savedPois.length}</span>
+                <span className="font-mono text-[10px] text-text-muted">{totalPoisServer}</span>
                 <IOSSwitch on={savedPoisVisible} />
               </button>
               {clipboard && (
