@@ -1,58 +1,45 @@
-# Corregir: las carpetas de POIs muestran "0" y los POIs no aparecen al activarlas
+# Arreglar el contador "Mostrar en mapa 0" y la activación de POIs en el mapa
 
 ## Diagnóstico
 
-Hay **dos** problemas encadenados causados por el lazy-load:
+El elemento seleccionado (`Sidebar.tsx` línea 1754–1763) renderiza:
 
-### 1. Conteo de POIs en sidebar = 0
-En `Sidebar.tsx` (línea 723) `totalCounts` se calcula a partir del array `savedPois` que el padre pasa. Como con el lazy-load `savedPois` arranca vacío, **todas las carpetas muestran 0** y el usuario no sabe cuántos POIs tiene cada una. Tampoco se ve diferencia entre una carpeta vacía y una sin cargar.
+```tsx
+<span className="font-mono text-[10px] text-text-muted">{savedPois.length}</span>
+```
 
-### 2. Al activar la carpeta, los POIs no se pintan en el mapa
-`SavedPoisLayer` recibe `visible={savedPoisVisible}`, que arranca en `false`. Aunque `loadPoiFoldersOnce` traiga los datos correctamente, el master toggle apagado bloquea el render.
+Con el lazy-load actual, `savedPois` arranca **vacío** hasta que el usuario abre una carpeta. Por eso el botón muestra siempre `0` aunque el usuario tenga miles de POIs en BD.
 
-## Cambios propuestos
+El conteo **real ya está disponible** en la prop `poiFolderCounts` (RPC `poi_counts_by_folder()` que se carga al montar el hook). El sidebar lo usa para los conteos por carpeta en `totalCounts` (línea 728), pero **no** para el botón maestro.
 
-### A. Conteos reales independientes de la carga (problema 1)
+Sobre "no se muestran en mapa": el wiring ya es correcto — `handleHiddenPoiFoldersChange` (Index.tsx 319–345) detecta carpetas activadas, llama a `loadPoiFoldersOnce` y hace `setSavedPoisVisible(true)` automáticamente. Una vez corregido el contador, el usuario verá que al encender una carpeta el número sube y los markers aparecen. Si tras el fix algún caso sigue fallando, lo aislamos con un repro concreto.
 
-1. **Nueva función SQL `poi_counts_by_folder()`** (migration):
-   ```sql
-   create or replace function public.poi_counts_by_folder()
-   returns table(folder_id uuid, cnt bigint)
-   language sql stable security definer set search_path = public as $$
-     select folder_id, count(*)::bigint
-       from public.pois
-      where user_id = auth.uid() and deleted_at is null
-      group by folder_id;
-   $$;
+## Cambios
+
+### `src/components/layout/Sidebar.tsx` (única modificación)
+
+1. Calcular un total derivado del RPC en lugar de `savedPois.length`:
+
+   ```tsx
+   const totalPoisServer = useMemo(() => {
+     if (!poiFolderCounts || poiFolderCounts.size === 0) return savedPois.length;
+     let n = 0;
+     poiFolderCounts.forEach((v) => { n += v; });
+     // Si hay mutaciones locales optimistas que aún no se reflejan en el RPC,
+     // tomamos el mayor de los dos para no parpadear hacia abajo.
+     return Math.max(n, savedPois.length);
+   }, [poiFolderCounts, savedPois.length]);
    ```
-   Devuelve `(folder_id, cnt)` solo para el usuario autenticado. Filas con `folder_id IS NULL` representan los huérfanos.
 
-2. **`useSavedPois.ts`**: nuevo estado `folderCounts: Map<string|null, number>` y un `loadFolderCounts()` que llama al RPC. Se invoca una vez al montar (después de auth listo). Es una sola query agregada — barata.
+2. Reemplazar línea 1761:
 
-3. **`Index.tsx`**: pasa `folderCounts` al `Sidebar`.
-
-4. **`Sidebar.tsx`**:
-   - Nueva prop `folderCounts?: Map<string|null, number>`.
-   - En `totalCounts`, si una carpeta aún no fue cargada (no está en `loadedPoiFolderIds`) **o** está oculta, usar el valor del servidor (`folderCounts`) en vez del derivado de `savedPois`. Si ya fue cargada, usar el array (refleja mutaciones locales).
-
-### B. Auto-activar "Mostrar en mapa" al encender una carpeta (problema 2)
-
-En `Index.tsx`, dentro de `handleHiddenPoiFoldersChange`: si hay carpetas recién activadas y `savedPoisVisible === false`, hacer `setSavedPoisVisible(true)`.
-
-### C. Refrescar conteos tras mutaciones
-
-Tras `addMany`, `removeMany`, `restore`, `purgePermanently`, `clearAll` y movimientos entre carpetas, llamar a `loadFolderCounts()` para mantener la UI sincronizada.
-
-## Archivos a modificar
-
-- **Nueva migration**: crear función `poi_counts_by_folder()`.
-- `src/hooks/useSavedPois.ts` — añadir `folderCounts` + `loadFolderCounts` + refresco tras mutaciones.
-- `src/pages/Index.tsx` — auto-enable `savedPoisVisible` + pasar `folderCounts` al sidebar.
-- `src/components/layout/Sidebar.tsx` — aceptar `folderCounts` y usarlo cuando la carpeta no está cargada.
+   ```tsx
+   <span className="font-mono text-[10px] text-text-muted">{totalPoisServer}</span>
+   ```
 
 ## Verificación
 
-1. Reload: sidebar muestra el número real de POIs por carpeta (ej. "245") sin haber consultado a `/pois`. En Network solo se ve la llamada al RPC `poi_counts_by_folder`.
-2. Activar una carpeta: se dispara `/pois?folder_id=in.(...)`, los markers aparecen en el mapa automáticamente (sin tocar el toggle global).
-3. Crear/borrar un POI: el conteo de la carpeta se actualiza.
-4. Apagar la carpeta: markers desaparecen, conteo sigue mostrándose correctamente.
+1. Recargar app sin abrir ninguna carpeta → el botón "Mostrar en mapa" muestra el total real (ej. `6391`), no `0`.
+2. Network: solo `poi_counts_by_folder` se dispara al inicio, no `/pois`.
+3. Activar una carpeta → markers aparecen en el mapa (ya funciona vía auto-enable de `savedPoisVisible`); contador del botón se mantiene correcto.
+4. Crear/borrar un POI → `loadFolderCounts()` se reejecuta en `trackMutation.finally` y el total se actualiza.
