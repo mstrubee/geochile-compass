@@ -120,7 +120,7 @@ export const CommuneLayer = ({
         if (!base.area && stats.superficie_km2) base.area = stats.superficie_km2;
         if (!base.density && stats.densidad) base.density = stats.densidad;
         if (!base.hh && base.pop) base.hh = Math.round(base.pop / 3.3);
-        if (stats.nse && (!c.pop || c.nse === 3)) {
+        if (stats.nse && c.pop === 0) {
           const n = NSE_LABEL_TO_NUM[stats.nse];
           if (n) base.nse = n;
         }
