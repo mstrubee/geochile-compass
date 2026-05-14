@@ -25,6 +25,7 @@ export interface GseProperties {
   hacin_class: string | null;
   hacin_score: number | null;
   auto_score: number | null;
+  source_year: number | null;
 }
 
 export type GseFeature = Feature<Polygon | MultiPolygon, GseProperties>;
@@ -35,7 +36,8 @@ export interface GseFeatureCollection extends FeatureCollection {
     total: number;
     bbox: [number, number, number, number];
     variable: GseVariable;
-    source: "Censo 2012";
+    source: string;
+    source_year: number;
     /** Comunas sin cobertura en el viewport (para el fallback). */
     fallbackCommunes: string[];
   };
@@ -61,5 +63,6 @@ export interface GseIndexEntry {
 export interface GseIndex {
   region: string;
   source: string;
+  source_year?: number;
   communes: GseIndexEntry[];
 }
