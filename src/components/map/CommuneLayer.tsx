@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { CircleMarker, Popup, useMap } from "react-leaflet";
 import type { CircleMarker as LCircleMarker, LeafletMouseEvent } from "leaflet";
-import { COMMUNES, NSE_LABELS, NSE_INCOME, type Commune } from "@/data/communes";
+import { COMMUNES, NSE_LABELS, NSE_INCOME, type Commune, type NSE } from "@/data/communes";
 import { colorForPopulation } from "@/utils/colorScales";
 import { fmtNum, fmtCLP, fmtArea, fmtDensity } from "@/utils/formatters";
 import {
@@ -10,6 +10,12 @@ import {
   type CoordOverrides,
 } from "@/utils/communeOverrides";
 import { toast } from "sonner";
+import { loadIneIndex, type IneIndex } from "@/services/ineService";
+import { normalizeCommuneName } from "@/services/communeDataService";
+
+const NSE_LABEL_TO_NUM: Record<string, NSE> = {
+  E: 1, D: 2, C3: 3, C2: 4, ABC1: 5,
+};
 
 // Radius proportional to population (sqrt for visual perception)
 const radiusForPop = (pop: number): number => {
@@ -50,8 +56,8 @@ const CommunePopup = ({ c, lat, lng }: {
           <PopupRow k="Área" v={fmtArea(c.area)} />
           <PopupRow k="Densidad" v={fmtDensity(c.density)} />
           <PopupRow k="NSE pred." v={NSE_LABELS[c.nse]} />
-          <PopupRow k="Ingreso prom." v={`${fmtCLP(NSE_INCOME[c.nse])}/mes`} />
-          <PopupRow k="Tráfico" v={`${c.traffic}/100`} />
+          <PopupRow k="Ingreso prom." v={`${fmtCLP(c.incomeOverride ?? NSE_INCOME[c.nse])}/mes`} />
+          <PopupRow k="Tráfico" v={c.traffic > 0 ? `${c.traffic}/100` : "—"} />
         </div>
       ) : (
         <div className="text-[10px] text-[hsl(215_19%_55%)]">Sin datos demográficos detallados.</div>
