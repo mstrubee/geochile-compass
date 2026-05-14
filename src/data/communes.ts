@@ -10,6 +10,7 @@ export interface Commune {
   density: number;   // hab/km²
   area: number;      // km²
   hh: number;        // hogares
+  incomeOverride?: number; // ingreso mensual real (CLP), si viene del CSV INE
 }
 
 // 20 comunas RM con datos aproximados (INE 2017 / proyecciones)
