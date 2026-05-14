@@ -99,14 +99,36 @@ export const CommuneLayer = ({
     draggingRef.current = draggingName;
   }, [draggingName]);
 
-  // Apply overrides to commune list
+  // Carga índice INE para hidratar las comunas sin datos hardcoded (fuera de RM)
+  const [ine, setIne] = useState<IneIndex | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    loadIneIndex()
+      .then((idx) => mounted && setIne(idx))
+      .catch((e) => console.warn("[CommuneLayer] ine load failed", e));
+    return () => { mounted = false; };
+  }, []);
+
+  // Apply overrides + merge INE stats
   const communes = useMemo(() => {
     return COMMUNES.map((c) => {
       const ov = overrides[c.name];
-      if (ov) return { ...c, lat: ov.lat, lng: ov.lng };
-      return c;
+      const base = ov ? { ...c, lat: ov.lat, lng: ov.lng } : { ...c };
+      const stats = ine?.byName.get(normalizeCommuneName(c.name));
+      if (stats) {
+        if (!base.pop && stats.poblacion) base.pop = stats.poblacion;
+        if (!base.area && stats.superficie_km2) base.area = stats.superficie_km2;
+        if (!base.density && stats.densidad) base.density = stats.densidad;
+        if (!base.hh && base.pop) base.hh = Math.round(base.pop / 3.3);
+        if (stats.nse && (!c.pop || c.nse === 3)) {
+          const n = NSE_LABEL_TO_NUM[stats.nse];
+          if (n) base.nse = n;
+        }
+        if (stats.ingreso) base.incomeOverride = stats.ingreso;
+      }
+      return base;
     });
-  }, [overrides]);
+  }, [overrides, ine]);
 
   // Open popup programmatically after fly-to
   useEffect(() => {
