@@ -128,7 +128,7 @@ export const GseLayer = ({
           <span style="color:hsl(215 19% 50%)">Movilización</span><span style="font-family:monospace">${fmtN(p.auto_score, 0)}</span>
         </div>
         <div style="margin-top:6px;font-size:9px;color:hsl(215 19% 35%)">
-          Fuente: Censo 2012 · ID ${p.id}
+          Fuente: Censo ${p.source_year ?? 2012} · ID ${p.id}
         </div>
       </div>`;
     layer.bindPopup(html);

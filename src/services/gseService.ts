@@ -81,7 +81,9 @@ class GseService {
     const { west, south, east, north, variable } = params;
     const viewportBbox: [number, number, number, number] = [west, south, east, north];
 
-    const matching = await this.coveredCommunesIn(viewportBbox);
+    const idx = await this.loadIndex();
+    const sourceYear = idx.source_year ?? 2012;
+    const matching = idx.communes.filter((c) => bboxIntersects(c.bbox, viewportBbox));
     if (matching.length === 0) {
       return {
         type: "FeatureCollection",
@@ -90,7 +92,8 @@ class GseService {
           total: 0,
           bbox: viewportBbox,
           variable,
-          source: "Censo 2012",
+          source: `Censo ${sourceYear}`,
+          source_year: sourceYear,
           fallbackCommunes: [],
         },
       };
@@ -114,7 +117,8 @@ class GseService {
         total: features.length,
         bbox: viewportBbox,
         variable,
-        source: "Censo 2012",
+        source: `Censo ${sourceYear}`,
+        source_year: sourceYear,
         fallbackCommunes: [],
       },
     };
