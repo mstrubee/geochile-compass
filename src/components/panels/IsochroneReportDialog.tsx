@@ -24,6 +24,7 @@ import { ISO_MODE_LABEL } from "@/types/isochrones";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 import type { GseFeatureCollection } from "@/types/gse";
 import { useIsochroneReport } from "@/hooks/useIsochroneReport";
+import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import {
   DEFAULT_COMMERCE_CATEGORIES,
   buildFreeTextCategory,
@@ -465,6 +466,11 @@ export const IsochroneReportDialog = ({
                   )}
                 </Section>
               </div>
+
+              {/* Parque automotor (solo si la capa está activa) */}
+              <ParqueSection
+                isoFeature={isochrone?.features?.[tab] ?? isochrone?.features?.[0] ?? null}
+              />
             </div>
 
             {/* Footer con exportaciones */}
@@ -528,3 +534,68 @@ const Empty = ({ text }: { text: string }) => (
     {text}
   </div>
 );
+
+const ParqueSection = ({
+  isoFeature,
+}: {
+  isoFeature: import("geojson").Feature<
+    import("geojson").Polygon | import("geojson").MultiPolygon,
+    unknown
+  > | null;
+}) => {
+  const { stats, loading, enabled } = useParqueIsochroneStats(isoFeature);
+  if (!enabled) return null;
+  return (
+    <div className="mt-4">
+      <Section title="Parque automotor en isócrona">
+        <div className="rounded-lg border border-border/30 bg-surface-2/40 p-3">
+          {loading ? (
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Calculando…
+            </div>
+          ) : !stats || stats.vehiculos <= 0 ? (
+            <Empty text="Sin vehículos en el área." />
+          ) : (
+            <>
+              <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-3">
+                <Card value={`~${fmt(stats.vehiculos)}`} label="Vehículos (±5%)" />
+                <Card value={`${stats.edad_media.toFixed(1)} años`} label="Edad media" />
+                <Card
+                  value={`${stats.edad_p25.toFixed(0)} / ${stats.edad_p75.toFixed(0)}`}
+                  label="P25 / P75 (años)"
+                />
+              </div>
+              <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+                Ranking marcas
+              </div>
+              <div className="overflow-hidden rounded-lg border border-border/30">
+                <div className="grid grid-cols-[24px_1fr_70px_60px] bg-surface-2/60 text-[10px] font-medium text-muted-foreground">
+                  <div className="px-2 py-1.5">#</div>
+                  <div className="px-2 py-1.5">Marca</div>
+                  <div className="px-2 py-1.5 text-right">Vehículos</div>
+                  <div className="px-2 py-1.5 text-right">%</div>
+                </div>
+                {stats.ranking_marcas.map((m, i) => (
+                  <div
+                    key={m.marca}
+                    className="grid grid-cols-[24px_1fr_70px_60px] border-t border-border/30 text-[11px]"
+                  >
+                    <div className="px-2 py-1.5 font-mono text-muted-foreground">{i + 1}</div>
+                    <div className="truncate px-2 py-1.5">{m.marca}</div>
+                    <div className="px-2 py-1.5 text-right font-mono">{fmt(m.count)}</div>
+                    <div className="px-2 py-1.5 text-right font-mono text-muted-foreground">
+                      {m.pct.toFixed(1)}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-[10px] text-muted-foreground">
+                Estimación ponderada por área de hexágonos (~500 m). Margen ±5%.
+              </div>
+            </>
+          )}
+        </div>
+      </Section>
+    </div>
+  );
+};
