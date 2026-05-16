@@ -73,12 +73,18 @@ const ClickHandler = ({ onClick }: { onClick: (c: { lat: number; lng: number }) 
 const ContextMenuHandler = ({
   onContextMenu,
 }: {
-  onContextMenu: (c: { lat: number; lng: number }) => void;
+  onContextMenu: (c: { lat: number; lng: number; x: number; y: number }) => void;
 }) => {
   useMapEvents({
     contextmenu: (e) => {
       L.DomEvent.preventDefault(e.originalEvent);
-      onContextMenu({ lat: e.latlng.lat, lng: e.latlng.lng });
+      const oe = e.originalEvent as MouseEvent;
+      onContextMenu({
+        lat: e.latlng.lat,
+        lng: e.latlng.lng,
+        x: oe.clientX,
+        y: oe.clientY,
+      });
     },
   });
   return null;
