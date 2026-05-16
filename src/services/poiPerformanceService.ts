@@ -38,16 +38,20 @@ export const fetchPerformanceForFolder = async (
   return (data ?? []) as unknown as PoiPerformanceAnalysis[];
 };
 
-export interface ComputeBatchResult {
-  ok: boolean;
-  upserted: number;
-  train_set_size: number;
-  total_pois: number;
-  target_year: number;
-  r_squared: number;
+export interface ComputeBatchModelInfo {
+  r2: number;
   cv_rmse: number;
-  lambda: number;
-  errors: string[];
+  alpha: number;
+  n_train: number;
+  features_used: { key: string; label: string }[];
+}
+
+export interface ComputeBatchResult {
+  success: boolean;
+  n_pois_processed: number;
+  model_a: ComputeBatchModelInfo;
+  model_b: ComputeBatchModelInfo | null;
+  n_pois_with_score: number;
 }
 
 export const triggerComputeBatch = async (

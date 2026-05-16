@@ -1158,7 +1158,9 @@ const Index = () => {
             try {
               const r = await performanceBatch.run(folderId);
               toast.success(
-                `Análisis recalculado · ${r.upserted}/${r.total_pois} POIs · R²=${(r.r_squared * 100).toFixed(0)}%`,
+                `Análisis recalculado · ${r.n_pois_processed} POIs · ` +
+                  `Modelo A R²=${(r.model_a.r2 * 100).toFixed(0)}%` +
+                  (r.model_b ? ` · Modelo B R²=${(r.model_b.r2 * 100).toFixed(0)}%` : ""),
               );
             } catch (e) {
               toast.error(e instanceof Error ? e.message : String(e));
@@ -1500,7 +1502,9 @@ const Index = () => {
             try {
               const r = await performanceBatch.run(detailPoi.folder_id);
               toast.success(
-                `Análisis recalculado · ${r.upserted}/${r.total_pois} POIs · R²=${(r.r_squared * 100).toFixed(0)}%`,
+                `Análisis recalculado · ${r.n_pois_processed} POIs · ` +
+                  `Modelo A R²=${(r.model_a.r2 * 100).toFixed(0)}%` +
+                  (r.model_b ? ` · Modelo B R²=${(r.model_b.r2 * 100).toFixed(0)}%` : ""),
               );
             } catch (e) {
               toast.error(e instanceof Error ? e.message : String(e));
