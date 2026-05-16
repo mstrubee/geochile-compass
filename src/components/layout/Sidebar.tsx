@@ -1352,6 +1352,7 @@ export const Sidebar = ({
             </div>
             <TerritorialGroupsSection />
           </div>
+          <ParqueLayerToggle />
         </SidebarSection>
 
 
