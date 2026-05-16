@@ -2494,8 +2494,9 @@ const ParqueLayerToggle = () => {
         onCheckedChange={() => toggle()}
         className="h-4 w-4"
       />
+      <Car className="h-3.5 w-3.5 text-amber-500" />
       <span className={["flex-1 text-[13px] leading-tight", visible ? "text-foreground" : "text-muted-foreground"].join(" ")}>
-        🔥 Parque automotor
+        Parque automotor
       </span>
     </label>
   );
