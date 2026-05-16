@@ -92,7 +92,7 @@ export default function ParqueHeatmapLayer({ visible }: Props) {
         weight: 0,
         interactive: false,
       }),
-    });
+    } as any);
 
     layer.addTo(map);
     if ((layer as any).bringToBack) layer.bringToBack();
