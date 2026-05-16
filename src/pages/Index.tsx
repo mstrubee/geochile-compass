@@ -747,9 +747,9 @@ const Index = () => {
       const mapId = `saved:${id}`;
       if (!loadedSavedIsoIds.has(id)) loadSavedIsoToMap(id);
       setSelectedIsoId(mapId);
-      setPanelOpen(true);
+      userOpenPanel();
     },
-    [loadedSavedIsoIds, loadSavedIsoToMap],
+    [loadedSavedIsoIds, loadSavedIsoToMap, userOpenPanel],
   );
 
   const handleSaveIsochronePayload = useCallback(
