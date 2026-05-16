@@ -167,27 +167,6 @@ export const Legend = ({
         shifted ? "right-[394px]" : "right-4",
       ].join(" ")}
     >
-      {!showAny && (
-        <>
-          <div className="mb-2 font-mono text-[9px] uppercase tracking-[2px] text-text-muted">Leyenda</div>
-          <div className="space-y-1">
-            {[
-              { swatch: "bg-primary", label: "Demografía" },
-              { swatch: "bg-brand-purple", label: "NSE" },
-              { swatch: "bg-brand-orange", label: "Tráfico" },
-              { swatch: "bg-brand-pink", label: "Densidad" },
-            ].map((i) => (
-              <div key={i.label} className="flex items-center gap-2 text-[11px] text-foreground">
-                <span className={["h-2 w-[18px] flex-shrink-0 rounded-sm", i.swatch].join(" ")} />
-                {i.label}
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 border-t border-border pt-1.5 font-mono text-[9px] text-text-muted">
-            Activa una capa para filtrar
-          </div>
-        </>
-      )}
 
       {showManzanas && (
         <>
