@@ -1,43 +1,44 @@
-## Diagnóstico
+## Cambios solicitados
 
-El popup demográfico (Población, Hogares, Área, Densidad, NSE, Ingreso, Tráfico) lo dibuja `CommuneLayer.tsx` a partir de la lista hardcoded `COMMUNES` (`src/data/communes.ts`).
+### 1. Ocultar la ventana de "Análisis territorial"
+Archivo: `src/components/panels/AnalysisPanel.tsx` (+ `src/pages/Index.tsx`).
+- El botón "X" del panel ya existe pero la ventana se vuelve a abrir automáticamente al seleccionar/crear isócrona. Hacer que `onClose` realmente persista el estado "cerrado": no reabrir el panel hasta que el usuario lo invoque explícitamente (botón flotante o doble-click sobre la isócrona en el sidebar).
+- Verificar el flujo en `Index.tsx` que setea `panelOpen=true` y desacoplarlo de la selección de isócrona.
 
-Esa lista contiene los 346 nombres de comunas de Chile, pero **solo las ~52 de la RM tienen datos reales**. Las 294 restantes están como placeholder (`pop: 0`, `nse: 3`, etc.). En el popup, la condición `hasData = c.pop > 0` cae al ramal "Sin datos demográficos detallados.", por eso fuera de la RM no se ve nada.
+### 2. Mostrar parque + ranking de marcas en "Análisis territorial"
+Archivo: `src/components/panels/AnalysisPanel.tsx`.
+- Reutilizar el hook existente `useParqueIsochroneStats` (ya hecho para el `IsochroneReportDialog`).
+- Añadir una nueva sección "Parque automotor" dentro del panel lateral con:
+  - KPIs: vehículos estimados, edad media, P25/P75.
+  - Tabla Top 10 marcas (marca, count, %).
+- Solo se renderiza si la capa "Parque automotor" está activa (`enabled` del hook).
+- Pasar la feature de la banda activa (`isochrone.features[tab]`) al hook.
 
-`ChileCommunesLayer` (la capa coroplética) ya lee correctamente el CSV INE para todas las comunas — el problema es solo el popup de los círculos.
+### 3. Permitir crear isócrona con el heatmap cargado
+Archivo: `src/components/map/ParqueHeatmapLayer.tsx` (+ pasar prop desde `MapView.tsx` → `ParqueHeatmapHost`).
+- Problema actual: los hexágonos GeoJSON capturan el click (popup) e impiden que el click llegue al mapa cuando `isoMode` está activo.
+- Solución: aceptar prop `interactive` (derivada de `!isoMode`). Cuando `isoMode` esté activo:
+  - Aplicar `interactive: false` en el style → los clicks pasan al mapa y se crea la isócrona normalmente.
+  - No bindear popup/tooltip ni eventos hover.
+- `MapView.tsx`: `ParqueHeatmapHost` recibe `isoMode` y se lo pasa al layer.
 
-Como el CSV `public/ine_communes.csv` ahora trae las 346 comunas con `poblacion`, `superficie_km2`, `ingreso_promedio` y `nse`, podemos hidratar el popup con esos datos.
+### 4. Información del heatmap solo con click derecho
+Archivo: `src/components/map/ParqueHeatmapLayer.tsx`.
+- Eliminar `bindTooltip` (sin preview al hover).
+- Eliminar el highlight de contorno negro al `mouseover`.
+- Reemplazar el `bindPopup` automático por un handler de `contextmenu`:
+  - Al click derecho sobre un hexágono: `L.popup().setLatLng(e.latlng).setContent(popupHtml).openOn(map)`.
+  - Usar `L.DomEvent.preventDefault(e.originalEvent)` para evitar el menú nativo del navegador.
+- El contenido del popup (vehículos, edad P25/Med/P75, top marcas) se mantiene igual.
 
-## Cambios
+## Detalles técnicos
 
-### 1. `src/components/map/CommuneLayer.tsx`
-- Cargar el índice INE con `loadIneIndex()` (mismo servicio que ya usa el resto de la app).
-- Construir una lista enriquecida fusionando `COMMUNES` con `ine.byName` (clave: nombre normalizado):
-  - `pop` → `ineStats.poblacion ?? c.pop`
-  - `area` → `ineStats.superficie_km2 ?? c.area`
-  - `density` → `ineStats.densidad ?? c.density`
-  - `nse` → mapear etiqueta `"ABC1"|"C2"|"C3"|"D"|"E"` al numérico 1–5 si el original venía vacío
-  - `hh` → si era 0, estimar `Math.round(pop / 3.3)` (tamaño hogar promedio Chile, INE)
-  - `ingreso` → nuevo campo opcional `incomeOverride` para usar `ineStats.ingreso` directamente en el popup en vez de la tabla `NSE_INCOME` (que solo asocia rangos por NSE)
-- En `CommunePopup`, sustituir `NSE_INCOME[c.nse]` por `c.incomeOverride ?? NSE_INCOME[c.nse]`.
-- Para campos sin fuente (Tráfico fuera de la RM), mostrar `"—"` en lugar de `0/100`.
-- `hasData` pasa a ser `c.pop > 0` igual que ahora — pero después del merge ya será verdadero para las 346.
+- El `ContextMenuHandler` global en `MapView.tsx` debe seguir funcionando: el contextmenu sobre un hex se consume en el layer (`L.DomEvent.stop`) para evitar disparar el menú del mapa.
+- `interactive: false` se aplica vía la función `style` (Leaflet lo respeta dentro de `pathOptions`).
+- Para #1, mantener el botón flotante (flecha) que abre el panel — solo cambiar el comportamiento de "cerrado" para que sea sticky por sesión.
 
-### 2. `src/data/communes.ts`
-- Añadir el campo opcional `incomeOverride?: number` a la interfaz `Commune` (no rompe nada).
+## Fuera de alcance
 
-### 3. (Opcional) Pequeño helper
-Crear `src/data/communesEnriched.ts` o dejar el merge inline en `CommuneLayer` con `useMemo` + estado para esperar la carga asíncrona del CSV. Mientras carga (~50ms), seguir mostrando los datos hardcoded.
-
-## Notas técnicas
-
-- `loadIneIndex()` ya está en cache de módulo, así que el costo es nulo si otra capa lo cargó antes.
-- El radio del círculo (`radiusForPop`) seguirá funcionando bien porque la población real es siempre > 0.
-- No se toca la capa coroplética (`ChileCommunesLayer`), ni `gseService`, ni el script de manzanas.
-
-## Verificación
-
-1. Abrir el mapa, hacer zoom-out a Chile.
-2. Click en un círculo de Arica, Concepción, Punta Arenas → debe mostrar Población, Área, Densidad, NSE e Ingreso del CSV.
-3. Click en Las Condes/Vitacura → mismos datos, ahora con NSE corregido (ABC1) e ingreso real del CSV.
-4. Confirmar que el popup ya no muestra "Sin datos demográficos detallados." en ninguna comuna.
+- No tocar otras capas (manzanas, GSE, microzonas, POIs, comunas).
+- No cambiar el formato del GeoJSON ni el script `inject-parque-features`.
+- No modificar `IsochroneReportDialog` (ya tiene la sección de parque).
