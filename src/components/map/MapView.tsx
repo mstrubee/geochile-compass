@@ -14,6 +14,8 @@ import { TerritorialLayersLayer } from "./TerritorialLayersLayer";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
 import { MicrozoneLayer } from "./MicrozoneLayer";
+import ParqueHeatmapLayer from "./ParqueHeatmapLayer";
+import { useParqueLayer } from "@/hooks/useParqueLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { GseFeatureCollection, GseVariable } from "@/types/gse";
 import type { UserLayer } from "@/types/userLayers";
@@ -329,6 +331,7 @@ export const MapView = ({
         onPickPoi={onPoiPickSelect}
       />
       <TerritorialLayersHost />
+      <ParqueHeatmapHost />
 
       <MicrozoneLayer
         microzones={microzones}
@@ -364,4 +367,9 @@ const TerritorialLayersHost = () => {
     ensureVisibleDefaults(layers.map((l) => l.id));
   }, [layers, ensureVisibleDefaults]);
   return <TerritorialLayersLayer layers={layers} visibleLayerIds={visibleLayerIds} heatmap={heatmapEnabled} />;
+};
+
+const ParqueHeatmapHost = () => {
+  const { visible } = useParqueLayer();
+  return <ParqueHeatmapLayer visible={visible} />;
 };

@@ -27,6 +27,7 @@ import { exportFolderDataset } from "@/services/exportFolderDataset";
 import { CommuneSearch } from "./CommuneSearch";
 import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
+import { useParqueLayer } from "@/hooks/useParqueLayer";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
@@ -1351,6 +1352,7 @@ export const Sidebar = ({
             </div>
             <TerritorialGroupsSection />
           </div>
+          <ParqueLayerToggle />
         </SidebarSection>
 
 
@@ -2477,6 +2479,25 @@ export const Sidebar = ({
       />
     )}
     </>
+  );
+};
+
+const ParqueLayerToggle = () => {
+  const { visible, toggle } = useParqueLayer();
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      className="mt-2 flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
+      aria-pressed={visible}
+    >
+      <span className="h-2 w-2 flex-shrink-0 rounded-full bg-brand-yellow" />
+      <span className={["flex-1 text-[13px] leading-tight", visible ? "text-foreground" : "text-muted-foreground"].join(" ")}>
+        Parque automotor
+      </span>
+      <span className="font-mono text-[10px] text-text-muted">heatmap</span>
+      <IOSSwitch on={visible} />
+    </button>
   );
 };
 
