@@ -1305,6 +1305,24 @@ const Index = () => {
         </div>
       </main>
 
+      {mapMenu && (
+        <MapContextMenu
+          x={mapMenu.x}
+          y={mapMenu.y}
+          items={mapMenuItems}
+          onClose={() => setMapMenu(null)}
+        />
+      )}
+
+      {parqueInfo && (
+        <ParqueHexInfoCard
+          x={parqueInfo.x}
+          y={parqueInfo.y}
+          hex={parqueInfo.hex}
+          onClose={() => setParqueInfo(null)}
+        />
+      )}
+
       <SaveIsochroneDialog
         open={!!saveIsoDialogId}
         onClose={() => setSaveIsoDialogId(null)}
