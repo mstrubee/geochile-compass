@@ -800,7 +800,7 @@ const Index = () => {
         setIsoLoading(false);
       }
     },
-    [mode, isoMode, isoMinutes, isochrones.length],
+    [mode, isoMode, isoMinutes, isochrones.length, autoOpenPanel],
   );
 
   const handleViewportChange = useCallback(
