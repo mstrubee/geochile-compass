@@ -1,14 +1,7 @@
 // ============================================================================
 // ParqueHeatmapLayer.tsx
-//
-// Heatmap del parque automotor.
-//
-// Fixes (vs versión anterior):
-//   1) Performance: maxCount memoizado, for-of en vez de spread.
-//   2) Limpieza al apagar: layer imperativo con L.geoJSON + remove().
-//   3) Click pasante: canvas con padding 0, bringToBack, interactive false.
 // ============================================================================
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
 import type { FeatureCollection, Polygon } from "geojson";
@@ -40,8 +33,6 @@ function buildColorFn(maxCount: number) {
 export default function ParqueHeatmapLayer({ visible }: Props) {
   const map = useMap();
   const [data, setData] = useState<FeatureCollection<Polygon, ParqueHexProps> | null>(null);
-  const layerRef = useRef<L.GeoJSON | null>(null);
-  const rendererRef = useRef<L.Canvas | null>(null);
 
   useEffect(() => {
     if (!visible || data) return;
@@ -69,21 +60,12 @@ export default function ParqueHeatmapLayer({ visible }: Props) {
   const colorFn = useMemo(() => buildColorFn(maxCount), [maxCount]);
 
   useEffect(() => {
-    if (!map) return;
+    if (!map || !visible || !data) return;
 
-    if (layerRef.current) {
-      layerRef.current.remove();
-      layerRef.current = null;
-    }
-
-    if (!visible || !data) return;
-
-    if (!rendererRef.current) {
-      rendererRef.current = L.canvas({ padding: 0, tolerance: 0 });
-    }
+    const renderer = L.canvas({ padding: 0, tolerance: 0 });
 
     const layer = L.geoJSON(data as any, {
-      renderer: rendererRef.current,
+      renderer,
       interactive: false,
       style: (feature: any) => ({
         fillColor: colorFn(feature.properties.count),
@@ -97,25 +79,19 @@ export default function ParqueHeatmapLayer({ visible }: Props) {
     layer.addTo(map);
     if ((layer as any).bringToBack) layer.bringToBack();
 
-    layerRef.current = layer;
-
     return () => {
-      if (layerRef.current) {
-        layerRef.current.remove();
-        layerRef.current = null;
-      }
+      try {
+        layer.remove();
+      } catch {}
+      try {
+        const container = (renderer as any)._container as HTMLElement | undefined;
+        if (container && container.parentNode) {
+          container.parentNode.removeChild(container);
+        }
+        if ((renderer as any).remove) (renderer as any).remove();
+      } catch {}
     };
   }, [map, visible, data, colorFn]);
-
-  useEffect(() => {
-    return () => {
-      if (layerRef.current) {
-        layerRef.current.remove();
-        layerRef.current = null;
-      }
-      rendererRef.current = null;
-    };
-  }, []);
 
   return null;
 }
