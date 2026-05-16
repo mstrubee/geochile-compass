@@ -1034,10 +1034,10 @@ const Index = () => {
           onToggleIsochrone={toggleIsochrone}
           onRemoveIsochrone={removeIsochrone}
           onClearIsochrones={clearIsochrones}
-          onFocusIsochrone={(id) => { setFitIsoId(id); setSelectedIsoId(id); setPanelOpen(true); }}
+          onFocusIsochrone={(id) => { setFitIsoId(id); setSelectedIsoId(id); autoOpenPanel(); }}
           isoLoading={isoLoading}
           onToggleIsoMode={() => setMode((m) => (m === "isochrone" ? "none" : "isochrone"))}
-          onAnalyzeIsochrone={(id) => { setSelectedIsoId(id); setPanelOpen(true); }}
+          onAnalyzeIsochrone={(id) => { setSelectedIsoId(id); userOpenPanel(); }}
           onSaveIsochrone={(id) => setSaveIsoDialogId(id)}
           onReportIsochrone={(id) => setReportIsoDialogId(id)}
           savedIsochrones={savedIsos}
