@@ -369,7 +369,7 @@ const TerritorialLayersHost = () => {
   return <TerritorialLayersLayer layers={layers} visibleLayerIds={visibleLayerIds} heatmap={heatmapEnabled} />;
 };
 
-const ParqueHeatmapHost = ({ isoMode }: { isoMode: boolean }) => {
+const ParqueHeatmapHost = () => {
   const { visible } = useParqueLayer();
-  return <ParqueHeatmapLayer visible={visible} passthrough={isoMode} />;
+  return <ParqueHeatmapLayer visible={visible} />;
 };
