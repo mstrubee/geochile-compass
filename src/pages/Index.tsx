@@ -459,19 +459,62 @@ const Index = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [coordPicker]);
 
-  // Click derecho en el mapa → crear POI en esa posición.
+  // Menú contextual del mapa (click derecho).
+  const { visible: parqueVisible } = useParqueLayer();
+  const [mapMenu, setMapMenu] = useState<
+    { x: number; y: number; lat: number; lng: number } | null
+  >(null);
+  const [parqueInfo, setParqueInfo] = useState<
+    { x: number; y: number; hex: ParqueHexProps } | null
+  >(null);
+
   const handleMapContextMenu = useCallback(
-    (c: { lat: number; lng: number }) => {
-      if (!user) {
-        toast.error("Inicia sesión para crear POIs");
-        navigate("/auth");
-        return;
+    (c: { lat: number; lng: number; x: number; y: number }) => {
+      if (coordPicker) return; // si está activo el picker, no abrir menú
+      setParqueInfo(null);
+      setMapMenu({ x: c.x, y: c.y, lat: c.lat, lng: c.lng });
+      // Si la capa de parque está visible, precargar el GeoJSON para tener el hex listo
+      if (parqueVisible) {
+        void loadParqueGeoJson().catch(() => {});
       }
-      if (coordPicker) return; // si está activo el picker, dejar que ese click siga su flujo
-      openCreatePoiAt(c, null);
     },
-    [user, navigate, openCreatePoiAt, coordPicker],
+    [coordPicker, parqueVisible],
   );
+
+  const handleMenuCreatePoi = useCallback(() => {
+    if (!mapMenu) return;
+    if (!user) {
+      toast.error("Inicia sesión para crear POIs");
+      navigate("/auth");
+      return;
+    }
+    openCreatePoiAt({ lat: mapMenu.lat, lng: mapMenu.lng }, null);
+  }, [mapMenu, user, navigate, openCreatePoiAt]);
+
+  const handleMenuParqueInfo = useCallback(() => {
+    if (!mapMenu) return;
+    const hex = findHexAt(mapMenu.lat, mapMenu.lng);
+    if (!hex) {
+      toast.error("No hay datos de parque en este punto");
+      return;
+    }
+    setParqueInfo({ x: mapMenu.x, y: mapMenu.y, hex: hex.properties });
+  }, [mapMenu]);
+
+  const mapMenuItems = useMemo<MapContextMenuItem[]>(() => {
+    const items: MapContextMenuItem[] = [
+      { key: "poi", label: "Crear POI", icon: "📍", onClick: handleMenuCreatePoi },
+    ];
+    if (parqueVisible) {
+      items.push({
+        key: "parque",
+        label: "Ver info parque",
+        icon: "🚗",
+        onClick: handleMenuParqueInfo,
+      });
+    }
+    return items;
+  }, [parqueVisible, handleMenuCreatePoi, handleMenuParqueInfo]);
 
   const savePoisFromLayer = useCallback(
     (layerIdOrIds: string | string[]) => {
