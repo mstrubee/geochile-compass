@@ -14,6 +14,8 @@ import { TerritorialLayersLayer } from "./TerritorialLayersLayer";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
 import { MicrozoneLayer } from "./MicrozoneLayer";
+import ParqueHeatmapLayer from "./ParqueHeatmapLayer";
+import { useParqueLayer } from "@/hooks/useParqueLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { GseFeatureCollection, GseVariable } from "@/types/gse";
 import type { UserLayer } from "@/types/userLayers";
