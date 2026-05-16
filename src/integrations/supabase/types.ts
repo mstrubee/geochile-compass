@@ -14,6 +14,147 @@ export type Database = {
   }
   public: {
     Tables: {
+      _migration_log: {
+        Row: {
+          applied_at: string
+          id: number
+          notes: string | null
+          sprint: string | null
+        }
+        Insert: {
+          applied_at?: string
+          id?: number
+          notes?: string | null
+          sprint?: string | null
+        }
+        Update: {
+          applied_at?: string
+          id?: number
+          notes?: string | null
+          sprint?: string | null
+        }
+        Relationships: []
+      }
+      _poi_features_cache_pre_migration_backup: {
+        Row: {
+          computed_at: string | null
+          config_version: number | null
+          features: Json | null
+          folder_id: string | null
+          is_rm: boolean | null
+          iso_geom_hash: string | null
+          iso_minutes: number | null
+          poi_id: string | null
+        }
+        Insert: {
+          computed_at?: string | null
+          config_version?: number | null
+          features?: Json | null
+          folder_id?: string | null
+          is_rm?: boolean | null
+          iso_geom_hash?: string | null
+          iso_minutes?: number | null
+          poi_id?: string | null
+        }
+        Update: {
+          computed_at?: string | null
+          config_version?: number | null
+          features?: Json | null
+          folder_id?: string | null
+          is_rm?: boolean | null
+          iso_geom_hash?: string | null
+          iso_minutes?: number | null
+          poi_id?: string | null
+        }
+        Relationships: []
+      }
+      _poi_folders_pre_migration_backup: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          deleted_at: string | null
+          id: string | null
+          name: string | null
+          parent_id: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          id?: string | null
+          name?: string | null
+          parent_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          id?: string | null
+          name?: string | null
+          parent_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      _pois_pre_migration_backup: {
+        Row: {
+          category: string | null
+          color: string | null
+          created_at: string | null
+          deleted_at: string | null
+          description: string | null
+          folder_id: string | null
+          icon: string | null
+          id: string | null
+          lat: number | null
+          lng: number | null
+          name: string | null
+          properties: Json | null
+          source_layer: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          category?: string | null
+          color?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          folder_id?: string | null
+          icon?: string | null
+          id?: string | null
+          lat?: number | null
+          lng?: number | null
+          name?: string | null
+          properties?: Json | null
+          source_layer?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          category?: string | null
+          color?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          folder_id?: string | null
+          icon?: string | null
+          id?: string | null
+          lat?: number | null
+          lng?: number | null
+          name?: string | null
+          properties?: Json | null
+          source_layer?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       analysis_settings: {
         Row: {
           config_version: number
@@ -167,6 +308,54 @@ export type Database = {
           weight?: number
         }
         Relationships: []
+      }
+      folder_layer_roles: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          folder_id: string
+          id: string
+          layer_id: string
+          role: string
+          updated_at: string
+          weight_override: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          folder_id: string
+          id?: string
+          layer_id: string
+          role: string
+          updated_at?: string
+          weight_override?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          folder_id?: string
+          id?: string
+          layer_id?: string
+          role?: string
+          updated_at?: string
+          weight_override?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folder_layer_roles_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folder_layer_roles_layer_id_fkey"
+            columns: ["layer_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       isochrone_folders: {
         Row: {
@@ -936,10 +1125,16 @@ export type Database = {
           created_at: string
           feature_count: number
           group_id: string
+          heatmap_aggregate_url: string | null
+          heatmap_enabled: boolean
           icon: string | null
+          icon_render: string | null
           id: string
+          last_dedup_strategy: string | null
           name: string
           order_index: number
+          parent_layer_id: string | null
+          render_mode: string
           source_file_id: string | null
           source_name: string | null
           updated_at: string
@@ -950,10 +1145,16 @@ export type Database = {
           created_at?: string
           feature_count?: number
           group_id: string
+          heatmap_aggregate_url?: string | null
+          heatmap_enabled?: boolean
           icon?: string | null
+          icon_render?: string | null
           id?: string
+          last_dedup_strategy?: string | null
           name: string
           order_index?: number
+          parent_layer_id?: string | null
+          render_mode?: string
           source_file_id?: string | null
           source_name?: string | null
           updated_at?: string
@@ -964,10 +1165,16 @@ export type Database = {
           created_at?: string
           feature_count?: number
           group_id?: string
+          heatmap_aggregate_url?: string | null
+          heatmap_enabled?: boolean
           icon?: string | null
+          icon_render?: string | null
           id?: string
+          last_dedup_strategy?: string | null
           name?: string
           order_index?: number
+          parent_layer_id?: string | null
+          render_mode?: string
           source_file_id?: string | null
           source_name?: string | null
           updated_at?: string
@@ -978,6 +1185,13 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "territorial_layer_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "territorial_layers_parent_layer_id_fkey"
+            columns: ["parent_layer_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layers"
             referencedColumns: ["id"]
           },
         ]
@@ -1212,6 +1426,10 @@ export type Database = {
       set_poi_folder_kpi_order: {
         Args: { _folder_id: string; _order: Json }
         Returns: undefined
+      }
+      territorial_role_default_weight: {
+        Args: { role_name: string }
+        Returns: number
       }
       user_section_permissions: { Args: { _user_id: string }; Returns: Json }
     }
