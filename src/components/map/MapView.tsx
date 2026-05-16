@@ -195,7 +195,7 @@ interface MapViewProps {
   onAddCommuneToCompare?: (c: import("@/data/communes").Commune) => void;
   outlinedCommuneNames?: string[];
   highlightedCommuneName?: string | null;
-  onMapContextMenu?: (c: { lat: number; lng: number }) => void;
+  onMapContextMenu?: (c: { lat: number; lng: number; x: number; y: number }) => void;
   /** Cuando es true, el próximo click del mapa se delega a `onPickCoord` y nada más. */
   coordPickerActive?: boolean;
   onPickCoord?: (c: { lat: number; lng: number }) => void;
