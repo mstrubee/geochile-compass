@@ -14,6 +14,14 @@ import type { Feature, FeatureCollection, Polygon, MultiPolygon } from "geojson"
 import { useParqueLayer } from "./useParqueLayer";
 import { loadParqueGeoJson, type ParqueHexProps as HexProps } from "@/services/parqueData";
 
+export interface ParqueIsochroneStats {
+  vehiculos: number;
+  edad_media: number;
+  edad_p25: number;
+  edad_p75: number;
+  ranking_marcas: { marca: string; count: number; pct: number }[];
+}
+
 function bboxOverlap(a: number[], b: number[]): boolean {
   return !(a[2] < b[0] || a[0] > b[2] || a[3] < b[1] || a[1] > b[3]);
 }
