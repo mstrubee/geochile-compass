@@ -462,3 +462,71 @@ const KV = ({ label, value }: { label: string; value: string }) => (
     <span className="font-mono font-medium text-foreground">{value}</span>
   </div>
 );
+
+const ParqueAnalysisSection = ({
+  isoFeature,
+}: {
+  isoFeature: import("geojson").Feature<
+    import("geojson").Polygon | import("geojson").MultiPolygon,
+    unknown
+  > | null;
+}) => {
+  const { stats, loading, enabled } = useParqueIsochroneStats(isoFeature);
+  if (!enabled) return null;
+  return (
+    <>
+      <div className="mb-2 px-1 text-[11px] font-medium text-muted-foreground">
+        Parque automotor
+      </div>
+      <div className="mb-3 rounded-xl bg-surface-2/60 p-3">
+        {loading ? (
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" /> Calculando…
+          </div>
+        ) : !stats || stats.vehiculos <= 0 ? (
+          <div className="text-center text-[11px] text-text-muted">
+            Sin vehículos en el área.
+          </div>
+        ) : (
+          <>
+            <div className="mb-3 grid grid-cols-3 gap-2">
+              <Metric value={`~${fmt(stats.vehiculos)}`} label="Vehículos" />
+              <Metric value={`${stats.edad_media.toFixed(1)}`} label="Edad media (años)" />
+              <Metric
+                value={`${stats.edad_p25.toFixed(0)}/${stats.edad_p75.toFixed(0)}`}
+                label="P25 / P75"
+              />
+            </div>
+            <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+              Ranking marcas
+            </div>
+            <div className="overflow-hidden rounded-lg border border-border/30">
+              <div className="grid grid-cols-[22px_1fr_60px_46px] bg-surface-3/40 text-[10px] font-medium text-muted-foreground">
+                <div className="px-2 py-1.5">#</div>
+                <div className="px-2 py-1.5">Marca</div>
+                <div className="px-2 py-1.5 text-right">Veh.</div>
+                <div className="px-2 py-1.5 text-right">%</div>
+              </div>
+              {stats.ranking_marcas.map((m, i) => (
+                <div
+                  key={m.marca}
+                  className="grid grid-cols-[22px_1fr_60px_46px] border-t border-border/30 text-[11px]"
+                >
+                  <div className="px-2 py-1.5 font-mono text-muted-foreground">{i + 1}</div>
+                  <div className="truncate px-2 py-1.5 text-foreground">{m.marca}</div>
+                  <div className="px-2 py-1.5 text-right font-mono text-foreground">{fmt(m.count)}</div>
+                  <div className="px-2 py-1.5 text-right font-mono text-muted-foreground">
+                    {m.pct.toFixed(1)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-[10px] text-muted-foreground">
+              Estimación ponderada por hexágonos (~500 m). Margen ±5%.
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+};
