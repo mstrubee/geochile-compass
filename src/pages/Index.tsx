@@ -59,6 +59,19 @@ const Index = () => {
   const [mode, setMode] = useState<Mode>("none");
   const [basemap, setBasemap] = useState<"dark" | "light" | "satellite" | "hybrid">("hybrid");
   const [panelOpen, setPanelOpen] = useState(false);
+  // Si el usuario cierra el panel, no se reabre solo al crear/seleccionar isócronas.
+  const [panelHiddenByUser, setPanelHiddenByUser] = useState(false);
+  const autoOpenPanel = useCallback(() => {
+    if (!panelHiddenByUser) setPanelOpen(true);
+  }, [panelHiddenByUser]);
+  const userOpenPanel = useCallback(() => {
+    setPanelHiddenByUser(false);
+    setPanelOpen(true);
+  }, []);
+  const userClosePanel = useCallback(() => {
+    setPanelHiddenByUser(true);
+    setPanelOpen(false);
+  }, []);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [layers, setLayers] = useState<LayerState>({
     communes: false,
@@ -724,7 +737,7 @@ const Index = () => {
       if (!loadedSavedIsoIds.has(id)) loadSavedIsoToMap(id);
       setFitIsoId(mapId);
       setSelectedIsoId(mapId);
-      setPanelOpen(true);
+      autoOpenPanel();
     },
     [loadedSavedIsoIds, loadSavedIsoToMap],
   );
@@ -734,9 +747,9 @@ const Index = () => {
       const mapId = `saved:${id}`;
       if (!loadedSavedIsoIds.has(id)) loadSavedIsoToMap(id);
       setSelectedIsoId(mapId);
-      setPanelOpen(true);
+      userOpenPanel();
     },
-    [loadedSavedIsoIds, loadSavedIsoToMap],
+    [loadedSavedIsoIds, loadSavedIsoToMap, userOpenPanel],
   );
 
   const handleSaveIsochronePayload = useCallback(
@@ -778,7 +791,7 @@ const Index = () => {
         setIsochrones((prev) => [...prev, newIso]);
         setFitIsoId(id);
         setSelectedIsoId(id);
-        setPanelOpen(true);
+        autoOpenPanel();
         toast.success("Isócrona añadida", { id: tId });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Error";
@@ -787,7 +800,7 @@ const Index = () => {
         setIsoLoading(false);
       }
     },
-    [mode, isoMode, isoMinutes, isochrones.length],
+    [mode, isoMode, isoMinutes, isochrones.length, autoOpenPanel],
   );
 
   const handleViewportChange = useCallback(
@@ -1021,10 +1034,10 @@ const Index = () => {
           onToggleIsochrone={toggleIsochrone}
           onRemoveIsochrone={removeIsochrone}
           onClearIsochrones={clearIsochrones}
-          onFocusIsochrone={(id) => { setFitIsoId(id); setSelectedIsoId(id); setPanelOpen(true); }}
+          onFocusIsochrone={(id) => { setFitIsoId(id); setSelectedIsoId(id); autoOpenPanel(); }}
           isoLoading={isoLoading}
           onToggleIsoMode={() => setMode((m) => (m === "isochrone" ? "none" : "isochrone"))}
-          onAnalyzeIsochrone={(id) => { setSelectedIsoId(id); setPanelOpen(true); }}
+          onAnalyzeIsochrone={(id) => { setSelectedIsoId(id); userOpenPanel(); }}
           onSaveIsochrone={(id) => setSaveIsoDialogId(id)}
           onReportIsochrone={(id) => setReportIsoDialogId(id)}
           savedIsochrones={savedIsos}
@@ -1230,7 +1243,7 @@ const Index = () => {
           )}
 
           <button
-            onClick={() => setPanelOpen(true)}
+            onClick={userOpenPanel}
             aria-label="Abrir panel de análisis"
             className="absolute bottom-14 right-4 z-[500] flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-apple-lg transition-transform hover:scale-105 active:scale-95"
           >
@@ -1239,7 +1252,7 @@ const Index = () => {
 
           <AnalysisPanel
             open={panelOpen}
-            onClose={() => setPanelOpen(false)}
+            onClose={userClosePanel}
             isochrone={isochrones.find((i) => i.id === selectedIsoId) ?? isochrones[isochrones.length - 1] ?? null}
             manzanas={manzanaData ?? densityData ?? null}
           />

@@ -2,15 +2,19 @@
 // ParqueHeatmapLayer.tsx
 //
 // Heatmap del parque automotor (canvas renderer para performance).
-// Tooltip simple al hover, popup completo al click, contorno negro al hover.
+// - Sin hover preview (ni tooltip ni highlight).
+// - Click derecho: popup con info completa del hexágono.
+// - En modo isócrona: capa no interactiva, para que los clicks creen isócronas.
 // ============================================================================
 import { useEffect, useMemo, useState } from "react";
-import { GeoJSON } from "react-leaflet";
+import { GeoJSON, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { FeatureCollection, Feature, Polygon } from "geojson";
 
 interface Props {
   visible: boolean;
+  /** Si true, la capa no captura eventos (necesario para crear isócronas encima). */
+  passthrough?: boolean;
 }
 
 interface MarcaCount {
@@ -26,7 +30,8 @@ interface HexProps {
   top_marcas: MarcaCount[];
 }
 
-export default function ParqueHeatmapLayer({ visible }: Props) {
+export default function ParqueHeatmapLayer({ visible, passthrough = false }: Props) {
+  const map = useMap();
   const [data, setData] = useState<FeatureCollection<Polygon, HexProps> | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -72,57 +77,59 @@ export default function ParqueHeatmapLayer({ visible }: Props) {
     fillOpacity: 0.55,
     color: "transparent",
     weight: 0,
+    interactive: !passthrough,
   });
+
+  // Forzamos remount al cambiar passthrough para que Leaflet aplique
+  // `interactive` correctamente sobre el canvas.
+  const layerKey = passthrough ? "pt" : "int";
 
   return (
     <GeoJSON
+      key={layerKey}
       data={data as any}
       style={styleFor as any}
-      onEachFeature={(feature: Feature<Polygon, HexProps>, layer: any) => {
-        const p = feature.properties;
-        const count = p.count;
-        const marcas = Array.isArray(p.top_marcas) ? p.top_marcas : [];
+      interactive={!passthrough}
+      onEachFeature={
+        passthrough
+          ? undefined
+          : (feature: Feature<Polygon, HexProps>, layer: any) => {
+              const p = feature.properties;
+              const count = p.count;
+              const marcas = Array.isArray(p.top_marcas) ? p.top_marcas : [];
 
-        // Tooltip al hover: solo cantidad
-        layer.bindTooltip(
-          `${count.toLocaleString("es-CL")} vehículos`,
-          { sticky: true },
-        );
+              const marcasHtml = marcas.length
+                ? `<ol style="margin:6px 0 0 0;padding-left:18px;font-size:11px;line-height:1.4">${marcas
+                    .map(
+                      (m) =>
+                        `<li><strong>${m.marca}</strong> (${m.count.toLocaleString("es-CL")})</li>`,
+                    )
+                    .join("")}</ol>`
+                : "";
+              const popupHtml = `
+                <div style="font-size:12px;min-width:180px">
+                  <div style="font-weight:600;font-size:13px;margin-bottom:4px">
+                    ${count.toLocaleString("es-CL")} vehículos
+                  </div>
+                  <div style="color:#555">
+                    Edad: ${p.edad_p25.toFixed(0)} / ${p.edad_med.toFixed(0)} / ${p.edad_p75.toFixed(0)} años
+                  </div>
+                  ${marcas.length ? `<div style="margin-top:6px;font-weight:500">Top marcas</div>${marcasHtml}` : ""}
+                </div>
+              `;
 
-        // Popup al click: info completa
-        const marcasHtml = marcas.length
-          ? `<ol style="margin:6px 0 0 0;padding-left:18px;font-size:11px;line-height:1.4">${marcas
-              .map(
-                (m) =>
-                  `<li><strong>${m.marca}</strong> (${m.count.toLocaleString("es-CL")})</li>`,
-              )
-              .join("")}</ol>`
-          : "";
-        const popupHtml = `
-          <div style="font-size:12px;min-width:180px">
-            <div style="font-weight:600;font-size:13px;margin-bottom:4px">
-              ${count.toLocaleString("es-CL")} vehículos
-            </div>
-            <div style="color:#555">
-              Edad: ${p.edad_p25.toFixed(0)} / ${p.edad_med.toFixed(0)} / ${p.edad_p75.toFixed(0)} años
-            </div>
-            ${marcas.length ? `<div style="margin-top:6px;font-weight:500">Top marcas</div>${marcasHtml}` : ""}
-          </div>
-        `;
-        layer.bindPopup(popupHtml);
-
-        // Highlight al hover: contorno negro
-        const baseStyle = styleFor(feature);
-        layer.on({
-          mouseover: () => {
-            layer.setStyle({ color: "#000", weight: 2, fillOpacity: 0.7 });
-            if ((layer as any).bringToFront) layer.bringToFront();
-          },
-          mouseout: () => {
-            layer.setStyle(baseStyle);
-          },
-        });
-      }}
+              // Click derecho: abre popup. Se previene el menú nativo y se
+              // detiene la propagación al mapa para no disparar otros handlers.
+              layer.on("contextmenu", (e: L.LeafletMouseEvent) => {
+                L.DomEvent.preventDefault(e.originalEvent);
+                L.DomEvent.stopPropagation(e.originalEvent);
+                L.popup({ closeButton: true })
+                  .setLatLng(e.latlng)
+                  .setContent(popupHtml)
+                  .openOn(map);
+              });
+            }
+      }
     />
   );
 }

@@ -331,7 +331,7 @@ export const MapView = ({
         onPickPoi={onPoiPickSelect}
       />
       <TerritorialLayersHost />
-      <ParqueHeatmapHost />
+      <ParqueHeatmapHost isoMode={isoMode} />
 
       <MicrozoneLayer
         microzones={microzones}
@@ -369,7 +369,7 @@ const TerritorialLayersHost = () => {
   return <TerritorialLayersLayer layers={layers} visibleLayerIds={visibleLayerIds} heatmap={heatmapEnabled} />;
 };
 
-const ParqueHeatmapHost = () => {
+const ParqueHeatmapHost = ({ isoMode }: { isoMode: boolean }) => {
   const { visible } = useParqueLayer();
-  return <ParqueHeatmapLayer visible={visible} />;
+  return <ParqueHeatmapLayer visible={visible} passthrough={isoMode} />;
 };
