@@ -331,7 +331,7 @@ export const MapView = ({
         onPickPoi={onPoiPickSelect}
       />
       <TerritorialLayersHost />
-      <ParqueHeatmapHost />
+      <ParqueHeatmapHost isoMode={isoMode} />
 
       <MicrozoneLayer
         microzones={microzones}
