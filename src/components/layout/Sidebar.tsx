@@ -2485,20 +2485,20 @@ export const Sidebar = ({
 const ParqueLayerToggle = () => {
   const { visible, toggle } = useParqueLayer();
   return (
-    <label
-      className="mt-2 flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
+    <button
+      type="button"
+      onClick={() => toggle()}
+      aria-pressed={visible}
       title="Capa disponible solo como mapa de calor por su volumen (8.1M vehículos)"
+      className="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
     >
-      <Checkbox
-        checked={visible}
-        onCheckedChange={() => toggle()}
-        className="h-4 w-4"
-      />
-      <Car className="h-3.5 w-3.5 text-amber-500" />
+      <Car className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
       <span className={["flex-1 text-[13px] leading-tight", visible ? "text-foreground" : "text-muted-foreground"].join(" ")}>
         Parque automotor
       </span>
-    </label>
+      <span className="font-mono text-[10px] text-text-muted">8.1M</span>
+      <IOSSwitch on={visible} />
+    </button>
   );
 };
 
