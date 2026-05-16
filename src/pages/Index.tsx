@@ -737,7 +737,7 @@ const Index = () => {
       if (!loadedSavedIsoIds.has(id)) loadSavedIsoToMap(id);
       setFitIsoId(mapId);
       setSelectedIsoId(mapId);
-      setPanelOpen(true);
+      autoOpenPanel();
     },
     [loadedSavedIsoIds, loadSavedIsoToMap],
   );
