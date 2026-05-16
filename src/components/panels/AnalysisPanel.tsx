@@ -376,6 +376,16 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
               )}
             </div>
 
+            {/* Parque automotor (solo si la capa está activa) */}
+            <ParqueAnalysisSection
+              isoFeature={
+                isochrone?.features.find((f) => f.properties?.value === bandSeconds)
+                  ?? isochrone?.features[tab]
+                  ?? isochrone?.features[0]
+                  ?? null
+              }
+            />
+
             {/* Comunas cubiertas */}
             <div className="mb-2 px-1 text-[11px] font-medium text-muted-foreground">
               Comunas cubiertas
