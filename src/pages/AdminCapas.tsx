@@ -32,6 +32,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import type { DedupStrategy, TerritorialSourceFile } from "@/types/territorial";
+import { injectParqueFeatures } from "@/scripts/inject-parque-features";
 
 const AdminCapas = () => {
   const navigate = useNavigate();
