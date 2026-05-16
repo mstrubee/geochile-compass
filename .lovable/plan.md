@@ -1,44 +1,21 @@
-## Cambios solicitados
+## Plan
 
-### 1. Ocultar la ventana de "Análisis territorial"
-Archivo: `src/components/panels/AnalysisPanel.tsx` (+ `src/pages/Index.tsx`).
-- El botón "X" del panel ya existe pero la ventana se vuelve a abrir automáticamente al seleccionar/crear isócrona. Hacer que `onClose` realmente persista el estado "cerrado": no reabrir el panel hasta que el usuario lo invoque explícitamente (botón flotante o doble-click sobre la isócrona en el sidebar).
-- Verificar el flujo en `Index.tsx` que setea `panelOpen=true` y desacoplarlo de la selección de isócrona.
+1. **Eliminar el duplicado de capas personalizadas**
+   - Quitar la sección/grupo de `Capas personalizadas` llamado **Parque Automotriz** del render del sidebar.
+   - Mantener visible solo el toggle dedicado **Parque automotor** con ícono de auto.
+   - No borrar nada todavía en la base: la query devolvió estos grupos:
+     - `Parque Automotriz` (`4127272b-7ee0-4952-9e10-513d7421f1ed`)
+     - `SERV. AUTOMOTRICES` (`ea9433a6-16a7-48d7-b0bf-443f684f233d`)
 
-### 2. Mostrar parque + ranking de marcas en "Análisis territorial"
-Archivo: `src/components/panels/AnalysisPanel.tsx`.
-- Reutilizar el hook existente `useParqueIsochroneStats` (ya hecho para el `IsochroneReportDialog`).
-- Añadir una nueva sección "Parque automotor" dentro del panel lateral con:
-  - KPIs: vehículos estimados, edad media, P25/P75.
-  - Tabla Top 10 marcas (marca, count, %).
-- Solo se renderiza si la capa "Parque automotor" está activa (`enabled` del hook).
-- Pasar la feature de la banda activa (`isochrone.features[tab]`) al hook.
+2. **Arreglar el estado del toggle “Parque automotor”**
+   - Reemplazar `useParqueLayer` por un estado compartido vía `useSyncExternalStore`/evento global o contexto, porque hoy cada componente que llama al hook tiene su propio `useState` aislado.
+   - Así el click en el sidebar actualizará inmediatamente al host del mapa que monta/desmonta `ParqueHeatmapLayer`.
 
-### 3. Permitir crear isócrona con el heatmap cargado
-Archivo: `src/components/map/ParqueHeatmapLayer.tsx` (+ pasar prop desde `MapView.tsx` → `ParqueHeatmapHost`).
-- Problema actual: los hexágonos GeoJSON capturan el click (popup) e impiden que el click llegue al mapa cuando `isoMode` está activo.
-- Solución: aceptar prop `interactive` (derivada de `!isoMode`). Cuando `isoMode` esté activo:
-  - Aplicar `interactive: false` en el style → los clicks pasan al mapa y se crea la isócrona normalmente.
-  - No bindear popup/tooltip ni eventos hover.
-- `MapView.tsx`: `ParqueHeatmapHost` recibe `isoMode` y se lo pasa al layer.
+3. **Hacer el desmontaje del heatmap robusto**
+   - Mantener el enfoque imperativo con Leaflet, pero asegurar que al cambiar `visible=false` se remuevan todas las capas/canvas creadas por Parque Automotor.
+   - Usar identificación propia de pane/canvas o clase CSS interna para limpiar cualquier remanente sin afectar otras capas del mapa.
 
-### 4. Información del heatmap solo con click derecho
-Archivo: `src/components/map/ParqueHeatmapLayer.tsx`.
-- Eliminar `bindTooltip` (sin preview al hover).
-- Eliminar el highlight de contorno negro al `mouseover`.
-- Reemplazar el `bindPopup` automático por un handler de `contextmenu`:
-  - Al click derecho sobre un hexágono: `L.popup().setLatLng(e.latlng).setContent(popupHtml).openOn(map)`.
-  - Usar `L.DomEvent.preventDefault(e.originalEvent)` para evitar el menú nativo del navegador.
-- El contenido del popup (vehículos, edad P25/Med/P75, top marcas) se mantiene igual.
-
-## Detalles técnicos
-
-- El `ContextMenuHandler` global en `MapView.tsx` debe seguir funcionando: el contextmenu sobre un hex se consume en el layer (`L.DomEvent.stop`) para evitar disparar el menú del mapa.
-- `interactive: false` se aplica vía la función `style` (Leaflet lo respeta dentro de `pathOptions`).
-- Para #1, mantener el botón flotante (flecha) que abre el panel — solo cambiar el comportamiento de "cerrado" para que sea sticky por sesión.
-
-## Fuera de alcance
-
-- No tocar otras capas (manzanas, GSE, microzonas, POIs, comunas).
-- No cambiar el formato del GeoJSON ni el script `inject-parque-features`.
-- No modificar `IsochroneReportDialog` (ya tiene la sección de parque).
+4. **Validación**
+   - Probar activar/desactivar varias veces desde el toggle dedicado.
+   - Confirmar que el heatmap aparece al activar y desaparece inmediatamente al apagar, sin recargar.
+   - Verificar que el grupo `Parque Automotriz` ya no aparece en `Capas personalizadas` y que no se toca `SERV. AUTOMOTRICES`.

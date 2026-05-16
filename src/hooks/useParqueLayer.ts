@@ -1,27 +1,40 @@
 // ============================================================================
 // useParqueLayer.ts
 //
-// Hook simple para gestionar el toggle de la capa de parque automotor en el
-// sidebar / mapa. Persiste el estado en localStorage.
+// Store global compartido para el toggle del "Parque automotor". Antes usaba
+// useState local en cada consumidor, lo que causaba que el sidebar y el host
+// del mapa tuvieran estados independientes (el heatmap quedaba pegado).
 // ============================================================================
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 const LS_KEY = "geochile:parque-layer-visible";
 
+let visible: boolean = (() => {
+  try { return localStorage.getItem(LS_KEY) === "true"; }
+  catch { return false; }
+})();
+
+const listeners = new Set<() => void>();
+
+const subscribe = (cb: () => void) => {
+  listeners.add(cb);
+  return () => { listeners.delete(cb); };
+};
+
+const getSnapshot = () => visible;
+
+const setVisible = (v: boolean) => {
+  if (visible === v) return;
+  visible = v;
+  try { localStorage.setItem(LS_KEY, v ? "true" : "false"); } catch { /* ignore */ }
+  listeners.forEach((cb) => cb());
+};
+
 export function useParqueLayer() {
-  const [visible, setVisibleState] = useState<boolean>(() => {
-    try { return localStorage.getItem(LS_KEY) === "true"; }
-    catch { return false; }
-  });
-
-  useEffect(() => {
-    try { localStorage.setItem(LS_KEY, visible ? "true" : "false"); }
-    catch { /* ignore */ }
-  }, [visible]);
-
+  const v = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return {
-    visible,
-    setVisible: setVisibleState,
-    toggle: () => setVisibleState(v => !v),
+    visible: v,
+    setVisible,
+    toggle: () => setVisible(!visible),
   };
 }

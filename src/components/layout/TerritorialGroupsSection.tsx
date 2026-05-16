@@ -124,7 +124,12 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
 };
 
 export const TerritorialGroupsSection = () => {
-  const { groups, layers, loading } = useTerritorialLayers();
+  const { groups: allGroups, layers, loading } = useTerritorialLayers();
+  // Ocultamos el grupo "Parque Automotriz" porque ya está representado por el
+  // toggle dedicado "Parque automotor" (heatmap canvas).
+  const groups = allGroups.filter(
+    (g) => g.name.trim().toLowerCase() !== "parque automotriz",
+  );
   const { visibleLayerIds, heatmapEnabled, setHeatmapEnabled } = useTerritorialVisibility();
   const hasVisibleLayers = layers.some((layer) => visibleLayerIds.has(layer.id));
 
