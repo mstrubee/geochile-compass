@@ -1243,7 +1243,7 @@ const Index = () => {
           )}
 
           <button
-            onClick={() => setPanelOpen(true)}
+            onClick={userOpenPanel}
             aria-label="Abrir panel de análisis"
             className="absolute bottom-14 right-4 z-[500] flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-apple-lg transition-transform hover:scale-105 active:scale-95"
           >
@@ -1252,7 +1252,7 @@ const Index = () => {
 
           <AnalysisPanel
             open={panelOpen}
-            onClose={() => setPanelOpen(false)}
+            onClose={userClosePanel}
             isochrone={isochrones.find((i) => i.id === selectedIsoId) ?? isochrones[isochrones.length - 1] ?? null}
             manzanas={manzanaData ?? densityData ?? null}
           />
