@@ -27,6 +27,7 @@ import { exportFolderDataset } from "@/services/exportFolderDataset";
 import { CommuneSearch } from "./CommuneSearch";
 import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
+import { useParqueLayer } from "@/hooks/useParqueLayer";
 
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
