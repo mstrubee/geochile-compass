@@ -1082,5 +1082,39 @@ const AdminCollapsible = ({
   );
 };
 
+const ParqueInjectButton = () => {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ updated: number; notFound: number; errors: number; total: number } | null>(null);
+  const run = async () => {
+    setRunning(true);
+    setResult(null);
+    try {
+      const r = await injectParqueFeatures();
+      setResult(r);
+      toast.success(`Inyección OK: ${r.updated}/${r.total} actualizados`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunning(false);
+    }
+  };
+  return (
+    <div className="space-y-2">
+      <Button onClick={run} disabled={running}>
+        {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+        Inyectar features de parque
+      </Button>
+      {result && (
+        <pre className="rounded-md bg-muted/40 p-2 text-xs">
+{JSON.stringify(result, null, 2)}
+        </pre>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Verificar con: <code>SELECT count(*) FROM poi_features_cache WHERE features ? 'parque_n_vehiculos';</code> (~68 esperados)
+      </p>
+    </div>
+  );
+};
+
 export default AdminCapas;
 
