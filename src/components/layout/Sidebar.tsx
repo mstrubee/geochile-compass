@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText, Car } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -2494,8 +2494,9 @@ const ParqueLayerToggle = () => {
         onCheckedChange={() => toggle()}
         className="h-4 w-4"
       />
+      <Car className="h-3.5 w-3.5 text-amber-500" />
       <span className={["flex-1 text-[13px] leading-tight", visible ? "text-foreground" : "text-muted-foreground"].join(" ")}>
-        🔥 Parque automotor
+        Parque automotor
       </span>
     </label>
   );
