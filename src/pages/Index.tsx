@@ -32,6 +32,9 @@ import { usePoiFolders } from "@/hooks/usePoiFolders";
 import { useSavedIsochrones } from "@/hooks/useSavedIsochrones";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
+import { findHexAt, loadParqueGeoJson, type ParqueHexProps } from "@/services/parqueData";
+import { useParqueLayer } from "@/hooks/useParqueLayer";
+import { MapContextMenu, type MapContextMenuItem } from "@/components/ui-overlays/MapContextMenu";
 import { fetchOverpassPreset, fetchOverpassFreeText, bboxAreaDegSq } from "@/services/overpassService";
 import { extractPointPois, countPoints, type PoiInsert, type SavedPoi, type PoiFolder } from "@/types/pois";
 import { parseFile, getExtension } from "@/utils/fileParsers";
@@ -456,19 +459,62 @@ const Index = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [coordPicker]);
 
-  // Click derecho en el mapa → crear POI en esa posición.
+  // Menú contextual del mapa (click derecho).
+  const { visible: parqueVisible } = useParqueLayer();
+  const [mapMenu, setMapMenu] = useState<
+    { x: number; y: number; lat: number; lng: number } | null
+  >(null);
+  const [parqueInfo, setParqueInfo] = useState<
+    { x: number; y: number; hex: ParqueHexProps } | null
+  >(null);
+
   const handleMapContextMenu = useCallback(
-    (c: { lat: number; lng: number }) => {
-      if (!user) {
-        toast.error("Inicia sesión para crear POIs");
-        navigate("/auth");
-        return;
+    (c: { lat: number; lng: number; x: number; y: number }) => {
+      if (coordPicker) return; // si está activo el picker, no abrir menú
+      setParqueInfo(null);
+      setMapMenu({ x: c.x, y: c.y, lat: c.lat, lng: c.lng });
+      // Si la capa de parque está visible, precargar el GeoJSON para tener el hex listo
+      if (parqueVisible) {
+        void loadParqueGeoJson().catch(() => {});
       }
-      if (coordPicker) return; // si está activo el picker, dejar que ese click siga su flujo
-      openCreatePoiAt(c, null);
     },
-    [user, navigate, openCreatePoiAt, coordPicker],
+    [coordPicker, parqueVisible],
   );
+
+  const handleMenuCreatePoi = useCallback(() => {
+    if (!mapMenu) return;
+    if (!user) {
+      toast.error("Inicia sesión para crear POIs");
+      navigate("/auth");
+      return;
+    }
+    openCreatePoiAt({ lat: mapMenu.lat, lng: mapMenu.lng }, null);
+  }, [mapMenu, user, navigate, openCreatePoiAt]);
+
+  const handleMenuParqueInfo = useCallback(() => {
+    if (!mapMenu) return;
+    const hex = findHexAt(mapMenu.lat, mapMenu.lng);
+    if (!hex) {
+      toast.error("No hay datos de parque en este punto");
+      return;
+    }
+    setParqueInfo({ x: mapMenu.x, y: mapMenu.y, hex: hex.properties });
+  }, [mapMenu]);
+
+  const mapMenuItems = useMemo<MapContextMenuItem[]>(() => {
+    const items: MapContextMenuItem[] = [
+      { key: "poi", label: "Crear POI", icon: "📍", onClick: handleMenuCreatePoi },
+    ];
+    if (parqueVisible) {
+      items.push({
+        key: "parque",
+        label: "Ver info parque",
+        icon: "🚗",
+        onClick: handleMenuParqueInfo,
+      });
+    }
+    return items;
+  }, [parqueVisible, handleMenuCreatePoi, handleMenuParqueInfo]);
 
   const savePoisFromLayer = useCallback(
     (layerIdOrIds: string | string[]) => {
@@ -1259,6 +1305,24 @@ const Index = () => {
         </div>
       </main>
 
+      {mapMenu && (
+        <MapContextMenu
+          x={mapMenu.x}
+          y={mapMenu.y}
+          items={mapMenuItems}
+          onClose={() => setMapMenu(null)}
+        />
+      )}
+
+      {parqueInfo && (
+        <ParqueHexInfoCard
+          x={parqueInfo.x}
+          y={parqueInfo.y}
+          hex={parqueInfo.hex}
+          onClose={() => setParqueInfo(null)}
+        />
+      )}
+
       <SaveIsochroneDialog
         open={!!saveIsoDialogId}
         onClose={() => setSaveIsoDialogId(null)}
@@ -1574,3 +1638,60 @@ const ComputeFeaturesWrapper = ({
 };
 
 export default Index;
+
+const ParqueHexInfoCard = ({
+  x,
+  y,
+  hex,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  hex: ParqueHexProps;
+  onClose: () => void;
+}) => {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const left = Math.min(x, vw - 260);
+  const top = Math.min(y, vh - 280);
+  const marcas = Array.isArray(hex.top_marcas) ? hex.top_marcas : [];
+  return (
+    <div
+      className="fixed z-[9999] w-[240px] overflow-hidden rounded-lg border border-border/60 bg-surface/95 shadow-apple-lg backdrop-blur-xl"
+      style={{ left, top }}
+    >
+      <div className="flex items-center justify-between border-b border-border/40 px-3 py-2">
+        <div className="text-[13px] font-semibold text-foreground">
+          {hex.count.toLocaleString("es-CL")} vehículos
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-full px-2 py-0.5 text-[14px] leading-none text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+      <div className="px-3 py-2 text-[11px] text-muted-foreground">
+        Edad: {hex.edad_p25.toFixed(0)} / {hex.edad_med.toFixed(0)} / {hex.edad_p75.toFixed(0)} años
+      </div>
+      {marcas.length > 0 && (
+        <div className="border-t border-border/40 px-3 py-2">
+          <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+            Top marcas
+          </div>
+          <ol className="space-y-0.5 pl-4 text-[11px] text-foreground">
+            {marcas.map((m) => (
+              <li key={m.marca} className="list-decimal">
+                <span className="font-medium">{m.marca}</span>{" "}
+                <span className="text-muted-foreground">
+                  ({m.count.toLocaleString("es-CL")})
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+};

@@ -73,12 +73,18 @@ const ClickHandler = ({ onClick }: { onClick: (c: { lat: number; lng: number }) 
 const ContextMenuHandler = ({
   onContextMenu,
 }: {
-  onContextMenu: (c: { lat: number; lng: number }) => void;
+  onContextMenu: (c: { lat: number; lng: number; x: number; y: number }) => void;
 }) => {
   useMapEvents({
     contextmenu: (e) => {
       L.DomEvent.preventDefault(e.originalEvent);
-      onContextMenu({ lat: e.latlng.lat, lng: e.latlng.lng });
+      const oe = e.originalEvent as MouseEvent;
+      onContextMenu({
+        lat: e.latlng.lat,
+        lng: e.latlng.lng,
+        x: oe.clientX,
+        y: oe.clientY,
+      });
     },
   });
   return null;
@@ -189,7 +195,7 @@ interface MapViewProps {
   onAddCommuneToCompare?: (c: import("@/data/communes").Commune) => void;
   outlinedCommuneNames?: string[];
   highlightedCommuneName?: string | null;
-  onMapContextMenu?: (c: { lat: number; lng: number }) => void;
+  onMapContextMenu?: (c: { lat: number; lng: number; x: number; y: number }) => void;
   /** Cuando es true, el próximo click del mapa se delega a `onPickCoord` y nada más. */
   coordPickerActive?: boolean;
   onPickCoord?: (c: { lat: number; lng: number }) => void;
@@ -331,7 +337,7 @@ export const MapView = ({
         onPickPoi={onPoiPickSelect}
       />
       <TerritorialLayersHost />
-      <ParqueHeatmapHost isoMode={isoMode} />
+      <ParqueHeatmapHost />
 
       <MicrozoneLayer
         microzones={microzones}
@@ -369,7 +375,7 @@ const TerritorialLayersHost = () => {
   return <TerritorialLayersLayer layers={layers} visibleLayerIds={visibleLayerIds} heatmap={heatmapEnabled} />;
 };
 
-const ParqueHeatmapHost = ({ isoMode }: { isoMode: boolean }) => {
+const ParqueHeatmapHost = () => {
   const { visible } = useParqueLayer();
-  return <ParqueHeatmapLayer visible={visible} passthrough={isoMode} />;
+  return <ParqueHeatmapLayer visible={visible} />;
 };

@@ -12,19 +12,7 @@ import intersect from "@turf/intersect";
 import bboxFn from "@turf/bbox";
 import type { Feature, FeatureCollection, Polygon, MultiPolygon } from "geojson";
 import { useParqueLayer } from "./useParqueLayer";
-
-interface MarcaCount {
-  marca: string;
-  count: number;
-}
-
-interface HexProps {
-  count: number;
-  edad_med: number;
-  edad_p25: number;
-  edad_p75: number;
-  top_marcas: MarcaCount[];
-}
+import { loadParqueGeoJson, type ParqueHexProps as HexProps } from "@/services/parqueData";
 
 export interface ParqueIsochroneStats {
   vehiculos: number;
@@ -32,21 +20,6 @@ export interface ParqueIsochroneStats {
   edad_p25: number;
   edad_p75: number;
   ranking_marcas: { marca: string; count: number; pct: number }[];
-}
-
-let _cache: FeatureCollection<Polygon, HexProps> | null = null;
-let _cachePromise: Promise<FeatureCollection<Polygon, HexProps>> | null = null;
-
-async function loadParqueGeoJson(): Promise<FeatureCollection<Polygon, HexProps>> {
-  if (_cache) return _cache;
-  if (_cachePromise) return _cachePromise;
-  _cachePromise = fetch("/parque/parque_h3_agregado.geojson")
-    .then((r) => r.json())
-    .then((j) => {
-      _cache = j;
-      return j;
-    });
-  return _cachePromise;
 }
 
 function bboxOverlap(a: number[], b: number[]): boolean {
