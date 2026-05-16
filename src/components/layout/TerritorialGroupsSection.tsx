@@ -1,6 +1,5 @@
 import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
 import type { TerritorialGroup, TerritorialLayer } from "@/types/territorial";
@@ -14,6 +13,22 @@ const readMap = (): Record<string, boolean> => {
     return {};
   }
 };
+
+const IOSSwitch = ({ on }: { on: boolean }) => (
+  <div
+    className={[
+      "relative h-[22px] w-[36px] flex-shrink-0 rounded-full transition-colors",
+      on ? "bg-brand-green" : "bg-surface-3",
+    ].join(" ")}
+  >
+    <span
+      className={[
+        "absolute top-[2px] h-[18px] w-[18px] rounded-full bg-white shadow-apple-sm transition-all",
+        on ? "left-[16px]" : "left-[2px]",
+      ].join(" ")}
+    />
+  </div>
+);
 
 interface GroupBlockProps {
   group: TerritorialGroup;
@@ -40,7 +55,6 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
 
   const visibleCount = layers.filter((l) => isVisible(l.id)).length;
   const allOn = layers.length > 0 && visibleCount === layers.length;
-  const indeterminate = visibleCount > 0 && visibleCount < layers.length;
 
   const toggleAll = () => {
     setLayers(
@@ -52,32 +66,40 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
   const accent = group.color || "#F59E0B";
 
   return (
-    <div className="mb-1.5 rounded-lg bg-surface-2/40">
-      <div className="flex items-center gap-2 px-2 py-1.5">
+    <div className="mb-0.5">
+      <div className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-2/60">
         <button
           type="button"
           onClick={() => updateExpanded(!expanded)}
-          className="flex flex-1 items-center gap-1.5 text-left"
+          aria-label={expanded ? "Colapsar" : "Expandir"}
+          className="flex-shrink-0"
         >
           {expanded ? (
             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
           ) : (
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
           )}
-          <Wrench className="h-3.5 w-3.5" style={{ color: accent }} />
-          <span className="text-[13px] font-medium text-foreground">{group.name}</span>
-          <span className="ml-auto font-mono text-[10px] text-text-muted">
-            {visibleCount}/{layers.length}
-          </span>
         </button>
-        <Checkbox
-          checked={allOn ? true : indeterminate ? "indeterminate" : false}
-          onCheckedChange={toggleAll}
-          aria-label={`Encender/apagar todas las capas de ${group.name}`}
-        />
+        <Wrench className="h-3.5 w-3.5 flex-shrink-0" style={{ color: accent }} />
+        <button
+          type="button"
+          onClick={toggleAll}
+          className={[
+            "flex-1 text-left text-[13px] leading-tight",
+            allOn ? "text-foreground" : "text-muted-foreground",
+          ].join(" ")}
+        >
+          {group.name}
+        </button>
+        <span className="font-mono text-[10px] text-text-muted">
+          {visibleCount}/{layers.length}
+        </span>
+        <button type="button" onClick={toggleAll} aria-label={`Encender/apagar ${group.name}`}>
+          <IOSSwitch on={allOn} />
+        </button>
       </div>
       {expanded && (
-        <div className="px-2 pb-2">
+        <div className="ml-5">
           {layers.length === 0 && (
             <p className="px-2 py-1 text-[11px] text-text-muted">
               Sin sub-capas. Cargá un archivo desde Admin.
@@ -91,7 +113,8 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
                 key={l.id}
                 type="button"
                 onClick={() => toggleLayer(l.id)}
-                className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-surface-2/60"
+                className="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
+                aria-pressed={on}
               >
                 <span
                   className="h-2 w-2 flex-shrink-0 rounded-full"
@@ -99,7 +122,7 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
                 />
                 <span
                   className={[
-                    "flex-1 text-[12px]",
+                    "flex-1 text-[13px] leading-tight",
                     on ? "text-foreground" : "text-muted-foreground",
                   ].join(" ")}
                 >
@@ -108,12 +131,7 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
                 <span className="font-mono text-[10px] text-text-muted">
                   {l.feature_count}
                 </span>
-                <span onClick={(e) => e.stopPropagation()}>
-                  <Checkbox
-                    checked={on}
-                    onCheckedChange={() => toggleLayer(l.id)}
-                  />
-                </span>
+                <IOSSwitch on={on} />
               </button>
             );
           })}
@@ -145,18 +163,27 @@ export const TerritorialGroupsSection = () => {
   }
   return (
     <>
-      <label className="mb-1.5 flex items-center gap-2 rounded-lg bg-surface-2/40 px-2 py-1.5 cursor-pointer">
-        <Checkbox
-          checked={heatmapEnabled && hasVisibleLayers}
-          disabled={!hasVisibleLayers}
-          onCheckedChange={(v) => setHeatmapEnabled(v === true && hasVisibleLayers)}
-          aria-label="Mostrar mapa de calor"
-        />
-        <span className="text-[12px] font-medium text-foreground">Mapa de calor</span>
-        <span className="ml-auto text-[10px] text-text-muted">
-          {hasVisibleLayers ? "azul → rojo" : "selecciona capas"}
+      <button
+        type="button"
+        onClick={() => setHeatmapEnabled(!(heatmapEnabled && hasVisibleLayers) && hasVisibleLayers)}
+        disabled={!hasVisibleLayers}
+        className="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60 disabled:cursor-not-allowed disabled:opacity-50"
+        aria-pressed={heatmapEnabled && hasVisibleLayers}
+      >
+        <span className="h-2 w-2 flex-shrink-0 rounded-full bg-brand-orange" />
+        <span
+          className={[
+            "flex-1 text-[13px] leading-tight",
+            heatmapEnabled && hasVisibleLayers ? "text-foreground" : "text-muted-foreground",
+          ].join(" ")}
+        >
+          Mapa de calor
         </span>
-      </label>
+        <span className="font-mono text-[10px] text-text-muted">
+          {hasVisibleLayers ? "azul→rojo" : "—"}
+        </span>
+        <IOSSwitch on={heatmapEnabled && hasVisibleLayers} />
+      </button>
       {groups.map((g) => (
         <GroupBlock key={g.id} group={g} layers={layers.filter((l) => l.group_id === g.id)} />
       ))}
