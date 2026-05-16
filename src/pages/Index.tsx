@@ -59,6 +59,19 @@ const Index = () => {
   const [mode, setMode] = useState<Mode>("none");
   const [basemap, setBasemap] = useState<"dark" | "light" | "satellite" | "hybrid">("hybrid");
   const [panelOpen, setPanelOpen] = useState(false);
+  // Si el usuario cierra el panel, no se reabre solo al crear/seleccionar isócronas.
+  const [panelHiddenByUser, setPanelHiddenByUser] = useState(false);
+  const autoOpenPanel = useCallback(() => {
+    if (!panelHiddenByUser) setPanelOpen(true);
+  }, [panelHiddenByUser]);
+  const userOpenPanel = useCallback(() => {
+    setPanelHiddenByUser(false);
+    setPanelOpen(true);
+  }, []);
+  const userClosePanel = useCallback(() => {
+    setPanelHiddenByUser(true);
+    setPanelOpen(false);
+  }, []);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [layers, setLayers] = useState<LayerState>({
     communes: false,
