@@ -1,10 +1,11 @@
-import { X, Download, FileJson, Sparkles, RefreshCw } from "lucide-react";
+import { X, Download, FileJson, Sparkles, RefreshCw, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Isochrone } from "@/types/isochrones";
 import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
 import { useIsochroneAnalysis } from "@/hooks/useIsochroneAnalysis";
 import { useIsochroneInsights } from "@/hooks/useIsochroneInsights";
+import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 
 interface AnalysisPanelProps {
