@@ -511,6 +511,15 @@ const AdminCapas = () => {
           </ul>
         </section>
         </AdminCollapsible>
+
+        <AdminCollapsible
+          id="parque"
+          title="Parque automotor"
+          icon={<MapIcon className="h-4 w-4" />}
+          description="Inyectar features de parque automotor al cache de POIs (one-shot)."
+        >
+          <ParqueInjectButton />
+        </AdminCollapsible>
       </main>
 
       <UploadDialog
