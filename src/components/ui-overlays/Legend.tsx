@@ -149,6 +149,8 @@ export const Legend = ({
   const showChileCommunes = chileCommunesActive;
   const showAny = showNSE || showTraffic || showManzanas || showChileCommunes;
 
+  if (!showAny) return null;
+
   // Count combined matches when both filters could apply
   const matched = COMMUNES.filter(
     (c) =>
