@@ -85,17 +85,26 @@ const fetchLayerFeatures = async (layerId: string): Promise<TerritorialFeature[]
     }));
   }
 
-  // Paginación en paralelo.
+  // Paginación con concurrencia limitada: evita disparar decenas de requests
+  // simultáneos cuando hay capas grandes o varias capas activadas a la vez.
   const pageCount = Math.ceil(total / PAGE);
-  const results = await Promise.all(
-    Array.from({ length: pageCount }, (_, i) =>
-      supabase
+  const PAGE_CONCURRENCY = 3;
+  const results: TerritorialFeature[][] = new Array(pageCount);
+  let nextIdx = 0;
+  const worker = async () => {
+    while (true) {
+      const i = nextIdx++;
+      if (i >= pageCount) return;
+      const { data } = await supabase
         .from("territorial_features")
         .select(cols)
         .eq("layer_id", layerId)
-        .range(i * PAGE, i * PAGE + PAGE - 1)
-        .then((r) => (r.data ?? []) as unknown as TerritorialFeature[]),
-    ),
+        .range(i * PAGE, i * PAGE + PAGE - 1);
+      results[i] = (data ?? []) as unknown as TerritorialFeature[];
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(PAGE_CONCURRENCY, pageCount) }, () => worker()),
   );
   const flat = results.flat();
   // Si vinimos en modo "heavy" sin geometry, sintetizar Point para los renders que la requieran.
@@ -146,7 +155,22 @@ export const useTerritorialFeatures = (layerIds: string[]) => {
 
     (async () => {
       try {
-        const lists = await Promise.all(layerIds.map((id) => getLayerFeatures(id)));
+        // Concurrencia limitada entre capas: evita iniciar la carga de todas
+        // las capas visibles a la vez (cada una abre múltiples requests).
+        const LAYER_CONCURRENCY = 2;
+        const lists: TerritorialFeature[][] = new Array(layerIds.length);
+        let i = 0;
+        const worker = async () => {
+          while (true) {
+            const idx = i++;
+            if (idx >= layerIds.length) return;
+            lists[idx] = await getLayerFeatures(layerIds[idx]);
+            if (cancel) return;
+          }
+        };
+        await Promise.all(
+          Array.from({ length: Math.min(LAYER_CONCURRENCY, layerIds.length) }, () => worker()),
+        );
         if (cancel) return;
         setFeatures(lists.flat());
       } catch (e) {
