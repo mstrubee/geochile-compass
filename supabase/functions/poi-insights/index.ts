@@ -222,7 +222,6 @@ Reglas CRÍTICAS, sin excepción:
       throw err;
     }
 
-    const data = await aiRes.json();
     const rawSummary: string =
       data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("")
       ?? "";
