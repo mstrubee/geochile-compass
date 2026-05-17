@@ -142,14 +142,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+    const FALLBACK_KEY = Deno.env.get("GEMINI_API_KEY") ?? undefined;
     const MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.0-flash";
+    const admin = getAdminClient();
 
     let payload: PoiSummaryPayload;
     try {
