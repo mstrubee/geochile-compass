@@ -1,4 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import {
+  AllGeminiKeysFailedError,
+  callGeminiWithRotation,
+  getAdminClient,
+} from "../_shared/gemini-keys.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -137,14 +142,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+    const FALLBACK_KEY = Deno.env.get("GEMINI_API_KEY") ?? undefined;
     const MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.0-flash";
+    const admin = getAdminClient();
 
     let payload: PoiSummaryPayload;
     try {
@@ -194,33 +194,34 @@ Reglas CRÍTICAS, sin excepción:
 
     const userPrompt = `Datos del local:\n\n${JSON.stringify(payload, null, 2)}`;
 
-    const aiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+    let data: any;
+    try {
+      const result = await callGeminiWithRotation({
+        model: MODEL,
+        admin,
+        fallbackEnvKey: FALLBACK_KEY,
+        body: {
           systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
           generationConfig: { temperature: 0.3, maxOutputTokens: 800 },
-        }),
-      },
-    );
-
-    if (!aiRes.ok) {
-      const t = await aiRes.text();
-      console.error("Gemini error", aiRes.status, t);
-      const status = aiRes.status === 429 ? 429 : 500;
-      return new Response(
-        JSON.stringify({
-          error: aiRes.status === 429 ? "Rate limit exceeded" : "Gemini error",
-          detail: t,
-        }),
-        { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+        },
+      });
+      data = result.data;
+    } catch (err) {
+      if (err instanceof AllGeminiKeysFailedError) {
+        console.error("[poi-insights] all gemini keys failed", err.attempts);
+        return new Response(
+          JSON.stringify({
+            error: "ALL_KEYS_FAILED",
+            detail: err.attempts,
+            summary: buildSafeSummary(payload, ctx),
+          }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      throw err;
     }
 
-    const data = await aiRes.json();
     const rawSummary: string =
       data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("")
       ?? "";

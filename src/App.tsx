@@ -9,6 +9,7 @@ import Auth from "./pages/Auth.tsx";
 import MapaComunasPage from "./pages/MapaComunasPage.tsx";
 import AdminCapas from "./pages/AdminCapas.tsx";
 import EvaluationDimensionsAdmin from "@/components/admin/EvaluationDimensionsAdmin";
+import GeminiKeysAdminPage from "./pages/GeminiKeysAdmin.tsx";
 import { TerritorialVisibilityProvider } from "@/hooks/useTerritorialVisibility";
 import { AuthProvider } from "@/hooks/useAuth";
 import { PermissionsProvider } from "@/hooks/usePermissions";
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/comunas" element={<MapaComunasPage />} />
             <Route path="/admin/capas" element={<AdminCapas />} />
             <Route path="/admin/evaluation-dimensions" element={<EvaluationDimensionsAdmin />} />
+            <Route path="/admin/gemini-keys" element={<GeminiKeysAdminPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

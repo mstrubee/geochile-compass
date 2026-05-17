@@ -1,4 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import {
+  AllGeminiKeysFailedError,
+  callGeminiWithRotation,
+  getAdminClient,
+} from "../_shared/gemini-keys.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -103,14 +108,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      return new Response(JSON.stringify({ error: "GEMINI_API_KEY not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const FALLBACK_KEY = Deno.env.get("GEMINI_API_KEY") ?? undefined;
     const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
+    const admin = getAdminClient();
 
     const { analysis, rmAverages } = await req.json();
     if (!analysis) {
@@ -171,74 +171,58 @@ Reglas:
 
     const userPrompt = `Datos de la isócrona:\n\n${JSON.stringify(compactAnalysis, null, 2)}\n\nPromedios RM de referencia:\n${JSON.stringify(rmAverages, null, 2)}`;
 
-    const callGemini = (model: string) =>
-      fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-            generationConfig: { temperature: 0.4 },
-          }),
-        },
-      );
-
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const body = {
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: { temperature: 0.4 },
+    };
     const fallbackModels = [GEMINI_MODEL, "gemini-2.5-flash-lite", "gemini-2.0-flash"];
-    let aiRes: Response | null = null;
-    let lastErrText = "";
-    let lastStatus = 0;
-    let retryAfterMs = 0;
 
-    outer: for (const model of fallbackModels) {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await callGemini(model);
-        if (res.ok) {
-          aiRes = res;
-          break outer;
-        }
-        lastStatus = res.status;
-        lastErrText = await res.text();
-        console.error(`Gemini ${model} attempt ${attempt + 1} failed:`, res.status, lastErrText);
-        if (res.status === 429) {
-          retryAfterMs = extractRetryAfterMs(lastErrText);
-          break outer;
-        }
-        if (res.status === 401 || res.status === 400) break outer;
-        if (res.status === 503 || res.status >= 500) {
-          await sleep(500 * (attempt + 1));
+    let data: any = null;
+    let lastError: AllGeminiKeysFailedError | null = null;
+    for (const model of fallbackModels) {
+      try {
+        const result = await callGeminiWithRotation({
+          model,
+          admin,
+          fallbackEnvKey: FALLBACK_KEY,
+          body,
+        });
+        data = result.data;
+        break;
+      } catch (err) {
+        if (err instanceof AllGeminiKeysFailedError) {
+          lastError = err;
+          // If everyone failed for THIS model, try next fallback model.
           continue;
         }
-        break;
+        throw err;
       }
     }
 
-    if (!aiRes) {
-      const isUnavailable = lastStatus === 503;
-      const isRateLimited = lastStatus === 429;
-      const summary = (isRateLimited || isUnavailable) ? buildFallbackSummary(compactAnalysis) : null;
+    if (!data) {
+      const attempts = lastError?.attempts ?? [];
+      const anyQuota = attempts.some((a) => a.reason === "quota" || a.reason === "rate_limit");
+      const anyUnavailable = attempts.some((a) => a.reason === "unavailable");
+      const lastDetail = attempts[attempts.length - 1]?.message ?? "";
+      const summary = buildFallbackSummary(compactAnalysis);
       return new Response(
         JSON.stringify({
-          error: isRateLimited
+          error: anyQuota
             ? "RATE_LIMITED"
-            : isUnavailable
+            : anyUnavailable
               ? "SERVICE_UNAVAILABLE"
-              : "Gemini API error",
-          detail: lastErrText,
-          fallback: Boolean(summary) || isUnavailable || lastStatus >= 500,
-          retryAfterMs: retryAfterMs || undefined,
+              : "ALL_KEYS_FAILED",
+          detail: lastDetail,
+          attempts,
+          fallback: true,
+          retryAfterMs: anyQuota ? extractRetryAfterMs(lastDetail) : undefined,
           summary,
         }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const data = await aiRes.json();
     const summary: string =
       data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("") ??
       "No se pudo generar el resumen.";

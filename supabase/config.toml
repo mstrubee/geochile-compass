@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.compute-performance-batch]
 verify_jwt = true
+
+[functions.gemini-key-test]
+verify_jwt = true
