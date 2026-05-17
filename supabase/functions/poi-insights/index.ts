@@ -79,12 +79,12 @@ Tu tarea es producir un resumen ejecutivo en español, en formato Markdown, con 
 **Posicionamiento** (si hay folderContext: cómo se compara con la mediana del grupo)
 **Recomendación** (1-2 bullets accionables: oportunidad, riesgo, próxima acción)
 
-Reglas:
-- Sé concreto, usa cifras formateadas (CLP con separadores de miles).
-- No inventes datos. Si un campo es null, omítelo.
-- Máximo 200 palabras totales.
-- No incluyas títulos H1.
-- Si no hay datos suficientes, di "Datos insuficientes para análisis completo" y entrega lo que tengas.`;
+Reglas CRÍTICAS:
+- NUNCA inventes meses, años ni cifras. Usa EXACTAMENTE el campo "periodLabel" tal como aparece en el JSON (p. ej. "abril 2026"). PROHIBIDO traducir, reescribir o inferir el mes desde otros campos.
+- El "último mes" SIEMPRE es \`aggregates[i].latest.periodLabel\`. No menciones ningún mes posterior a ese, aunque hoy sea otra fecha. Los datos pueden tener rezago.
+- Usa cifras formateadas (CLP con separadores de miles).
+- Si un campo es null, omítelo. Si no hay datos suficientes, di "Datos insuficientes para análisis completo".
+- Máximo 200 palabras totales. No incluyas títulos H1.`;
 
     const userPrompt = `Datos del local:\n\n${JSON.stringify(payload, null, 2)}`;
 
