@@ -60,7 +60,13 @@ type Mode = "none" | "isochrone" | "microzone";
 
 const Index = () => {
   const [mode, setMode] = useState<Mode>("none");
-  const [basemap, setBasemap] = useState<"dark" | "light" | "satellite" | "hybrid">("hybrid");
+  const [basemap, setBasemap] = useState<"dark" | "light" | "satellite" | "hybrid">(() => {
+    try {
+      const saved = localStorage.getItem("map_base_default_v1");
+      if (saved === "dark" || saved === "light" || saved === "satellite" || saved === "hybrid") return saved;
+    } catch { /* ignore */ }
+    return "hybrid";
+  });
   const [panelOpen, setPanelOpen] = useState(false);
   // Si el usuario cierra el panel, no se reabre solo al crear/seleccionar isócronas.
   const [panelHiddenByUser, setPanelHiddenByUser] = useState(false);
