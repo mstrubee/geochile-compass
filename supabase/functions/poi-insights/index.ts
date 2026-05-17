@@ -71,9 +71,14 @@ const enforceAvailablePeriods = (summary: string, payload: PoiSummaryPayload): s
   const latestLabel = payload.salesContext?.latestRegisteredPeriodLabel
     ?? payload.aggregates?.find((a) => a.latest?.period === latest)?.latest?.periodLabel
     ?? latestPeriod;
+  const aggregatePeriods = payload.aggregates?.flatMap((a) =>
+    [a.latest?.period, a.bestMonth?.period, a.worstMonth?.period]
+      .filter((p): p is string => Boolean(p))
+      .map(normalizePeriod),
+  ) ?? [];
   const allowed = new Set([
     ...(payload.salesContext?.availablePeriods ?? []).map(normalizePeriod),
-    ...payload.aggregates?.flatMap((a) => [a.latest?.period, a.bestMonth?.period, a.worstMonth?.period].filter(Boolean).map(normalizePeriod)),
+    ...aggregatePeriods,
   ]);
 
   let changed = false;
@@ -121,6 +126,9 @@ serve(async (req) => {
     if (!Array.isArray(payload.aggregates)) {
       payload.aggregates = [];
     }
+    const latestAvailableLabel = payload.salesContext?.latestRegisteredPeriodLabel
+      ?? payload.aggregates.map((a) => a.latest?.periodLabel).filter(Boolean).at(-1)
+      ?? "no informado";
 
     const systemPrompt = `Eres un analista comercial experto en retail chileno.
 Recibes datos de un local: identidad y métricas históricas (ventas mensuales y similares).
@@ -133,8 +141,10 @@ Tu tarea es producir un resumen ejecutivo en español, en formato Markdown, con 
 **Recomendación** (1-2 bullets accionables: oportunidad, riesgo, próxima acción)
 
 Reglas CRÍTICAS:
-- NUNCA inventes meses, años ni cifras. Usa EXACTAMENTE el campo "periodLabel" tal como aparece en el JSON (p. ej. "abril 2026"). PROHIBIDO traducir, reescribir o inferir el mes desde otros campos.
-- El "último mes" SIEMPRE es \`aggregates[i].latest.periodLabel\`. No menciones ningún mes posterior a ese, aunque hoy sea otra fecha. Los datos pueden tener rezago.
+- El último mes registrado de ventas es: ${latestAvailableLabel}. Ese límite viene desde salesContext.latestRegisteredPeriodLabel.
+- NUNCA inventes meses, años ni cifras. Usa EXACTAMENTE los campos "periodLabel" / "latestRegisteredPeriodLabel" tal como aparecen en el JSON.
+- El "último mes" SIEMPRE es \`salesContext.latestRegisteredPeriodLabel\` si existe; si no, \`aggregates[i].latest.periodLabel\`. No menciones ningún mes posterior a ese, aunque target_year sea posterior o hoy sea otra fecha. Los datos pueden tener rezago.
+- target_year describe el año objetivo del modelo; NO significa que existan ventas hasta diciembre ni hasta el mes actual.
 - Usa cifras formateadas (CLP con separadores de miles).
 - Si un campo es null, omítelo. Si no hay datos suficientes, di "Datos insuficientes para análisis completo".
 - Máximo 200 palabras totales. No incluyas títulos H1.`;
@@ -145,7 +155,7 @@ Reglas CRÍTICAS:
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Lovable-API-Key": LOVABLE_API_KEY,
       },
       body: JSON.stringify({
         model: MODEL,
@@ -176,8 +186,9 @@ Reglas CRÍTICAS:
     }
 
     const data = await aiRes.json();
-    const summary: string =
+    const rawSummary: string =
       data?.choices?.[0]?.message?.content ?? "No se pudo generar el resumen.";
+    const summary = enforceAvailablePeriods(rawSummary, payload);
 
     return new Response(JSON.stringify({ summary }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
