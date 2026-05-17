@@ -1011,7 +1011,7 @@ export const Sidebar = ({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       try {
-        window.localStorage.setItem("sidebar.width", String(sidebarWidth));
+        window.localStorage.setItem(SIDEBAR_W_KEY, String(sidebarWidth));
       } catch {
         /* ignore */
       }
