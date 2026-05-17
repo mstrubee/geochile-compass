@@ -514,9 +514,10 @@ const SavedIsochronesSubsection = ({
           />
           <button
             onClick={handleCreateRoot}
-            className="rounded bg-primary px-2 py-1 text-[11px] text-primary-foreground hover:opacity-90"
+            disabled={creatingBusy || !newFolderName.trim()}
+            className="rounded bg-primary px-2 py-1 text-[11px] text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Crear
+            {creatingBusy ? "Creando…" : "Crear"}
           </button>
         </div>
       )}
