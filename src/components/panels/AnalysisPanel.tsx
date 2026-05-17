@@ -93,6 +93,29 @@ const exportCsv = (a: IsochroneAnalysis) => {
   URL.revokeObjectURL(url);
 };
 
+type SectionKey =
+  | "isocronas"
+  | "comparativo"
+  | "resumen_ia"
+  | "gse"
+  | "nse"
+  | "capas"
+  | "parque"
+  | "comunas"
+  | "exportar";
+
+const DEFAULT_SECTION_OPEN: Record<SectionKey, boolean> = {
+  isocronas: true,
+  gse: true,
+  nse: true,
+  comparativo: false,
+  resumen_ia: false,
+  capas: false,
+  parque: false,
+  comunas: false,
+  exportar: false,
+};
+
 export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: AnalysisPanelProps) => {
   const minutesAvailable = useMemo(
     () => (isochrone ? [...isochrone.minutes].sort((a, b) => a - b) : []),
@@ -104,6 +127,14 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
 
   const analysis = useIsochroneAnalysis({ isochrone, bandSeconds, manzanas });
   const insights = useIsochroneInsights(analysis, open);
+
+  // Estado de secciones colapsadas/expandidas. Se resetea cuando cambia la isócrona.
+  const [sectionOpen, setSectionOpen] = useState<Record<SectionKey, boolean>>(DEFAULT_SECTION_OPEN);
+  useEffect(() => {
+    setSectionOpen(DEFAULT_SECTION_OPEN);
+  }, [isochrone?.id]);
+  const toggleSection = (k: SectionKey) =>
+    setSectionOpen((s) => ({ ...s, [k]: !s[k] }));
 
   const nseDist = useMemo(() => {
     if (!analysis) return [] as { label: string; pct: number; color: string }[];
