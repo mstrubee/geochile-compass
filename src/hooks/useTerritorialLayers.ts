@@ -155,7 +155,22 @@ export const useTerritorialFeatures = (layerIds: string[]) => {
 
     (async () => {
       try {
-        const lists = await Promise.all(layerIds.map((id) => getLayerFeatures(id)));
+        // Concurrencia limitada entre capas: evita iniciar la carga de todas
+        // las capas visibles a la vez (cada una abre múltiples requests).
+        const LAYER_CONCURRENCY = 2;
+        const lists: TerritorialFeature[][] = new Array(layerIds.length);
+        let i = 0;
+        const worker = async () => {
+          while (true) {
+            const idx = i++;
+            if (idx >= layerIds.length) return;
+            lists[idx] = await getLayerFeatures(layerIds[idx]);
+            if (cancel) return;
+          }
+        };
+        await Promise.all(
+          Array.from({ length: Math.min(LAYER_CONCURRENCY, layerIds.length) }, () => worker()),
+        );
         if (cancel) return;
         setFeatures(lists.flat());
       } catch (e) {
