@@ -145,11 +145,27 @@ const mentionsInvalidMonths = (summary: string, ctx: SalesContext): boolean => {
   const latest = normalizePeriod(ctx.latestRegisteredPeriod!);
   const latestYear = parseInt(latest.slice(0, 4), 10);
 
+  console.log("[poi-insights] DEBUG mentionsInvalidMonths", {
+    latest: ctx.latestRegisteredPeriod,
+    allowed_sample: [...ctx.availablePeriods].slice(-5),
+    summary_first_500: summary.slice(0, 500),
+  });
+  console.log("[poi-insights] DEBUG monthMention regex:", monthMention.source);
+
   // 1) "mes año" fuera del rango permitido.
   for (const match of summary.matchAll(monthMention)) {
     const month = match[1].toLowerCase();
     const year = match[2];
     const period = `${year}-${MONTHS_ES_TO_NUM[month]}-01`;
+    console.log("[poi-insights] DEBUG month found", {
+      fullMatch: match[0],
+      month,
+      year,
+      mappedNumber: MONTHS_ES_TO_NUM[month],
+      computedPeriod: period,
+      greaterThanLatest: period > latest,
+      inAllowed: allowed.has(period),
+    });
     if (period > latest || !allowed.has(period)) {
       console.warn(`[poi-insights] invalid month mention: ${match[0]}`);
       return true;
