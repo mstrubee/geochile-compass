@@ -80,6 +80,21 @@ const Index = () => {
   useEffect(() => {
     try { localStorage.setItem("analysis_panel_state_v1", panelOpen ? "open" : "closed"); } catch { /* ignore */ }
   }, [panelOpen]);
+  // Ancho del panel de análisis (resizable por arrastre)
+  const PANEL_MIN_W = 320;
+  const PANEL_MAX_W = 800;
+  const [panelWidth, setPanelWidth] = useState<number>(() => {
+    try {
+      const v = Number(localStorage.getItem("analysis_panel_width_v1"));
+      if (Number.isFinite(v) && v >= PANEL_MIN_W && v <= PANEL_MAX_W) return v;
+    } catch { /* ignore */ }
+    return 480;
+  });
+  const handlePanelWidthChange = useCallback((w: number) => {
+    const clamped = Math.min(PANEL_MAX_W, Math.max(PANEL_MIN_W, Math.round(w)));
+    setPanelWidth(clamped);
+    try { localStorage.setItem("analysis_panel_width_v1", String(clamped)); } catch { /* ignore */ }
+  }, []);
   const autoOpenPanel = useCallback(() => {
     if (!panelHiddenByUser) setPanelOpen(true);
   }, [panelHiddenByUser]);
