@@ -120,22 +120,47 @@ const buildSafeSummary = (payload: PoiSummaryPayload, ctx: SalesContext | null):
   ].join("\n");
 };
 
-/** Devuelve true si el texto menciona meses que no están en availablePeriods. */
+/** Palabras predictivas/futuras prohibidas (variantes con/sin acento). */
+const FUTURE_WORDS_RE =
+  /\b(pr[oó]xim[oa]s?|futur[oa]s?|proyecci[oó]n|proyectad[oa]s?|proyectar[ae]?|estimaci[oó]n|estimad[oa]s?|se\s+espera|se\s+proyecta|se\s+estima|pron[oó]stico|forecast|outlook|trimestre\s+entrante|a[ñn]o\s+entrante|venideros?)\b/i;
+
+/**
+ * Devuelve true si el resumen menciona meses, años o lenguaje predictivo
+ * posterior al último mes con ventas registradas.
+ */
 const mentionsInvalidMonths = (summary: string, ctx: SalesContext): boolean => {
   const allowed = new Set(ctx.availablePeriods.map(normalizePeriod));
   if (allowed.size === 0) return false;
   const latest = normalizePeriod(ctx.latestRegisteredPeriod!);
-  let invalid = false;
+  const latestYear = parseInt(latest.slice(0, 4), 10);
+
+  // 1) "mes año" fuera del rango permitido.
   for (const match of summary.matchAll(monthMention)) {
     const month = match[1].toLowerCase();
     const year = match[2];
     const period = `${year}-${MONTHS_ES_TO_NUM[month]}-01`;
     if (period > latest || !allowed.has(period)) {
-      invalid = true;
-      break;
+      console.warn(`[poi-insights] invalid month mention: ${match[0]}`);
+      return true;
     }
   }
-  return invalid;
+
+  // 2) Cualquier año de 4 dígitos > año del último período.
+  for (const m of summary.matchAll(/\b(20\d{2})\b/g)) {
+    const y = parseInt(m[1], 10);
+    if (y > latestYear) {
+      console.warn(`[poi-insights] future year mention: ${m[1]}`);
+      return true;
+    }
+  }
+
+  // 3) Lenguaje predictivo/futuro.
+  if (FUTURE_WORDS_RE.test(summary)) {
+    console.warn("[poi-insights] predictive language detected");
+    return true;
+  }
+
+  return false;
 };
 
 serve(async (req) => {
@@ -176,21 +201,39 @@ serve(async (req) => {
       .map((p) => formatPeriodEs(p))
       .join(", ");
 
+    const latestYear = parseInt(ctx.latestRegisteredPeriod!.slice(0, 4), 10);
     const systemPrompt = `Eres un analista comercial experto en retail chileno. Produces un resumen ejecutivo en español, en Markdown, con secciones:
 
 **Perfil del local** (1-2 frases con nombre, dirección, comuna, centro SAP/zona si aplica)
 **Desempeño reciente** (último mes registrado + comparación MoM y YoY SOLO si las cifras están en los datos)
 **Tendencia histórica** (TTM, mejor/peor mes histórico)
 **Posicionamiento** (si hay folderContext)
-**Recomendación** (1-2 bullets accionables)
+**Recomendación** (1-2 bullets accionables, observacionales, sobre datos pasados; nunca proyecciones a futuro)
 
 Reglas CRÍTICAS, sin excepción:
-- El ÚLTIMO mes registrado de ventas es: ${latestLabel}. Nunca menciones meses posteriores.
+- El ÚLTIMO mes registrado de ventas es: ${latestLabel}. NUNCA menciones meses posteriores.
 - Los ÚNICOS meses que puedes nombrar son: ${allowedList}.
-- Ignora cualquier referencia a "target_year", año actual, año cerrado o meses no listados arriba.
+- NUNCA menciones años posteriores a ${latestYear}. Ningún "20${latestYear + 1 - 2000}" o posterior.
+- PROHIBIDO usar lenguaje predictivo o de proyección: "próximo", "próximos", "futuro", "proyección", "proyectado", "estimación", "se espera", "se proyecta", "pronóstico", "trimestre entrante", "año entrante", "venidero".
+- Ignora cualquier referencia a año actual, año cerrado, target_year o meses no listados arriba.
 - Usa cifras EXACTAS del JSON. No inventes números ni proyecciones.
 - Formato CLP con separador de miles (ej: $108.469.704).
 - Si un campo es null, omítelo. Máximo 200 palabras. Sin H1.`;
+
+    const userPrompt = `Datos del local:\n\n${JSON.stringify(payload, null, 2)}`;
+
+    let data: any;
+    try {
+      const result = await callGeminiWithRotation({
+        model: MODEL,
+        admin,
+        fallbackEnvKey: FALLBACK_KEY,
+        body: {
+          systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 800 },
+        },
+      });
 
     const userPrompt = `Datos del local:\n\n${JSON.stringify(payload, null, 2)}`;
 
