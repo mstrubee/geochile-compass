@@ -2429,6 +2429,24 @@ export const Sidebar = ({
               </button>
             ))}
           </div>
+          <div className="mt-1.5 flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  localStorage.setItem("map_base_default_v1", basemap);
+                  const label = basemap === "dark" ? "Oscuro" : basemap === "light" ? "Claro" : basemap === "satellite" ? "Satélite" : "Híbrido";
+                  toast.success(`Mapa base '${label}' guardado como default`);
+                } catch {
+                  toast.error("No se pudo guardar");
+                }
+              }}
+              className="text-[10px] text-primary hover:underline"
+              title="Guardar el mapa base actual como default"
+            >
+              Guardar por defecto
+            </button>
+          </div>
         </SidebarSection>
       </div>
       {/* Handle de arrastre para redimensionar */}
