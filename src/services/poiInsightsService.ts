@@ -3,6 +3,19 @@ import type { SavedPoi } from "@/types/pois";
 import type { PoiAttribute } from "@/types/poiMetrics";
 import type { MetricAggregate } from "@/utils/poiMetricsAggregate";
 
+const MESES_ES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/** "2026-04-01" → "abril 2026". Si no parsea, devuelve el string crudo. */
+const formatPeriodEs = (period: string): string => {
+  const [y, m] = period.split("-");
+  const idx = parseInt(m, 10) - 1;
+  if (!MESES_ES[idx] || !y) return period;
+  return `${MESES_ES[idx]} ${y}`;
+};
+
 /**
  * Llama a la edge function `poi-insights` para generar un resumen ejecutivo.
  * Devuelve markdown listo para renderizar.
@@ -35,17 +48,27 @@ export const fetchPoiInsights = async ({
       zona: attrMap["Zona"],
       ...attrMap,
     },
-    aggregates: aggregates.map((a) => ({
-      metricKey: a.metricKey,
-      format: a.format,
-      totalAllTime: Math.round(a.totalAllTime),
-      latest: a.latest ? { period: a.latest.period, value: Math.round(a.latest.value) } : null,
-      yoy: a.yoy != null ? Math.round(a.yoy * 10) / 10 : null,
-      mom: a.mom != null ? Math.round(a.mom * 10) / 10 : null,
-      trailing12Sum: Math.round(a.trailing12Sum),
-      bestMonth: a.bestMonth ? { period: a.bestMonth.period, value: Math.round(a.bestMonth.value) } : null,
-      worstMonth: a.worstMonth ? { period: a.worstMonth.period, value: Math.round(a.worstMonth.value) } : null,
-    })),
+    aggregates: aggregates.map((a) => {
+      const fmt = (p: { period: string; value: number } | null) =>
+        p ? { period: p.period, periodLabel: formatPeriodEs(p.period), value: Math.round(p.value) } : null;
+      const tail = a.series.slice(-6).map((p) => ({
+        period: p.period,
+        periodLabel: formatPeriodEs(p.period),
+        value: Math.round(p.value),
+      }));
+      return {
+        metricKey: a.metricKey,
+        format: a.format,
+        totalAllTime: Math.round(a.totalAllTime),
+        latest: fmt(a.latest),
+        yoy: a.yoy != null ? Math.round(a.yoy * 10) / 10 : null,
+        mom: a.mom != null ? Math.round(a.mom * 10) / 10 : null,
+        trailing12Sum: Math.round(a.trailing12Sum),
+        bestMonth: fmt(a.bestMonth),
+        worstMonth: fmt(a.worstMonth),
+        recentSeries: tail,
+      };
+    }),
     folderContext,
   };
 
