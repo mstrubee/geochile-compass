@@ -84,42 +84,46 @@ export const Header = ({ mode, onToggleIsochrone, onToggleMicrozone }: HeaderPro
 
       {isAdmin && (
         <DropdownMenu>
-          <DropdownMenuTrigger className="flex items-center gap-1 whitespace-nowrap rounded-full border border-border/60 bg-surface-2/60 px-3 py-1 text-[12px] font-medium text-foreground transition-colors hover:bg-surface-3">
-            <KeyRound className="h-3 w-3" /> Obtener más API Keys
+          <DropdownMenuTrigger className="flex items-center gap-1 whitespace-nowrap rounded-full border border-brand-purple/40 bg-brand-purple/10 px-3 py-1 text-[12px] font-medium text-brand-purple transition-colors hover:bg-brand-purple/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple/40">
+            <Shield className="h-3 w-3" /> Admin
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72">
-            <DropdownMenuLabel>Generar nuevas Gemini API Keys</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {links.length === 0 && (
-              <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-                Sin enlaces configurados
-              </DropdownMenuItem>
-            )}
-            {links.map((l) => (
-              <DropdownMenuItem key={l.id} asChild>
-                <a href={l.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between gap-2">
-                  <span className="truncate">{l.label}</span>
-                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                </a>
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
+          <DropdownMenuContent align="end" className="z-[1100] w-72">
+            <DropdownMenuLabel>Paneles de administración</DropdownMenuLabel>
             <DropdownMenuItem asChild>
-              <Link to="/admin/gemini-keys" className="flex items-center gap-2">
-                <Shield className="h-3 w-3" /> Gestionar keys y enlaces
+              <Link to="/admin/capas" className="flex items-center gap-2">
+                <Shield className="h-3 w-3" /> Capas territoriales
               </Link>
             </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/admin/gemini-keys" className="flex items-center gap-2">
+                <KeyRound className="h-3 w-3" /> Gemini API Keys
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="flex items-center gap-1.5">
+              <KeyRound className="h-3 w-3" /> Obtener más API Keys
+            </DropdownMenuLabel>
+            {links.length === 0 ? (
+              <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                Sin enlaces configurados — agregar en Gemini API Keys
+              </DropdownMenuItem>
+            ) : (
+              links.map((l) => (
+                <DropdownMenuItem key={l.id} asChild>
+                  <a
+                    href={l.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span className="truncate">{l.label}</span>
+                    <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                  </a>
+                </DropdownMenuItem>
+              ))
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
-      )}
-
-      {isAdmin && (
-        <Link
-          to="/admin/capas"
-          className="flex items-center gap-1 whitespace-nowrap rounded-full border border-brand-purple/40 bg-brand-purple/10 px-3 py-1 text-[12px] font-medium text-brand-purple transition-colors hover:bg-brand-purple/20"
-        >
-          <Shield className="h-3 w-3" /> Admin
-        </Link>
       )}
 
       {user ? (
