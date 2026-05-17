@@ -570,42 +570,37 @@ const ParqueAnalysisSection = ({
           </div>
         ) : (
           <>
-            <div className="mb-3 grid grid-cols-3 gap-2">
-              <Metric value={`~${fmt(stats.vehiculos)}`} label="Vehículos" />
-              <Metric value={`${stats.edad_media.toFixed(1)}`} label="Edad media (años)" />
-              <Metric
-                value={`${stats.edad_p25.toFixed(0)}/${stats.edad_p75.toFixed(0)}`}
+            <div className="mb-3 space-y-1">
+              <KV label="Vehículos" value={`~${fmt(stats.vehiculos)} (±5%)`} />
+              <KV label="Edad media" value={`${stats.edad_media.toFixed(1)} años`} />
+              <KV
                 label="P25 / P75"
+                value={`${stats.edad_p25.toFixed(0)} / ${stats.edad_p75.toFixed(0)} años`}
               />
             </div>
             <div className="mb-1 text-[11px] font-medium text-muted-foreground">
               Ranking marcas
             </div>
             <div className="overflow-hidden rounded-lg border border-border/30">
-              <div className="grid grid-cols-[22px_1fr_60px_46px] bg-surface-3/40 text-[10px] font-medium text-muted-foreground">
-                <div className="px-2 py-1.5">#</div>
-                <div className="px-2 py-1.5">Marca</div>
-                <div className="px-2 py-1.5 text-right">Veh.</div>
-                <div className="px-2 py-1.5 text-right">%</div>
-              </div>
-              {stats.ranking_marcas.map((m, i) => (
+              {stats.ranking_marcas.slice(0, 10).map((m, i) => (
                 <div
                   key={m.marca}
-                  className="grid grid-cols-[22px_1fr_60px_46px] border-t border-border/30 text-[11px]"
+                  className="grid grid-cols-[22px_1fr_70px_56px] border-t border-border/30 text-[11px] first:border-t-0"
                 >
-                  <div className="px-2 py-1.5 font-mono text-muted-foreground">{i + 1}</div>
+                  <div className="px-2 py-1.5 font-mono text-muted-foreground">{i + 1}.</div>
                   <div className="truncate px-2 py-1.5 text-foreground">{m.marca}</div>
                   <div className="px-2 py-1.5 text-right font-mono text-foreground">{fmt(m.count)}</div>
                   <div className="px-2 py-1.5 text-right font-mono text-muted-foreground">
-                    {m.pct.toFixed(1)}%
+                    ({m.pct.toFixed(1)}%)
                   </div>
                 </div>
               ))}
             </div>
             <div className="mt-2 text-[10px] text-muted-foreground">
-              Estimación ponderada por hexágonos (~500 m). Margen ±5%.
+              Estimación ponderada por hexágonos (~500 m) sobre la isócrona de {(((isoFeature?.properties as { value?: number } | null)?.value ?? 0) / 60) || "?"} min.
             </div>
           </>
+
         )}
       </div>
     </Section>
