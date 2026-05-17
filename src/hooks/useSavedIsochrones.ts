@@ -147,8 +147,14 @@ export const useSavedIsochrones = () => {
         .select()
         .single();
       if (error) throw new Error(error.message);
-      await refresh();
-      return data ? rowToFolder(data as Row) : null;
+      const created = data ? rowToFolder(data as Row) : null;
+      if (created) {
+        setFolders((prev) =>
+          prev.some((f) => f.id === created.id) ? prev : [...prev, created],
+        );
+      }
+      void refresh();
+      return created;
     },
     [user, refresh],
   );
