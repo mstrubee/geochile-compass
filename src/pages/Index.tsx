@@ -1108,7 +1108,7 @@ const Index = () => {
           }}
           isAuthenticated={!!user}
           isoMode={isoMode}
-          onIsoModeChange={setIsoMode}
+          onIsoModeChange={handleIsoModeChange}
           isoMinutes={isoMinutes}
           onIsoMinutesChange={setIsoMinutes}
           onSaveIsoMinutesDefault={saveIsoMinutesAsDefault}
