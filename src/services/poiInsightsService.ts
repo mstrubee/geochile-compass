@@ -35,17 +35,27 @@ export const fetchPoiInsights = async ({
       zona: attrMap["Zona"],
       ...attrMap,
     },
-    aggregates: aggregates.map((a) => ({
-      metricKey: a.metricKey,
-      format: a.format,
-      totalAllTime: Math.round(a.totalAllTime),
-      latest: a.latest ? { period: a.latest.period, value: Math.round(a.latest.value) } : null,
-      yoy: a.yoy != null ? Math.round(a.yoy * 10) / 10 : null,
-      mom: a.mom != null ? Math.round(a.mom * 10) / 10 : null,
-      trailing12Sum: Math.round(a.trailing12Sum),
-      bestMonth: a.bestMonth ? { period: a.bestMonth.period, value: Math.round(a.bestMonth.value) } : null,
-      worstMonth: a.worstMonth ? { period: a.worstMonth.period, value: Math.round(a.worstMonth.value) } : null,
-    })),
+    aggregates: aggregates.map((a) => {
+      const fmt = (p: { period: string; value: number } | null) =>
+        p ? { period: p.period, periodLabel: formatPeriodEs(p.period), value: Math.round(p.value) } : null;
+      const tail = a.series.slice(-6).map((p) => ({
+        period: p.period,
+        periodLabel: formatPeriodEs(p.period),
+        value: Math.round(p.value),
+      }));
+      return {
+        metricKey: a.metricKey,
+        format: a.format,
+        totalAllTime: Math.round(a.totalAllTime),
+        latest: fmt(a.latest),
+        yoy: a.yoy != null ? Math.round(a.yoy * 10) / 10 : null,
+        mom: a.mom != null ? Math.round(a.mom * 10) / 10 : null,
+        trailing12Sum: Math.round(a.trailing12Sum),
+        bestMonth: fmt(a.bestMonth),
+        worstMonth: fmt(a.worstMonth),
+        recentSeries: tail,
+      };
+    }),
     folderContext,
   };
 
