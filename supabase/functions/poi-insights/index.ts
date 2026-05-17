@@ -10,12 +10,20 @@ interface MetricsAggregate {
   metricKey: string;
   format: string;
   totalAllTime: number;
-  latest: { period: string; value: number } | null;
+  latest: { period: string; periodLabel?: string; value: number } | null;
   yoy: number | null; // % crecimiento últimos 12 vs 12 anteriores
   mom: number | null; // % crecimiento último mes vs mes anterior
   trailing12Sum: number; // ventas TTM
-  bestMonth: { period: string; value: number } | null;
-  worstMonth: { period: string; value: number } | null;
+  bestMonth: { period: string; periodLabel?: string; value: number } | null;
+  worstMonth: { period: string; periodLabel?: string; value: number } | null;
+}
+
+interface SalesContext {
+  metricKey: string;
+  latestRegisteredPeriod: string | null;
+  latestRegisteredPeriodLabel: string | null;
+  availablePeriods: string[];
+  recentSeries: Array<{ period: string; periodLabel: string; value: number }>;
 }
 
 interface PoiSummaryPayload {
@@ -28,6 +36,7 @@ interface PoiSummaryPayload {
     zona?: string;
     [k: string]: unknown;
   };
+  salesContext?: SalesContext;
   aggregates: MetricsAggregate[];
   /** Métricas comparables agregadas a nivel carpeta. */
   folderContext?: {
@@ -37,6 +46,50 @@ interface PoiSummaryPayload {
     topPercentile?: number;
   };
 }
+
+const MONTHS_ES: Record<string, string> = {
+  enero: "01", febrero: "02", marzo: "03", abril: "04", mayo: "05", junio: "06",
+  julio: "07", agosto: "08", septiembre: "09", setiembre: "09", octubre: "10", noviembre: "11", diciembre: "12",
+};
+
+const monthMention = /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(20\d{2})\b/gi;
+
+const normalizePeriod = (period: string) => {
+  const [y, m] = period.split("-");
+  return `${y}-${String(parseInt(m, 10)).padStart(2, "0")}-01`;
+};
+
+const periodFromMention = (month: string, year: string) => `${year}-${MONTHS_ES[month.toLowerCase()]}-01`;
+
+const enforceAvailablePeriods = (summary: string, payload: PoiSummaryPayload): string => {
+  const latest = payload.salesContext?.latestRegisteredPeriod
+    ?? payload.aggregates?.map((a) => a.latest?.period).filter(Boolean).sort().at(-1)
+    ?? null;
+  if (!latest) return summary;
+
+  const latestPeriod = normalizePeriod(latest);
+  const latestLabel = payload.salesContext?.latestRegisteredPeriodLabel
+    ?? payload.aggregates?.find((a) => a.latest?.period === latest)?.latest?.periodLabel
+    ?? latestPeriod;
+  const allowed = new Set([
+    ...(payload.salesContext?.availablePeriods ?? []).map(normalizePeriod),
+    ...payload.aggregates?.flatMap((a) => [a.latest?.period, a.bestMonth?.period, a.worstMonth?.period].filter(Boolean).map(normalizePeriod)),
+  ]);
+
+  let changed = false;
+  const corrected = summary.replace(monthMention, (match, month: string, year: string) => {
+    const mentionedPeriod = periodFromMention(month, year);
+    if (mentionedPeriod > latestPeriod || (allowed.size > 0 && !allowed.has(mentionedPeriod))) {
+      changed = true;
+      return latestLabel;
+    }
+    return match;
+  });
+
+  return changed
+    ? `${corrected}\n\n> Nota de validación: el último mes registrado en la base es ${latestLabel}; se corrigieron referencias fuera del rango disponible.`
+    : corrected;
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
