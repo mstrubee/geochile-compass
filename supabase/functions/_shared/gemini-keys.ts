@@ -229,7 +229,7 @@ export const callGeminiWithRotation = async ({
 /** Helper for the test-key edge function: try a single key, no DB updates. */
 export const testGeminiKey = async (
   apiKey: string,
-  model = "gemini-2.0-flash",
+  model = "gemini-2.5-flash",
 ): Promise<{ ok: boolean; status: number; reason?: GeminiErrorReason; message?: string; latencyMs: number }> => {
   const start = Date.now();
   try {

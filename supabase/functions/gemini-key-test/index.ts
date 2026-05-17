@@ -68,7 +68,7 @@ serve(async (req) => {
       });
     }
 
-    const result = await testGeminiKey(apiKey, model ?? "gemini-2.0-flash");
+    const result = await testGeminiKey(apiKey, model ?? "gemini-2.5-flash");
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
