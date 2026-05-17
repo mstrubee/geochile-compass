@@ -1342,12 +1342,21 @@ const Index = () => {
             </div>
           )}
 
+          {/* Pestaña vertical pegada al panel de análisis */}
           <button
-            onClick={userOpenPanel}
-            aria-label="Abrir panel de análisis"
-            className="absolute bottom-14 right-4 z-[500] flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-apple-lg transition-transform hover:scale-105 active:scale-95"
+            onClick={() => (panelOpen ? userClosePanel() : userOpenPanel())}
+            aria-label={panelOpen ? "Cerrar panel de análisis" : "Abrir panel de análisis"}
+            style={{ right: panelOpen ? 380 : 0 }}
+            className="absolute top-1/2 z-[700] flex h-28 w-8 -translate-y-1/2 items-center justify-center rounded-l-lg border border-r-0 border-border/60 bg-surface/90 text-foreground shadow-apple-lg backdrop-blur-xl transition-[right] duration-300 hover:bg-surface-2"
           >
-            <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M13 6l6 6-6 6"/></svg>
+            <span className="flex flex-col items-center gap-1.5">
+              <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                {panelOpen ? <path d="M9 6l6 6-6 6"/> : <path d="M15 6l-6 6 6 6"/>}
+              </svg>
+              <span className="text-[10px] font-medium tracking-wider uppercase [writing-mode:vertical-rl] rotate-180">
+                Análisis
+              </span>
+            </span>
           </button>
 
           <AnalysisPanel
