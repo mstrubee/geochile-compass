@@ -524,7 +524,7 @@ const Section = ({
   title: string;
   open: boolean;
   onToggle: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) => (
   <div className="mb-3">
     <button
