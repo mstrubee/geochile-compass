@@ -69,6 +69,17 @@ const fmtPeriod = (period: string): string => {
   return `${months[parseInt(m, 10) - 1] ?? m} ${y}`;
 };
 
+const fmtPeriodLongEs = (period: string): string => {
+  const [y, m] = period.split("-");
+  const months = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  return `${months[parseInt(m, 10) - 1] ?? m} ${y}`;
+};
+
+const normalizePeriod = (period: string): string => {
+  const [y, m] = period.split("-");
+  return `${y}-${String(parseInt(m, 10)).padStart(2, "0")}-01`;
+};
+
 export const PoiAnalysisPanel = ({ poi, chainPois, isAdmin, onRecompute, recomputing = false }: Props) => {
   const { perf, loading, reload } = usePoiPerformance(poi.id);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -95,8 +106,33 @@ export const PoiAnalysisPanel = ({ poi, chainPois, isAdmin, onRecompute, recompu
     setAiLoading(true);
     setAiError(null);
     try {
+      const { data: salesRows, error: salesError } = await supabase
+        .from("poi_metrics")
+        .select("period,value")
+        .eq("poi_id", poi.id)
+        .eq("metric_key", "ventas")
+        .order("period", { ascending: true });
+      if (salesError) throw salesError;
+
+      const salesSeries = (salesRows ?? [])
+        .map((r) => ({
+          period: normalizePeriod(String(r.period)),
+          periodLabel: fmtPeriodLongEs(String(r.period)),
+          value: Math.round(Number(r.value ?? 0)),
+        }))
+        .filter((p) => Number.isFinite(p.value))
+        .sort((a, b) => a.period.localeCompare(b.period));
+      const latestSales = salesSeries[salesSeries.length - 1] ?? null;
+
       const payload = {
         poi: { id: poi.id, name: poi.name, lat: poi.lat, lng: poi.lng },
+        salesContext: {
+          metricKey: "ventas",
+          latestRegisteredPeriod: latestSales?.period ?? null,
+          latestRegisteredPeriodLabel: latestSales?.periodLabel ?? null,
+          availablePeriods: salesSeries.map((p) => p.period),
+          recentSeries: salesSeries.slice(-12),
+        },
         analysis: {
           target_year: perf.target_year,
           actual_monthly_uf: perf.actual_monthly_uf,
