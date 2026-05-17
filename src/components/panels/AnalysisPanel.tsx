@@ -13,6 +13,10 @@ interface AnalysisPanelProps {
   onClose: () => void;
   isochrone: Isochrone | null;
   manzanas?: ManzanaFeatureCollection | null;
+  width?: number;
+  onWidthChange?: (w: number) => void;
+  minWidth?: number;
+  maxWidth?: number;
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
