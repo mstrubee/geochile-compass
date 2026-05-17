@@ -521,6 +521,15 @@ const AdminCapas = () => {
         >
           <ParqueInjectButton />
         </AdminCollapsible>
+
+        <AdminCollapsible
+          id="gemini-keys"
+          title="Gemini API Keys"
+          icon={<KeyRound className="h-4 w-4" />}
+          description="Administrá las API Keys de Gemini con fallback automático y enlaces para obtener nuevas."
+        >
+          <GeminiKeysAdminSection />
+        </AdminCollapsible>
       </main>
 
       <UploadDialog
