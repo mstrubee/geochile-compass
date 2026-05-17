@@ -67,9 +67,19 @@ const Index = () => {
     } catch { /* ignore */ }
     return "hybrid";
   });
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("analysis_panel_state_v1");
+      if (saved === "open") return true;
+      if (saved === "closed") return false;
+    } catch { /* ignore */ }
+    return false;
+  });
   // Si el usuario cierra el panel, no se reabre solo al crear/seleccionar isócronas.
   const [panelHiddenByUser, setPanelHiddenByUser] = useState(false);
+  useEffect(() => {
+    try { localStorage.setItem("analysis_panel_state_v1", panelOpen ? "open" : "closed"); } catch { /* ignore */ }
+  }, [panelOpen]);
   const autoOpenPanel = useCallback(() => {
     if (!panelHiddenByUser) setPanelOpen(true);
   }, [panelHiddenByUser]);
