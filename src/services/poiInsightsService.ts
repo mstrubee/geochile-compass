@@ -38,6 +38,25 @@ export const fetchPoiInsights = async ({
   const attrMap: Record<string, string> = {};
   for (const a of attrs) if (a.attr_value) attrMap[a.attr_key] = a.attr_value;
 
+  const ventas = aggregates.find((a) => a.metricKey === "ventas") ?? aggregates[0];
+  const salesSeries = ventas
+    ? ventas.series.map((p) => ({
+        period: p.period,
+        periodLabel: formatPeriodEs(p.period),
+        value: Math.round(p.value),
+      }))
+    : [];
+  const latestSale = salesSeries[salesSeries.length - 1] ?? null;
+  const salesContext = ventas && latestSale
+    ? {
+        metricKey: ventas.metricKey,
+        latestRegisteredPeriod: latestSale.period,
+        latestRegisteredPeriodLabel: latestSale.periodLabel,
+        availablePeriods: salesSeries.map((p) => p.period),
+        recentSeries: salesSeries.slice(-12),
+      }
+    : undefined;
+
   const payload = {
     poi: {
       name: poi.name,
@@ -69,6 +88,7 @@ export const fetchPoiInsights = async ({
         recentSeries: tail,
       };
     }),
+    salesContext,
     folderContext,
   };
 
