@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon } from "lucide-react";
+import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound } from "lucide-react";
+import { GeminiKeysAdminSection } from "@/components/admin/GeminiKeysAdminSection";
 import { htmlToGeoJson, downloadGeoJson } from "@/utils/htmlToGeoJson";
 import { parseFile, splitByFolderPath } from "@/utils/fileParsers";
 import { UsersAdminSection } from "@/components/admin/UsersAdminSection";
