@@ -515,22 +515,51 @@ const KV = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
+const Section = ({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) => (
+  <div className="mb-3">
+    <button
+      type="button"
+      onClick={onToggle}
+      className="mb-2 flex w-full items-center gap-1.5 px-1 py-1 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+    >
+      {open ? (
+        <ChevronDown className="h-3 w-3 flex-shrink-0" />
+      ) : (
+        <ChevronRight className="h-3 w-3 flex-shrink-0" />
+      )}
+      <span className="truncate">{title}</span>
+    </button>
+    {open && <div>{children}</div>}
+  </div>
+);
+
 const ParqueAnalysisSection = ({
   isoFeature,
+  open,
+  onToggle,
 }: {
   isoFeature: import("geojson").Feature<
     import("geojson").Polygon | import("geojson").MultiPolygon,
     unknown
   > | null;
+  open: boolean;
+  onToggle: () => void;
 }) => {
   const { stats, loading, enabled } = useParqueIsochroneStats(isoFeature);
   if (!enabled) return null;
   return (
-    <>
-      <div className="mb-2 px-1 text-[11px] font-medium text-muted-foreground">
-        Parque automotor
-      </div>
-      <div className="mb-3 rounded-xl bg-surface-2/60 p-3">
+    <Section title="Parque vehicular" open={open} onToggle={onToggle}>
+      <div className="rounded-xl bg-surface-2/60 p-3">
         {loading ? (
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" /> Calculando…
@@ -579,6 +608,6 @@ const ParqueAnalysisSection = ({
           </>
         )}
       </div>
-    </>
+    </Section>
   );
 };
