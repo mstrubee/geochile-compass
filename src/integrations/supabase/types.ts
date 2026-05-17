@@ -188,6 +188,42 @@ export type Database = {
         }
         Relationships: []
       }
+      _territorial_features_reasignacion_backup_20260517: {
+        Row: {
+          created_at: string | null
+          external_id: string | null
+          geometry: Json | null
+          id: string | null
+          lat: number | null
+          layer_id: string | null
+          lng: number | null
+          name: string | null
+          properties: Json | null
+        }
+        Insert: {
+          created_at?: string | null
+          external_id?: string | null
+          geometry?: Json | null
+          id?: string | null
+          lat?: number | null
+          layer_id?: string | null
+          lng?: number | null
+          name?: string | null
+          properties?: Json | null
+        }
+        Update: {
+          created_at?: string | null
+          external_id?: string | null
+          geometry?: Json | null
+          id?: string | null
+          lat?: number | null
+          layer_id?: string | null
+          lng?: number | null
+          name?: string | null
+          properties?: Json | null
+        }
+        Relationships: []
+      }
       analysis_settings: {
         Row: {
           config_version: number
