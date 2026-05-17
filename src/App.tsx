@@ -9,6 +9,7 @@ import Auth from "./pages/Auth.tsx";
 import MapaComunasPage from "./pages/MapaComunasPage.tsx";
 import AdminCapas from "./pages/AdminCapas.tsx";
 import EvaluationDimensionsAdmin from "@/components/admin/EvaluationDimensionsAdmin";
+import GeminiKeysAdminPage from "./pages/GeminiKeysAdmin.tsx";
 import { TerritorialVisibilityProvider } from "@/hooks/useTerritorialVisibility";
 import { AuthProvider } from "@/hooks/useAuth";
 import { PermissionsProvider } from "@/hooks/usePermissions";
