@@ -249,32 +249,68 @@ const Index = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Cargar minutos por defecto guardados por usuario
-  const isoMinutesStorageKey = user ? `isoMinutesDefault:${user.id}` : null;
-  useEffect(() => {
-    if (!isoMinutesStorageKey) return;
+  // Minutos por defecto por modo (localStorage, no user-scoped)
+  const ISO_DEFAULTS_KEY = "isochrone_default_minutes_v1";
+  const ISO_MODE_TO_KEY: Record<IsoMode, "walking" | "vehicle" | "bike"> = {
+    "foot-walking": "walking",
+    "driving-car": "vehicle",
+    "cycling-regular": "bike",
+  };
+  const FALLBACK_MINUTES: [number, number, number] = [5, 7, 10];
+
+  const readIsoDefaults = useCallback((): Record<"walking" | "vehicle" | "bike", [number, number, number]> => {
     try {
-      const raw = localStorage.getItem(isoMinutesStorageKey);
-      if (!raw) return;
+      const raw = localStorage.getItem(ISO_DEFAULTS_KEY);
+      if (!raw) return { walking: FALLBACK_MINUTES, vehicle: FALLBACK_MINUTES, bike: FALLBACK_MINUTES };
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length === 3 && parsed.every((n) => typeof n === "number")) {
-        setIsoMinutes(parsed);
-      }
-    } catch { /* ignore */ }
-  }, [isoMinutesStorageKey]);
+      const pick = (k: string): [number, number, number] => {
+        const v = parsed?.[k];
+        if (v && typeof v === "object" && [v.min1, v.min2, v.min3].every((n) => typeof n === "number")) {
+          return [v.min1, v.min2, v.min3];
+        }
+        if (Array.isArray(v) && v.length === 3 && v.every((n: unknown) => typeof n === "number")) {
+          return [v[0], v[1], v[2]];
+        }
+        return FALLBACK_MINUTES;
+      };
+      return { walking: pick("walking"), vehicle: pick("vehicle"), bike: pick("bike") };
+    } catch {
+      return { walking: FALLBACK_MINUTES, vehicle: FALLBACK_MINUTES, bike: FALLBACK_MINUTES };
+    }
+  }, []);
+
+  // Cargar defaults del modo inicial al montar
+  useEffect(() => {
+    const defaults = readIsoDefaults();
+    setIsoMinutes(defaults[ISO_MODE_TO_KEY[isoMode]]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Al cambiar modo, cargar defaults persistidos para ese modo
+  const handleIsoModeChange = useCallback((m: IsoMode) => {
+    setIsoMode(m);
+    const defaults = readIsoDefaults();
+    setIsoMinutes(defaults[ISO_MODE_TO_KEY[m]]);
+  }, [readIsoDefaults]);
 
   const saveIsoMinutesAsDefault = useCallback(() => {
-    if (!isoMinutesStorageKey) {
-      toast.error("Inicia sesión para guardar tus valores por defecto");
-      return;
-    }
     try {
-      localStorage.setItem(isoMinutesStorageKey, JSON.stringify(isoMinutes));
-      toast.success("Minutos por defecto guardados");
+      const current = readIsoDefaults();
+      const modeKey = ISO_MODE_TO_KEY[isoMode];
+      const next = {
+        ...current,
+        [modeKey]: {
+          min1: isoMinutes[0] ?? 0,
+          min2: isoMinutes[1] ?? 0,
+          min3: isoMinutes[2] ?? 0,
+        },
+      };
+      localStorage.setItem(ISO_DEFAULTS_KEY, JSON.stringify(next));
+      toast.success("Defaults guardados");
     } catch {
       toast.error("No se pudo guardar");
     }
-  }, [isoMinutesStorageKey, isoMinutes]);
+  }, [isoMode, isoMinutes, readIsoDefaults]);
   const {
     pois,
     trashedPois,
@@ -1072,7 +1108,7 @@ const Index = () => {
           }}
           isAuthenticated={!!user}
           isoMode={isoMode}
-          onIsoModeChange={setIsoMode}
+          onIsoModeChange={handleIsoModeChange}
           isoMinutes={isoMinutes}
           onIsoMinutesChange={setIsoMinutes}
           onSaveIsoMinutesDefault={saveIsoMinutesAsDefault}
