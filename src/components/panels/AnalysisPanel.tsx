@@ -186,13 +186,56 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null, width
       ? "Manzanas Censo 2017"
       : "Comunal";
 
+  // Drag handler para redimensionar el panel desde su borde izquierdo.
+  const resizingRef = useRef(false);
+  useEffect(() => {
+    if (!onWidthChange) return;
+    const onMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return;
+      // El panel está pegado al borde derecho de la ventana; ancho = viewport - clientX.
+      const next = window.innerWidth - e.clientX;
+      onWidthChange(next);
+    };
+    const onUp = () => {
+      if (!resizingRef.current) return;
+      resizingRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [onWidthChange]);
+  const startResize = (e: React.MouseEvent) => {
+    if (!onWidthChange) return;
+    e.preventDefault();
+    resizingRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
   return (
     <div
+      style={{ width }}
       className={[
-        "absolute right-0 top-0 z-[600] flex h-full w-[380px] flex-col border-l border-border/60 bg-surface/85 backdrop-blur-2xl backdrop-saturate-150 transition-transform duration-300",
+        "absolute right-0 top-0 z-[600] flex h-full flex-col border-l border-border/60 bg-surface/85 backdrop-blur-2xl backdrop-saturate-150 transition-transform duration-300",
         open ? "translate-x-0" : "translate-x-full",
       ].join(" ")}
     >
+      {onWidthChange && open && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Redimensionar panel"
+          onMouseDown={startResize}
+          className="group absolute left-0 top-0 z-10 flex h-full w-1.5 -translate-x-1/2 cursor-col-resize items-center justify-center hover:bg-primary/20"
+        >
+          <span className="h-10 w-[3px] rounded-full bg-border/60 transition-colors group-hover:bg-primary" />
+        </div>
+      )}
       <div className="relative flex-shrink-0 border-b border-border/40 px-5 pb-3 pt-4">
         <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-foreground">
           <span
