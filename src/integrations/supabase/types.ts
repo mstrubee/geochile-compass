@@ -101,6 +101,39 @@ export type Database = {
         }
         Relationships: []
       }
+      _poi_metrics_synthetic_backup_20260517: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          metric_key: string | null
+          period: string | null
+          poi_id: string | null
+          source_import_id: string | null
+          updated_at: string | null
+          value: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          metric_key?: string | null
+          period?: string | null
+          poi_id?: string | null
+          source_import_id?: string | null
+          updated_at?: string | null
+          value?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          metric_key?: string | null
+          period?: string | null
+          poi_id?: string | null
+          source_import_id?: string | null
+          updated_at?: string | null
+          value?: number | null
+        }
+        Relationships: []
+      }
       _pois_pre_migration_backup: {
         Row: {
           category: string | null
