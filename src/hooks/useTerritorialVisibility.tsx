@@ -14,12 +14,28 @@ const TerritorialVisibilityContext = createContext<Ctx | null>(null);
 const STORAGE_KEY = "territorial_visible_v2";
 const SEEN_LAYERS_KEY = `${STORAGE_KEY}_seen_layers`;
 const HEATMAP_KEY = "territorial_heatmap_v1";
+// Safe-boot: si la sesión anterior dejó demasiadas capas activadas, al abrir la
+// app se cargarían todas en paralelo y pueden tumbar la pestaña por memoria.
+// Limitamos cuántas capas se restauran automáticamente desde localStorage.
+const MAX_RESTORED_VISIBLE_LAYERS = 4;
 
 export const TerritorialVisibilityProvider = ({ children }: { children: ReactNode }) => {
   const [visibleLayerIds, setVisible] = useState<Set<string>>(() => {
     try {
       const arr = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-      return new Set(Array.isArray(arr) ? arr : []);
+      if (!Array.isArray(arr)) return new Set();
+      const safe = arr.slice(0, MAX_RESTORED_VISIBLE_LAYERS);
+      if (safe.length < arr.length) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(safe));
+        } catch {
+          // ignore
+        }
+        console.warn(
+          `[territorial-visibility] safe-boot: se restauraron ${safe.length} de ${arr.length} capas para evitar sobrecarga`,
+        );
+      }
+      return new Set(safe);
     } catch {
       return new Set();
     }
