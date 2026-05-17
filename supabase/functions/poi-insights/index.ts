@@ -245,7 +245,9 @@ Reglas CRÍTICAS, sin excepción:
 - Ignora cualquier referencia a año actual, año cerrado, target_year o meses no listados arriba.
 - Usa cifras EXACTAS del JSON. No inventes números ni proyecciones.
 - Formato CLP con separador de miles (ej: $108.469.704).
-- Si un campo es null, omítelo. Máximo 200 palabras. Sin H1.`;
+- Si un campo es null, omítelo. Sin H1.
+- El informe debe tener al menos 150 palabras y desarrollar TODAS las secciones aplicables (Perfil, Desempeño, Tendencia histórica, Recomendación).
+- Si una sección no tiene datos, omitila completa, pero NUNCA dejes el texto cortado a mitad de frase.`;
 
     const userPrompt = `Datos del local:\n\n${JSON.stringify(payload, null, 2)}`;
 
@@ -258,7 +260,7 @@ Reglas CRÍTICAS, sin excepción:
         body: {
           systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 800 },
+          generationConfig: { temperature: 0, maxOutputTokens: 2000 },
         },
       });
       data = result.data;
