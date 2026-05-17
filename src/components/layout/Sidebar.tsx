@@ -990,11 +990,12 @@ export const Sidebar = ({
   ];
 
   // Ancho redimensionable (arrastrable). Persistido en localStorage.
-  const MIN_W = 240;
-  const MAX_W = 560;
+  const MIN_W = 280;
+  const MAX_W = 600;
+  const SIDEBAR_W_KEY = "sidebar_width_v1";
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return 288;
-    const v = Number(window.localStorage.getItem("sidebar.width"));
+    const v = Number(window.localStorage.getItem(SIDEBAR_W_KEY) ?? window.localStorage.getItem("sidebar.width"));
     return Number.isFinite(v) && v >= MIN_W && v <= MAX_W ? v : 288;
   });
   const resizingRef = useRef(false);
