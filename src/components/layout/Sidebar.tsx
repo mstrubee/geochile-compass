@@ -2458,7 +2458,7 @@ export const Sidebar = ({
         onMouseDown={startResize}
         onDoubleClick={() => {
           setSidebarWidth(288);
-          try { window.localStorage.setItem("sidebar.width", "288"); } catch { /* ignore */ }
+          try { window.localStorage.setItem(SIDEBAR_W_KEY, "288"); } catch { /* ignore */ }
         }}
         className="group absolute right-0 top-0 z-10 flex h-full w-1.5 cursor-col-resize items-center justify-center hover:bg-primary/20"
       >
