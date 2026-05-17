@@ -1018,15 +1018,6 @@ export const Sidebar = ({
       style={{ width: sidebarWidth }}
     >
       <div className="scrollbar-thin flex-1 overflow-y-auto">
-        <SidebarSection title="Resumen">
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <StatCard value={20} label="Comunas" />
-            <StatCard value={manzanaCount} label="Manzanas vis." />
-            <StatCard value={0} label="POIs OSM" />
-            <StatCard value={isochrones.length} label="Isócronas" />
-          </div>
-        </SidebarSection>
-
         <SidebarSection title="Comunas" permissionKey="comunas">
           <CommuneSearch
             onFlyToCommune={onFlyToCommune}
