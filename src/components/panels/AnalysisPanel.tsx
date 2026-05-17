@@ -1,5 +1,5 @@
 import { X, Download, FileJson, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Isochrone } from "@/types/isochrones";
 import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
