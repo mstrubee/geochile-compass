@@ -120,7 +120,7 @@ const DEFAULT_SECTION_OPEN: Record<SectionKey, boolean> = {
   exportar: false,
 };
 
-export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: AnalysisPanelProps) => {
+export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null, width = 380, onWidthChange, minWidth = 320, maxWidth = 800 }: AnalysisPanelProps) => {
   const minutesAvailable = useMemo(
     () => (isochrone ? [...isochrone.minutes].sort((a, b) => a - b) : []),
     [isochrone],
