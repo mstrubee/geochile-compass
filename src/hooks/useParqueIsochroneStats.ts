@@ -28,8 +28,10 @@ function bboxOverlap(a: number[], b: number[]): boolean {
 
 export function useParqueIsochroneStats(
   isoFeature: Feature<Polygon | MultiPolygon, unknown> | null,
+  forceEnabled: boolean = false,
 ): { stats: ParqueIsochroneStats | null; loading: boolean; enabled: boolean } {
   const { visible } = useParqueLayer();
+  const active = visible || forceEnabled;
   const [stats, setStats] = useState<ParqueIsochroneStats | null>(null);
   const [loading, setLoading] = useState(false);
   const reqId = useRef(0);
