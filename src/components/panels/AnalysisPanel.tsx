@@ -1,5 +1,5 @@
 import { X, Download, FileJson, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Isochrone } from "@/types/isochrones";
 import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
@@ -13,6 +13,10 @@ interface AnalysisPanelProps {
   onClose: () => void;
   isochrone: Isochrone | null;
   manzanas?: ManzanaFeatureCollection | null;
+  width?: number;
+  onWidthChange?: (w: number) => void;
+  minWidth?: number;
+  maxWidth?: number;
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
@@ -116,7 +120,7 @@ const DEFAULT_SECTION_OPEN: Record<SectionKey, boolean> = {
   exportar: false,
 };
 
-export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: AnalysisPanelProps) => {
+export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null, width = 380, onWidthChange, minWidth = 320, maxWidth = 800 }: AnalysisPanelProps) => {
   const minutesAvailable = useMemo(
     () => (isochrone ? [...isochrone.minutes].sort((a, b) => a - b) : []),
     [isochrone],
@@ -182,13 +186,56 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
       ? "Manzanas Censo 2017"
       : "Comunal";
 
+  // Drag handler para redimensionar el panel desde su borde izquierdo.
+  const resizingRef = useRef(false);
+  useEffect(() => {
+    if (!onWidthChange) return;
+    const onMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return;
+      // El panel está pegado al borde derecho de la ventana; ancho = viewport - clientX.
+      const next = window.innerWidth - e.clientX;
+      onWidthChange(next);
+    };
+    const onUp = () => {
+      if (!resizingRef.current) return;
+      resizingRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [onWidthChange]);
+  const startResize = (e: React.MouseEvent) => {
+    if (!onWidthChange) return;
+    e.preventDefault();
+    resizingRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
   return (
     <div
+      style={{ width }}
       className={[
-        "absolute right-0 top-0 z-[600] flex h-full w-[380px] flex-col border-l border-border/60 bg-surface/85 backdrop-blur-2xl backdrop-saturate-150 transition-transform duration-300",
+        "absolute right-0 top-0 z-[600] flex h-full flex-col border-l border-border/60 bg-surface/85 backdrop-blur-2xl backdrop-saturate-150 transition-transform duration-300",
         open ? "translate-x-0" : "translate-x-full",
       ].join(" ")}
     >
+      {onWidthChange && open && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Redimensionar panel"
+          onMouseDown={startResize}
+          className="group absolute left-0 top-0 z-10 flex h-full w-1.5 -translate-x-1/2 cursor-col-resize items-center justify-center hover:bg-primary/20"
+        >
+          <span className="h-10 w-[3px] rounded-full bg-border/60 transition-colors group-hover:bg-primary" />
+        </div>
+      )}
       <div className="relative flex-shrink-0 border-b border-border/40 px-5 pb-3 pt-4">
         <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-foreground">
           <span
@@ -555,14 +602,13 @@ const ParqueAnalysisSection = ({
   open: boolean;
   onToggle: () => void;
 }) => {
-  const { stats, loading, enabled } = useParqueIsochroneStats(isoFeature);
-  if (!enabled) return null;
+  const { stats, loading } = useParqueIsochroneStats(isoFeature, open);
   return (
     <Section title="Parque vehicular" open={open} onToggle={onToggle}>
       <div className="rounded-xl bg-surface-2/60 p-3">
         {loading ? (
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" /> Calculando…
+            <Loader2 className="h-3 w-3 animate-spin" /> Cargando…
           </div>
         ) : !stats || stats.vehiculos <= 0 ? (
           <div className="text-center text-[11px] text-text-muted">

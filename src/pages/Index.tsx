@@ -80,6 +80,21 @@ const Index = () => {
   useEffect(() => {
     try { localStorage.setItem("analysis_panel_state_v1", panelOpen ? "open" : "closed"); } catch { /* ignore */ }
   }, [panelOpen]);
+  // Ancho del panel de análisis (resizable por arrastre)
+  const PANEL_MIN_W = 320;
+  const PANEL_MAX_W = 800;
+  const [panelWidth, setPanelWidth] = useState<number>(() => {
+    try {
+      const v = Number(localStorage.getItem("analysis_panel_width_v1"));
+      if (Number.isFinite(v) && v >= PANEL_MIN_W && v <= PANEL_MAX_W) return v;
+    } catch { /* ignore */ }
+    return 480;
+  });
+  const handlePanelWidthChange = useCallback((w: number) => {
+    const clamped = Math.min(PANEL_MAX_W, Math.max(PANEL_MIN_W, Math.round(w)));
+    setPanelWidth(clamped);
+    try { localStorage.setItem("analysis_panel_width_v1", String(clamped)); } catch { /* ignore */ }
+  }, []);
   const autoOpenPanel = useCallback(() => {
     if (!panelHiddenByUser) setPanelOpen(true);
   }, [panelHiddenByUser]);
@@ -1342,12 +1357,12 @@ const Index = () => {
             </div>
           )}
 
-          {/* Pestaña vertical pegada al panel de análisis */}
+          {/* Pestaña vertical pegada al panel de análisis (arriba, bajo zoom) */}
           <button
             onClick={() => (panelOpen ? userClosePanel() : userOpenPanel())}
             aria-label={panelOpen ? "Cerrar panel de análisis" : "Abrir panel de análisis"}
-            style={{ right: panelOpen ? 380 : 0 }}
-            className="absolute top-1/2 z-[700] flex h-28 w-8 -translate-y-1/2 items-center justify-center rounded-l-lg border border-r-0 border-border/60 bg-surface/90 text-foreground shadow-apple-lg backdrop-blur-xl transition-[right] duration-300 hover:bg-surface-2"
+            style={{ right: panelOpen ? panelWidth : 0 }}
+            className="absolute top-20 z-[700] flex h-28 w-8 items-center justify-center rounded-l-lg border border-r-0 border-border/60 bg-surface/90 text-foreground shadow-apple-lg backdrop-blur-xl transition-[right] duration-300 hover:bg-surface-2"
           >
             <span className="flex flex-col items-center gap-1.5">
               <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -1364,6 +1379,10 @@ const Index = () => {
             onClose={userClosePanel}
             isochrone={isochrones.find((i) => i.id === selectedIsoId) ?? isochrones[isochrones.length - 1] ?? null}
             manzanas={manzanaData ?? densityData ?? null}
+            width={panelWidth}
+            onWidthChange={handlePanelWidthChange}
+            minWidth={PANEL_MIN_W}
+            maxWidth={PANEL_MAX_W}
           />
         </div>
       </main>
