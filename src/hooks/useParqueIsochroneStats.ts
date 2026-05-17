@@ -126,7 +126,7 @@ export function useParqueIsochroneStats(
         if (myReq === reqId.current) setLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, key]);
+  }, [active, key]);
 
-  return { stats, loading, enabled: visible };
+  return { stats, loading, enabled: active };
 }
