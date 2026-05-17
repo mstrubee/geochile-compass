@@ -102,8 +102,17 @@ export const useSavedIsochrones = () => {
         .select()
         .single();
       if (error) throw new Error(error.message);
-      await refresh();
-      return data ? rowToIso(data as Row) : null;
+      const inserted = data ? rowToIso(data as Row) : null;
+      // Update optimista: agregar la isócrona al estado local de inmediato,
+      // así el sidebar la muestra sin esperar al refetch.
+      if (inserted) {
+        setSavedIsos((prev) =>
+          prev.some((s) => s.id === inserted.id) ? prev : [inserted, ...prev],
+        );
+      }
+      // Refetch en background para sincronizar cualquier diferencia con BD.
+      void refresh();
+      return inserted;
     },
     [user, refresh],
   );
