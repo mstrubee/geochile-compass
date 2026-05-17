@@ -101,8 +101,19 @@ const buildSafeSummary = (payload: PoiSummaryPayload, ctx: SalesContext | null):
   if (!ctx || !ctx.latestRegisteredPeriodLabel || ctx.recentSeries.length === 0) {
     return `**Perfil del local**\n${name}${comuna}.\n\n**Desempeño reciente**\nDatos insuficientes para análisis completo.`;
   }
-  const last = ctx.recentSeries[ctx.recentSeries.length - 1];
-  const prev = ctx.recentSeries[ctx.recentSeries.length - 2];
+  // Filtrar: solo periodos con value > 0 Y mes <= mes actual (evita meses futuros vacíos)
+  const today = new Date();
+  const todayYM = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const realData = ctx.recentSeries.filter((p) => {
+    if (p.value <= 0) return false;
+    const periodYM = (p.period || "").slice(0, 7);
+    return periodYM <= todayYM;
+  });
+  if (realData.length === 0) {
+    return `**Perfil del local**\n${name}${comuna}.\n\n**Desempeño reciente**\nDatos insuficientes para análisis completo.`;
+  }
+  const last = realData[realData.length - 1];
+  const prev = realData[realData.length - 2];
   const mom = prev && prev.value > 0
     ? ((last.value - prev.value) / prev.value) * 100
     : null;
