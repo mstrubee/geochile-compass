@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import type { PoiFolder } from "@/types/pois";
 import { useAnalysisSettings, useUfMap, useComplementRules } from "@/hooks/useAnalysisConfig";
+import { TerritorialRolesTab } from "./TerritorialRolesTab";
 
 interface Props {
   open: boolean;
@@ -49,7 +50,7 @@ export const AnalysisConfigDialog = ({
   const { ufMap, loading: ufLoading, syncing, sync, coverage } = useUfMap();
   const { rules, upsert, remove, refresh: refreshRules } = useComplementRules(folder?.id ?? null);
 
-  const [tab, setTab] = useState<"general" | "rules">("general");
+  const [tab, setTab] = useState<"general" | "territorial" | "rules">("general");
   const [savingGeneral, setSavingGeneral] = useState(false);
 
   // Form state — general
@@ -137,7 +138,7 @@ export const AnalysisConfigDialog = ({
         {/* Tabs */}
         <div className="border-b border-border/40 px-5 pt-2">
           <div className="inline-flex rounded-lg bg-surface-2/60 p-0.5">
-            {(["general", "rules"] as const).map((t) => (
+            {(["general", "territorial", "rules"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -148,7 +149,11 @@ export const AnalysisConfigDialog = ({
                     : "text-muted-foreground hover:text-foreground",
                 ].join(" ")}
               >
-                {t === "general" ? "General" : `Pesos complementarios (${rules.length})`}
+                {t === "general"
+                  ? "General"
+                  : t === "territorial"
+                    ? "Capas territoriales"
+                    : `Pesos complementarios (${rules.length})`}
               </button>
             ))}
           </div>
@@ -312,6 +317,10 @@ export const AnalysisConfigDialog = ({
                 </Button>
               </div>
             </div>
+          ) : tab === "territorial" ? (
+            folder ? (
+              <TerritorialRolesTab folderId={folder.id} />
+            ) : null
           ) : (
             <RulesEditor
               rules={rules}
