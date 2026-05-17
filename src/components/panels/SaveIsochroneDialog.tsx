@@ -160,8 +160,12 @@ export const SaveIsochroneDialog = ({
                 onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()}
                 placeholder="Nombre de carpeta"
               />
-              <Button size="sm" onClick={handleCreateFolder}>
-                Crear
+              <Button
+                size="sm"
+                onClick={handleCreateFolder}
+                disabled={creatingFolderBusy || !newFolderName.trim()}
+              >
+                {creatingFolderBusy ? "Creando…" : "Crear"}
               </Button>
             </div>
           ) : (
