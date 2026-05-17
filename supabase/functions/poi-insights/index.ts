@@ -88,26 +88,34 @@ Reglas:
 
     const userPrompt = `Datos del local:\n\n${JSON.stringify(payload, null, 2)}`;
 
-    const aiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0.4 },
-        }),
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
       },
-    );
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0.4,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    });
 
     if (!aiRes.ok) {
       const t = await aiRes.text();
-      console.error("Gemini error", aiRes.status, t);
-      const status = aiRes.status === 429 ? 429 : 500;
+      console.error("Lovable AI error", aiRes.status, t);
+      const status = aiRes.status === 429 ? 429 : aiRes.status === 402 ? 402 : 500;
       return new Response(
         JSON.stringify({
-          error: aiRes.status === 429 ? "Rate limit exceeded" : "Gemini API error",
+          error:
+            aiRes.status === 429
+              ? "Rate limit exceeded"
+              : aiRes.status === 402
+                ? "AI credits exhausted"
+                : "AI gateway error",
           detail: t,
         }),
         { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -116,9 +124,7 @@ Reglas:
 
     const data = await aiRes.json();
     const summary: string =
-      data?.candidates?.[0]?.content?.parts
-        ?.map((p: { text?: string }) => p.text ?? "")
-        .join("") ?? "No se pudo generar el resumen.";
+      data?.choices?.[0]?.message?.content ?? "No se pudo generar el resumen.";
 
     return new Response(JSON.stringify({ summary }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
