@@ -46,7 +46,7 @@ export function useParqueIsochroneStats(
   }, [isoFeature]);
 
   useEffect(() => {
-    if (!visible || !isoFeature) {
+    if (!active || !isoFeature) {
       setStats(null);
       return;
     }
