@@ -383,8 +383,9 @@ export type Database = {
           created_at: string
           created_by: string | null
           folder_id: string
+          group_id: string | null
           id: string
-          layer_id: string
+          layer_id: string | null
           role: string
           updated_at: string
           weight_override: number | null
@@ -393,8 +394,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           folder_id: string
+          group_id?: string | null
           id?: string
-          layer_id: string
+          layer_id?: string | null
           role: string
           updated_at?: string
           weight_override?: number | null
@@ -403,8 +405,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           folder_id?: string
+          group_id?: string | null
           id?: string
-          layer_id?: string
+          layer_id?: string | null
           role?: string
           updated_at?: string
           weight_override?: number | null
@@ -415,6 +418,13 @@ export type Database = {
             columns: ["folder_id"]
             isOneToOne: false
             referencedRelation: "poi_folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folder_layer_roles_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layer_groups"
             referencedColumns: ["id"]
           },
           {
