@@ -1,4 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import {
+  AllGeminiKeysFailedError,
+  callGeminiWithRotation,
+  getAdminClient,
+} from "../_shared/gemini-keys.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
