@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { AppDialog } from "@/components/ui/app-dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,8 @@ export const SaveIsochroneDialog = ({
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [creatingFolderBusy, setCreatingFolderBusy] = useState(false);
+  const creatingFolderBusyRef = useRef(false);
 
   useEffect(() => {
     if (open && isochrone) {
@@ -68,12 +71,25 @@ export const SaveIsochroneDialog = ({
   const folderOptions = useMemo(() => buildIndentedList(folders), [folders]);
 
   const handleCreateFolder = async () => {
+    if (creatingFolderBusyRef.current) return;
     const trimmed = newFolderName.trim();
     if (!trimmed) return;
-    const created = await onCreateFolder(trimmed, null);
-    if (created && "id" in created && created.id) setFolderId(created.id);
-    setCreatingFolder(false);
-    setNewFolderName("");
+    creatingFolderBusyRef.current = true;
+    setCreatingFolderBusy(true);
+    try {
+      const created = await onCreateFolder(trimmed, null);
+      if (created && "id" in created && created.id) setFolderId(created.id);
+      setCreatingFolder(false);
+      setNewFolderName("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(/duplicate|uniq_iso_folder_sibling_name/i.test(msg)
+        ? "Ya existe una carpeta con ese nombre"
+        : "No se pudo crear la carpeta");
+    } finally {
+      creatingFolderBusyRef.current = false;
+      setCreatingFolderBusy(false);
+    }
   };
 
   const handleSave = async () => {
@@ -144,8 +160,12 @@ export const SaveIsochroneDialog = ({
                 onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()}
                 placeholder="Nombre de carpeta"
               />
-              <Button size="sm" onClick={handleCreateFolder}>
-                Crear
+              <Button
+                size="sm"
+                onClick={handleCreateFolder}
+                disabled={creatingFolderBusy || !newFolderName.trim()}
+              >
+                {creatingFolderBusy ? "Creando…" : "Crear"}
               </Button>
             </div>
           ) : (

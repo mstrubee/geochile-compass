@@ -256,6 +256,8 @@ const SavedIsochronesSubsection = ({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [creatingRoot, setCreatingRoot] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [creatingBusy, setCreatingBusy] = useState(false);
+  const creatingBusyRef = useRef(false);
 
   const childrenByParent = useMemo(() => {
     const m = new Map<string | null, typeof folders>();
@@ -291,11 +293,26 @@ const SavedIsochronesSubsection = ({
   };
 
   const handleCreateRoot = async () => {
+    // Guard contra double-submit: el ref bloquea aunque setState no haya
+    // re-renderado todavía. El estado React solo gobierna el disabled visual.
+    if (creatingBusyRef.current) return;
     const t = newFolderName.trim();
     if (!t || !onCreateFolder) return;
-    await onCreateFolder(t, null);
-    setNewFolderName("");
-    setCreatingRoot(false);
+    creatingBusyRef.current = true;
+    setCreatingBusy(true);
+    try {
+      await onCreateFolder(t, null);
+      setNewFolderName("");
+      setCreatingRoot(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(/duplicate|uniq_iso_folder_sibling_name/i.test(msg)
+        ? "Ya existe una carpeta con ese nombre"
+        : "No se pudo crear la carpeta");
+    } finally {
+      creatingBusyRef.current = false;
+      setCreatingBusy(false);
+    }
   };
 
   const renderIso = (s: typeof savedIsos[number], depth: number) => {
@@ -497,9 +514,10 @@ const SavedIsochronesSubsection = ({
           />
           <button
             onClick={handleCreateRoot}
-            className="rounded bg-primary px-2 py-1 text-[11px] text-primary-foreground hover:opacity-90"
+            disabled={creatingBusy || !newFolderName.trim()}
+            className="rounded bg-primary px-2 py-1 text-[11px] text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Crear
+            {creatingBusy ? "Creando…" : "Crear"}
           </button>
         </div>
       )}
