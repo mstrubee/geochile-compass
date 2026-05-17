@@ -3,6 +3,19 @@ import type { SavedPoi } from "@/types/pois";
 import type { PoiAttribute } from "@/types/poiMetrics";
 import type { MetricAggregate } from "@/utils/poiMetricsAggregate";
 
+const MESES_ES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/** "2026-04-01" → "abril 2026". Si no parsea, devuelve el string crudo. */
+const formatPeriodEs = (period: string): string => {
+  const [y, m] = period.split("-");
+  const idx = parseInt(m, 10) - 1;
+  if (!MESES_ES[idx] || !y) return period;
+  return `${MESES_ES[idx]} ${y}`;
+};
+
 /**
  * Llama a la edge function `poi-insights` para generar un resumen ejecutivo.
  * Devuelve markdown listo para renderizar.
