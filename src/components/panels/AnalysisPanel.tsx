@@ -218,196 +218,211 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
           </div>
         )}
 
-        {isochrone && minutesAvailable.length > 0 && (
-          <div className="mb-3 flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
-            {minutesAvailable.map((m, i) => (
-              <button
-                key={m}
-                onClick={() => setTab(i)}
-                className={[
-                  "flex-1 rounded-md px-1 py-1.5 text-[11px] font-medium transition-all",
-                  tab === i ? "bg-surface-3 text-foreground shadow-apple-sm" : "text-muted-foreground hover:text-foreground",
-                ].join(" ")}
-              >
-                {m} min
-              </button>
-            ))}
-          </div>
-        )}
-
         {analysis && (
           <>
-            {/* Métricas principales */}
-            <div className="mb-3 grid grid-cols-2 gap-2">
-              <Metric value={fmt(analysis.totals.pop)} label="Personas" />
-              <Metric value={fmt(analysis.totals.hh)} label="Hogares" />
-              <Metric value={fmtCLP(analysis.totals.incomeTotal)} label="Ingreso total/mes" />
-              <Metric value={fmtCLP(analysis.totals.incomeAvgPerHh)} label="Ingreso prom./hogar" />
-              <Metric value={analysis.area_km2.toFixed(2)} label="Área km²" />
-              <Metric value={fmt(analysis.density.popPerKm2)} label="Densidad hab/km²" />
-            </div>
-
-            <div className="mb-3 rounded-md bg-surface-2/40 px-3 py-1.5 text-[10px] text-muted-foreground">
-              Fuente población:{" "}
-              <span className="font-medium text-foreground">
-                {analysis.totals.source === "manzanas"
-                  ? "Manzanas Censo 2017"
-                  : "Estimado por comuna (proporcional al área)"}
-              </span>
-              {analysis.gse && (
-                <div className="mt-1">
-                  GSE/NSE enriquecido con {analysis.gse.manzanaCount} manzanas Censo 2012.
+            <Section
+              title="Isócronas"
+              open={sectionOpen.isocronas}
+              onToggle={() => toggleSection("isocronas")}
+            >
+              {isochrone && minutesAvailable.length > 0 && (
+                <div className="mb-3 flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
+                  {minutesAvailable.map((m, i) => (
+                    <button
+                      key={m}
+                      onClick={() => setTab(i)}
+                      className={[
+                        "flex-1 rounded-md px-1 py-1.5 text-[11px] font-medium transition-all",
+                        tab === i ? "bg-surface-3 text-foreground shadow-apple-sm" : "text-muted-foreground hover:text-foreground",
+                      ].join(" ")}
+                    >
+                      {m} min
+                    </button>
+                  ))}
                 </div>
               )}
-            </div>
-
-            {/* Resumen IA */}
-            <div className="mb-3 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
-                  <Sparkles className="h-3 w-3 text-primary" />
-                  Resumen IA · Gemini
-                </div>
-                <button
-                  onClick={insights.regenerate}
-                  disabled={insights.loading}
-                  className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground disabled:opacity-50"
-                  aria-label="Regenerar resumen"
-                >
-                  <RefreshCw className={["h-2.5 w-2.5", insights.loading ? "animate-spin" : ""].join(" ")} />
-                  Regenerar
-                </button>
+              <div className="mb-3 grid grid-cols-2 gap-2">
+                <Metric value={fmt(analysis.totals.pop)} label="Personas" />
+                <Metric value={fmt(analysis.totals.hh)} label="Hogares" />
+                <Metric value={fmtCLP(analysis.totals.incomeTotal)} label="Ingreso total/mes" />
+                <Metric value={fmtCLP(analysis.totals.incomeAvgPerHh)} label="Ingreso prom./hogar" />
+                <Metric value={analysis.area_km2.toFixed(2)} label="Área km²" />
+                <Metric value={fmt(analysis.density.popPerKm2)} label="Densidad hab/km²" />
               </div>
-              {insights.loading && (
-                <div className="space-y-1.5">
-                  <div className="h-2 w-full animate-pulse rounded bg-surface-3" />
-                  <div className="h-2 w-5/6 animate-pulse rounded bg-surface-3" />
-                  <div className="h-2 w-4/6 animate-pulse rounded bg-surface-3" />
-                </div>
-              )}
-              {insights.error && (
-                <div className="text-[11px] text-brand-red">{insights.error}</div>
-              )}
-              {insights.summary && (
-                <div className="prose prose-sm prose-invert max-w-none text-[11.5px] leading-relaxed text-foreground [&>*]:my-1 [&_h1]:hidden [&_h2]:mt-2 [&_h2]:text-[12px] [&_h2]:font-semibold [&_p]:text-[11.5px] [&_strong]:text-foreground [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0.5">
-                  <ReactMarkdown>{insights.summary}</ReactMarkdown>
-                </div>
-              )}
-            </div>
-
-            {/* Comparativos vs RM */}
-            {analysis.comparisons.length > 0 && (
-              <div className="mb-3 overflow-hidden rounded-xl bg-surface-2/60">
-                <div className="border-b border-border/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
-                  Comparativo vs. promedio RM
-                </div>
-                {analysis.comparisons.map((c) => (
-                  <div key={c.key} className="flex items-center justify-between border-b border-border/30 px-3 py-1.5 text-[11px] last:border-b-0">
-                    <span className="text-foreground">{c.label}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-foreground">{formatComparison(c.value, c.format)}</span>
-                      {c.vsRmPct != null && (
-                        <span
-                          className={[
-                            "rounded px-1.5 py-0.5 font-mono text-[10px]",
-                            c.vsRmPct >= 0
-                              ? "bg-brand-green/15 text-brand-green"
-                              : "bg-brand-red/15 text-brand-red",
-                          ].join(" ")}
-                        >
-                          {c.vsRmPct >= 0 ? "+" : ""}{c.vsRmPct}%
-                        </span>
-                      )}
-                    </div>
+              <div className="rounded-md bg-surface-2/40 px-3 py-1.5 text-[10px] text-muted-foreground">
+                Fuente población:{" "}
+                <span className="font-medium text-foreground">
+                  {analysis.totals.source === "manzanas"
+                    ? "Manzanas Censo 2017"
+                    : "Estimado por comuna (proporcional al área)"}
+                </span>
+                {analysis.gse && (
+                  <div className="mt-1">
+                    GSE/NSE enriquecido con {analysis.gse.manzanaCount} manzanas Censo 2012.
                   </div>
-                ))}
+                )}
               </div>
-            )}
+            </Section>
 
-            {/* GSE detalle */}
             {analysis.gse && (
-              <div className="mb-3 rounded-xl bg-surface-2/60 p-3">
-                <div className="mb-2 text-[11px] font-medium text-muted-foreground">
-                  Indicadores GSE (Censo 2012)
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  {analysis.gse.nseScoreAvg != null && (
-                    <KV label="NSE score" value={analysis.gse.nseScoreAvg.toFixed(0)} />
-                  )}
-                  {analysis.gse.educYearsAvg != null && (
-                    <KV label="Escolaridad" value={`${analysis.gse.educYearsAvg.toFixed(1)} años`} />
-                  )}
-                  {analysis.gse.hacinAvg != null && (
-                    <KV label="Hacinamiento" value={analysis.gse.hacinAvg.toFixed(2)} />
-                  )}
-                  {analysis.gse.autoScoreAvg != null && (
-                    <KV label="Motorización" value={analysis.gse.autoScoreAvg.toFixed(0)} />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* NSE distribution */}
-            {nseDist.length > 0 && (
-              <div className="mb-3 rounded-xl bg-surface-2/60 p-3">
-                <div className="mb-2.5 text-[11px] font-medium text-muted-foreground">
-                  Distribución NSE · {nseSource}
-                </div>
-                {nseDist.map((n) => (
-                  <div key={n.label} className="mb-1.5 flex items-center gap-2">
-                    <span className="w-9 flex-shrink-0 font-mono text-[11px] text-foreground">{n.label}</span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
-                      <div className={["h-full transition-all duration-500", n.color].join(" ")} style={{ width: `${n.pct}%` }} />
-                    </div>
-                    <span className="w-7 text-right font-mono text-[10px] text-text-muted">{n.pct}%</span>
+              <Section
+                title="Indicadores GSE (Censo 2012)"
+                open={sectionOpen.gse}
+                onToggle={() => toggleSection("gse")}
+              >
+                <div className="rounded-xl bg-surface-2/60 p-3">
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    {analysis.gse.nseScoreAvg != null && (
+                      <KV label="NSE score" value={analysis.gse.nseScoreAvg.toFixed(0)} />
+                    )}
+                    {analysis.gse.educYearsAvg != null && (
+                      <KV label="Escolaridad" value={`${analysis.gse.educYearsAvg.toFixed(1)} años`} />
+                    )}
+                    {analysis.gse.hacinAvg != null && (
+                      <KV label="Hacinamiento" value={analysis.gse.hacinAvg.toFixed(2)} />
+                    )}
+                    {analysis.gse.autoScoreAvg != null && (
+                      <KV label="Motorización" value={analysis.gse.autoScoreAvg.toFixed(0)} />
+                    )}
                   </div>
-                ))}
-              </div>
+                </div>
+              </Section>
             )}
 
-            {/* Capas territoriales */}
-            <div className="mb-2 px-1 text-[11px] font-medium text-muted-foreground">
-              Capas territoriales · {analysis.territorialPoints.total} puntos · {analysis.density.pointsPerKm2.toFixed(1)}/km²
-            </div>
-            <div className="mb-3 overflow-hidden rounded-xl bg-surface-2/60">
-              {analysis.territorialPoints.groups.length === 0 ? (
-                <div className="px-3 py-3 text-center text-[11px] text-text-muted">
-                  Sin puntos territoriales en el área.
-                </div>
-              ) : (
-                analysis.territorialPoints.groups.map((g) => {
-                  const dens = analysis.density.pointsPerKm2ByGroup.find((d) => d.groupId === g.groupId);
-                  return (
-                    <div key={g.groupId} className="border-b border-border/30 px-3 py-2 last:border-b-0">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full" style={{ background: g.color ?? "#888" }} />
-                          <span className="text-[12px] font-medium text-foreground">{g.groupName}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {dens && (
-                            <span className="font-mono text-[10px] text-muted-foreground">{dens.perKm2.toFixed(1)}/km²</span>
-                          )}
-                          <span className="font-mono text-[12px] text-foreground">{g.count}</span>
-                        </div>
+            {nseDist.length > 0 && (
+              <Section
+                title={`Distribución NSE · ${nseSource}`}
+                open={sectionOpen.nse}
+                onToggle={() => toggleSection("nse")}
+              >
+                <div className="rounded-xl bg-surface-2/60 p-3">
+                  {nseDist.map((n) => (
+                    <div key={n.label} className="mb-1.5 flex items-center gap-2">
+                      <span className="w-9 flex-shrink-0 font-mono text-[11px] text-foreground">{n.label}</span>
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
+                        <div className={["h-full transition-all duration-500", n.color].join(" ")} style={{ width: `${n.pct}%` }} />
                       </div>
-                      {g.layers.length > 0 && (
-                        <div className="mt-1 ml-4 space-y-0.5">
-                          {g.layers.map((l) => (
-                            <div key={l.layerId} className="flex items-center justify-between text-[10px] text-muted-foreground">
-                              <span className="truncate">{l.layerName}</span>
-                              <span className="ml-2 font-mono">{l.count}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      <span className="w-7 text-right font-mono text-[10px] text-text-muted">{n.pct}%</span>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                  ))}
+                </div>
+              </Section>
+            )}
 
-            {/* Parque automotor (solo si la capa está activa) */}
+            {analysis.comparisons.length > 0 && (
+              <Section
+                title="Comparativo vs. promedio RM"
+                open={sectionOpen.comparativo}
+                onToggle={() => toggleSection("comparativo")}
+              >
+                <div className="overflow-hidden rounded-xl bg-surface-2/60">
+                  {analysis.comparisons.map((c) => (
+                    <div key={c.key} className="flex items-center justify-between border-b border-border/30 px-3 py-1.5 text-[11px] last:border-b-0">
+                      <span className="text-foreground">{c.label}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-foreground">{formatComparison(c.value, c.format)}</span>
+                        {c.vsRmPct != null && (
+                          <span
+                            className={[
+                              "rounded px-1.5 py-0.5 font-mono text-[10px]",
+                              c.vsRmPct >= 0
+                                ? "bg-brand-green/15 text-brand-green"
+                                : "bg-brand-red/15 text-brand-red",
+                            ].join(" ")}
+                          >
+                            {c.vsRmPct >= 0 ? "+" : ""}{c.vsRmPct}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            <Section
+              title="Resumen IA · Gemini"
+              open={sectionOpen.resumen_ia}
+              onToggle={() => toggleSection("resumen_ia")}
+            >
+              <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
+                    <Sparkles className="h-3 w-3 text-primary" />
+                    Resumen
+                  </div>
+                  <button
+                    onClick={insights.regenerate}
+                    disabled={insights.loading}
+                    className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground disabled:opacity-50"
+                    aria-label="Regenerar resumen"
+                  >
+                    <RefreshCw className={["h-2.5 w-2.5", insights.loading ? "animate-spin" : ""].join(" ")} />
+                    Regenerar
+                  </button>
+                </div>
+                {insights.loading && (
+                  <div className="space-y-1.5">
+                    <div className="h-2 w-full animate-pulse rounded bg-surface-3" />
+                    <div className="h-2 w-5/6 animate-pulse rounded bg-surface-3" />
+                    <div className="h-2 w-4/6 animate-pulse rounded bg-surface-3" />
+                  </div>
+                )}
+                {insights.error && (
+                  <div className="text-[11px] text-brand-red">{insights.error}</div>
+                )}
+                {insights.summary && (
+                  <div className="prose prose-sm prose-invert max-w-none text-[11.5px] leading-relaxed text-foreground [&>*]:my-1 [&_h1]:hidden [&_h2]:mt-2 [&_h2]:text-[12px] [&_h2]:font-semibold [&_p]:text-[11.5px] [&_strong]:text-foreground [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0.5">
+                    <ReactMarkdown>{insights.summary}</ReactMarkdown>
+                  </div>
+                )}
+              </div>
+            </Section>
+
+            <Section
+              title={`Capas territoriales · ${analysis.territorialPoints.total} puntos`}
+              open={sectionOpen.capas}
+              onToggle={() => toggleSection("capas")}
+            >
+              <div className="overflow-hidden rounded-xl bg-surface-2/60">
+                {analysis.territorialPoints.groups.length === 0 ? (
+                  <div className="px-3 py-3 text-center text-[11px] text-text-muted">
+                    Sin puntos territoriales en el área.
+                  </div>
+                ) : (
+                  analysis.territorialPoints.groups.map((g) => {
+                    const dens = analysis.density.pointsPerKm2ByGroup.find((d) => d.groupId === g.groupId);
+                    return (
+                      <div key={g.groupId} className="border-b border-border/30 px-3 py-2 last:border-b-0">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full" style={{ background: g.color ?? "#888" }} />
+                            <span className="text-[12px] font-medium text-foreground">{g.groupName}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {dens && (
+                              <span className="font-mono text-[10px] text-muted-foreground">{dens.perKm2.toFixed(1)}/km²</span>
+                            )}
+                            <span className="font-mono text-[12px] text-foreground">{g.count}</span>
+                          </div>
+                        </div>
+                        {g.layers.length > 0 && (
+                          <div className="mt-1 ml-4 space-y-0.5">
+                            {g.layers.map((l) => (
+                              <div key={l.layerId} className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                <span className="truncate">{l.layerName}</span>
+                                <span className="ml-2 font-mono">{l.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </Section>
+
             <ParqueAnalysisSection
               isoFeature={
                 isochrone?.features.find((f) => f.properties?.value === bandSeconds)
@@ -415,62 +430,68 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null }: Ana
                   ?? isochrone?.features[0]
                   ?? null
               }
+              open={sectionOpen.parque}
+              onToggle={() => toggleSection("parque")}
             />
 
-            {/* Comunas cubiertas */}
-            <div className="mb-2 px-1 text-[11px] font-medium text-muted-foreground">
-              Comunas cubiertas
-            </div>
-            <div className="mb-3 overflow-hidden rounded-xl bg-surface-2/60">
-              <div className="grid grid-cols-[1fr_55px_55px_55px] border-b border-border/40 text-[10px] font-medium text-muted-foreground">
-                <div className="px-2 py-1.5">Comuna</div>
-                <div className="px-2 py-1.5 text-right">% iso</div>
-                <div className="px-2 py-1.5 text-right">Pob.</div>
-                <div className="px-2 py-1.5 text-right">NSE</div>
-              </div>
-              {analysis.communes.length === 0 ? (
-                <div className="px-2 py-3 text-center text-[11px] text-text-muted">
-                  Sin comunas cubiertas.
+            <Section
+              title="Comunas cubiertas"
+              open={sectionOpen.comunas}
+              onToggle={() => toggleSection("comunas")}
+            >
+              <div className="overflow-hidden rounded-xl bg-surface-2/60">
+                <div className="grid grid-cols-[1fr_55px_55px_55px] border-b border-border/40 text-[10px] font-medium text-muted-foreground">
+                  <div className="px-2 py-1.5">Comuna</div>
+                  <div className="px-2 py-1.5 text-right">% iso</div>
+                  <div className="px-2 py-1.5 text-right">Pob.</div>
+                  <div className="px-2 py-1.5 text-right">NSE</div>
                 </div>
-              ) : (
-                analysis.communes.map((c) => (
-                  <div
-                    key={c.name}
-                    className="grid grid-cols-[1fr_55px_55px_55px] border-b border-border/30 text-[11px] last:border-b-0"
-                  >
-                    <div className="truncate px-2 py-1.5 text-foreground">{c.name}</div>
-                    <div className="px-2 py-1.5 text-right font-mono text-muted-foreground">
-                      {(c.areaShareInIso * 100).toFixed(0)}%
-                    </div>
-                    <div className="px-2 py-1.5 text-right font-mono text-foreground">
-                      {fmt(c.popInIso)}
-                    </div>
-                    <div className="px-2 py-1.5 text-right text-muted-foreground">
-                      {c.nse ?? "—"}
-                    </div>
+                {analysis.communes.length === 0 ? (
+                  <div className="px-2 py-3 text-center text-[11px] text-text-muted">
+                    Sin comunas cubiertas.
                   </div>
-                ))
-              )}
-            </div>
+                ) : (
+                  analysis.communes.map((c) => (
+                    <div
+                      key={c.name}
+                      className="grid grid-cols-[1fr_55px_55px_55px] border-b border-border/30 text-[11px] last:border-b-0"
+                    >
+                      <div className="truncate px-2 py-1.5 text-foreground">{c.name}</div>
+                      <div className="px-2 py-1.5 text-right font-mono text-muted-foreground">
+                        {(c.areaShareInIso * 100).toFixed(0)}%
+                      </div>
+                      <div className="px-2 py-1.5 text-right font-mono text-foreground">
+                        {fmt(c.popInIso)}
+                      </div>
+                      <div className="px-2 py-1.5 text-right text-muted-foreground">
+                        {c.nse ?? "—"}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Section>
 
-            {/* Export */}
-            <div className="mb-2 mt-3 px-1 text-[11px] font-medium text-muted-foreground">
-              Exportar
-            </div>
-            <div className="flex gap-1.5">
-              <button
-                onClick={() => exportCsv(analysis)}
-                className="flex-1 rounded-lg bg-surface-2/60 px-2 py-2 text-[11px] font-medium text-foreground transition-colors hover:bg-surface-3"
-              >
-                <Download className="mr-1 inline h-3 w-3" /> CSV
-              </button>
-              <button
-                onClick={() => exportJson(analysis, insights.summary)}
-                className="flex-1 rounded-lg bg-surface-2/60 px-2 py-2 text-[11px] font-medium text-foreground transition-colors hover:bg-surface-3"
-              >
-                <FileJson className="mr-1 inline h-3 w-3" /> JSON
-              </button>
-            </div>
+            <Section
+              title="Exportar"
+              open={sectionOpen.exportar}
+              onToggle={() => toggleSection("exportar")}
+            >
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => exportCsv(analysis)}
+                  className="flex-1 rounded-lg bg-surface-2/60 px-2 py-2 text-[11px] font-medium text-foreground transition-colors hover:bg-surface-3"
+                >
+                  <Download className="mr-1 inline h-3 w-3" /> CSV
+                </button>
+                <button
+                  onClick={() => exportJson(analysis, insights.summary)}
+                  className="flex-1 rounded-lg bg-surface-2/60 px-2 py-2 text-[11px] font-medium text-foreground transition-colors hover:bg-surface-3"
+                >
+                  <FileJson className="mr-1 inline h-3 w-3" /> JSON
+                </button>
+              </div>
+            </Section>
           </>
         )}
       </div>
