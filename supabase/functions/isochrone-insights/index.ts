@@ -176,7 +176,7 @@ Reglas:
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       generationConfig: { temperature: 0.4 },
     };
-    const fallbackModels = [GEMINI_MODEL, "gemini-2.5-flash-lite", "gemini-2.5-flash"];
+    const fallbackModels = [GEMINI_MODEL, "gemini-2.5-flash-lite", "gemini-1.5-flash"];
 
     let data: any = null;
     let lastError: AllGeminiKeysFailedError | null = null;
