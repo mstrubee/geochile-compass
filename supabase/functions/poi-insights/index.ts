@@ -194,30 +194,32 @@ Reglas CRÍTICAS, sin excepción:
 
     const userPrompt = `Datos del local:\n\n${JSON.stringify(payload, null, 2)}`;
 
-    const aiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+    let data: any;
+    try {
+      const result = await callGeminiWithRotation({
+        model: MODEL,
+        admin,
+        fallbackEnvKey: FALLBACK_KEY,
+        body: {
           systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
           generationConfig: { temperature: 0.3, maxOutputTokens: 800 },
-        }),
-      },
-    );
-
-    if (!aiRes.ok) {
-      const t = await aiRes.text();
-      console.error("Gemini error", aiRes.status, t);
-      const status = aiRes.status === 429 ? 429 : 500;
-      return new Response(
-        JSON.stringify({
-          error: aiRes.status === 429 ? "Rate limit exceeded" : "Gemini error",
-          detail: t,
-        }),
-        { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+        },
+      });
+      data = result.data;
+    } catch (err) {
+      if (err instanceof AllGeminiKeysFailedError) {
+        console.error("[poi-insights] all gemini keys failed", err.attempts);
+        return new Response(
+          JSON.stringify({
+            error: "ALL_KEYS_FAILED",
+            detail: err.attempts,
+            summary: buildSafeSummary(payload, ctx),
+          }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      throw err;
     }
 
     const data = await aiRes.json();
