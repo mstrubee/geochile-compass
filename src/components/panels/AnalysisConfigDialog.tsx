@@ -317,6 +317,10 @@ export const AnalysisConfigDialog = ({
                 </Button>
               </div>
             </div>
+          ) : tab === "territorial" ? (
+            folder ? (
+              <TerritorialRolesTab folderId={folder.id} />
+            ) : null
           ) : (
             <RulesEditor
               rules={rules}
