@@ -129,3 +129,55 @@ Las migraciones largas (>30s) que se ejecutan vía API/edge function pueden cort
 - [ ] Idempotencia con `_migration_log` + `pg_advisory_xact_lock`.
 - [ ] Transacción explícita `BEGIN ... COMMIT` con `statement_timeout` apropiado.
 - [ ] Probado en una copia/branch antes de aplicar a prod.
+
+---
+
+## Trigger anti-data-sintética (`trg_reject_future_sales`)
+
+Origen: incidente del 2026-05-17. Se detectó que `poi_metrics` contenía 64 filas de `metric_key='ventas'` con `period = 2026-06-01` (mes futuro) y valores decimales largos — claramente proyecciones o datos sintéticos cargados el 2026-05-09 por un proceso no rastreable (no hay registro en `poi_import_jobs` ni en logs de edge functions de esa fecha). Esa data se filtraba al modelo Gemini en `poi-insights` como "último mes registrado", haciendo que el resumen mencionara junio 2026 con cifras inventadas.
+
+### Qué hace
+
+Trigger `BEFORE INSERT OR UPDATE` sobre `public.poi_metrics`. Bloquea con `RAISE EXCEPTION` cualquier fila donde:
+
+- `metric_key = 'ventas'`, y
+- `period > date_trunc('month', now())::date` (es decir, posterior al primer día del mes calendario actual).
+
+Definición:
+
+```sql
+CREATE OR REPLACE FUNCTION public.reject_future_sales_metrics()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.metric_key = 'ventas'
+     AND NEW.period > date_trunc('month', now())::date THEN
+    RAISE EXCEPTION 'Period % is in the future. Sales metrics cannot have periods > current month (%).',
+      NEW.period, date_trunc('month', now())::date;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_reject_future_sales
+  BEFORE INSERT OR UPDATE ON public.poi_metrics
+  FOR EACH ROW EXECUTE FUNCTION public.reject_future_sales_metrics();
+```
+
+### Por qué
+
+- **Defensa en profundidad**: imports, scripts manuales, edge functions o queries ad-hoc no pueden saltarse esta validación. El error es ruidoso (excepción a nivel DB) y se propaga al cliente.
+- **No depende del código de la app**: aunque alguien cambie `poi-insights` o el flujo de import, el dato sucio nunca entra.
+- **Limitado a `ventas`**: otras métricas (objetivos, proyecciones formales) podrían legítimamente tener períodos futuros y no se ven afectadas.
+
+### Si en el futuro hay que cargar proyecciones de ventas
+
+Opciones (no romper este trigger):
+
+1. Usar otra `metric_key` (ej. `ventas_proyectadas`) que no se filtre al modelo.
+2. Agregar una columna `is_projection boolean` a `poi_metrics`, ajustar el trigger para permitir futuros solo cuando `is_projection = true`, y filtrar esa columna del lado de `poi-insights`.
+3. Mover proyecciones a una tabla separada (`poi_projections`).
+
+Nunca: deshabilitar el trigger temporalmente para "meter el dato y listo" — esa fue exactamente la categoría de problema que originó este guardrail.
