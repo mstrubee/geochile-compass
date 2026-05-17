@@ -134,12 +134,22 @@ export const PoiAnalysisPanel = ({ poi, chainPois, isAdmin, onRecompute, recompu
           recentSeries: salesSeries.slice(-12),
         },
         analysis: {
-          target_year: perf.target_year,
+          // Nota: NO enviamos target_year ni temporal_decomposition con
+          // períodos posteriores al último mes con ventas registradas para
+          // evitar que el modelo invente fechas futuras.
+          latest_registered_period: latestSales?.period ?? null,
+          latest_registered_period_label: latestSales?.periodLabel ?? null,
           actual_monthly_uf: perf.actual_monthly_uf,
           predicted_monthly_uf: perf.predicted_monthly_uf,
           residual_pct: perf.residual_pct,
           temporal_state: perf.temporal_state,
-          temporal_decomposition: perf.temporal_decomposition,
+          temporal_decomposition: Array.isArray(perf.temporal_decomposition)
+            ? (perf.temporal_decomposition as Array<{ period?: string }>).filter((d) => {
+                if (!latestSales?.period) return true;
+                const p = d?.period ? normalizePeriod(String(d.period)) : null;
+                return !p || p <= latestSales.period;
+              })
+            : perf.temporal_decomposition,
           top_drivers: perf.top_drivers,
         },
         peers: peerRows.map((p) => p.name),

@@ -1,60 +1,56 @@
-## Objetivo
+## Problema
 
-Corregir únicamente la causa de la recarga/crash de la página principal, sin rediseñar, sin cambiar flujos, sin tocar administración de API keys, permisos, imports, rutas ni lógica no relacionada.
+El informe de IA sigue mostrando fechas/meses del futuro respecto al último mes con ventas registradas. La validación actual solo busca el patrón "mes año" en español, así que se le escapan casos como:
+
+- Años a secas: "en 2027", "para 2027", "el próximo año".
+- Trimestres/proyecciones: "próximo trimestre", "proyectado", "estimación", "se espera".
+- Meses sin año junto a un año del futuro.
+
+Además, hoy se está pasando al modelo `analysis.target_year` y `temporal_decomposition` con períodos que pueden ser posteriores al último mes registrado, lo cual lo empuja a inventar fechas futuras.
 
 ## Alcance estricto
 
-Solo se tocará código si está directamente relacionado con una de estas dos causas posibles:
-
-1. Carga/render excesivo en la página principal `/`.
-2. Llamadas largas a funciones backend que puedan dejar la pestaña inestable.
-
-No se hará ninguna mejora adicional.
+Solo se tocará lo necesario para evitar fechas del futuro en el informe de IA, sin cambiar nada más de la app.
 
 ## Plan mínimo
 
-### 1. Confirmar la causa exacta antes de editar
-- Revisar señales de navegador: memoria, CPU, requests repetidos y errores.
-- Revisar logs de funciones backend solo si aparece una llamada lenta/fallida relacionada con el momento de la recarga.
-- No cambiar nada hasta identificar qué dispara la caída.
+### 1. Sanitizar el payload enviado al modelo (frontend)
 
-### 2. Si la causa es carga masiva de capas territoriales
-Aplicar solo un parche defensivo:
-- Evitar que la app restaure automáticamente demasiadas capas territoriales visibles desde `localStorage` al abrir `/`.
-- Limitar la concurrencia de carga de features para que no se disparen decenas de requests simultáneos.
-- No cambiar el diseño ni la forma de usar las capas.
+Archivo: `src/components/panels/PoiAnalysisPanel.tsx`
 
-Archivos máximos en este caso:
-- `src/hooks/useTerritorialVisibility.tsx`
-- `src/hooks/useTerritorialLayers.ts`
+- Eliminar `target_year` del objeto `analysis` que se envía a `poi-insights`, o reemplazarlo por `latestRegisteredPeriodLabel` para que el modelo no tenga ningún ancla de año futuro.
+- Filtrar `temporal_decomposition` para descartar tramos cuyo período sea posterior al `latestRegisteredPeriod`.
+- No cambiar el panel visual ni el flujo del botón.
 
-### 3. Si la causa es una función backend lenta o con timeout
-Aplicar solo un parche defensivo:
-- Evitar que el frontend quede esperando indefinidamente.
-- Manejar timeout/error devolviendo estado controlado al usuario.
-- No implementar una cola completa salvo que se confirme que esa función realmente está superando límites y que no hay alternativa menor.
+### 2. Endurecer el prompt y la validación en el backend
 
-Archivos máximos en este caso:
-- El servicio/hook frontend que llama esa función.
-- La función backend específica que esté fallando, solo si es imprescindible.
+Archivo: `supabase/functions/poi-insights/index.ts`
 
-### 4. Validación mínima
-- Abrir `/` con el viewport actual.
-- Confirmar que no se dispara una explosión de requests.
-- Confirmar que la página se mantiene estable y no se recarga.
-- Verificar que las funciones principales existentes siguen iguales: mapa, sidebar y capas.
+- Endurecer el `systemPrompt`:
+  - Prohibir explícitamente menciones a años o trimestres posteriores a `latestRegisteredPeriod`.
+  - Prohibir lenguaje predictivo: "próximo", "próximos", "futuro", "proyección", "proyectado", "estimación", "se espera", "se proyecta".
+  - Bajar `temperature` a 0 para reducir alucinaciones.
+- Mejorar `mentionsInvalidMonths` y renombrar lógicamente a "menciones inválidas":
+  - Seguir detectando "mes año" fuera del rango permitido.
+  - Detectar cualquier año de 4 dígitos > año del último período registrado.
+  - Detectar palabras predictivas listadas arriba.
+- Si la validación falla, reemplazar por `buildSafeSummary` como ya se hace hoy.
+
+### 3. Validación
+
+- Generar el informe sobre un POI con datos hasta el mes X.
+- Confirmar que el texto no menciona meses, trimestres ni años posteriores a X.
+- Confirmar que el resto del informe sigue funcionando igual.
 
 ## Exclusiones explícitas
 
 No se tocará:
 - Administración de API keys.
-- Header.
-- Pantallas admin.
-- Autenticación/permisos.
-- Diseño visual.
-- Base de datos o migraciones, salvo que una función backend confirmada lo requiera.
-- Refactors generales o limpieza de código.
+- Lógica de rotación de keys.
+- Header, sidebar, panel admin, autenticación.
+- UI/estilos del panel de análisis.
+- Otras funciones backend.
 
 ## Resultado esperado
 
-Un cambio pequeño y focalizado que elimine la causa de la recarga sin alterar el comportamiento del resto de la app.
+El informe generado por IA nunca menciona fechas, trimestres ni años posteriores al último mes con ventas registradas. Si el modelo intenta hacerlo, el backend lo reemplaza automáticamente por el resumen seguro determinístico ya existente.
