@@ -145,11 +145,27 @@ const mentionsInvalidMonths = (summary: string, ctx: SalesContext): boolean => {
   const latest = normalizePeriod(ctx.latestRegisteredPeriod!);
   const latestYear = parseInt(latest.slice(0, 4), 10);
 
+  console.log("[poi-insights] DEBUG mentionsInvalidMonths", {
+    latest: ctx.latestRegisteredPeriod,
+    allowed_sample: [...ctx.availablePeriods].slice(-5),
+    summary_first_500: summary.slice(0, 500),
+  });
+  console.log("[poi-insights] DEBUG monthMention regex:", monthMention.source);
+
   // 1) "mes año" fuera del rango permitido.
   for (const match of summary.matchAll(monthMention)) {
     const month = match[1].toLowerCase();
     const year = match[2];
     const period = `${year}-${MONTHS_ES_TO_NUM[month]}-01`;
+    console.log("[poi-insights] DEBUG month found", {
+      fullMatch: match[0],
+      month,
+      year,
+      mappedNumber: MONTHS_ES_TO_NUM[month],
+      computedPeriod: period,
+      greaterThanLatest: period > latest,
+      inAllowed: allowed.has(period),
+    });
     if (period > latest || !allowed.has(period)) {
       console.warn(`[poi-insights] invalid month mention: ${match[0]}`);
       return true;
@@ -229,7 +245,9 @@ Reglas CRÍTICAS, sin excepción:
 - Ignora cualquier referencia a año actual, año cerrado, target_year o meses no listados arriba.
 - Usa cifras EXACTAS del JSON. No inventes números ni proyecciones.
 - Formato CLP con separador de miles (ej: $108.469.704).
-- Si un campo es null, omítelo. Máximo 200 palabras. Sin H1.`;
+- Si un campo es null, omítelo. Sin H1.
+- El informe debe tener al menos 150 palabras y desarrollar TODAS las secciones aplicables (Perfil, Desempeño, Tendencia histórica, Recomendación).
+- Si una sección no tiene datos, omitila completa, pero NUNCA dejes el texto cortado a mitad de frase.`;
 
     const userPrompt = `Datos del local:\n\n${JSON.stringify(payload, null, 2)}`;
 
@@ -242,7 +260,7 @@ Reglas CRÍTICAS, sin excepción:
         body: {
           systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 800 },
+          generationConfig: { temperature: 0, maxOutputTokens: 2000 },
         },
       });
       data = result.data;
