@@ -1,51 +1,36 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { SectionKey } from "@/config/sections";
-import {
-  ensurePrefsLoaded,
-  getPref,
-  setPref,
-  subscribePrefs,
-} from "@/services/userUiPrefs";
 
 interface SidebarSectionProps {
   title: string;
   accent?: "primary" | "teal" | "purple" | "iso" | "orange";
+  /** Estado por defecto en una sesión fresca. Por requerimiento UX, todas las
+   *  secciones del sidebar arrancan colapsadas al recargar la página. */
   defaultOpen?: boolean;
   children: ReactNode;
-  /** Si se pasa, la sección se oculta cuando el usuario no tiene permiso de view. */
   permissionKey?: SectionKey;
 }
 
-const STORAGE_KEY = "sidebar_sections_collapsed_v1";
+/**
+ * Estado in-memory por título: persiste mientras dura la sesión del SPA,
+ * pero se pierde al recargar la página (por diseño — el usuario pidió que
+ * todas las secciones vuelvan a estar colapsadas tras un reload).
+ */
+const sessionOpenState = new Map<string, boolean>();
 
-const readMap = (): Record<string, boolean> =>
-  (getPref<Record<string, boolean>>(STORAGE_KEY) ?? {}) as Record<string, boolean>;
-
-export const SidebarSection = ({ title, defaultOpen = true, children, permissionKey }: SidebarSectionProps) => {
+export const SidebarSection = ({ title, defaultOpen = false, children, permissionKey }: SidebarSectionProps) => {
   const { canView, loading } = usePermissions();
   const [open, setOpen] = useState<boolean>(() => {
-    const map = readMap();
-    return typeof map[title] === "boolean" ? map[title] : defaultOpen;
+    const v = sessionOpenState.get(title);
+    return typeof v === "boolean" ? v : defaultOpen;
   });
-
-  // On first mount: kick off remote prefs fetch + subscribe so we re-render
-  // when the server snapshot arrives (overwrites local guess if different).
-  useEffect(() => {
-    void ensurePrefsLoaded();
-    const unsub = subscribePrefs(() => {
-      const map = readMap();
-      if (typeof map[title] === "boolean") setOpen(map[title]);
-    });
-    return unsub;
-  }, [title]);
 
   const toggle = () => {
     setOpen((prev) => {
       const next = !prev;
-      const map = { ...readMap(), [title]: next };
-      setPref(STORAGE_KEY, map);
+      sessionOpenState.set(title, next);
       return next;
     });
   };
