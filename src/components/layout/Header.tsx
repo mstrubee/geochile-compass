@@ -1,9 +1,15 @@
-import { Clock, Hexagon, FileUp, LogIn, LogOut, User as UserIcon, Shield } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Clock, Hexagon, FileUp, LogIn, LogOut, User as UserIcon, Shield, KeyRound, ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { listGeminiLinks, type GeminiKeyLink } from "@/services/geminiKeysService";
 
 interface HeaderProps {
   mode: "none" | "isochrone" | "microzone";
@@ -14,6 +20,12 @@ interface HeaderProps {
 export const Header = ({ mode, onToggleIsochrone, onToggleMicrozone }: HeaderProps) => {
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
+  const [links, setLinks] = useState<GeminiKeyLink[]>([]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    listGeminiLinks().then(setLinks).catch(() => {});
+  }, [isAdmin]);
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -69,6 +81,37 @@ export const Header = ({ mode, onToggleIsochrone, onToggleMicrozone }: HeaderPro
       <button className="whitespace-nowrap rounded-full bg-primary px-3 py-1 text-[12px] font-medium text-primary-foreground shadow-apple-sm transition-colors hover:bg-primary/90">
         <FileUp className="mr-1 inline h-3 w-3" /> Archivo
       </button>
+
+      {isAdmin && (
+        <DropdownMenu>
+          <DropdownMenuTrigger className="flex items-center gap-1 whitespace-nowrap rounded-full border border-border/60 bg-surface-2/60 px-3 py-1 text-[12px] font-medium text-foreground transition-colors hover:bg-surface-3">
+            <KeyRound className="h-3 w-3" /> Obtener más API Keys
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-72">
+            <DropdownMenuLabel>Generar nuevas Gemini API Keys</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {links.length === 0 && (
+              <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                Sin enlaces configurados
+              </DropdownMenuItem>
+            )}
+            {links.map((l) => (
+              <DropdownMenuItem key={l.id} asChild>
+                <a href={l.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between gap-2">
+                  <span className="truncate">{l.label}</span>
+                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                </a>
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/admin/gemini-keys" className="flex items-center gap-2">
+                <Shield className="h-3 w-3" /> Gestionar keys y enlaces
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       {isAdmin && (
         <Link
