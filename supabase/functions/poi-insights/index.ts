@@ -234,21 +234,6 @@ Reglas CRÍTICAS, sin excepción:
           generationConfig: { temperature: 0, maxOutputTokens: 800 },
         },
       });
-
-    const userPrompt = `Datos del local:\n\n${JSON.stringify(payload, null, 2)}`;
-
-    let data: any;
-    try {
-      const result = await callGeminiWithRotation({
-        model: MODEL,
-        admin,
-        fallbackEnvKey: FALLBACK_KEY,
-        body: {
-          systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 800 },
-        },
-      });
       data = result.data;
     } catch (err) {
       if (err instanceof AllGeminiKeysFailedError) {
