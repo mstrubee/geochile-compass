@@ -555,14 +555,13 @@ const ParqueAnalysisSection = ({
   open: boolean;
   onToggle: () => void;
 }) => {
-  const { stats, loading, enabled } = useParqueIsochroneStats(isoFeature);
-  if (!enabled) return null;
+  const { stats, loading } = useParqueIsochroneStats(isoFeature, open);
   return (
     <Section title="Parque vehicular" open={open} onToggle={onToggle}>
       <div className="rounded-xl bg-surface-2/60 p-3">
         {loading ? (
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" /> Calculando…
+            <Loader2 className="h-3 w-3 animate-spin" /> Cargando…
           </div>
         ) : !stats || stats.vehiculos <= 0 ? (
           <div className="text-center text-[11px] text-text-muted">
