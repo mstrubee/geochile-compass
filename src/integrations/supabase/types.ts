@@ -357,6 +357,81 @@ export type Database = {
           },
         ]
       }
+      gemini_api_keys: {
+        Row: {
+          alias: string
+          api_key: string
+          created_at: string
+          enabled: boolean
+          error_count: number
+          id: string
+          last_error_at: string | null
+          last_error_message: string | null
+          last_error_reason: string | null
+          last_used_at: string | null
+          priority: number
+          success_count: number
+          updated_at: string
+        }
+        Insert: {
+          alias: string
+          api_key: string
+          created_at?: string
+          enabled?: boolean
+          error_count?: number
+          id?: string
+          last_error_at?: string | null
+          last_error_message?: string | null
+          last_error_reason?: string | null
+          last_used_at?: string | null
+          priority?: number
+          success_count?: number
+          updated_at?: string
+        }
+        Update: {
+          alias?: string
+          api_key?: string
+          created_at?: string
+          enabled?: boolean
+          error_count?: number
+          id?: string
+          last_error_at?: string | null
+          last_error_message?: string | null
+          last_error_reason?: string | null
+          last_used_at?: string | null
+          priority?: number
+          success_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      gemini_key_links: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          order_index: number
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          order_index?: number
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          order_index?: number
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
       isochrone_folders: {
         Row: {
           color: string | null
