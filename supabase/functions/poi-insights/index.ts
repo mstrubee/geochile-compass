@@ -213,10 +213,11 @@ Reglas CRÍTICAS, sin excepción:
         return new Response(
           JSON.stringify({
             error: "ALL_KEYS_FAILED",
-            detail: err.attempts,
+            attempts: err.attempts,
+            fallback: true,
             summary: buildSafeSummary(payload, ctx),
           }),
-          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
       throw err;
