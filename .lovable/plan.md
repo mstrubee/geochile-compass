@@ -1,56 +1,46 @@
-## Problema
+## Diagnóstico
 
-El informe de IA sigue mostrando fechas/meses del futuro respecto al último mes con ventas registradas. La validación actual solo busca el patrón "mes año" en español, así que se le escapan casos como:
+Los POIs desaparecen del sidebar después de "un rato" sin tocar nada. Recargar la página los recupera. La causa raíz está en el ciclo auth + bootstrap:
 
-- Años a secas: "en 2027", "para 2027", "el próximo año".
-- Trimestres/proyecciones: "próximo trimestre", "proyectado", "estimación", "se espera".
-- Meses sin año junto a un año del futuro.
+1. `useAuth` (`src/hooks/useAuth.tsx:38-43`) escucha `onAuthStateChange`. Supabase emite `TOKEN_REFRESHED` cada ~1 h y dispara `setUser(s?.user ?? null)` con un **nuevo objeto `User`** (referencia distinta, mismo `id`).
+2. En `useSavedPois.ts:431-448` el effect de bootstrap depende de `[user, authLoading, loadFolderCounts]`. Como `user` cambió de referencia, el effect corre de nuevo y ejecuta:
+   ```ts
+   setPois([]); setTrashedPois([]);
+   poisRef.current = []; trashedRef.current = [];
+   lastSyncAtRef.current = null;
+   ```
+   → los POIs ya cargados de las carpetas abiertas desaparecen de la UI.
+3. En `Index.tsx:388-399` `loadedPoiFolderIds` **no** se resetea, así que `loadPoiFoldersOnce` cree que las carpetas ya están cargadas y no vuelve a pedirlas. Sólo `loadFolderCounts` corre, por eso los contadores siguen bien pero las listas quedan vacías.
+4. Recargar la página re-bootstrappea desde caché (IndexedDB) y todo vuelve.
 
-Además, hoy se está pasando al modelo `analysis.target_year` y `temporal_decomposition` con períodos que pueden ser posteriores al último mes registrado, lo cual lo empuja a inventar fechas futuras.
+Esto coincide con el síntoma "después de un rato" (≈ el intervalo de refresh de Supabase) y con que recargar lo arregla.
 
-## Alcance estricto
+## Fix propuesto
 
-Solo se tocará lo necesario para evitar fechas del futuro en el informe de IA, sin cambiar nada más de la app.
+### 1. `src/hooks/useSavedPois.ts` — no resetear si el `user.id` no cambió
 
-## Plan mínimo
+En el effect de bootstrap (≈ línea 431-448), comparar contra `userIdRef.current`:
 
-### 1. Sanitizar el payload enviado al modelo (frontend)
+- Si `user?.id === userIdRef.current` → no tocar `pois`/`trashedPois`/`lastSyncAtRef`. Opcionalmente disparar un `void syncDelta()` para traer cambios remotos posteriores al refresh.
+- Si cambió el `user.id` (login real, logout, switch de cuenta) → mantener el comportamiento actual de limpieza.
+- Mismo criterio para el caso `!user`: sólo limpiar si antes había un user distinto.
 
-Archivo: `src/components/panels/PoiAnalysisPanel.tsx`
+### 2. `src/pages/Index.tsx` — resetear `loadedPoiFolderIds` cuando se limpia el estado
 
-- Eliminar `target_year` del objeto `analysis` que se envía a `poi-insights`, o reemplazarlo por `latestRegisteredPeriodLabel` para que el modelo no tenga ningún ancla de año futuro.
-- Filtrar `temporal_decomposition` para descartar tramos cuyo período sea posterior al `latestRegisteredPeriod`.
-- No cambiar el panel visual ni el flujo del botón.
+Para que, en un cambio real de usuario, las carpetas abiertas se vuelvan a pedir. Una forma simple: vaciar `loadedPoiFolderIds` cuando `user?.id` cambie. Esto evita futuras inconsistencias aunque el fix #1 ya cubre el caso TOKEN_REFRESHED.
 
-### 2. Endurecer el prompt y la validación en el backend
+### 3. (Opcional, defensivo) Cache anti-clear duplicado
 
-Archivo: `supabase/functions/poi-insights/index.ts`
+En el effect de persistencia (`useSavedPois.ts:88-109`) ya hay guard contra escribir snapshot vacío encima del caché bueno. Con el fix #1 ya no se dispararía el setPois([]) espurio, pero el guard sigue siendo útil — no se toca.
 
-- Endurecer el `systemPrompt`:
-  - Prohibir explícitamente menciones a años o trimestres posteriores a `latestRegisteredPeriod`.
-  - Prohibir lenguaje predictivo: "próximo", "próximos", "futuro", "proyección", "proyectado", "estimación", "se espera", "se proyecta".
-  - Bajar `temperature` a 0 para reducir alucinaciones.
-- Mejorar `mentionsInvalidMonths` y renombrar lógicamente a "menciones inválidas":
-  - Seguir detectando "mes año" fuera del rango permitido.
-  - Detectar cualquier año de 4 dígitos > año del último período registrado.
-  - Detectar palabras predictivas listadas arriba.
-- Si la validación falla, reemplazar por `buildSafeSummary` como ya se hace hoy.
+## Verificación
 
-### 3. Validación
+- Cargar la app, abrir una o varias carpetas, ver POIs en sidebar.
+- En DevTools, simular `TOKEN_REFRESHED` (o esperar ~1 h, o forzar `supabase.auth.refreshSession()` desde consola).
+- Confirmar que los POIs visibles en el sidebar **no** desaparecen.
+- Confirmar que login/logout real sigue limpiando el estado correctamente.
 
-- Generar el informe sobre un POI con datos hasta el mes X.
-- Confirmar que el texto no menciona meses, trimestres ni años posteriores a X.
-- Confirmar que el resto del informe sigue funcionando igual.
+## Fuera de alcance
 
-## Exclusiones explícitas
-
-No se tocará:
-- Administración de API keys.
-- Lógica de rotación de keys.
-- Header, sidebar, panel admin, autenticación.
-- UI/estilos del panel de análisis.
-- Otras funciones backend.
-
-## Resultado esperado
-
-El informe generado por IA nunca menciona fechas, trimestres ni años posteriores al último mes con ventas registradas. Si el modelo intenta hacerlo, el backend lo reemplaza automáticamente por el resumen seguro determinístico ya existente.
+- No se toca el sync delta, el caché en IndexedDB, ni la lógica de mutaciones.
+- No se cambia `useAuth` (su comportamiento de re-emitir el user en cada evento es estándar de Supabase y otros consumidores podrían depender de eso).
