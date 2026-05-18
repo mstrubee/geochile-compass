@@ -2208,20 +2208,6 @@ export const Sidebar = ({
                   );
                 })()}
               </div>
-              <button
-                onClick={() => {
-                  const total = savedPois.length;
-                  if (total === 0) {
-                    toast.info("No hay POIs para borrar");
-                    return;
-                  }
-                  if (!window.confirm(`¿Mover TODOS los ${total} POIs a la papelera? Podrás recuperarlos durante 30 días.`)) return;
-                  onClearSavedPois();
-                }}
-                className="mt-1.5 w-full rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              >
-                Mover todos a papelera
-              </button>
             </>
           )}
         </SidebarSection>
