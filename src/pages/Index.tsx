@@ -376,6 +376,17 @@ const Index = () => {
   );
   const [loadedPoiFolderIds, setLoadedPoiFolderIds] = useState<Set<string | null>>(new Set());
 
+  // Si cambia el user (login/logout/switch), olvidamos qué carpetas estaban
+  // ya cargadas: el hook resetea el state de POIs y hay que volver a pedirlas.
+  const prevUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const uid = user?.id ?? null;
+    if (prevUserIdRef.current !== uid) {
+      prevUserIdRef.current = uid;
+      setLoadedPoiFolderIds(new Set());
+    }
+  }, [user]);
+
   useEffect(() => {
     if (folders.length === 0) return;
     setHiddenPoiFolders((prev) => {

@@ -431,13 +431,26 @@ export const useSavedPois = () => {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      setPois([]);
-      setTrashedPois([]);
-      setFolderCounts(new Map());
-      lastSyncAtRef.current = null;
-      userIdRef.current = null;
+      // Solo limpiar si antes había un user distinto (logout real).
+      if (userIdRef.current !== null) {
+        setPois([]);
+        setTrashedPois([]);
+        setFolderCounts(new Map());
+        poisRef.current = [];
+        trashedRef.current = [];
+        lastSyncAtRef.current = null;
+        userIdRef.current = null;
+      }
       return;
     }
+    // Si el user.id no cambió (típicamente TOKEN_REFRESHED re-emite el mismo
+    // user con otra referencia), NO resetear el estado: los POIs ya cargados
+    // siguen siendo válidos. Sólo refrescamos contadores por las dudas.
+    if (userIdRef.current === user.id) {
+      void loadFolderCounts();
+      return;
+    }
+    // Cambio real de user (login o switch de cuenta): bootstrap limpio.
     userIdRef.current = user.id;
     setPois([]);
     setTrashedPois([]);
