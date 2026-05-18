@@ -619,7 +619,7 @@ export const buildFeaturePayload = async (
   const folderIdEff = opts.folderId ?? poi.folder_id ?? null;
   let usedRolesPath = false;
 
-  if (folderIdEff) {
+  if (folderIdEff && ENABLE_FOLDER_LAYER_ROLES) {
     try {
       const buckets = await buildFromFolderRoles(folderIdEff, iso, bbox, isoMinutes);
       if (buckets) {
