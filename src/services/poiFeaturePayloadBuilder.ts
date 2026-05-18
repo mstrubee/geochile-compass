@@ -518,6 +518,9 @@ interface BuildPayloadDeps {
 
 export interface BuildPayloadOptions {
   poi: SavedPoi;
+  /** Carpeta del POI. Si se entrega y tiene folder_layer_roles, el builder
+   *  usa la lógica nueva (roles territoriales); si no, lógica vieja. */
+  folderId?: string | null;
   /** Comuna conocida del POI. Si no se entrega, se resuelve por reverse-geocode lat/lng. */
   comuna?: string | null;
   /** Flag RM conocido. Si no se entrega, se resuelve por reverse-geocode. */
