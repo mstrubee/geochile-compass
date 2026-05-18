@@ -126,6 +126,9 @@ export interface FeaturePayload {
   cells: ManzanaCell[];
   competitors: CompetitorPoi[];
   complements: ComplementCandidate[];
+  /** Subconjunto de complements con role='ancla'. Hoy la edge function no lo
+   *  consume todavía (Fase 3b lo agrega como anchor_score). */
+  anchors: ComplementCandidate[];
   config_version: number;
   use_fine_cannibalization: boolean;
 }
