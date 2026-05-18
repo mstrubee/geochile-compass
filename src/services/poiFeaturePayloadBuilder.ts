@@ -13,6 +13,20 @@ import {
 import type { AnalysisSettings, ComplementWeightRule } from "@/types/analysis";
 import type { GseClass, GseFeature } from "@/types/gse";
 import { resolveCommuneAndRegion } from "@/utils/communeReverseGeocode";
+import { supabase } from "@/integrations/supabase/client";
+
+/* ---------- Mapeo rol territorial → peso (folder_layer_roles) ----------
+ * Defaults hardcoded para Sprint 3 Tarea 3. Si una capa NO tiene rol
+ * asignado (ni por layer_id ni por group_id) la ignoramos: NO se asume
+ * "complementario default" — sería peligroso (ej: 46k features SII).
+ */
+const ROLE_WEIGHTS_BUILDER = {
+  competencia: -1.0,
+  complementario: 0.5,
+  ancla: 1.5,
+  irrelevante: 0.0,
+} as const;
+type BuilderRole = keyof typeof ROLE_WEIGHTS_BUILDER;
 
 /**
  * Construye el payload para `compute-poi-features` para UN POI.
