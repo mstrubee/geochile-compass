@@ -68,6 +68,42 @@ export type Database = {
         }
         Relationships: []
       }
+      _poi_features_cache_pre_tarea3: {
+        Row: {
+          computed_at: string | null
+          config_version: number | null
+          features: Json | null
+          folder_id: string | null
+          is_rm: boolean | null
+          iso_geom_hash: string | null
+          iso_minutes: number | null
+          poi_id: string | null
+          snapshot_at: string | null
+        }
+        Insert: {
+          computed_at?: string | null
+          config_version?: number | null
+          features?: Json | null
+          folder_id?: string | null
+          is_rm?: boolean | null
+          iso_geom_hash?: string | null
+          iso_minutes?: number | null
+          poi_id?: string | null
+          snapshot_at?: string | null
+        }
+        Update: {
+          computed_at?: string | null
+          config_version?: number | null
+          features?: Json | null
+          folder_id?: string | null
+          is_rm?: boolean | null
+          iso_geom_hash?: string | null
+          iso_minutes?: number | null
+          poi_id?: string | null
+          snapshot_at?: string | null
+        }
+        Relationships: []
+      }
       _poi_folders_pre_migration_backup: {
         Row: {
           color: string | null
@@ -185,6 +221,42 @@ export type Database = {
           source_layer?: string | null
           updated_at?: string | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      _r2_baseline_pre_tarea3: {
+        Row: {
+          computed_at: string | null
+          config_version: number | null
+          folder_id: string | null
+          folder_name: string | null
+          model_a_r2: number | null
+          model_b_r2: number | null
+          poi_id: string | null
+          snapshot_at: string | null
+          snapshot_label: string | null
+        }
+        Insert: {
+          computed_at?: string | null
+          config_version?: number | null
+          folder_id?: string | null
+          folder_name?: string | null
+          model_a_r2?: number | null
+          model_b_r2?: number | null
+          poi_id?: string | null
+          snapshot_at?: string | null
+          snapshot_label?: string | null
+        }
+        Update: {
+          computed_at?: string | null
+          config_version?: number | null
+          folder_id?: string | null
+          folder_name?: string | null
+          model_a_r2?: number | null
+          model_b_r2?: number | null
+          poi_id?: string | null
+          snapshot_at?: string | null
+          snapshot_label?: string | null
         }
         Relationships: []
       }
