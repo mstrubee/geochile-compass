@@ -401,6 +401,109 @@ const inBbox = (
   return pt.lng >= w && pt.lng <= e && pt.lat >= s && pt.lat <= n;
 };
 
+/* ---------- Lógica nueva: folder_layer_roles → buckets ---------- */
+
+interface RoleBuckets {
+  competitors: CompetitorPoi[];
+  complements: ComplementCandidate[];
+  anchors: ComplementCandidate[];
+}
+
+/**
+ * Si la carpeta tiene roles configurados en folder_layer_roles, esta función
+ * devuelve los buckets (competitors / complements / anchors) derivados de
+ * territorial_features filtrados por isócrona.
+ *
+ * Retorna null si la carpeta NO tiene roles → caller debe usar la lógica
+ * vieja (analysis_settings.external_competition_* + complement_weight_rules).
+ *
+ * Herencia: layer_id override > group_id de la categoría. Capas sin rol
+ * asignado se IGNORAN (no default complementario).
+ */
+const buildFromFolderRoles = async (
+  folderId: string,
+  iso: Polygon | MultiPolygon,
+  isoBbox: [number, number, number, number],
+  isoMinutes: number,
+): Promise<RoleBuckets | null> => {
+  const { data: roles, error: rolesErr } = await supabase
+    .from("folder_layer_roles")
+    .select("layer_id, group_id, role, weight_override")
+    .eq("folder_id", folderId);
+  if (rolesErr) throw rolesErr;
+  if (!roles || roles.length === 0) return null;
+
+  const byLayer = new Map<string, { role: string; weight_override: number | null }>();
+  const byGroup = new Map<string, { role: string; weight_override: number | null }>();
+  for (const r of roles) {
+    const rec = { role: r.role, weight_override: r.weight_override };
+    if (r.layer_id) byLayer.set(r.layer_id, rec);
+    else if (r.group_id) byGroup.set(r.group_id, rec);
+  }
+
+  const { data: layers, error: layersErr } = await supabase
+    .from("territorial_layers")
+    .select("id, group_id, name");
+  if (layersErr) throw layersErr;
+
+  const layerResolved = new Map<string, { role: BuilderRole; weight: number; label: string }>();
+  for (const l of layers ?? []) {
+    const eff = byLayer.get(l.id) ?? (l.group_id ? byGroup.get(l.group_id) : null);
+    if (!eff) continue; // capa sin rol → ignorada (conservador)
+    const role = eff.role as BuilderRole;
+    if (!(role in ROLE_WEIGHTS_BUILDER)) continue;
+    const weight =
+      eff.weight_override ?? ROLE_WEIGHTS_BUILDER[role] ?? 0;
+    layerResolved.set(l.id, { role, weight, label: l.name ?? role });
+  }
+
+  const relevantLayerIds = [...layerResolved.entries()]
+    .filter(([, v]) => v.role !== "irrelevante")
+    .map(([id]) => id);
+
+  if (relevantLayerIds.length === 0) {
+    return { competitors: [], complements: [], anchors: [] };
+  }
+
+  const [w, s, e, n] = isoBbox;
+  const { data: feats, error: featsErr } = await supabase
+    .from("territorial_features")
+    .select("id, layer_id, lat, lng, name")
+    .in("layer_id", relevantLayerIds)
+    .gte("lng", w).lte("lng", e)
+    .gte("lat", s).lte("lat", n);
+  if (featsErr) throw featsErr;
+
+  const competitors: CompetitorPoi[] = [];
+  const complements: ComplementCandidate[] = [];
+  const anchors: ComplementCandidate[] = [];
+
+  for (const f of feats ?? []) {
+    if (f.lat == null || f.lng == null) continue;
+    if (!pointInPoly([f.lng, f.lat], iso)) continue;
+    const meta = layerResolved.get(f.layer_id);
+    if (!meta || meta.role === "irrelevante") continue;
+
+    if (meta.role === "competencia") {
+      competitors.push({
+        id: f.id, lng: f.lng, lat: f.lat,
+        iso_minutes: isoMinutes, source: "external",
+      });
+    } else {
+      const cand: ComplementCandidate = {
+        id: f.id, lng: f.lng, lat: f.lat,
+        text: f.name ?? "",
+        weight: meta.weight,
+        label: meta.label,
+      };
+      complements.push(cand);
+      if (meta.role === "ancla") anchors.push(cand);
+    }
+  }
+
+  return { competitors, complements, anchors };
+};
+
 /* ---------- API pública ---------- */
 
 interface BuildPayloadDeps {
