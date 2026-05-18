@@ -104,7 +104,10 @@ export const TerritorialRolesTab = ({ folderId }: Props) => {
         ...Object.entries(layerOverrides).map(([layer_id, role]) => ({ layer_id, role })),
       ];
       await saveFolderLayerRoles(folderId, rows);
-      toast.success("Roles guardados");
+      toast.success(
+        "Roles guardados. El próximo recálculo de features usará la nueva configuración. Ejecutá \"Calcular features territoriales\" para actualizar.",
+        { duration: 7000 },
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al guardar");
     } finally {

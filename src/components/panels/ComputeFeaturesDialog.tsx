@@ -240,11 +240,19 @@ export const ComputeFeaturesDialog = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => batch.reset()}
+                  onClick={() => {
+                    batch.reset();
+                    // Forzar recálculo: destildar "Saltar caché" para que la
+                    // próxima corrida procese todos los POIs (útil cuando el
+                    // usuario reinicia tras cambiar roles/config y quiere
+                    // garantizar que se recomputen, no que salten por cache).
+                    setSkipCached(false);
+                  }}
                   disabled={isRunning}
+                  title="Reinicia el panel y destilda 'Saltar caché' para forzar recálculo"
                 >
                   <RotateCcw className="mr-1.5 h-3 w-3" />
-                  Reiniciar
+                  Reiniciar (forzar recálculo)
                 </Button>
                 <div className="flex gap-2">
                   {isRunning && (
