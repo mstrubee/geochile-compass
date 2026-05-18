@@ -20,6 +20,11 @@ import { supabase } from "@/integrations/supabase/client";
  * asignado (ni por layer_id ni por group_id) la ignoramos: NO se asume
  * "complementario default" — sería peligroso (ej: 46k features SII).
  */
+// Sprint 3 Tarea 3 - DESACTIVADO temporalmente.
+// El cálculo nuevo desestabiliza el modelo Ridge.
+// Reactivar en Sprint 4 con normalización por área.
+const ENABLE_FOLDER_LAYER_ROLES = false;
+
 const ROLE_WEIGHTS_BUILDER = {
   competencia: -1.0,
   complementario: 0.5,
@@ -614,7 +619,7 @@ export const buildFeaturePayload = async (
   const folderIdEff = opts.folderId ?? poi.folder_id ?? null;
   let usedRolesPath = false;
 
-  if (folderIdEff) {
+  if (folderIdEff && ENABLE_FOLDER_LAYER_ROLES) {
     try {
       const buckets = await buildFromFolderRoles(folderIdEff, iso, bbox, isoMinutes);
       if (buckets) {
