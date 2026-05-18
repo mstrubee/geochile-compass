@@ -602,115 +602,113 @@ export const buildFeaturePayload = async (
     cells = await buildRegionCells(poi, comuna);
   }
 
-  // 4) Competidores internos cercanos
-  const internalPeers = deps.internalPeers
-    .filter((p) => p.id !== poi.id)
-    .filter((p) => inBbox(p, expanded));
+  // 4-6) Competidores y complementarios.
+  //
+  // Si la carpeta tiene folder_layer_roles configurados → lógica NUEVA
+  // (territorial_features bucketizados por rol). Si no → lógica VIEJA
+  // (deps.externalCompetitors + complement_weight_rules vía regex).
+  let competitors: CompetitorPoi[] = [];
+  let complements: ComplementCandidate[] = [];
+  let anchors: ComplementCandidate[] = [];
 
-  const competitors: CompetitorPoi[] = [];
+  const folderIdEff = opts.folderId ?? poi.folder_id ?? null;
+  let usedRolesPath = false;
 
-  if (includeCompetitorIsos) {
-    for (const p of internalPeers) {
-      try {
-        const peerIso = await fetchIsochrone(
-          p.lng,
-          p.lat,
-          isoMinutes,
-          supabaseUrl,
-          supabaseAnonKey,
-          bearer,
-        );
+  if (folderIdEff) {
+    try {
+      const buckets = await buildFromFolderRoles(folderIdEff, iso, bbox, isoMinutes);
+      if (buckets) {
+        competitors = buckets.competitors;
+        complements = buckets.complements;
+        anchors = buckets.anchors;
+        usedRolesPath = true;
+      }
+    } catch (e) {
+      console.warn("[features] folder_layer_roles falló, fallback a lógica vieja:", e);
+    }
+  }
+
+  if (!usedRolesPath) {
+    // === LÓGICA VIEJA (intacta) ===
+    const internalPeers = deps.internalPeers
+      .filter((p) => p.id !== poi.id)
+      .filter((p) => inBbox(p, expanded));
+
+    if (includeCompetitorIsos) {
+      for (const p of internalPeers) {
+        try {
+          const peerIso = await fetchIsochrone(
+            p.lng, p.lat, isoMinutes, supabaseUrl, supabaseAnonKey, bearer,
+          );
+          competitors.push({
+            id: p.id, lng: p.lng, lat: p.lat,
+            iso_minutes: isoMinutes, iso_polygon: peerIso, source: "internal",
+          });
+        } catch {
+          competitors.push({
+            id: p.id, lng: p.lng, lat: p.lat,
+            iso_minutes: isoMinutes, source: "internal",
+          });
+        }
+      }
+    } else {
+      for (const p of internalPeers) {
         competitors.push({
-          id: p.id,
-          lng: p.lng,
-          lat: p.lat,
-          iso_minutes: isoMinutes,
-          iso_polygon: peerIso,
-          source: "internal",
-        });
-      } catch {
-        competitors.push({
-          id: p.id,
-          lng: p.lng,
-          lat: p.lat,
-          iso_minutes: isoMinutes,
-          source: "internal",
+          id: p.id, lng: p.lng, lat: p.lat,
+          iso_minutes: isoMinutes, source: "internal",
         });
       }
     }
-  } else {
-    for (const p of internalPeers) {
+
+    // 5) Competidores externos (folders y layer features)
+    for (const p of deps.externalCompetitors.filter((p) => inBbox(p, expanded))) {
       competitors.push({
-        id: p.id,
-        lng: p.lng,
-        lat: p.lat,
-        iso_minutes: isoMinutes,
-        source: "internal",
+        id: p.id, lng: p.lng, lat: p.lat,
+        iso_minutes: isoMinutes, source: "external",
+      });
+    }
+    for (const f of deps.externalCompetitorLayerFeatures.filter((f) => inBbox(f, expanded))) {
+      competitors.push({
+        id: f.id, lng: f.lng, lat: f.lat,
+        iso_minutes: isoMinutes, source: "external",
+      });
+    }
+
+    // 6) Complementarios con regex
+    const compiled: CompiledRule[] = compileRules(deps.rules);
+    for (const p of deps.otherPois.filter((p) => inBbox(p, expanded))) {
+      const text = `${p.name ?? ""} ${p.category ?? ""}`.trim();
+      const m = matchRule(text, compiled);
+      complements.push({
+        id: p.id, lng: p.lng, lat: p.lat, text, weight: m.weight, label: m.label,
+      });
+    }
+    for (const f of deps.complementaryLayerFeatures.filter((f) => inBbox(f, expanded))) {
+      const text = `${f.name ?? ""} ${f.category ?? ""}`.trim();
+      const m = matchRule(text, compiled);
+      complements.push({
+        id: f.id, lng: f.lng, lat: f.lat, text, weight: m.weight, label: m.label,
       });
     }
   }
 
-  // 5) Competidores externos (folders y layer features)
-  for (const p of deps.externalCompetitors.filter((p) => inBbox(p, expanded))) {
-    competitors.push({
-      id: p.id,
-      lng: p.lng,
-      lat: p.lat,
-      iso_minutes: isoMinutes,
-      source: "external",
-    });
-  }
-  for (const f of deps.externalCompetitorLayerFeatures.filter((f) => inBbox(f, expanded))) {
-    competitors.push({
-      id: f.id,
-      lng: f.lng,
-      lat: f.lat,
-      iso_minutes: isoMinutes,
-      source: "external",
-    });
-  }
-
-  // 6) Complementarios con regex
-  const compiled: CompiledRule[] = compileRules(deps.rules);
-  const complements: ComplementCandidate[] = [];
-  for (const p of deps.otherPois.filter((p) => inBbox(p, expanded))) {
-    const text = `${p.name ?? ""} ${p.category ?? ""}`.trim();
-    const m = matchRule(text, compiled);
-    complements.push({
-      id: p.id,
-      lng: p.lng,
-      lat: p.lat,
-      text,
-      weight: m.weight,
-      label: m.label,
-    });
-  }
-  for (const f of deps.complementaryLayerFeatures.filter((f) => inBbox(f, expanded))) {
-    const text = `${f.name ?? ""} ${f.category ?? ""}`.trim();
-    const m = matchRule(text, compiled);
-    complements.push({
-      id: f.id,
-      lng: f.lng,
-      lat: f.lat,
-      text,
-      weight: m.weight,
-      label: m.label,
-    });
-  }
+  console.debug(
+    `[features] poi=${poi.name} folder=${folderIdEff} ` +
+    `usedRolesPath=${usedRolesPath} ` +
+    `comp=${competitors.length} compl=${complements.length} ` +
+    `ancl=${anchors.length}`,
+  );
 
   return {
     poi: {
-      id: poi.id,
-      lng: poi.lng,
-      lat: poi.lat,
-      comuna,
-      is_rm: isRm,
-      iso_minutes: isoMinutes,
+      id: poi.id, lng: poi.lng, lat: poi.lat,
+      comuna, is_rm: isRm, iso_minutes: isoMinutes,
     },
     iso_polygon: iso,
     cells,
     competitors,
     complements,
+    anchors,
     config_version: deps.settings.config_version,
     use_fine_cannibalization: deps.settings.use_fine_cannibalization,
   };
