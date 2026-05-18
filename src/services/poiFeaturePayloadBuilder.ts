@@ -13,6 +13,20 @@ import {
 import type { AnalysisSettings, ComplementWeightRule } from "@/types/analysis";
 import type { GseClass, GseFeature } from "@/types/gse";
 import { resolveCommuneAndRegion } from "@/utils/communeReverseGeocode";
+import { supabase } from "@/integrations/supabase/client";
+
+/* ---------- Mapeo rol territorial → peso (folder_layer_roles) ----------
+ * Defaults hardcoded para Sprint 3 Tarea 3. Si una capa NO tiene rol
+ * asignado (ni por layer_id ni por group_id) la ignoramos: NO se asume
+ * "complementario default" — sería peligroso (ej: 46k features SII).
+ */
+const ROLE_WEIGHTS_BUILDER = {
+  competencia: -1.0,
+  complementario: 0.5,
+  ancla: 1.5,
+  irrelevante: 0.0,
+} as const;
+type BuilderRole = keyof typeof ROLE_WEIGHTS_BUILDER;
 
 /**
  * Construye el payload para `compute-poi-features` para UN POI.
@@ -112,6 +126,9 @@ export interface FeaturePayload {
   cells: ManzanaCell[];
   competitors: CompetitorPoi[];
   complements: ComplementCandidate[];
+  /** Subconjunto de complements con role='ancla'. Hoy la edge function no lo
+   *  consume todavía (Fase 3b lo agrega como anchor_score). */
+  anchors: ComplementCandidate[];
   config_version: number;
   use_fine_cannibalization: boolean;
 }
@@ -384,6 +401,109 @@ const inBbox = (
   return pt.lng >= w && pt.lng <= e && pt.lat >= s && pt.lat <= n;
 };
 
+/* ---------- Lógica nueva: folder_layer_roles → buckets ---------- */
+
+interface RoleBuckets {
+  competitors: CompetitorPoi[];
+  complements: ComplementCandidate[];
+  anchors: ComplementCandidate[];
+}
+
+/**
+ * Si la carpeta tiene roles configurados en folder_layer_roles, esta función
+ * devuelve los buckets (competitors / complements / anchors) derivados de
+ * territorial_features filtrados por isócrona.
+ *
+ * Retorna null si la carpeta NO tiene roles → caller debe usar la lógica
+ * vieja (analysis_settings.external_competition_* + complement_weight_rules).
+ *
+ * Herencia: layer_id override > group_id de la categoría. Capas sin rol
+ * asignado se IGNORAN (no default complementario).
+ */
+const buildFromFolderRoles = async (
+  folderId: string,
+  iso: Polygon | MultiPolygon,
+  isoBbox: [number, number, number, number],
+  isoMinutes: number,
+): Promise<RoleBuckets | null> => {
+  const { data: roles, error: rolesErr } = await supabase
+    .from("folder_layer_roles")
+    .select("layer_id, group_id, role, weight_override")
+    .eq("folder_id", folderId);
+  if (rolesErr) throw rolesErr;
+  if (!roles || roles.length === 0) return null;
+
+  const byLayer = new Map<string, { role: string; weight_override: number | null }>();
+  const byGroup = new Map<string, { role: string; weight_override: number | null }>();
+  for (const r of roles) {
+    const rec = { role: r.role, weight_override: r.weight_override };
+    if (r.layer_id) byLayer.set(r.layer_id, rec);
+    else if (r.group_id) byGroup.set(r.group_id, rec);
+  }
+
+  const { data: layers, error: layersErr } = await supabase
+    .from("territorial_layers")
+    .select("id, group_id, name");
+  if (layersErr) throw layersErr;
+
+  const layerResolved = new Map<string, { role: BuilderRole; weight: number; label: string }>();
+  for (const l of layers ?? []) {
+    const eff = byLayer.get(l.id) ?? (l.group_id ? byGroup.get(l.group_id) : null);
+    if (!eff) continue; // capa sin rol → ignorada (conservador)
+    const role = eff.role as BuilderRole;
+    if (!(role in ROLE_WEIGHTS_BUILDER)) continue;
+    const weight =
+      eff.weight_override ?? ROLE_WEIGHTS_BUILDER[role] ?? 0;
+    layerResolved.set(l.id, { role, weight, label: l.name ?? role });
+  }
+
+  const relevantLayerIds = [...layerResolved.entries()]
+    .filter(([, v]) => v.role !== "irrelevante")
+    .map(([id]) => id);
+
+  if (relevantLayerIds.length === 0) {
+    return { competitors: [], complements: [], anchors: [] };
+  }
+
+  const [w, s, e, n] = isoBbox;
+  const { data: feats, error: featsErr } = await supabase
+    .from("territorial_features")
+    .select("id, layer_id, lat, lng, name")
+    .in("layer_id", relevantLayerIds)
+    .gte("lng", w).lte("lng", e)
+    .gte("lat", s).lte("lat", n);
+  if (featsErr) throw featsErr;
+
+  const competitors: CompetitorPoi[] = [];
+  const complements: ComplementCandidate[] = [];
+  const anchors: ComplementCandidate[] = [];
+
+  for (const f of feats ?? []) {
+    if (f.lat == null || f.lng == null) continue;
+    if (!pointInPoly([f.lng, f.lat], iso)) continue;
+    const meta = layerResolved.get(f.layer_id);
+    if (!meta || meta.role === "irrelevante") continue;
+
+    if (meta.role === "competencia") {
+      competitors.push({
+        id: f.id, lng: f.lng, lat: f.lat,
+        iso_minutes: isoMinutes, source: "external",
+      });
+    } else {
+      const cand: ComplementCandidate = {
+        id: f.id, lng: f.lng, lat: f.lat,
+        text: f.name ?? "",
+        weight: meta.weight,
+        label: meta.label,
+      };
+      complements.push(cand);
+      if (meta.role === "ancla") anchors.push(cand);
+    }
+  }
+
+  return { competitors, complements, anchors };
+};
+
 /* ---------- API pública ---------- */
 
 interface BuildPayloadDeps {
@@ -398,6 +518,9 @@ interface BuildPayloadDeps {
 
 export interface BuildPayloadOptions {
   poi: SavedPoi;
+  /** Carpeta del POI. Si se entrega y tiene folder_layer_roles, el builder
+   *  usa la lógica nueva (roles territoriales); si no, lógica vieja. */
+  folderId?: string | null;
   /** Comuna conocida del POI. Si no se entrega, se resuelve por reverse-geocode lat/lng. */
   comuna?: string | null;
   /** Flag RM conocido. Si no se entrega, se resuelve por reverse-geocode. */
@@ -479,115 +602,113 @@ export const buildFeaturePayload = async (
     cells = await buildRegionCells(poi, comuna);
   }
 
-  // 4) Competidores internos cercanos
-  const internalPeers = deps.internalPeers
-    .filter((p) => p.id !== poi.id)
-    .filter((p) => inBbox(p, expanded));
+  // 4-6) Competidores y complementarios.
+  //
+  // Si la carpeta tiene folder_layer_roles configurados → lógica NUEVA
+  // (territorial_features bucketizados por rol). Si no → lógica VIEJA
+  // (deps.externalCompetitors + complement_weight_rules vía regex).
+  let competitors: CompetitorPoi[] = [];
+  let complements: ComplementCandidate[] = [];
+  let anchors: ComplementCandidate[] = [];
 
-  const competitors: CompetitorPoi[] = [];
+  const folderIdEff = opts.folderId ?? poi.folder_id ?? null;
+  let usedRolesPath = false;
 
-  if (includeCompetitorIsos) {
-    for (const p of internalPeers) {
-      try {
-        const peerIso = await fetchIsochrone(
-          p.lng,
-          p.lat,
-          isoMinutes,
-          supabaseUrl,
-          supabaseAnonKey,
-          bearer,
-        );
+  if (folderIdEff) {
+    try {
+      const buckets = await buildFromFolderRoles(folderIdEff, iso, bbox, isoMinutes);
+      if (buckets) {
+        competitors = buckets.competitors;
+        complements = buckets.complements;
+        anchors = buckets.anchors;
+        usedRolesPath = true;
+      }
+    } catch (e) {
+      console.warn("[features] folder_layer_roles falló, fallback a lógica vieja:", e);
+    }
+  }
+
+  if (!usedRolesPath) {
+    // === LÓGICA VIEJA (intacta) ===
+    const internalPeers = deps.internalPeers
+      .filter((p) => p.id !== poi.id)
+      .filter((p) => inBbox(p, expanded));
+
+    if (includeCompetitorIsos) {
+      for (const p of internalPeers) {
+        try {
+          const peerIso = await fetchIsochrone(
+            p.lng, p.lat, isoMinutes, supabaseUrl, supabaseAnonKey, bearer,
+          );
+          competitors.push({
+            id: p.id, lng: p.lng, lat: p.lat,
+            iso_minutes: isoMinutes, iso_polygon: peerIso, source: "internal",
+          });
+        } catch {
+          competitors.push({
+            id: p.id, lng: p.lng, lat: p.lat,
+            iso_minutes: isoMinutes, source: "internal",
+          });
+        }
+      }
+    } else {
+      for (const p of internalPeers) {
         competitors.push({
-          id: p.id,
-          lng: p.lng,
-          lat: p.lat,
-          iso_minutes: isoMinutes,
-          iso_polygon: peerIso,
-          source: "internal",
-        });
-      } catch {
-        competitors.push({
-          id: p.id,
-          lng: p.lng,
-          lat: p.lat,
-          iso_minutes: isoMinutes,
-          source: "internal",
+          id: p.id, lng: p.lng, lat: p.lat,
+          iso_minutes: isoMinutes, source: "internal",
         });
       }
     }
-  } else {
-    for (const p of internalPeers) {
+
+    // 5) Competidores externos (folders y layer features)
+    for (const p of deps.externalCompetitors.filter((p) => inBbox(p, expanded))) {
       competitors.push({
-        id: p.id,
-        lng: p.lng,
-        lat: p.lat,
-        iso_minutes: isoMinutes,
-        source: "internal",
+        id: p.id, lng: p.lng, lat: p.lat,
+        iso_minutes: isoMinutes, source: "external",
+      });
+    }
+    for (const f of deps.externalCompetitorLayerFeatures.filter((f) => inBbox(f, expanded))) {
+      competitors.push({
+        id: f.id, lng: f.lng, lat: f.lat,
+        iso_minutes: isoMinutes, source: "external",
+      });
+    }
+
+    // 6) Complementarios con regex
+    const compiled: CompiledRule[] = compileRules(deps.rules);
+    for (const p of deps.otherPois.filter((p) => inBbox(p, expanded))) {
+      const text = `${p.name ?? ""} ${p.category ?? ""}`.trim();
+      const m = matchRule(text, compiled);
+      complements.push({
+        id: p.id, lng: p.lng, lat: p.lat, text, weight: m.weight, label: m.label,
+      });
+    }
+    for (const f of deps.complementaryLayerFeatures.filter((f) => inBbox(f, expanded))) {
+      const text = `${f.name ?? ""} ${f.category ?? ""}`.trim();
+      const m = matchRule(text, compiled);
+      complements.push({
+        id: f.id, lng: f.lng, lat: f.lat, text, weight: m.weight, label: m.label,
       });
     }
   }
 
-  // 5) Competidores externos (folders y layer features)
-  for (const p of deps.externalCompetitors.filter((p) => inBbox(p, expanded))) {
-    competitors.push({
-      id: p.id,
-      lng: p.lng,
-      lat: p.lat,
-      iso_minutes: isoMinutes,
-      source: "external",
-    });
-  }
-  for (const f of deps.externalCompetitorLayerFeatures.filter((f) => inBbox(f, expanded))) {
-    competitors.push({
-      id: f.id,
-      lng: f.lng,
-      lat: f.lat,
-      iso_minutes: isoMinutes,
-      source: "external",
-    });
-  }
-
-  // 6) Complementarios con regex
-  const compiled: CompiledRule[] = compileRules(deps.rules);
-  const complements: ComplementCandidate[] = [];
-  for (const p of deps.otherPois.filter((p) => inBbox(p, expanded))) {
-    const text = `${p.name ?? ""} ${p.category ?? ""}`.trim();
-    const m = matchRule(text, compiled);
-    complements.push({
-      id: p.id,
-      lng: p.lng,
-      lat: p.lat,
-      text,
-      weight: m.weight,
-      label: m.label,
-    });
-  }
-  for (const f of deps.complementaryLayerFeatures.filter((f) => inBbox(f, expanded))) {
-    const text = `${f.name ?? ""} ${f.category ?? ""}`.trim();
-    const m = matchRule(text, compiled);
-    complements.push({
-      id: f.id,
-      lng: f.lng,
-      lat: f.lat,
-      text,
-      weight: m.weight,
-      label: m.label,
-    });
-  }
+  console.debug(
+    `[features] poi=${poi.name} folder=${folderIdEff} ` +
+    `usedRolesPath=${usedRolesPath} ` +
+    `comp=${competitors.length} compl=${complements.length} ` +
+    `ancl=${anchors.length}`,
+  );
 
   return {
     poi: {
-      id: poi.id,
-      lng: poi.lng,
-      lat: poi.lat,
-      comuna,
-      is_rm: isRm,
-      iso_minutes: isoMinutes,
+      id: poi.id, lng: poi.lng, lat: poi.lat,
+      comuna, is_rm: isRm, iso_minutes: isoMinutes,
     },
     iso_polygon: iso,
     cells,
     competitors,
     complements,
+    anchors,
     config_version: deps.settings.config_version,
     use_fine_cannibalization: deps.settings.use_fine_cannibalization,
   };

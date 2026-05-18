@@ -175,6 +175,7 @@ export const usePoiFeaturesBatch = () => {
           // Construir payload (el builder resuelve internamente comuna+RM+isoMinutes)
           const payload: FeaturePayload = await buildFeaturePayload({
             poi,
+            folderId: poi.folder_id ?? null,
             comuna: comunaHint, // hint; si null el builder reverse-geocode
             zonaFallback: zonaHint, // fallback "RM1"/"RM2" → RM si reverse falla
             isoMinutesRm: opts.settings.iso_minutes_rm,
