@@ -17,11 +17,7 @@ import { MicrozoneLayer } from "./MicrozoneLayer";
 import ParqueHeatmapLayer from "./ParqueHeatmapLayer";
 import { CrimeHeatLayer } from "./CrimeHeatLayer";
 import { CommercialHeatLayer } from "./CommercialHeatLayer";
-<<<<<<< HEAD
-import { GastoEndogenoHeatLayer } from "./GastoEndogenoHeatLayer";
-=======
 import { GastoHeatLayer } from "./GastoHeatLayer";
->>>>>>> d39ff7d6ee557005299d764240e36eefffdb22f2
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { GseFeatureCollection, GseVariable } from "@/types/gse";
@@ -365,14 +361,7 @@ export const MapView = ({
         activeCategories={activeCommercialCats ?? new Set(["all"])}
         isAdmin={isAdmin}
       />
-<<<<<<< HEAD
-      <GastoEndogenoHeatLayer
-        visible={layers.gastoEndogeno}
-        isAdmin={isAdmin}
-      />
-=======
       <GastoHeatLayer visible={layers.gasto && gastoView !== "manzana"} />
->>>>>>> d39ff7d6ee557005299d764240e36eefffdb22f2
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
 

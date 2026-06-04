@@ -116,11 +116,7 @@ const Index = () => {
     manzanas: false,
     crime: false,
     commercial: false,
-<<<<<<< HEAD
-    gastoEndogeno: false,
-=======
     gasto: false,
->>>>>>> d39ff7d6ee557005299d764240e36eefffdb22f2
   });
   const [nseFilter, setNseFilter] = useState<NSE | null>(null);
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
