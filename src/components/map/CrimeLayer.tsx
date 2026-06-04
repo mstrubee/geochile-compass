@@ -55,12 +55,16 @@ async function loadData(): Promise<GeoJSON.FeatureCollection> {
       const text = await r.text();
       let data: GeoJSON.FeatureCollection;
       try {
-        data = JSON.parse(text) as GeoJSON.FeatureCollection;
+        // Sanitizar tokens no estándar (NaN, Infinity, -Infinity) → null.
+        // Python suele emitirlos con allow_nan=True; JSON.parse los rechaza.
+        const safeText = text.replace(/\b(-?Infinity|NaN)\b/g, "null");
+        data = JSON.parse(safeText) as GeoJSON.FeatureCollection;
       } catch (parseErr) {
         throw new Error(
           `JSON parse failed (len=${text.length}, head="${text.slice(0, 40).replace(/\n/g, "\\n")}"): ${parseErr}`
         );
       }
+
       if (!Array.isArray(data?.features)) {
         throw new Error(`Invalid GeoJSON: features is not an array (got ${typeof data?.features})`);
       }
