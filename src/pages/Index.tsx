@@ -158,6 +158,7 @@ const Index = () => {
 
   // Capa Riesgo Delictivo
   const [crimeView, setCrimeView] = useState<"heat" | "manzana">("heat");
+  const [gastoView, setGastoView] = useState<"heat" | "manzana">("heat");
   const [crimeType, setCrimeType] = useState<import("@/components/map/CrimeHeatLayer").CrimeType>("total");
   const [activeRisk, setActiveRisk] = useState<Set<import("@/components/map/CrimeHeatLayer").RiskFilter>>(
     new Set(["Muy Alto", "Alto", "Medio", "Bajo", "Muy Bajo"])
@@ -985,11 +986,13 @@ const Index = () => {
     minZoom: 12,
   });
 
+  const gastoManzana = layers.gasto && gastoView === "manzana";
+  const crimeManzana = layers.crime && crimeView === "manzana";
   const { data: gseData, error: gseError } = useGseManzanas({
-    enabled: layers.nse || (layers.crime && crimeView === "manzana"),
+    enabled: layers.nse || crimeManzana || gastoManzana,
     bbox: gseViewport?.bbox ?? null,
     zoom: gseViewport?.zoom ?? 12,
-    variable: crimeView === "manzana" && layers.crime ? "crime" : gseVariable,
+    variable: crimeManzana ? "crime" : gastoManzana ? "gasto" : gseVariable,
     minZoom: 11,
   });
 
@@ -1180,6 +1183,8 @@ const Index = () => {
           onCrimeTypeChange={setCrimeType}
           activeRisk={activeRisk}
           onRiskToggle={handleRiskToggle}
+          gastoView={gastoView}
+          onGastoViewChange={setGastoView}
           chileCommunesVariable={chileCommunesVariable}
           onChileCommunesVariableChange={setChileCommunesVariable}
           userLayers={userLayers}
@@ -1323,10 +1328,11 @@ const Index = () => {
             densityData={densityData}
             onDensityViewportChange={handleDensityViewportChange}
             gseData={gseData}
-            gseVariable={crimeView === "manzana" && layers.crime ? "crime" : gseVariable}
-            onGseViewportChange={crimeView === "manzana" && layers.crime ? handleGseViewportChange : handleGseViewportChange}
+            gseVariable={crimeManzana ? "crime" : gastoManzana ? "gasto" : gseVariable}
+            onGseViewportChange={handleGseViewportChange}
             crimeView={crimeView}
             crimeType={crimeType}
+            gastoView={gastoView}
             activeRisk={activeRisk}
             activeCommercialCats={activeCommercialCats}
             isAdmin={isAdmin}

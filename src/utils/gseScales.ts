@@ -1,4 +1,5 @@
 import type { GseClass, GseVariable } from "@/types/gse";
+import { EPF_AUTOPLANET } from "@/utils/gastoEndogeno";
 
 /** Etiquetas legibles. */
 export const GSE_VARIABLE_LABEL: Record<GseVariable, string> = {
@@ -9,6 +10,7 @@ export const GSE_VARIABLE_LABEL: Record<GseVariable, string> = {
   hacin: "Hacinamiento",
   auto: "Movilización",
   crime: "🚨 Riesgo Delictivo",
+  gasto: "💰 Gasto endógeno",
 };
 
 /** Escala de colores para riesgo delictivo (0–1 normalizado por región). */
@@ -18,6 +20,15 @@ export const CRIME_SCALE: NumericStop[] = [
   { max: 0.60, color: "#fbc02d", label: "Medio"     },
   { max: 0.80, color: "#f57c00", label: "Alto"      },
   { max: 1.00, color: "#c62828", label: "Muy Alto"  },
+];
+
+/** Escala EPF — CLP/hogar/mes en canasta Autoplanet. */
+export const GASTO_SCALE: NumericStop[] = [
+  { max: 5_000,  color: "#fee5d9", label: "< $5k"      },
+  { max: 15_000, color: "#fcae91", label: "$5k–$15k"   },
+  { max: 30_000, color: "#fb6a4a", label: "$15k–$30k"  },
+  { max: 45_000, color: "#de2d26", label: "$30k–$45k"  },
+  { max: Infinity, color: "#a50f15", label: "> $45k"   },
 ];
 
 /** Paleta canónica para las 6 categorías GSE — alineada con el branding existente. */
@@ -105,6 +116,10 @@ export const colorForGse = (
     case "hacin":    return p.hacin == null ? NEUTRAL : pickStop(HACIN_SCALE, p.hacin);
     case "auto":     return p.auto_score == null ? NEUTRAL : pickStop(AUTO_SCALE, p.auto_score);
     case "crime":    return p.crime_score == null ? NEUTRAL : pickStop(CRIME_SCALE, p.crime_score);
+    case "gasto": {
+      const epf = p.gse ? (EPF_AUTOPLANET[p.gse] ?? null) : null;
+      return epf == null ? NEUTRAL : pickStop(GASTO_SCALE, epf);
+    }
   }
 };
 
@@ -119,5 +134,6 @@ export const scaleForGseVariable = (variable: GseVariable): { color: string; lab
     case "hacin":      return HACIN_SCALE.map((s) => ({ color: s.color, label: s.label }));
     case "auto":       return AUTO_SCALE.map((s) => ({ color: s.color, label: s.label }));
     case "crime":      return CRIME_SCALE.map((s) => ({ color: s.color, label: s.label }));
+    case "gasto":      return GASTO_SCALE.map((s) => ({ color: s.color, label: s.label }));
   }
 };

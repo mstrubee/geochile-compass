@@ -11,7 +11,8 @@ export type GseVariable =
   | "educ"       // Años de escolaridad promedio
   | "hacin"      // Índice de hacinamiento (hab/dorm)
   | "auto"       // Puntaje "automovilización"
-  | "crime";     // Riesgo delictivo por manzana (CEAD 2022-2024)
+  | "crime"     // Riesgo delictivo por manzana (CEAD 2022-2024)
+  | "gasto";    // Gasto endógeno por manzana (EPF × GSE)
 
 export interface GseProperties {
   id: string;

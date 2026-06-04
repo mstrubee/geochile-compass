@@ -71,6 +71,8 @@ interface SidebarProps {
   onCrimeTypeChange: (t: CrimeType) => void;
   activeRisk: Set<RiskFilter>;
   onRiskToggle: (r: RiskFilter) => void;
+  gastoView: "heat" | "manzana";
+  onGastoViewChange: (v: "heat" | "manzana") => void;
   chileCommunesVariable: IneVariable;
   onChileCommunesVariableChange: (v: IneVariable) => void;
   userLayers: UserLayer[];
@@ -581,6 +583,8 @@ export const Sidebar = ({
   onCrimeTypeChange,
   activeRisk,
   onRiskToggle,
+  gastoView,
+  onGastoViewChange,
   chileCommunesVariable,
   onChileCommunesVariableChange,
   userLayers = [],
@@ -1441,6 +1445,38 @@ export const Sidebar = ({
               <div className="flex justify-between text-[9px] text-muted-foreground/60">
                 <span>Disperso</span><span>Concentrado</span>
               </div>
+            </div>
+          )}
+          {layers.gasto && (
+            <div className="mt-2 rounded-lg bg-surface-2/40 p-2 space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">Vista</div>
+              <div className="flex gap-1 rounded-md bg-surface-2/60 p-0.5">
+                {([
+                  { key: "heat",    label: "🌡️ Heatmap",  desc: "Comunas ponderadas por hogares × EPF" },
+                  { key: "manzana", label: "🗺️ Manzanas", desc: "Coeficiente EPF por clase GSE" },
+                ] as const).map(({ key, label, desc }) => (
+                  <button
+                    key={key}
+                    onClick={() => onGastoViewChange(key)}
+                    className={[
+                      "flex-1 rounded px-2 py-1.5 text-[11px] font-medium transition-all text-center",
+                      gastoView === key
+                        ? "bg-surface-3 text-foreground shadow-apple-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    ].join(" ")}
+                    title={desc}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="h-1.5 rounded-full" style={{ background: "linear-gradient(to right,#fee5d9,#fcae91,#fb6a4a,#de2d26,#a50f15)" }} />
+              <div className="flex justify-between text-[9px] text-muted-foreground/60">
+                <span>Bajo gasto</span><span>Alto gasto</span>
+              </div>
+              <p className="text-[10px] leading-relaxed text-text-muted">
+                EPF Autoplanet: ABC1 $49k · C2 $25k · C3 $13k · D $4k.
+              </p>
             </div>
           )}
           {layers.communesGeo && (
