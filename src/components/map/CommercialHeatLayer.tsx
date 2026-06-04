@@ -29,8 +29,11 @@ export const CATEGORY_META: Record<CommercialCategory, { icon: string; label: st
   other:      { icon: "🏨", label: "Turismo y otros",       color: "#5d4037" },
 };
 
-type PointArray = [number, number, number][];
-const DATA = rawData as Record<CommercialCategory, PointArray>;
+// Puntos crudos [lat, lon] — sin intensidad explícita.
+// Leaflet.heat calcula la densidad kernel desde los puntos reales de cada local.
+// Grid de dedup a 100m → 1 POI representativo por celda → 33.707 puntos "all".
+type RawPoint = [number, number];
+const DATA = rawData as Record<CommercialCategory, RawPoint[]>;
 
 // ── Gradiente ─────────────────────────────────────────────────────────────────
 const GRADIENT = {
@@ -50,23 +53,21 @@ function makeOpts(radius: number, blur: number, opacity: number): L.HeatMapOptio
 }
 
 // ── Filtrado por categoría ────────────────────────────────────────────────────
-function getFilteredPoints(active: Set<CommercialCategory>): PointArray {
+// Devuelve puntos crudos [lat, lon] — Leaflet.heat calcula la densidad solo.
+function getFilteredPoints(active: Set<CommercialCategory>): RawPoint[] {
   const cats = Array.from(active).filter(c => c !== "all") as CommercialCategory[];
   if (active.has("all") || cats.length === 0) return DATA["all"] ?? [];
   if (cats.length === 1) return DATA[cats[0]] ?? [];
 
-  const merged = new Map<string, number>();
+  // Fusionar múltiples categorías deduplicando por coordenada
+  const seen = new Set<string>();
+  const result: RawPoint[] = [];
   for (const cat of cats)
-    for (const [lat, lon, intensity] of (DATA[cat] ?? []))
-      merged.set(`${lat},${lon}`, (merged.get(`${lat},${lon}`) ?? 0) + intensity);
-
-  const maxVal = Math.max(...merged.values(), 1);
-  const pts: PointArray = [];
-  for (const [key, val] of merged) {
-    const [lat, lon] = key.split(",").map(Number);
-    pts.push([lat, lon, Math.min(1, val / maxVal)]);
-  }
-  return pts.sort((a, b) => b[2] - a[2]);
+    for (const [lat, lon] of (DATA[cat] ?? [])) {
+      const key = `${lat},${lon}`;
+      if (!seen.has(key)) { seen.add(key); result.push([lat, lon]); }
+    }
+  return result;
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
@@ -102,7 +103,7 @@ export const CommercialHeatLayer = ({
     const opts = makeOpts(settings.radius, settings.blur, settings.opacity);
 
     if (heatRef.current) {
-      (heatRef.current as L.HeatLayer & { setLatLngs: (d: PointArray) => void }).setLatLngs(pts);
+      (heatRef.current as L.HeatLayer & { setLatLngs: (d: RawPoint[]) => void }).setLatLngs(pts);
       heatRef.current.setOptions(opts);
       (heatRef.current as L.HeatLayer & { redraw: () => void }).redraw();
       return;
@@ -162,6 +163,7 @@ export const CommercialHeatLayer = ({
       {isAdmin && visible && showSettings && (
         <HeatmapSettingsPanel
           layerLabel="Atractores Comerciales"
+          layerKey="commercial"
           settings={settings}
           saving={saving}
           error={error}

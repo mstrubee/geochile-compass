@@ -7,16 +7,18 @@
 
 import { useState, useCallback } from "react";
 import type { HeatmapSettings } from "@/hooks/useHeatmapSettings";
+import { DEFAULT_SETTINGS } from "@/hooks/useHeatmapSettings";
 
 interface Props {
-  layerLabel: string;
-  settings:   HeatmapSettings;
-  saving:     boolean;
-  error:      string | null;
+  layerLabel:  string;
+  layerKey:    string;               // para saber qué defaults cargar
+  settings:    HeatmapSettings;
+  saving:      boolean;
+  error:       string | null;
   currentZoom: number;
-  onChange:   (s: HeatmapSettings) => void;   // preview en tiempo real
-  onSave:     (s: HeatmapSettings) => void;   // persiste en Supabase
-  onClose:    () => void;
+  onChange:    (s: HeatmapSettings) => void;
+  onSave:      (s: HeatmapSettings) => void;
+  onClose:     () => void;
 }
 
 interface SliderProps {
@@ -56,10 +58,16 @@ function Slider({ label, hint, value, min, max, step = 1, onChange }: SliderProp
 }
 
 export const HeatmapSettingsPanel = ({
-  layerLabel, settings, saving, error, currentZoom,
+  layerLabel, layerKey, settings, saving, error, currentZoom,
   onChange, onSave, onClose,
 }: Props) => {
   const [draft, setDraft] = useState<HeatmapSettings>({ ...settings });
+
+  const resetToDefault = useCallback(() => {
+    const def = DEFAULT_SETTINGS[layerKey] ?? DEFAULT_SETTINGS.commercial;
+    setDraft({ ...def });
+    onChange({ ...def });
+  }, [layerKey, onChange]);
 
   const update = useCallback((patch: Partial<HeatmapSettings>) => {
     const next = { ...draft, ...patch };
@@ -154,7 +162,21 @@ export const HeatmapSettingsPanel = ({
         </div>
       )}
 
-      {/* Botones */}
+      {/* Botón reset */}
+      <button
+        onClick={resetToDefault}
+        style={{
+          width: "100%", padding: "6px 0", borderRadius: 7, marginBottom: 8,
+          border: "1px dashed rgba(148,163,184,0.3)",
+          background: "transparent", color: "#64748b", cursor: "pointer", fontSize: 10,
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+          transition: "all 0.15s",
+        }}
+      >
+        <span>↺</span> Volver a configuración por defecto
+      </button>
+
+      {/* Botones principales */}
       <div style={{ display: "flex", gap: 8 }}>
         <button
           onClick={onClose}
