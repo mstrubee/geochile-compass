@@ -71,6 +71,8 @@ interface SidebarProps {
   onCrimeTypeChange: (t: CrimeType) => void;
   activeRisk: Set<RiskFilter>;
   onRiskToggle: (r: RiskFilter) => void;
+  gastoView: "heat" | "manzana";
+  onGastoViewChange: (v: "heat" | "manzana") => void;
   chileCommunesVariable: IneVariable;
   onChileCommunesVariableChange: (v: IneVariable) => void;
   userLayers: UserLayer[];
@@ -581,6 +583,8 @@ export const Sidebar = ({
   onCrimeTypeChange,
   activeRisk,
   onRiskToggle,
+  gastoView,
+  onGastoViewChange,
   chileCommunesVariable,
   onChileCommunesVariableChange,
   userLayers = [],
