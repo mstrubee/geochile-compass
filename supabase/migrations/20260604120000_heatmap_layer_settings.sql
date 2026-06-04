@@ -37,3 +37,8 @@ CREATE POLICY "admin write heatmap settings"
 
 COMMENT ON TABLE public.heatmap_layer_settings IS
   'Configuración visual de capas heatmap (radius, blur, zoom) ajustable por admins';
+
+-- Agregar configuración por defecto para gasto endógeno
+INSERT INTO public.heatmap_layer_settings (layer_key, min_zoom, radius, blur, opacity)
+VALUES ('gasto_endogeno', 11, 25, 20, 0.75)
+ON CONFLICT (layer_key) DO NOTHING;
