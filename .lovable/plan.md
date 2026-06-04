@@ -1,46 +1,46 @@
 ## Diagnóstico
 
-Los POIs desaparecen del sidebar después de "un rato" sin tocar nada. Recargar la página los recupera. La causa raíz está en el ciclo auth + bootstrap:
+Los network logs muestran que las 4 URLs devuelven `200 OK` con GeoJSON válido (~6 MB, empieza con `{"type":"FeatureCollection",...`). Sin embargo, en consola las 4 fallan con:
 
-1. `useAuth` (`src/hooks/useAuth.tsx:38-43`) escucha `onAuthStateChange`. Supabase emite `TOKEN_REFRESHED` cada ~1 h y dispara `setUser(s?.user ?? null)` con un **nuevo objeto `User`** (referencia distinta, mismo `id`).
-2. En `useSavedPois.ts:431-448` el effect de bootstrap depende de `[user, authLoading, loadFolderCounts]`. Como `user` cambió de referencia, el effect corre de nuevo y ejecuta:
+```
+SyntaxError: The string did not match the expected pattern.
+```
+
+Este mensaje es específico de WebKit y aparece cuando `Response.json()` lee de una entry corrupta/parcial del HTTP cache. El código usa `fetch(url, { cache: "force-cache" })`, lo que fuerza al navegador a servir desde cache incluso si el body cacheado quedó truncado en un load anterior (probablemente el primer intento contra `/crime/...` cuando todavía no estaba el bucket).
+
+Como el fallo ocurre en las 4 URLs simultáneamente —incluida `/crime/...` que es same-origin y nunca tuvo CSP/CORS— se descarta:
+- problema del archivo (los logs muestran JSON válido)
+- CSP / CORS
+- URL incorrecta del bucket Supabase (el primer URL responde 200 con el FeatureCollection esperado)
+
+## Plan
+
+Editar **únicamente** `src/components/map/CrimeLayer.tsx` en la función `loadData`:
+
+1. **Quitar `cache: "force-cache"`** y usar `cache: "no-store"` en el primer intento, para forzar bypass del cache corrupto. Una vez cargado, el cache en memoria (`_cache`) ya evita re-fetches en la misma sesión.
+
+2. **Separar el parseo del fetch** para localizar el error con precisión:
    ```ts
-   setPois([]); setTrashedPois([]);
-   poisRef.current = []; trashedRef.current = [];
-   lastSyncAtRef.current = null;
+   const r = await fetch(url, { cache: "no-store" });
+   if (!r.ok) throw new Error(`HTTP ${r.status}`);
+   const text = await r.text();
+   try {
+     const data = JSON.parse(text) as GeoJSON.FeatureCollection;
+     ...
+   } catch (parseErr) {
+     throw new Error(`JSON parse failed (len=${text.length}, head="${text.slice(0,40)}"): ${parseErr}`);
+   }
    ```
-   → los POIs ya cargados de las carpetas abiertas desaparecen de la UI.
-3. En `Index.tsx:388-399` `loadedPoiFolderIds` **no** se resetea, así que `loadPoiFoldersOnce` cree que las carpetas ya están cargadas y no vuelve a pedirlas. Sólo `loadFolderCounts` corre, por eso los contadores siguen bien pero las listas quedan vacías.
-4. Recargar la página re-bootstrappea desde caché (IndexedDB) y todo vuelve.
+   Así, si el problema persiste, el mensaje de error mostrará el tamaño real y los primeros 40 caracteres recibidos, lo que permite distinguir entre "cache corrupto", "respuesta truncada" o "JSON realmente inválido".
 
-Esto coincide con el síntoma "después de un rato" (≈ el intervalo de refresh de Supabase) y con que recargar lo arregla.
+3. **Agregar header `Accept: application/json`** para evitar que algún proxy/CDN devuelva HTML alternativo.
 
-## Fix propuesto
+4. **Validar `data.features` antes de cachear**: si no es un array, tratar como fallo y pasar al siguiente URL.
 
-### 1. `src/hooks/useSavedPois.ts` — no resetear si el `user.id` no cambió
+No se tocan otros archivos. El bucket de Supabase, la migration y el upload ya están correctos (el GET devuelve 200 con el body esperado).
 
-En el effect de bootstrap (≈ línea 431-448), comparar contra `userIdRef.current`:
+## Validación
 
-- Si `user?.id === userIdRef.current` → no tocar `pois`/`trashedPois`/`lastSyncAtRef`. Opcionalmente disparar un `void syncDelta()` para traer cambios remotos posteriores al refresh.
-- Si cambió el `user.id` (login real, logout, switch de cuenta) → mantener el comportamiento actual de limpieza.
-- Mismo criterio para el caso `!user`: sólo limpiar si antes había un user distinto.
-
-### 2. `src/pages/Index.tsx` — resetear `loadedPoiFolderIds` cuando se limpia el estado
-
-Para que, en un cambio real de usuario, las carpetas abiertas se vuelvan a pedir. Una forma simple: vaciar `loadedPoiFolderIds` cuando `user?.id` cambie. Esto evita futuras inconsistencias aunque el fix #1 ya cubre el caso TOKEN_REFRESHED.
-
-### 3. (Opcional, defensivo) Cache anti-clear duplicado
-
-En el effect de persistencia (`useSavedPois.ts:88-109`) ya hay guard contra escribir snapshot vacío encima del caché bueno. Con el fix #1 ya no se dispararía el setPois([]) espurio, pero el guard sigue siendo útil — no se toca.
-
-## Verificación
-
-- Cargar la app, abrir una o varias carpetas, ver POIs en sidebar.
-- En DevTools, simular `TOKEN_REFRESHED` (o esperar ~1 h, o forzar `supabase.auth.refreshSession()` desde consola).
-- Confirmar que los POIs visibles en el sidebar **no** desaparecen.
-- Confirmar que login/logout real sigue limpiando el estado correctamente.
-
-## Fuera de alcance
-
-- No se toca el sync delta, el caché en IndexedDB, ni la lógica de mutaciones.
-- No se cambia `useAuth` (su comportamiento de re-emitir el user en cada evento es estándar de Supabase y otros consumidores podrían depender de eso).
+- Typecheck (`tsc --noEmit`) debe pasar.
+- En el preview, activar la capa "Riesgo Delictivo" y confirmar en consola el log `✅ cargado desde https://tcmyidycqdrrtwuaovbk.supabase.co/...` con 346 comunas.
+- Si aún falla, el nuevo mensaje de error indicará exactamente qué llega al cliente.

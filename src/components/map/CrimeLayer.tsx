@@ -47,9 +47,23 @@ async function loadData(): Promise<GeoJSON.FeatureCollection> {
   const errors: string[] = [];
   for (const url of URLS) {
     try {
-      const r = await fetch(url, { cache: "force-cache" });
+      const r = await fetch(url, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json() as GeoJSON.FeatureCollection;
+      const text = await r.text();
+      let data: GeoJSON.FeatureCollection;
+      try {
+        data = JSON.parse(text) as GeoJSON.FeatureCollection;
+      } catch (parseErr) {
+        throw new Error(
+          `JSON parse failed (len=${text.length}, head="${text.slice(0, 40).replace(/\n/g, "\\n")}"): ${parseErr}`
+        );
+      }
+      if (!Array.isArray(data?.features)) {
+        throw new Error(`Invalid GeoJSON: features is not an array (got ${typeof data?.features})`);
+      }
       console.info(`[CrimeLayer] ✅ cargado desde ${url} — ${data.features.length} comunas`);
       _cache = data;
       return data;
@@ -61,6 +75,7 @@ async function loadData(): Promise<GeoJSON.FeatureCollection> {
   }
   throw new Error(`No se pudo cargar el GeoJSON:\n${errors.join("\n")}`);
 }
+
 
 // ── Estilos ───────────────────────────────────────────────────────────────────
 
