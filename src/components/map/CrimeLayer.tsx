@@ -15,6 +15,7 @@ import { RISK_COLORS } from "@/types/crime";
 
 // ── URLs de fallback ──────────────────────────────────────────────────────────
 
+<<<<<<< HEAD
 // Supabase Storage — misma allowlist CSP que el resto de la app
 // Bucket público "geodata" en: supabase.com/dashboard/project/tcmyidycqdrrtwuaovbk/storage/buckets
 const SUPABASE_CDN =
@@ -25,6 +26,12 @@ const REPO = "mstrubee/geochile-compass";
 const FILE = "public/crime/crime_risk_chile.geojson";
 const URLS = [
   SUPABASE_CDN,
+=======
+const REPO  = "mstrubee/geochile-compass";
+const FILE  = "public/crime/crime_risk_chile.geojson";
+const URLS  = [
+  "https://tcmyidycqdrrtwuaovbk.supabase.co/storage/v1/object/public/geodata/crime_risk_chile.geojson",
+>>>>>>> 5ad59b6a1885fdc7b87a5592af1b1b5927840f72
   `https://cdn.jsdelivr.net/gh/${REPO}@main/${FILE}`,
   `https://raw.githubusercontent.com/${REPO}/main/${FILE}`,
   `/${FILE.replace("public/", "")}`,
