@@ -966,10 +966,10 @@ const Index = () => {
   });
 
   const { data: gseData, error: gseError } = useGseManzanas({
-    enabled: layers.nse,
+    enabled: layers.nse || (layers.crime && crimeView === "manzana"),
     bbox: gseViewport?.bbox ?? null,
     zoom: gseViewport?.zoom ?? 12,
-    variable: gseVariable,
+    variable: crimeView === "manzana" && layers.crime ? "crime" : gseVariable,
     minZoom: 11,
   });
 
@@ -1302,7 +1302,7 @@ const Index = () => {
             onDensityViewportChange={handleDensityViewportChange}
             gseData={gseData}
             gseVariable={crimeView === "manzana" && layers.crime ? "crime" : gseVariable}
-            onGseViewportChange={handleGseViewportChange}
+            onGseViewportChange={crimeView === "manzana" && layers.crime ? handleGseViewportChange : handleGseViewportChange}
             crimeView={crimeView}
             crimeType={crimeType}
             activeRisk={activeRisk}

@@ -319,7 +319,7 @@ export const MapView = ({
         highlightName={highlightedCommuneName}
       />
       <GseLayer
-        visible={layers.nse}
+        visible={layers.nse || (layers.crime && crimeView === "manzana")}
         data={gseData}
         variable={gseVariable}
         onViewportChange={onGseViewportChange}
