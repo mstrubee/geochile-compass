@@ -208,6 +208,7 @@ const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "density", color: "bg-brand-pink", name: "Densidad población", count: 20 },
   { key: "crime",      color: "bg-red-600",    name: "Riesgo delictivo",         count: 346,   sub: "CEAD 2022-2024 · comunas"  },
   { key: "commercial", color: "bg-blue-500",   name: "Atractores comerciales",   count: 98102, sub: "OSM 2024 · 16 regiones"    },
+  { key: "gasto",      color: "bg-emerald-500", name: "Gasto endógeno hogares",  count: 346,   sub: "EPF × GSE · canasta Autoplanet" },
 ];
 
 const StatCard = ({ value, label }: { value: string | number; label: string }) => (
