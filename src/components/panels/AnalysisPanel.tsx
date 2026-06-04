@@ -1,4 +1,5 @@
-import { X, Download, FileJson, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { X, Download, FileJson, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight, ShoppingCart } from "lucide-react";
+import { GastoEndogenoSection } from "./GastoEndogenoSection";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Isochrone } from "@/types/isochrones";
@@ -103,6 +104,7 @@ type SectionKey =
   | "resumen_ia"
   | "gse"
   | "nse"
+  | "gasto_endogeno"
   | "capas"
   | "parque"
   | "comunas"
@@ -112,6 +114,7 @@ const DEFAULT_SECTION_OPEN: Record<SectionKey, boolean> = {
   isocronas: true,
   gse: true,
   nse: true,
+  gasto_endogeno: true,
   comparativo: false,
   resumen_ia: false,
   capas: false,
@@ -355,6 +358,15 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null, width
                 </div>
               </Section>
             )}
+
+            {/* ── Gasto Endógeno Autoplanet ── */}
+            <Section
+              title="💰 Gasto Endógeno Autoplanet"
+              open={sectionOpen.gasto_endogeno}
+              onToggle={() => toggleSection("gasto_endogeno")}
+            >
+              <GastoEndogenoSection analysis={analysis} />
+            </Section>
 
             {analysis.comparisons.length > 0 && (
               <Section
