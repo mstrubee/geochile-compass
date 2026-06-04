@@ -167,6 +167,7 @@ interface MapViewProps {
   crimeView?: "heat" | "manzana";
   crimeType?: import("@/components/map/CrimeHeatLayer").CrimeType;
   activeRisk?: Set<import("@/components/map/CrimeHeatLayer").RiskFilter>;
+  activeCommercialCats?: Set<import("@/components/map/CommercialHeatLayer").CommercialCategory>;
   chileCommunesVariable: IneVariable;
   userLayers: UserLayer[];
   fitUserLayerId: string | null;
@@ -228,6 +229,7 @@ export const MapView = ({
   crimeView,
   crimeType,
   activeRisk,
+  activeCommercialCats,
   chileCommunesVariable,
   userLayers,
   fitUserLayerId,
@@ -349,7 +351,10 @@ export const MapView = ({
         crimeType={crimeType}
         activeRisk={activeRisk}
       />
-      <CommercialHeatLayer visible={layers.commercial} />
+      <CommercialHeatLayer
+        visible={layers.commercial}
+        activeCategories={activeCommercialCats ?? new Set(["all"])}
+      />
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
 

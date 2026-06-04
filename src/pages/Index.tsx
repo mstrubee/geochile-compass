@@ -137,6 +137,24 @@ const Index = () => {
     },
     [],
   );
+  // Capa Atractores Comerciales
+  const [activeCommercialCats, setActiveCommercialCats] = useState<Set<import("@/components/map/CommercialHeatLayer").CommercialCategory>>(
+    new Set(["all"])
+  );
+  const handleCommercialToggle = (cat: import("@/components/map/CommercialHeatLayer").CommercialCategory) => {
+    setActiveCommercialCats(prev => {
+      const next = new Set(prev);
+      if (cat === "all") {
+        // "Todos" activa/desactiva todo
+        return next.has("all") ? new Set() : new Set(["all"] as const);
+      }
+      if (next.has(cat)) { next.delete(cat); next.delete("all"); }
+      else { next.add(cat); }
+      if (next.size === 0) next.add("all");
+      return next;
+    });
+  };
+
   // Capa Riesgo Delictivo
   const [crimeView, setCrimeView] = useState<"heat" | "manzana">("heat");
   const [crimeType, setCrimeType] = useState<import("@/components/map/CrimeHeatLayer").CrimeType>("total");
@@ -1153,6 +1171,8 @@ const Index = () => {
           gseVariable={gseVariable}
           onGseVariableChange={setGseVariable}
           gseCount={gseData?.features.length ?? 0}
+          activeCommercialCats={activeCommercialCats}
+          onCommercialToggle={handleCommercialToggle}
           crimeView={crimeView}
           onCrimeViewChange={setCrimeView}
           crimeType={crimeType}
@@ -1307,6 +1327,7 @@ const Index = () => {
             crimeView={crimeView}
             crimeType={crimeType}
             activeRisk={activeRisk}
+            activeCommercialCats={activeCommercialCats}
             chileCommunesVariable={chileCommunesVariable}
             userLayers={userLayers}
             fitUserLayerId={fitId}

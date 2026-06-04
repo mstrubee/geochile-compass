@@ -30,6 +30,8 @@ import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 
 import type { CrimeType, RiskFilter } from "@/components/map/CrimeHeatLayer";
+import { CATEGORY_META } from "@/components/map/CommercialHeatLayer";
+import type { CommercialCategory } from "@/components/map/CommercialHeatLayer";
 
 const CRIME_TYPE_LABELS: Record<CrimeType, string> = {
   total:  "Todos los delitos",
@@ -61,6 +63,8 @@ interface SidebarProps {
   gseVariable: GseVariable;
   onGseVariableChange: (v: GseVariable) => void;
   gseCount: number;
+  activeCommercialCats: Set<CommercialCategory>;
+  onCommercialToggle: (c: CommercialCategory) => void;
   crimeView: "heat" | "manzana";
   onCrimeViewChange: (v: "heat" | "manzana") => void;
   crimeType: CrimeType;
@@ -568,6 +572,8 @@ export const Sidebar = ({
   gseVariable,
   onGseVariableChange,
   gseCount,
+  activeCommercialCats,
+  onCommercialToggle,
   crimeView,
   onCrimeViewChange,
   crimeType,
@@ -1405,6 +1411,34 @@ export const Sidebar = ({
               <div className="h-1.5 rounded-full" style={{ background: "linear-gradient(to right,#1b5e20,#388e3c,#aed581,#fdd835,#f57c00,#e53935,#b71c1c)" }} />
               <div className="flex justify-between text-[9px] text-muted-foreground/60">
                 <span>Sin riesgo</span><span>Máximo</span>
+              </div>
+            </div>
+          )}
+          {layers.commercial && (
+            <div className="mt-2 rounded-lg bg-surface-2/40 p-2 space-y-1">
+              <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
+                Categoría <span className="normal-case text-[9px] text-text-muted/60">(clic para filtrar)</span>
+              </div>
+              {(Object.keys(CATEGORY_META) as CommercialCategory[]).map((cat) => {
+                const { icon, label, color } = CATEGORY_META[cat];
+                const on = activeCommercialCats.has(cat);
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => onCommercialToggle(cat)}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 transition-all hover:bg-surface-2/60"
+                    style={{ opacity: on ? 1 : 0.35 }}
+                  >
+                    <span className="text-[13px]">{icon}</span>
+                    <span className={["text-[11px]", on ? "text-foreground font-medium" : "text-muted-foreground"].join(" ")}>{label}</span>
+                    {on && <div className="ml-auto h-2 w-2 flex-shrink-0 rounded-full" style={{ background: color, boxShadow: `0 0 4px ${color}` }} />}
+                    {!on && <span className="ml-auto text-[9px] text-muted-foreground/50">oculto</span>}
+                  </button>
+                );
+              })}
+              <div className="h-1.5 rounded-full mt-1" style={{ background: "linear-gradient(to right,#1565c0,#00897b,#c0ca33,#e64a19,#b71c1c)" }} />
+              <div className="flex justify-between text-[9px] text-muted-foreground/60">
+                <span>Disperso</span><span>Concentrado</span>
               </div>
             </div>
           )}
