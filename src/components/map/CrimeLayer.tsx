@@ -14,6 +14,7 @@ import type { Layer } from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
 import type { CrimeProperties, RiskLevel } from "@/types/crime";
 import { RISK_COLORS } from "@/types/crime";
+import { useToast } from "@/hooks/use-toast";
 
 interface CrimeLayerProps {
   visible: boolean;
@@ -73,40 +74,66 @@ function buildPopupHtml(p: CrimeProperties): string {
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
+// jsDelivr sirve archivos de GitHub con CDN + gzip + CORS.
+// Fallback al path local para desarrollo (vite dev server sirve /public/).
+const CRIME_CDN_URL =
+  "https://cdn.jsdelivr.net/gh/mstrubee/geochile-compass@main/public/crime/crime_risk_chile.geojson";
+const CRIME_LOCAL_URL = "/crime/crime_risk_chile.geojson";
+
 let _crimeDataPromise: Promise<FeatureCollection> | null = null;
 
-function loadCrimeData(): Promise<FeatureCollection> {
-  if (!_crimeDataPromise) {
-    _crimeDataPromise = fetch("/crime/crime_risk_chile.geojson")
-      .then((r) => {
+async function loadCrimeData(): Promise<FeatureCollection> {
+  if (_crimeDataPromise) return _crimeDataPromise;
+
+  _crimeDataPromise = (async () => {
+    // Intentar CDN primero (siempre disponible en producción Lovable)
+    for (const url of [CRIME_CDN_URL, CRIME_LOCAL_URL]) {
+      try {
+        const r = await fetch(url);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<FeatureCollection>;
-      })
-      .catch((e) => {
-        _crimeDataPromise = null;
-        throw e;
-      });
-  }
+        return await r.json() as FeatureCollection;
+      } catch {
+        // intentar siguiente URL
+      }
+    }
+    throw new Error("No se pudo cargar crime_risk_chile.geojson desde ninguna fuente");
+  })().catch((e) => {
+    _crimeDataPromise = null;
+    throw e;
+  });
+
   return _crimeDataPromise;
 }
 
 export const CrimeLayer = ({ visible, opacity = 0.65 }: CrimeLayerProps) => {
   const [data, setData] = useState<FeatureCollection | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
   // Carga el GeoJSON la primera vez que se activa la capa
   useEffect(() => {
-    if (!visible || data !== null) return;
+    if (!visible || data !== null || loading) return;
+
+    setLoading(true);
+    toast({ title: "Cargando riesgo delictivo…", description: "346 comunas · CEAD 2022-2024" });
+
     loadCrimeData()
-      .then(setData)
-      .catch((e) => setError(String(e)));
-  }, [visible, data]);
+      .then((d) => {
+        setData(d);
+        toast({ title: "✅ Riesgo delictivo cargado", description: `${d.features.length} comunas` });
+      })
+      .catch((e) => {
+        console.error("[CrimeLayer]", e);
+        toast({
+          title: "❌ Error al cargar riesgo delictivo",
+          description: String(e),
+          variant: "destructive",
+        });
+      })
+      .finally(() => setLoading(false));
+  }, [visible, data, loading, toast]);
 
   if (!visible || data === null) return null;
-  if (error) {
-    console.error("[CrimeLayer] Error cargando datos:", error);
-    return null;
-  }
 
   const styleFn = (feature?: Feature) => {
     const p = feature?.properties as CrimeProperties | undefined;
