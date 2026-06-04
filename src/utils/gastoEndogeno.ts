@@ -151,9 +151,10 @@ function estimateDistByNse(
   analysis: IsochroneAnalysis,
 ): Partial<Record<GseClass, number>> {
   // Usar la distribución de las comunas ponderada por hogares en la iso
+  const NSE_SCORE: Record<string, number> = { ABC1: 5, C2: 4, C3: 3, D: 2, E: 1 };
   const nseValues = analysis.communes
     .filter(c => c.nse != null)
-    .map(c => ({ nse: c.nse!, weight: c.hhInIso }));
+    .map(c => ({ nse: NSE_SCORE[c.nse as string] ?? 3, weight: c.hhInIso }));
 
   if (!nseValues.length) return defaultNationalDist();
 
