@@ -97,6 +97,8 @@ export const useIsochroneAnalysis = ({
     };
   }, [isoBbox]);
 
+  const comunasFc = comunas.fc;
+  const nombresPorCodigo = comunas.nombresPorCodigo;
   return useMemo(() => {
     if (!isochrone || !bandFeature) return null;
     return computeIsochroneAnalysis({
@@ -105,11 +107,12 @@ export const useIsochroneAnalysis = ({
       territorialFeatures: features,
       territorialLayers: layers,
       territorialGroups: groups,
-      comunasFC: comunas.fc,
+      comunasFC: comunasFc,
       ineByName: buildIneByName(comunas),
-      nombresPorCodigo: comunas.nombresPorCodigo,
+      nombresPorCodigo,
       manzanas,
       gse,
     });
-  }, [isochrone, bandFeature, features, layers, groups, comunas, manzanas, gse]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isochrone, bandFeature, features, layers, groups, comunasFc, nombresPorCodigo, manzanas, gse]);
 };
