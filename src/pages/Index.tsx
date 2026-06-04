@@ -1328,6 +1328,7 @@ const Index = () => {
             crimeType={crimeType}
             activeRisk={activeRisk}
             activeCommercialCats={activeCommercialCats}
+            isAdmin={isAdmin}
             chileCommunesVariable={chileCommunesVariable}
             userLayers={userLayers}
             fitUserLayerId={fitId}
