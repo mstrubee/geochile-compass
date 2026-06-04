@@ -15,6 +15,7 @@ import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
 import { MicrozoneLayer } from "./MicrozoneLayer";
 import ParqueHeatmapLayer from "./ParqueHeatmapLayer";
+import { CrimeLayer } from "./CrimeLayer";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { GseFeatureCollection, GseVariable } from "@/types/gse";
@@ -336,6 +337,7 @@ export const MapView = ({
         pickMode={poiPickMode}
         onPickPoi={onPoiPickSelect}
       />
+      <CrimeLayer visible={layers.crime} />
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
 

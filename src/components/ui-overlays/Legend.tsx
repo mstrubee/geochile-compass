@@ -3,9 +3,12 @@ import { COMMUNES, NSE_LABELS, NSE_COLOR_HSL, type NSE } from "@/data/communes";
 import { TRAFFIC_LEVELS, trafficLevelOf, type TrafficLevel } from "@/utils/traffic";
 import type { ManzanaSource, ManzanaVariable } from "@/types/manzanas";
 import type { GseVariable } from "@/types/gse";
+import { RISK_COLORS, type RiskLevel } from "@/types/crime";
 import { scaleForVariable, VARIABLE_LABEL } from "@/utils/colorScales";
 import { GSE_VARIABLE_LABEL, scaleForGseVariable } from "@/utils/gseScales";
 import { INE_VARIABLE_LABEL, scaleForIneVariable, type IneVariable } from "@/utils/ineScales";
+
+const CRIME_LEVELS: RiskLevel[] = ["Muy Alto", "Alto", "Medio", "Bajo", "Muy Bajo"];
 
 interface LegendProps {
   shifted: boolean;
@@ -147,7 +150,8 @@ export const Legend = ({
   const showTraffic = layers.traffic;
   const showManzanas = layers.manzanas;
   const showChileCommunes = chileCommunesActive;
-  const showAny = showNSE || showTraffic || showManzanas || showChileCommunes;
+  const showCrime = layers.crime;
+  const showAny = showNSE || showTraffic || showManzanas || showChileCommunes || showCrime;
 
   if (!showAny) return null;
 
@@ -278,6 +282,33 @@ export const Legend = ({
                 />
               );
             })}
+          </div>
+        </>
+      )}
+
+      {showCrime && (
+        <>
+          <div className="mb-1.5 mt-1 flex items-center gap-2">
+            <div className="flex-1 font-mono text-[9px] uppercase tracking-[2px] text-text-muted">
+              Riesgo Delictivo · Comunas
+            </div>
+            <span className="rounded-sm border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 font-mono text-[8px] uppercase text-red-400">
+              CEAD 2022-2024
+            </span>
+          </div>
+          <div className="space-y-0.5">
+            {CRIME_LEVELS.map((nivel) => (
+              <div key={nivel} className="flex items-center gap-2 px-1.5 py-0.5 text-[11px] text-foreground">
+                <span
+                  className="h-2 w-[18px] flex-shrink-0 rounded-sm"
+                  style={{ background: RISK_COLORS[nivel] }}
+                />
+                <span className="flex-1">{nivel}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-1.5 font-mono text-[9px] text-text-muted">
+            Robos y asaltos ponderados · tasa x1000 hab/año
           </div>
         </>
       )}
