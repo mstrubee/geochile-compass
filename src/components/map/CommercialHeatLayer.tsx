@@ -8,8 +8,8 @@
  * Gradiente: azul→verde→amarillo→rojo (diferenciado del crimen)
  */
 
-import { useEffect, useRef } from "react";
-import { useMap } from "react-leaflet";
+import { useEffect, useRef, useState } from "react";
+import { useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet.heat";
 import rawData from "@/data/commercial_heatmap_points.json";
@@ -49,16 +49,16 @@ const GRADIENT = {
   1.00: "#b71c1c",
 };
 
+// Zoom mínimo para mostrar la capa (≈ nivel de comuna)
+// zoom 13 = Santiago Centro cabe en pantalla (22 km², ~4x4 km)
+const MIN_ZOOM = 12;
+
 // ── Opciones por zoom ─────────────────────────────────────────────────────────
 function heatOpts(zoom: number): L.HeatMapOptions {
   const g = GRADIENT;
-  // Zoom alto: puntos pequeños y nítidos para ver concentración por calle
-  if (zoom >= 15) return { radius: 12, blur: 8,  maxZoom: 20, max: 1.0, minOpacity: 0.4, gradient: g };
-  if (zoom >= 13) return { radius: 18, blur: 13, maxZoom: 20, max: 1.0, minOpacity: 0.35, gradient: g };
-  if (zoom >= 11) return { radius: 25, blur: 18, maxZoom: 20, max: 1.0, minOpacity: 0.3, gradient: g };
-  if (zoom >= 9)  return { radius: 35, blur: 28, maxZoom: 20, max: 1.0, minOpacity: 0.25, gradient: g };
-  if (zoom >= 7)  return { radius: 45, blur: 38, maxZoom: 20, max: 1.0, minOpacity: 0.22, gradient: g };
-  return               { radius: 60, blur: 50, maxZoom: 20, max: 1.0, minOpacity: 0.18, gradient: g };
+  if (zoom >= 15) return { radius: 14, blur: 10, maxZoom: 20, max: 1.0, minOpacity: 0.45, gradient: g };
+  if (zoom >= 13) return { radius: 20, blur: 15, maxZoom: 20, max: 1.0, minOpacity: 0.40, gradient: g };
+  return               { radius: 28, blur: 22, maxZoom: 20, max: 1.0, minOpacity: 0.35, gradient: g };
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
@@ -71,37 +71,56 @@ interface CommercialHeatLayerProps {
 export const CommercialHeatLayer = ({ visible, activeCategories }: CommercialHeatLayerProps) => {
   const map = useMap();
   const heatRef = useRef<L.HeatLayer | null>(null);
+  const [zoom, setZoom] = useState(() => map.getZoom());
+
+  // Seguir el zoom
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
+
+  const shouldShow = visible && zoom >= MIN_ZOOM;
 
   useEffect(() => {
-    if (!visible) {
+    if (!shouldShow) {
+      // Ocultar cuando zoom es muy lejano o capa desactivada
       if (heatRef.current) { map.removeLayer(heatRef.current); heatRef.current = null; }
       return;
     }
 
-    // Calcular qué puntos mostrar según categorías activas
     const pts = getFilteredPoints(activeCategories);
 
     if (heatRef.current) {
+      // Actualizar datos y opciones
       (heatRef.current as L.HeatLayer & { setLatLngs: (d: PointArray) => void }).setLatLngs(pts);
-      heatRef.current.setOptions(heatOpts(map.getZoom()));
+      heatRef.current.setOptions(heatOpts(zoom));
       (heatRef.current as L.HeatLayer & { redraw: () => void }).redraw();
       return;
     }
 
-    const layer = L.heatLayer(pts, heatOpts(map.getZoom()));
+    // Crear capa nueva
+    const layer = L.heatLayer(pts, heatOpts(zoom));
     layer.addTo(map);
     heatRef.current = layer;
 
-    const onZoom = () => {
-      if (heatRef.current) heatRef.current.setOptions(heatOpts(map.getZoom()));
-    };
-    map.on("zoomend", onZoom);
-
     return () => {
-      map.off("zoomend", onZoom);
       if (heatRef.current) { map.removeLayer(heatRef.current); heatRef.current = null; }
     };
-  }, [visible, map, activeCategories]);
+  }, [shouldShow, map, activeCategories, zoom]);
+
+  // Aviso cuando está activada pero zoom es insuficiente
+  if (visible && zoom < MIN_ZOOM) {
+    return (
+      <div style={{
+        position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)",
+        zIndex: 10000, background: "rgba(10,15,30,0.88)", backdropFilter: "blur(8px)",
+        border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8,
+        padding: "8px 16px", color: "#94a3b8", fontSize: 11,
+        pointerEvents: "none", whiteSpace: "nowrap",
+        display: "flex", alignItems: "center", gap: 8,
+      }}>
+        <span>🔍</span>
+        <span>Acerca el mapa para ver atractores comerciales (zoom ≥ {MIN_ZOOM})</span>
+      </div>
+    );
+  }
 
   return null;
 };
