@@ -1,137 +1,261 @@
 /**
  * CrimeHeatLayer.tsx
  * ==================
- * Heatmap de concentración de riesgo delictivo.
- *
- * Fuente: CEAD 2022-2024 — 346 comunas desagregadas a ~12.000 puntos ponderados.
- * Técnica: Gaussian sampling centrado en el polo urbano de cada comuna,
- *          intensidad proporcional al risk_score normalizado (0-1).
- *
- * Usa leaflet.heat (ya en el bundle del proyecto).
- * Los puntos están embebidos como módulo TS → sin fetch, sin CSP.
+ * Heatmap de concentración de riesgo delictivo con:
+ * - 4 tipos de crimen seleccionables (total / robos / hurtos / lugar)
+ * - Leyenda clickeable para filtrar por nivel de riesgo
+ * - Gradiente custom sin azul (verde → amarillo → rojo)
+ * - Normalización regional (contraste real dentro de cada región)
+ * - Puntos clipeados al polígono de la comuna
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet.heat";
-import type { RiskLevel } from "@/types/crime";
-import { RISK_COLORS } from "@/types/crime";
 
-// Importación directa — Vite bundlea el JSON, ~80 KB gzipped, carga instantánea
-import rawPoints from "@/data/crime_heatmap_points.json";
+// JSON embebido: sin fetch, sin CSP, carga instantánea (~400 KB gzipped)
+import rawData from "@/data/crime_heatmap_points.json";
 
-// [[lat, lng, intensity], ...] donde intensity ∈ [0, 1]
-const POINTS = rawPoints as [number, number, number][];
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 
-// ── Opciones del heatmap según zoom ──────────────────────────────────────────
+export type CrimeType = "total" | "robos" | "hurtos" | "lugar";
+export type RiskFilter = "Muy Alto" | "Alto" | "Medio" | "Bajo" | "Muy Bajo";
 
-function heatOptions(zoom: number): L.HeatMapOptions {
-  // A mayor zoom → menos blur, más detalle de cada punto
-  // A menor zoom → más blur, efecto "mancha" continua
-  if (zoom >= 13) {
-    return { radius: 25, blur: 20, maxZoom: 18, max: 1.0, minOpacity: 0.3 };
-  } else if (zoom >= 10) {
-    return { radius: 35, blur: 30, maxZoom: 18, max: 1.0, minOpacity: 0.3 };
-  } else if (zoom >= 7) {
-    return { radius: 50, blur: 40, maxZoom: 18, max: 1.0, minOpacity: 0.25 };
-  } else {
-    return { radius: 70, blur: 55, maxZoom: 18, max: 1.0, minOpacity: 0.2 };
-  }
+const CRIME_TYPE_LABELS: Record<CrimeType, string> = {
+  total:  "Todos los delitos",
+  robos:  "Robos con violencia",
+  hurtos: "Hurtos",
+  lugar:  "Robos en lugar",
+};
+
+const CRIME_TYPE_ICONS: Record<CrimeType, string> = {
+  total:  "🔴",
+  robos:  "🔪",
+  hurtos: "👜",
+  lugar:  "🏠",
+};
+
+// Umbrales de intensidad para clasificar los niveles de riesgo
+const RISK_LEVELS: { label: RiskFilter; min: number; max: number; color: string }[] = [
+  { label: "Muy Alto", min: 0.80, max: 1.00, color: "#d32f2f" },
+  { label: "Alto",     min: 0.60, max: 0.80, color: "#f57c00" },
+  { label: "Medio",    min: 0.40, max: 0.60, color: "#fbc02d" },
+  { label: "Bajo",     min: 0.20, max: 0.40, color: "#558b2f" },
+  { label: "Muy Bajo", min: 0.00, max: 0.20, color: "#1b5e20" },
+];
+
+// ── Datos ─────────────────────────────────────────────────────────────────────
+
+type PointArray = [number, number, number][];
+const DATA = rawData as Record<CrimeType, PointArray>;
+
+// Pre-filtrar por nivel de riesgo (intensidad)
+function filterByRisk(points: PointArray, active: Set<RiskFilter>): PointArray {
+  if (active.size === RISK_LEVELS.length) return points; // todos activos → sin filtro
+  return points.filter(([,, intensity]) =>
+    RISK_LEVELS.some(lvl => active.has(lvl.label) && intensity >= lvl.min && intensity <= lvl.max)
+  );
 }
 
-// ── Componente ────────────────────────────────────────────────────────────────
+// ── Gradiente custom (sin azul confuso) ───────────────────────────────────────
+
+// Verde oscuro → verde → amarillo → naranja → rojo vivo
+const HEAT_GRADIENT = {
+  0.00: "rgba(27,94,32,0)",      // transparente (sin riesgo)
+  0.10: "rgba(27,94,32,0.5)",    // verde oscuro
+  0.25: "#388e3c",               // verde
+  0.45: "#aed581",               // verde claro
+  0.60: "#fdd835",               // amarillo
+  0.75: "#f57c00",               // naranja
+  0.90: "#e53935",               // rojo
+  1.00: "#b71c1c",               // rojo oscuro
+};
+
+// ── Opciones de zoom ──────────────────────────────────────────────────────────
+
+function heatOptions(zoom: number): L.HeatMapOptions {
+  const gradient = HEAT_GRADIENT;
+  if (zoom >= 13) return { radius: 20, blur: 18, maxZoom: 18, max: 1.0, minOpacity: 0.35, gradient };
+  if (zoom >= 10) return { radius: 30, blur: 25, maxZoom: 18, max: 1.0, minOpacity: 0.30, gradient };
+  if (zoom >= 7)  return { radius: 45, blur: 38, maxZoom: 18, max: 1.0, minOpacity: 0.25, gradient };
+  return                 { radius: 60, blur: 50, maxZoom: 18, max: 1.0, minOpacity: 0.20, gradient };
+}
+
+// ── Componente principal ──────────────────────────────────────────────────────
 
 interface CrimeHeatLayerProps {
   visible: boolean;
+  crimeType?: CrimeType;
+  activeRisk?: Set<RiskFilter>;
 }
 
-export const CrimeHeatLayer = ({ visible }: CrimeHeatLayerProps) => {
+export const CrimeHeatLayer = ({
+  visible,
+  crimeType = "total",
+  activeRisk,
+}: CrimeHeatLayerProps) => {
   const map = useMap();
   const heatRef = useRef<L.HeatLayer | null>(null);
 
   useEffect(() => {
     if (!visible) {
-      if (heatRef.current) {
-        map.removeLayer(heatRef.current);
-        heatRef.current = null;
-      }
+      if (heatRef.current) { map.removeLayer(heatRef.current); heatRef.current = null; }
       return;
     }
 
-    if (heatRef.current) return; // ya está en el mapa
+    // Obtener y filtrar puntos
+    const rawPts = DATA[crimeType] ?? DATA.total;
+    const pts = activeRisk ? filterByRisk(rawPts, activeRisk) : rawPts;
 
-    const zoom = map.getZoom();
-    const layer = L.heatLayer(POINTS, heatOptions(zoom));
+    if (heatRef.current) {
+      // Actualizar datos sin recrear la capa
+      (heatRef.current as L.HeatLayer & { setLatLngs: (d: PointArray) => void }).setLatLngs(pts);
+      heatRef.current.setOptions(heatOptions(map.getZoom()));
+      (heatRef.current as L.HeatLayer & { redraw: () => void }).redraw();
+      return;
+    }
+
+    const layer = L.heatLayer(pts, heatOptions(map.getZoom()));
     layer.addTo(map);
     heatRef.current = layer;
 
-    // Actualizar opciones al hacer zoom para mantener calidad visual
     const onZoom = () => {
-      if (heatRef.current) {
-        heatRef.current.setOptions(heatOptions(map.getZoom()));
-      }
+      if (heatRef.current) heatRef.current.setOptions(heatOptions(map.getZoom()));
     };
     map.on("zoomend", onZoom);
-
     return () => {
       map.off("zoomend", onZoom);
-      if (heatRef.current) {
-        map.removeLayer(heatRef.current);
-        heatRef.current = null;
-      }
+      if (heatRef.current) { map.removeLayer(heatRef.current); heatRef.current = null; }
     };
-  }, [visible, map]);
+  }, [visible, map, crimeType, activeRisk]);
 
   return null;
 };
 
-// ── Leyenda ───────────────────────────────────────────────────────────────────
+// ── Panel de control (tipo + filtro de riesgo) ────────────────────────────────
 
-const LEVELS: { label: RiskLevel; desc: string }[] = [
-  { label: "Muy Alto", desc: "Centro comercial / turístico" },
-  { label: "Alto",     desc: "Corredores urbanos activos"   },
-  { label: "Medio",    desc: "Zonas residenciales mixtas"   },
-  { label: "Bajo",     desc: "Sectores residenciales"       },
-  { label: "Muy Bajo", desc: "Zonas rurales / periféricas"  },
-];
+interface CrimeControlPanelProps {
+  crimeType: CrimeType;
+  onCrimeTypeChange: (t: CrimeType) => void;
+  activeRisk: Set<RiskFilter>;
+  onRiskToggle: (r: RiskFilter) => void;
+}
 
-export const CrimeHeatLegend = () => (
-  <div style={{
-    background: "rgba(10,15,30,0.90)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 8, padding: "10px 12px",
-    fontSize: 11, color: "#e2e8f0",
-    backdropFilter: "blur(8px)",
-  }}>
-    <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 12, letterSpacing: "0.02em" }}>
-      Concentración de Riesgo Delictivo
-    </div>
-    <div style={{ marginBottom: 8, color: "#94a3b8", fontSize: 9 }}>
-      Robos y asaltos ponderados · CEAD 2022-2024 · 346 comunas
-    </div>
+export const CrimeControlPanel = ({
+  crimeType,
+  onCrimeTypeChange,
+  activeRisk,
+  onRiskToggle,
+}: CrimeControlPanelProps) => {
+  const panelStyle: React.CSSProperties = {
+    background: "rgba(10,15,30,0.92)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    borderRadius: 10,
+    padding: "12px 14px",
+    fontSize: 11,
+    color: "#e2e8f0",
+    backdropFilter: "blur(10px)",
+    minWidth: 210,
+  };
 
-    {/* Gradiente continuo (como el heatmap real) */}
-    <div style={{
-      height: 12, borderRadius: 4, marginBottom: 6,
-      background: "linear-gradient(to right, #1a9850, #91cf60, #fee08b, #fc8d59, #d73027)",
-    }} />
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#94a3b8", marginBottom: 8 }}>
-      <span>Muy Bajo</span><span>Muy Alto</span>
-    </div>
+  return (
+    <div style={panelStyle}>
+      {/* Título */}
+      <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontSize: 14 }}>🚨</span>
+        Riesgo Delictivo
+        <span style={{
+          marginLeft: "auto", fontSize: 9, padding: "1px 6px",
+          background: "rgba(239,68,68,0.2)", border: "1px solid #ef4444",
+          borderRadius: 4, color: "#fca5a5", fontWeight: 600,
+        }}>CEAD 2022-2024</span>
+      </div>
 
-    {LEVELS.map(({ label, desc }) => (
-      <div key={label} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
-        <div style={{
-          width: 12, height: 12, borderRadius: "50%",
-          background: RISK_COLORS[label], flexShrink: 0,
-          boxShadow: `0 0 6px ${RISK_COLORS[label]}`,
-        }} />
-        <div>
-          <span style={{ fontWeight: 600 }}>{label}</span>
-          <span style={{ color: "#64748b", marginLeft: 5, fontSize: 9 }}>{desc}</span>
+      {/* Selector de tipo de crimen */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 9, color: "#64748b", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          Tipo de delito
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {(Object.keys(CRIME_TYPE_LABELS) as CrimeType[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => onCrimeTypeChange(t)}
+              style={{
+                display: "flex", alignItems: "center", gap: 7,
+                padding: "5px 8px", borderRadius: 6, border: "none",
+                background: crimeType === t ? "rgba(99,102,241,0.25)" : "transparent",
+                color: crimeType === t ? "#a5b4fc" : "#94a3b8",
+                cursor: "pointer", fontSize: 11, textAlign: "left",
+                outline: crimeType === t ? "1px solid rgba(99,102,241,0.4)" : "none",
+                transition: "all 0.15s",
+              }}
+            >
+              <span>{CRIME_TYPE_ICONS[t]}</span>
+              <span style={{ fontWeight: crimeType === t ? 600 : 400 }}>{CRIME_TYPE_LABELS[t]}</span>
+            </button>
+          ))}
         </div>
       </div>
-    ))}
-  </div>
-);
+
+      {/* Separador */}
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginBottom: 10 }} />
+
+      {/* Filtro por nivel de riesgo */}
+      <div>
+        <div style={{ fontSize: 9, color: "#64748b", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          Nivel de riesgo (clic para filtrar)
+        </div>
+        {RISK_LEVELS.map(({ label, color }) => {
+          const active = activeRisk.has(label);
+          return (
+            <button
+              key={label}
+              onClick={() => onRiskToggle(label)}
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                width: "100%", padding: "5px 8px", borderRadius: 6,
+                border: "none", cursor: "pointer",
+                background: active ? `${color}22` : "transparent",
+                opacity: active ? 1 : 0.4,
+                transition: "all 0.15s",
+                marginBottom: 2,
+              }}
+            >
+              <div style={{
+                width: 12, height: 12, borderRadius: "50%",
+                background: color, flexShrink: 0,
+                boxShadow: active ? `0 0 6px ${color}` : "none",
+                transition: "box-shadow 0.15s",
+              }} />
+              <span style={{ color: active ? "#e2e8f0" : "#64748b", fontSize: 11, fontWeight: active ? 600 : 400 }}>
+                {label}
+              </span>
+              {!active && (
+                <span style={{ marginLeft: "auto", fontSize: 9, color: "#475569" }}>oculto</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Gradiente visual */}
+      <div style={{ marginTop: 10 }}>
+        <div style={{
+          height: 8, borderRadius: 4,
+          background: "linear-gradient(to right, #1b5e20, #388e3c, #aed581, #fdd835, #f57c00, #e53935, #b71c1c)",
+        }} />
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569", marginTop: 3 }}>
+          <span>Sin riesgo</span>
+          <span>Riesgo máximo</span>
+        </div>
+      </div>
+
+      {/* Nota metodológica */}
+      <div style={{ marginTop: 8, fontSize: 9, color: "#475569", lineHeight: 1.4 }}>
+        Intensidad normalizada por región · robos y asaltos ponderados · tasa x1000 hab/año
+      </div>
+    </div>
+  );
+};

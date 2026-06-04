@@ -29,6 +29,25 @@ import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 
+import type { CrimeType, RiskFilter } from "@/components/map/CrimeHeatLayer";
+
+const CRIME_TYPE_LABELS: Record<CrimeType, string> = {
+  total:  "Todos los delitos",
+  robos:  "Robos con violencia",
+  hurtos: "Hurtos",
+  lugar:  "Robos en lugar",
+};
+const CRIME_TYPE_ICONS: Record<CrimeType, string> = {
+  total: "🔴", robos: "🔪", hurtos: "👜", lugar: "🏠",
+};
+const CRIME_RISK_LEVELS: { label: RiskFilter; color: string }[] = [
+  { label: "Muy Alto", color: "#d32f2f" },
+  { label: "Alto",     color: "#f57c00" },
+  { label: "Medio",    color: "#fbc02d" },
+  { label: "Bajo",     color: "#558b2f" },
+  { label: "Muy Bajo", color: "#1b5e20" },
+];
+
 interface SidebarProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
   onBasemapChange: (b: "dark" | "light" | "satellite" | "hybrid") => void;
@@ -42,6 +61,10 @@ interface SidebarProps {
   gseVariable: GseVariable;
   onGseVariableChange: (v: GseVariable) => void;
   gseCount: number;
+  crimeType: CrimeType;
+  onCrimeTypeChange: (t: CrimeType) => void;
+  activeRisk: Set<RiskFilter>;
+  onRiskToggle: (r: RiskFilter) => void;
   chileCommunesVariable: IneVariable;
   onChileCommunesVariableChange: (v: IneVariable) => void;
   userLayers: UserLayer[];
@@ -542,6 +565,10 @@ export const Sidebar = ({
   gseVariable,
   onGseVariableChange,
   gseCount,
+  crimeType,
+  onCrimeTypeChange,
+  activeRisk,
+  onRiskToggle,
   chileCommunesVariable,
   onChileCommunesVariableChange,
   userLayers = [],
@@ -1305,6 +1332,55 @@ export const Sidebar = ({
               onToggle={row.key ? () => onToggleLayer(row.key!) : undefined}
             />
           ))}
+          {layers.crime && (
+            <div className="mt-2 rounded-lg bg-surface-2/40 p-2 space-y-2">
+              {/* Tipo de delito */}
+              <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">Tipo de delito</div>
+              <div className="flex flex-col gap-0.5">
+                {(Object.keys(CRIME_TYPE_LABELS) as CrimeType[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => onCrimeTypeChange(t)}
+                    className={[
+                      "flex items-center gap-2 rounded px-2 py-1 text-[11px] text-left transition-all",
+                      crimeType === t
+                        ? "bg-indigo-500/20 text-indigo-300 font-semibold ring-1 ring-indigo-500/40"
+                        : "text-muted-foreground hover:text-foreground",
+                    ].join(" ")}
+                  >
+                    <span>{CRIME_TYPE_ICONS[t]}</span>
+                    {CRIME_TYPE_LABELS[t]}
+                  </button>
+                ))}
+              </div>
+              {/* Filtro por nivel */}
+              <div className="border-t border-white/10 pt-2">
+                <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
+                  Nivel de riesgo <span className="normal-case text-[9px] text-text-muted/60">(clic para filtrar)</span>
+                </div>
+                {CRIME_RISK_LEVELS.map(({ label, color }) => {
+                  const on = activeRisk.has(label);
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => onRiskToggle(label)}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1 transition-all hover:bg-surface-2/60"
+                      style={{ opacity: on ? 1 : 0.35 }}
+                    >
+                      <div className="h-3 w-3 flex-shrink-0 rounded-full" style={{ background: color, boxShadow: on ? `0 0 5px ${color}` : "none" }} />
+                      <span className={["text-[11px]", on ? "text-foreground font-medium" : "text-muted-foreground"].join(" ")}>{label}</span>
+                      {!on && <span className="ml-auto text-[9px] text-muted-foreground/50">oculto</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Gradiente */}
+              <div className="h-1.5 rounded-full" style={{ background: "linear-gradient(to right,#1b5e20,#388e3c,#aed581,#fdd835,#f57c00,#e53935,#b71c1c)" }} />
+              <div className="flex justify-between text-[9px] text-muted-foreground/60">
+                <span>Sin riesgo</span><span>Máximo</span>
+              </div>
+            </div>
+          )}
           {layers.communesGeo && (
             <div className="mt-2 rounded-lg bg-surface-2/40 p-2">
               <div className="mb-1.5 text-[10px] uppercase tracking-wider text-text-muted">

@@ -136,6 +136,19 @@ const Index = () => {
     },
     [],
   );
+  // Capa Riesgo Delictivo
+  const [crimeType, setCrimeType] = useState<import("@/components/map/CrimeHeatLayer").CrimeType>("total");
+  const [activeRisk, setActiveRisk] = useState<Set<import("@/components/map/CrimeHeatLayer").RiskFilter>>(
+    new Set(["Muy Alto", "Alto", "Medio", "Bajo", "Muy Bajo"])
+  );
+  const handleRiskToggle = (r: import("@/components/map/CrimeHeatLayer").RiskFilter) => {
+    setActiveRisk(prev => {
+      const next = new Set(prev);
+      if (next.has(r)) { next.delete(r); } else { next.add(r); }
+      return next;
+    });
+  };
+
   // Capa GSE por manzana (Censo 2012)
   const [gseVariable, setGseVariable] = useState<GseVariable>("gse");
   const [chileCommunesVariable, setChileCommunesVariable] = useState<IneVariable>("poblacion");
@@ -1138,6 +1151,10 @@ const Index = () => {
           gseVariable={gseVariable}
           onGseVariableChange={setGseVariable}
           gseCount={gseData?.features.length ?? 0}
+          crimeType={crimeType}
+          onCrimeTypeChange={setCrimeType}
+          activeRisk={activeRisk}
+          onRiskToggle={handleRiskToggle}
           chileCommunesVariable={chileCommunesVariable}
           onChileCommunesVariableChange={setChileCommunesVariable}
           userLayers={userLayers}
@@ -1283,6 +1300,8 @@ const Index = () => {
             gseData={gseData}
             gseVariable={gseVariable}
             onGseViewportChange={handleGseViewportChange}
+            crimeType={crimeType}
+            activeRisk={activeRisk}
             chileCommunesVariable={chileCommunesVariable}
             userLayers={userLayers}
             fitUserLayerId={fitId}
