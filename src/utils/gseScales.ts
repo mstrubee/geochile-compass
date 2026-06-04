@@ -8,7 +8,17 @@ export const GSE_VARIABLE_LABEL: Record<GseVariable, string> = {
   educ: "Escolaridad",
   hacin: "Hacinamiento",
   auto: "Movilización",
+  crime: "🚨 Riesgo Delictivo",
 };
+
+/** Escala de colores para riesgo delictivo (0–1 normalizado por región). */
+export const CRIME_SCALE: NumericStop[] = [
+  { max: 0.20, color: "#1b5e20", label: "Muy Bajo"  },
+  { max: 0.40, color: "#558b2f", label: "Bajo"      },
+  { max: 0.60, color: "#fbc02d", label: "Medio"     },
+  { max: 0.80, color: "#f57c00", label: "Alto"      },
+  { max: 1.00, color: "#c62828", label: "Muy Alto"  },
+];
 
 /** Paleta canónica para las 6 categorías GSE — alineada con el branding existente. */
 export const GSE_COLORS: Record<GseClass, string> = {
@@ -84,6 +94,7 @@ export const colorForGse = (
     educ: number | null;
     hacin: number | null;
     auto_score: number | null;
+    crime_score?: number | null;
   },
 ): string => {
   switch (variable) {
@@ -93,6 +104,7 @@ export const colorForGse = (
     case "educ":     return p.educ == null ? NEUTRAL : pickStop(EDUC_SCALE, p.educ);
     case "hacin":    return p.hacin == null ? NEUTRAL : pickStop(HACIN_SCALE, p.hacin);
     case "auto":     return p.auto_score == null ? NEUTRAL : pickStop(AUTO_SCALE, p.auto_score);
+    case "crime":    return p.crime_score == null ? NEUTRAL : pickStop(CRIME_SCALE, p.crime_score);
   }
 };
 
@@ -106,5 +118,6 @@ export const scaleForGseVariable = (variable: GseVariable): { color: string; lab
     case "educ":       return EDUC_SCALE.map((s) => ({ color: s.color, label: s.label }));
     case "hacin":      return HACIN_SCALE.map((s) => ({ color: s.color, label: s.label }));
     case "auto":       return AUTO_SCALE.map((s) => ({ color: s.color, label: s.label }));
+    case "crime":      return CRIME_SCALE.map((s) => ({ color: s.color, label: s.label }));
   }
 };

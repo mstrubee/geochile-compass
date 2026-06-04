@@ -10,7 +10,8 @@ export type GseVariable =
   | "nse_score"  // Puntaje NSE continuo (0–1000)
   | "educ"       // Años de escolaridad promedio
   | "hacin"      // Índice de hacinamiento (hab/dorm)
-  | "auto";      // Puntaje "automovilización"
+  | "auto"       // Puntaje "automovilización"
+  | "crime";     // Riesgo delictivo por manzana (CEAD 2022-2024)
 
 export interface GseProperties {
   id: string;

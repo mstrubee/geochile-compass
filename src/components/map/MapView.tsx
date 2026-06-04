@@ -163,6 +163,7 @@ interface MapViewProps {
   gseData: GseFeatureCollection | null;
   gseVariable: GseVariable;
   onGseViewportChange: (bbox: [number, number, number, number], zoom: number) => void;
+  crimeView?: "heat" | "manzana";
   crimeType?: import("@/components/map/CrimeHeatLayer").CrimeType;
   activeRisk?: Set<import("@/components/map/CrimeHeatLayer").RiskFilter>;
   chileCommunesVariable: IneVariable;
@@ -223,6 +224,7 @@ export const MapView = ({
   gseData,
   gseVariable,
   onGseViewportChange,
+  crimeView,
   crimeType,
   activeRisk,
   chileCommunesVariable,
@@ -341,7 +343,11 @@ export const MapView = ({
         pickMode={poiPickMode}
         onPickPoi={onPoiPickSelect}
       />
-      <CrimeHeatLayer visible={layers.crime} crimeType={crimeType} activeRisk={activeRisk} />
+      <CrimeHeatLayer
+        visible={layers.crime && crimeView !== "manzana"}
+        crimeType={crimeType}
+        activeRisk={activeRisk}
+      />
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
 

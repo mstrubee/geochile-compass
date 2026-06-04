@@ -137,6 +137,7 @@ const Index = () => {
     [],
   );
   // Capa Riesgo Delictivo
+  const [crimeView, setCrimeView] = useState<"heat" | "manzana">("heat");
   const [crimeType, setCrimeType] = useState<import("@/components/map/CrimeHeatLayer").CrimeType>("total");
   const [activeRisk, setActiveRisk] = useState<Set<import("@/components/map/CrimeHeatLayer").RiskFilter>>(
     new Set(["Muy Alto", "Alto", "Medio", "Bajo", "Muy Bajo"])
@@ -1151,6 +1152,8 @@ const Index = () => {
           gseVariable={gseVariable}
           onGseVariableChange={setGseVariable}
           gseCount={gseData?.features.length ?? 0}
+          crimeView={crimeView}
+          onCrimeViewChange={setCrimeView}
           crimeType={crimeType}
           onCrimeTypeChange={setCrimeType}
           activeRisk={activeRisk}
@@ -1298,8 +1301,9 @@ const Index = () => {
             densityData={densityData}
             onDensityViewportChange={handleDensityViewportChange}
             gseData={gseData}
-            gseVariable={gseVariable}
+            gseVariable={crimeView === "manzana" && layers.crime ? "crime" : gseVariable}
             onGseViewportChange={handleGseViewportChange}
+            crimeView={crimeView}
             crimeType={crimeType}
             activeRisk={activeRisk}
             chileCommunesVariable={chileCommunesVariable}

@@ -61,6 +61,8 @@ interface SidebarProps {
   gseVariable: GseVariable;
   onGseVariableChange: (v: GseVariable) => void;
   gseCount: number;
+  crimeView: "heat" | "manzana";
+  onCrimeViewChange: (v: "heat" | "manzana") => void;
   crimeType: CrimeType;
   onCrimeTypeChange: (t: CrimeType) => void;
   activeRisk: Set<RiskFilter>;
@@ -565,6 +567,8 @@ export const Sidebar = ({
   gseVariable,
   onGseVariableChange,
   gseCount,
+  crimeView,
+  onCrimeViewChange,
   crimeType,
   onCrimeTypeChange,
   activeRisk,
@@ -1334,6 +1338,28 @@ export const Sidebar = ({
           ))}
           {layers.crime && (
             <div className="mt-2 rounded-lg bg-surface-2/40 p-2 space-y-2">
+              {/* Modo de visualización: heatmap vs manzanas */}
+              <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">Vista</div>
+              <div className="flex gap-1 rounded-md bg-surface-2/60 p-0.5">
+                {([
+                  { key: "heat",    label: "🌡️ Heatmap",  desc: "Vista regional" },
+                  { key: "manzana", label: "🗺️ Manzanas", desc: "Vista detalle" },
+                ] as const).map(({ key, label, desc }) => (
+                  <button
+                    key={key}
+                    onClick={() => onCrimeViewChange(key)}
+                    className={[
+                      "flex-1 rounded px-2 py-1.5 text-[11px] font-medium transition-all text-center",
+                      crimeView === key
+                        ? "bg-surface-3 text-foreground shadow-apple-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    ].join(" ")}
+                    title={desc}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               {/* Tipo de delito */}
               <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">Tipo de delito</div>
               <div className="flex flex-col gap-0.5">
