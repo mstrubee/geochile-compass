@@ -17,6 +17,7 @@ import { MicrozoneLayer } from "./MicrozoneLayer";
 import ParqueHeatmapLayer from "./ParqueHeatmapLayer";
 import { CrimeHeatLayer } from "./CrimeHeatLayer";
 import { CommercialHeatLayer } from "./CommercialHeatLayer";
+import { GastoHeatLayer } from "./GastoHeatLayer";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { GseFeatureCollection, GseVariable } from "@/types/gse";
