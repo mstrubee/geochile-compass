@@ -583,6 +583,36 @@ export type Database = {
         }
         Relationships: []
       }
+      heatmap_layer_settings: {
+        Row: {
+          blur: number
+          layer_key: string
+          min_zoom: number
+          opacity: number
+          radius: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          blur?: number
+          layer_key: string
+          min_zoom?: number
+          opacity?: number
+          radius?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          blur?: number
+          layer_key?: string
+          min_zoom?: number
+          opacity?: number
+          radius?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       isochrone_folders: {
         Row: {
           color: string | null
