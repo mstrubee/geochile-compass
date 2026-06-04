@@ -16,6 +16,7 @@ import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
 import { MicrozoneLayer } from "./MicrozoneLayer";
 import ParqueHeatmapLayer from "./ParqueHeatmapLayer";
 import { CrimeHeatLayer } from "./CrimeHeatLayer";
+import { CommercialHeatLayer } from "./CommercialHeatLayer";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { GseFeatureCollection, GseVariable } from "@/types/gse";
@@ -348,6 +349,7 @@ export const MapView = ({
         crimeType={crimeType}
         activeRisk={activeRisk}
       />
+      <CommercialHeatLayer visible={layers.commercial} />
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
 

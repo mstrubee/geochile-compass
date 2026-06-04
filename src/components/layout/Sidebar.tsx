@@ -202,7 +202,8 @@ const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "communesGeo", color: "bg-brand-teal", name: "Comunas de Chile", count: 346, sub: "Polígonos · INE" },
   { key: "nse", color: "bg-brand-purple", name: "GSE por manzana", count: 334, sub: "Censo 2024 — Chile" },
   { key: "density", color: "bg-brand-pink", name: "Densidad población", count: 20 },
-  { key: "crime", color: "bg-red-600", name: "Riesgo delictivo", count: 346, sub: "CEAD 2022-2024 · comunas" },
+  { key: "crime",      color: "bg-red-600",    name: "Riesgo delictivo",         count: 346,   sub: "CEAD 2022-2024 · comunas"  },
+  { key: "commercial", color: "bg-blue-500",   name: "Atractores comerciales",   count: 98102, sub: "OSM 2024 · 16 regiones"    },
 ];
 
 const StatCard = ({ value, label }: { value: string | number; label: string }) => (

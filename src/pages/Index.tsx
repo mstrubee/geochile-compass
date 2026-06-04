@@ -115,6 +115,7 @@ const Index = () => {
     density: false,
     manzanas: false,
     crime: false,
+    commercial: false,
   });
   const [nseFilter, setNseFilter] = useState<NSE | null>(null);
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
