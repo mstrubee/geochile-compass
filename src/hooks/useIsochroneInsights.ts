@@ -106,7 +106,11 @@ export const useIsochroneInsights = (
 
   useEffect(() => {
     if (!enabled || !analysis) {
-      setState({ summary: null, loading: false, error: null });
+      setState((prev) =>
+        prev.summary === null && prev.loading === false && prev.error === null
+          ? prev
+          : { summary: null, loading: false, error: null },
+      );
       return;
     }
     fetchSummary(analysis, false);

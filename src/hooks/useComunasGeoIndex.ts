@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import L from "leaflet";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import { normalizeCommuneName } from "@/services/communeDataService";
@@ -106,44 +106,58 @@ export const useComunasGeoIndex = (enabled: boolean = true) => {
     };
   }, [enabled, index]);
 
-  const getFeatureByName = (name: string): ComunaFeature | null => {
-    if (!index) return null;
-    return index.byName.get(normalizeCommuneName(name)) ?? null;
-  };
+  const getFeatureByName = useCallback(
+    (name: string): ComunaFeature | null => {
+      if (!index) return null;
+      return index.byName.get(normalizeCommuneName(name)) ?? null;
+    },
+    [index],
+  );
 
   /**
    * Devuelve el bbox del polígono de una comuna por nombre, en formato
    * `[south, north, west, east]` (compatible con `MapView.flyTarget.bbox`).
    * Devuelve null si la comuna no existe o el geojson aún no cargó.
    */
-  const getBboxByName = (name: string): [number, number, number, number] | null => {
-    const f = getFeatureByName(name);
-    if (!f) return null;
-    try {
-      const bounds = L.geoJSON(f as never).getBounds();
-      if (!bounds.isValid()) return null;
-      return [bounds.getSouth(), bounds.getNorth(), bounds.getWest(), bounds.getEast()];
-    } catch {
-      return null;
-    }
-  };
+  const getBboxByName = useCallback(
+    (name: string): [number, number, number, number] | null => {
+      const f = getFeatureByName(name);
+      if (!f) return null;
+      try {
+        const bounds = L.geoJSON(f as never).getBounds();
+        if (!bounds.isValid()) return null;
+        return [bounds.getSouth(), bounds.getNorth(), bounds.getWest(), bounds.getEast()];
+      } catch {
+        return null;
+      }
+    },
+    [getFeatureByName],
+  );
 
-  const getIneStats = (codigo: string, nombre?: string): IneCommuneStats | null => {
-    if (!index) return null;
-    const byCode = index.ine.byCode.get(codigo);
-    if (byCode) return byCode;
-    const officialName = nombre ?? index.nombresPorCodigo[codigo];
-    if (!officialName) return null;
-    return index.ine.byName.get(normalizeCommuneName(officialName)) ?? null;
-  };
+  const getIneStats = useCallback(
+    (codigo: string, nombre?: string): IneCommuneStats | null => {
+      if (!index) return null;
+      const byCode = index.ine.byCode.get(codigo);
+      if (byCode) return byCode;
+      const officialName = nombre ?? index.nombresPorCodigo[codigo];
+      if (!officialName) return null;
+      return index.ine.byName.get(normalizeCommuneName(officialName)) ?? null;
+    },
+    [index],
+  );
 
-  return {
-    ready: !!index,
-    fc: index?.fc ?? null,
-    nombresPorCodigo: index?.nombresPorCodigo ?? {},
-    getFeatureByName,
-    getBboxByName,
-    getIneStats,
-    error,
-  };
+  // Objeto estable: solo cambia identidad cuando cambia `index` o `error`.
+  const EMPTY_NAMES: Record<string, string> = useMemo(() => ({}), []);
+  return useMemo(
+    () => ({
+      ready: !!index,
+      fc: index?.fc ?? null,
+      nombresPorCodigo: index?.nombresPorCodigo ?? EMPTY_NAMES,
+      getFeatureByName,
+      getBboxByName,
+      getIneStats,
+      error,
+    }),
+    [index, error, getFeatureByName, getBboxByName, getIneStats, EMPTY_NAMES],
+  );
 };
