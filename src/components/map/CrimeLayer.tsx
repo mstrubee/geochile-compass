@@ -1,200 +1,185 @@
 /**
  * CrimeLayer.tsx
- * ==============
- * Capa de Concentración de Riesgo Delictivo por comuna.
+ * Riesgo delictivo por comuna · CEAD 2022-2024
  *
- * Fuente: CEAD 2022-2024 (robos y asaltos) normalizado por población (Censo 2024).
- * Granularidad: comunal (346 comunas Chile completo).
- * Niveles: Muy Alto | Alto | Medio | Bajo | Muy Bajo
+ * Usa L.geoJSON de Leaflet directamente (más robusto que <GeoJSON> de react-leaflet).
+ * Sirve el archivo desde jsDelivr CDN (Lovable no sirve archivos grandes de /public/).
  */
 
-import { useEffect, useState } from "react";
-import { GeoJSON } from "react-leaflet";
-import type { Layer } from "leaflet";
-import type { Feature, FeatureCollection } from "geojson";
-import type { CrimeProperties, RiskLevel } from "@/types/crime";
+import { useEffect, useRef } from "react";
+import { useMap } from "react-leaflet";
+import L from "leaflet";
+import type { RiskLevel } from "@/types/crime";
 import { RISK_COLORS } from "@/types/crime";
-import { useToast } from "@/hooks/use-toast";
 
-interface CrimeLayerProps {
-  visible: boolean;
-  opacity?: number;
+// ── URL del GeoJSON ───────────────────────────────────────────────────────────
+
+const GEOJSON_URL =
+  "https://cdn.jsdelivr.net/gh/mstrubee/geochile-compass@main/public/crime/crime_risk_chile.geojson";
+
+// ── Caché global del GeoJSON (no re-descarga si el usuario alterna la capa) ──
+
+let cachedData: GeoJSON.FeatureCollection | null = null;
+let fetchPromise: Promise<GeoJSON.FeatureCollection> | null = null;
+
+function fetchCrimeData(): Promise<GeoJSON.FeatureCollection> {
+  if (cachedData) return Promise.resolve(cachedData);
+  if (fetchPromise) return fetchPromise;
+
+  fetchPromise = fetch(GEOJSON_URL)
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status} al cargar crime GeoJSON`);
+      return r.json() as Promise<GeoJSON.FeatureCollection>;
+    })
+    .then((data) => {
+      cachedData = data;
+      fetchPromise = null;
+      return data;
+    })
+    .catch((e) => {
+      fetchPromise = null;
+      throw e;
+    });
+
+  return fetchPromise;
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Estilos ───────────────────────────────────────────────────────────────────
 
-const fmtN = (v: number | null | undefined, dig = 0) =>
-  v == null
-    ? "—"
-    : new Intl.NumberFormat("es-CL", { maximumFractionDigits: dig }).format(v);
+interface CrimeProps {
+  color?: string;
+  nivel_riesgo?: RiskLevel;
+  [key: string]: unknown;
+}
 
-const RISK_ORDER: RiskLevel[] = ["Muy Alto", "Alto", "Medio", "Bajo", "Muy Bajo"];
+function getStyle(feature?: GeoJSON.Feature): L.PathOptions {
+  const p = feature?.properties as CrimeProps | undefined;
+  const fillColor =
+    p?.color ??
+    RISK_COLORS[p?.nivel_riesgo as RiskLevel] ??
+    "#9e9e9e";
 
-function buildPopupHtml(p: CrimeProperties): string {
-  const nivel = p.nivel_riesgo ?? "—";
-  const color = RISK_COLORS[p.nivel_riesgo as RiskLevel] ?? "#9e9e9e";
-  return `
-    <div style="min-width:220px;font-family:system-ui,sans-serif">
-      <div style="font-weight:700;color:${color};margin-bottom:6px;font-size:13px">
-        ${p.comuna}
-        <span style="font-weight:400;color:hsl(215 19% 50%);font-size:10px"> · ${p.region ?? ""}</span>
-      </div>
-      <div style="
-        display:inline-block;
-        background:${color}33;
-        border:1px solid ${color};
-        color:${color};
-        font-weight:700;
-        font-size:11px;
-        padding:2px 10px;
-        border-radius:4px;
-        margin-bottom:8px
-      ">Riesgo ${nivel}</div>
-      <div style="display:grid;grid-template-columns:auto auto;gap:3px 10px;font-size:10px;margin-bottom:8px">
-        <span style="color:hsl(215 19% 50%)">Score delictivo</span>
-        <span style="font-family:monospace;font-weight:600">${fmtN(p.risk_score, 0)} / 1000</span>
-        <span style="color:hsl(215 19% 50%)">Tasa x1000 hab/año</span>
-        <span style="font-family:monospace">${fmtN(p.tasa_x1000, 1)}</span>
-        <span style="color:hsl(215 19% 50%)">Total delitos/año</span>
-        <span style="font-family:monospace">${fmtN(p.total_delitos_anual)}</span>
-        <span style="color:hsl(215 19% 50%)">Robos c/violencia</span>
-        <span style="font-family:monospace">${fmtN(p.robos_violencia_anual)}</span>
-        <span style="color:hsl(215 19% 50%)">Hurtos</span>
-        <span style="font-family:monospace">${fmtN(p.hurtos_anual)}</span>
-        <span style="color:hsl(215 19% 50%)">Robos en lugar</span>
-        <span style="font-family:monospace">${fmtN(p.robos_lugar_anual)}</span>
-        <span style="color:hsl(215 19% 50%)">Población</span>
-        <span style="font-family:monospace">${fmtN(p.poblacion)}</span>
-      </div>
-      <div style="font-size:9px;color:hsl(215 19% 35%);border-top:1px solid hsl(215 19% 25%);padding-top:4px">
-        ${p.fuente ?? "CEAD"} · promedio ${p.years ?? "2022-2024"}
-      </div>
-    </div>`;
+  return {
+    color: "#1a1a2e",
+    weight: 0.8,
+    fillColor,
+    fillOpacity: 0.65,
+    opacity: 1,
+  };
+}
+
+// ── Popup ─────────────────────────────────────────────────────────────────────
+
+function makePopup(props: CrimeProps): string {
+  const nivel = props.nivel_riesgo ?? "—";
+  const color = RISK_COLORS[nivel as RiskLevel] ?? "#9e9e9e";
+  const fmt = (v: unknown, d = 0) =>
+    typeof v === "number"
+      ? new Intl.NumberFormat("es-CL", { maximumFractionDigits: d }).format(v)
+      : "—";
+
+  return `<div style="min-width:210px;font-family:system-ui,sans-serif;font-size:12px">
+    <b style="color:${color};font-size:13px">${props.comuna ?? "—"}</b>
+    <span style="color:#888;font-size:10px"> · ${props.region ?? ""}</span><br/>
+    <span style="
+      display:inline-block;margin:4px 0 6px;
+      padding:1px 8px;border-radius:3px;
+      background:${color}33;border:1px solid ${color};
+      color:${color};font-weight:700;font-size:11px
+    ">Riesgo ${nivel}</span>
+    <table style="border-collapse:collapse;width:100%;font-size:10px">
+      <tr><td style="color:#888;padding:1px 6px 1px 0">Score delictivo</td><td><b>${fmt(props.risk_score)} / 1000</b></td></tr>
+      <tr><td style="color:#888;padding:1px 6px 1px 0">Tasa x1000 hab/año</td><td>${fmt(props.tasa_x1000, 1)}</td></tr>
+      <tr><td style="color:#888;padding:1px 6px 1px 0">Total delitos/año</td><td>${fmt(props.total_delitos_anual)}</td></tr>
+      <tr><td style="color:#888;padding:1px 6px 1px 0">Robos c/violencia</td><td>${fmt(props.robos_violencia_anual)}</td></tr>
+      <tr><td style="color:#888;padding:1px 6px 1px 0">Hurtos</td><td>${fmt(props.hurtos_anual)}</td></tr>
+      <tr><td style="color:#888;padding:1px 6px 1px 0">Población</td><td>${fmt(props.poblacion)}</td></tr>
+    </table>
+    <div style="margin-top:5px;font-size:9px;color:#666">${props.fuente ?? "CEAD"} · ${props.years ?? "2022-2024"}</div>
+  </div>`;
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-// jsDelivr sirve archivos de GitHub con CDN + gzip + CORS.
-// Fallback al path local para desarrollo (vite dev server sirve /public/).
-const CRIME_CDN_URL =
-  "https://cdn.jsdelivr.net/gh/mstrubee/geochile-compass@main/public/crime/crime_risk_chile.geojson";
-const CRIME_LOCAL_URL = "/crime/crime_risk_chile.geojson";
-
-let _crimeDataPromise: Promise<FeatureCollection> | null = null;
-
-async function loadCrimeData(): Promise<FeatureCollection> {
-  if (_crimeDataPromise) return _crimeDataPromise;
-
-  _crimeDataPromise = (async () => {
-    // Intentar CDN primero (siempre disponible en producción Lovable)
-    for (const url of [CRIME_CDN_URL, CRIME_LOCAL_URL]) {
-      try {
-        const r = await fetch(url);
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return await r.json() as FeatureCollection;
-      } catch {
-        // intentar siguiente URL
-      }
-    }
-    throw new Error("No se pudo cargar crime_risk_chile.geojson desde ninguna fuente");
-  })().catch((e) => {
-    _crimeDataPromise = null;
-    throw e;
-  });
-
-  return _crimeDataPromise;
+interface CrimeLayerProps {
+  visible: boolean;
 }
 
-export const CrimeLayer = ({ visible, opacity = 0.65 }: CrimeLayerProps) => {
-  const [data, setData] = useState<FeatureCollection | null>(null);
-  const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
+export const CrimeLayer = ({ visible }: CrimeLayerProps) => {
+  const map = useMap();
+  const layerRef = useRef<L.GeoJSON | null>(null);
 
-  // Carga el GeoJSON la primera vez que se activa la capa
   useEffect(() => {
-    if (!visible || data !== null || loading) return;
+    // Si se oculta la capa: remover del mapa
+    if (!visible) {
+      if (layerRef.current) {
+        map.removeLayer(layerRef.current);
+        layerRef.current = null;
+      }
+      return;
+    }
 
-    setLoading(true);
-    toast({ title: "Cargando riesgo delictivo…", description: "346 comunas · CEAD 2022-2024" });
+    // Si ya está cargada y visible: no hacer nada
+    if (layerRef.current) return;
 
-    loadCrimeData()
-      .then((d) => {
-        setData(d);
-        toast({ title: "✅ Riesgo delictivo cargado", description: `${d.features.length} comunas` });
+    // Cargar y renderizar
+    fetchCrimeData()
+      .then((data) => {
+        // Re-verificar que sigue siendo visible cuando llega la respuesta
+        if (!visible) return;
+
+        const layer = L.geoJSON(data, {
+          style: getStyle,
+          onEachFeature: (feature, lyr) => {
+            const props = feature.properties as CrimeProps;
+            lyr.bindPopup(makePopup(props), { maxWidth: 280 });
+            lyr.on("mouseover", function (this: L.Path) {
+              this.setStyle({ weight: 2, fillOpacity: 0.85 });
+            });
+            lyr.on("mouseout", function (this: L.Path) {
+              layer.resetStyle(this);
+            });
+          },
+        });
+
+        layer.addTo(map);
+        layerRef.current = layer;
       })
       .catch((e) => {
-        console.error("[CrimeLayer]", e);
-        toast({
-          title: "❌ Error al cargar riesgo delictivo",
-          description: String(e),
-          variant: "destructive",
-        });
-      })
-      .finally(() => setLoading(false));
-  }, [visible, data, loading, toast]);
-
-  if (!visible || data === null) return null;
-
-  const styleFn = (feature?: Feature) => {
-    const p = feature?.properties as CrimeProperties | undefined;
-    const fillColor = p?.color ?? "#9e9e9e";
-    return {
-      color:       "hsl(222 38% 15%)",
-      weight:      0.8,
-      fillColor,
-      fillOpacity: opacity,
-    };
-  };
-
-  const onEachFeature = (feature: Feature, layer: Layer) => {
-    const p = feature.properties as CrimeProperties;
-    layer.bindPopup(buildPopupHtml(p), { maxWidth: 280 });
-    layer.on("mouseover", () => {
-      (layer as unknown as { setStyle: (s: object) => void }).setStyle({
-        weight:      2,
-        fillOpacity: Math.min(opacity + 0.2, 1),
+        console.error("[CrimeLayer] Error:", e);
       });
-    });
-    layer.on("mouseout", () => {
-      (layer as unknown as { setStyle: (s: object) => void }).setStyle(styleFn(feature));
-    });
-  };
 
-  return (
-    <GeoJSON
-      key="crime-layer"
-      data={data}
-      style={styleFn}
-      onEachFeature={onEachFeature}
-    />
-  );
+    // Cleanup al desmontar el componente
+    return () => {
+      if (layerRef.current) {
+        map.removeLayer(layerRef.current);
+        layerRef.current = null;
+      }
+    };
+  }, [visible, map]);
+
+  return null;   // Este componente no renderiza JSX — solo manipula el mapa via Leaflet
 };
 
 // ── Leyenda ───────────────────────────────────────────────────────────────────
+
+const LEVELS: RiskLevel[] = ["Muy Alto", "Alto", "Medio", "Bajo", "Muy Bajo"];
 
 export const CrimeLegend = () => (
   <div style={{
     background: "hsl(222 38% 10%)",
     border: "1px solid hsl(222 38% 22%)",
-    borderRadius: 6,
-    padding: "8px 10px",
-    fontSize: 10,
-    color: "hsl(215 19% 80%)",
+    borderRadius: 6, padding: "8px 10px",
+    fontSize: 10, color: "hsl(215 19% 80%)",
   }}>
-    <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 11 }}>
-      Índice de Riesgo Delictivo
-    </div>
+    <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 11 }}>Riesgo Delictivo</div>
     <div style={{ marginBottom: 4, color: "hsl(215 19% 55%)", fontSize: 9 }}>
-      Robos y asaltos ponderados · x1000 hab/año · CEAD 2022-2024
+      Robos y asaltos · x1000 hab/año · CEAD 2022-2024
     </div>
-    {RISK_ORDER.map((nivel) => (
-      <div key={nivel} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-        <div style={{
-          width: 14, height: 14,
-          background: RISK_COLORS[nivel],
-          borderRadius: 2, flexShrink: 0,
-        }} />
-        <span>{nivel}</span>
+    {LEVELS.map((n) => (
+      <div key={n} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+        <div style={{ width: 14, height: 14, background: RISK_COLORS[n], borderRadius: 2, flexShrink: 0 }} />
+        <span>{n}</span>
       </div>
     ))}
   </div>
