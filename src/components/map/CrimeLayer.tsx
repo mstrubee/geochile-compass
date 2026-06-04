@@ -15,15 +15,21 @@ import { RISK_COLORS } from "@/types/crime";
 
 // ── URLs de fallback ──────────────────────────────────────────────────────────
 
-// Supabase Storage público — mismo dominio permitido por CSP de Lovable
+// Supabase Storage — misma allowlist CSP que el resto de la app
+// Bucket público "geodata"
+const SUPABASE_CDN =
+  "https://tcmyidycqdrrtwuaovbk.supabase.co/storage/v1/object/public/geodata/crime_risk_chile.geojson";
+
+// Fallbacks si el bucket aún no existe o para desarrollo local
 const REPO = "mstrubee/geochile-compass";
 const FILE = "public/crime/crime_risk_chile.geojson";
 const URLS = [
-  "https://tcmyidycqdrrtwuaovbk.supabase.co/storage/v1/object/public/geodata/crime_risk_chile.geojson",
+  SUPABASE_CDN,
   `https://cdn.jsdelivr.net/gh/${REPO}@main/${FILE}`,
   `https://raw.githubusercontent.com/${REPO}/main/${FILE}`,
   `/${FILE.replace("public/", "")}`,
 ];
+
 
 // ── Cache global ──────────────────────────────────────────────────────────────
 
@@ -43,12 +49,16 @@ async function loadData(): Promise<GeoJSON.FeatureCollection> {
       const text = await r.text();
       let data: GeoJSON.FeatureCollection;
       try {
-        data = JSON.parse(text) as GeoJSON.FeatureCollection;
+        // Sanitizar tokens no estándar (NaN, Infinity, -Infinity) → null.
+        // Python suele emitirlos con allow_nan=True; JSON.parse los rechaza.
+        const safeText = text.replace(/\b(-?Infinity|NaN)\b/g, "null");
+        data = JSON.parse(safeText) as GeoJSON.FeatureCollection;
       } catch (parseErr) {
         throw new Error(
           `JSON parse failed (len=${text.length}, head="${text.slice(0, 40).replace(/\n/g, "\\n")}"): ${parseErr}`
         );
       }
+
       if (!Array.isArray(data?.features)) {
         throw new Error(`Invalid GeoJSON: features is not an array (got ${typeof data?.features})`);
       }
