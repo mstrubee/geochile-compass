@@ -17,7 +17,11 @@ import { MicrozoneLayer } from "./MicrozoneLayer";
 import ParqueHeatmapLayer from "./ParqueHeatmapLayer";
 import { CrimeHeatLayer } from "./CrimeHeatLayer";
 import { CommercialHeatLayer } from "./CommercialHeatLayer";
+<<<<<<< HEAD
 import { GastoEndogenoHeatLayer } from "./GastoEndogenoHeatLayer";
+=======
+import { GastoHeatLayer } from "./GastoHeatLayer";
+>>>>>>> d39ff7d6ee557005299d764240e36eefffdb22f2
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { GseFeatureCollection, GseVariable } from "@/types/gse";
@@ -169,6 +173,7 @@ interface MapViewProps {
   crimeType?: import("@/components/map/CrimeHeatLayer").CrimeType;
   activeRisk?: Set<import("@/components/map/CrimeHeatLayer").RiskFilter>;
   activeCommercialCats?: Set<import("@/components/map/CommercialHeatLayer").CommercialCategory>;
+  gastoView?: "heat" | "manzana";
   isAdmin?: boolean;
   chileCommunesVariable: IneVariable;
   userLayers: UserLayer[];
@@ -232,6 +237,7 @@ export const MapView = ({
   crimeType,
   activeRisk,
   activeCommercialCats,
+  gastoView,
   isAdmin,
   chileCommunesVariable,
   userLayers,
@@ -325,7 +331,7 @@ export const MapView = ({
         highlightName={highlightedCommuneName}
       />
       <GseLayer
-        visible={layers.nse || (layers.crime && crimeView === "manzana")}
+        visible={layers.nse || (layers.crime && crimeView === "manzana") || (layers.gasto && gastoView === "manzana")}
         data={gseData}
         variable={gseVariable}
         onViewportChange={onGseViewportChange}
@@ -359,10 +365,14 @@ export const MapView = ({
         activeCategories={activeCommercialCats ?? new Set(["all"])}
         isAdmin={isAdmin}
       />
+<<<<<<< HEAD
       <GastoEndogenoHeatLayer
         visible={layers.gastoEndogeno}
         isAdmin={isAdmin}
       />
+=======
+      <GastoHeatLayer visible={layers.gasto && gastoView !== "manzana"} />
+>>>>>>> d39ff7d6ee557005299d764240e36eefffdb22f2
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
 

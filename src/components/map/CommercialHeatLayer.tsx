@@ -102,14 +102,15 @@ export const CommercialHeatLayer = ({
     const pts = getFilteredPoints(activeCategories);
     const opts = makeOpts(settings.radius, settings.blur, settings.opacity);
 
+    const heatPts = pts as unknown as L.HeatLatLngTuple[];
     if (heatRef.current) {
-      (heatRef.current as L.HeatLayer & { setLatLngs: (d: RawPoint[]) => void }).setLatLngs(pts);
+      (heatRef.current as L.HeatLayer & { setLatLngs: (d: L.HeatLatLngTuple[]) => void }).setLatLngs(heatPts);
       heatRef.current.setOptions(opts);
       (heatRef.current as L.HeatLayer & { redraw: () => void }).redraw();
       return;
     }
 
-    const layer = L.heatLayer(pts, opts);
+    const layer = L.heatLayer(heatPts, opts);
     layer.addTo(map);
     heatRef.current = layer;
 
