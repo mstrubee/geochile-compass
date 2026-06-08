@@ -14,6 +14,9 @@ import type { AnalysisSettings, ComplementWeightRule } from "@/types/analysis";
 import type { GseClass, GseFeature } from "@/types/gse";
 import { resolveCommuneAndRegion } from "@/utils/communeReverseGeocode";
 import { supabase } from "@/integrations/supabase/client";
+import area from "@turf/area";
+import { computeTerritorialExtras } from "@/services/territorialExtras";
+import { crimeService } from "@/services/crimeService";
 
 /* ---------- Mapeo rol territorial → peso (folder_layer_roles) ----------
  * Defaults hardcoded para Sprint 3 Tarea 3. Si una capa NO tiene rol
@@ -98,6 +101,10 @@ export interface ManzanaCell {
   traffic: number;
   centroid: [number, number];
   area_m2: number;
+  /** Riesgo delictivo 0-1 (overlay GSE manzana). Opcional — solo RM. */
+  crime_score?: number | null;
+  /** Clase GSE real (ABC1…E) del overlay. Opcional. Permite EPF preciso. */
+  gse_class?: import("@/types/gse").GseClass | null;
 }
 
 export interface CompetitorPoi {
@@ -136,6 +143,9 @@ export interface FeaturePayload {
   anchors: ComplementCandidate[];
   config_version: number;
   use_fine_cannibalization: boolean;
+  /** Features derivados de capas nuevas (crime, comercio, gasto endógeno).
+   *  Pre-calculados en el cliente; la edge los fusiona en `features`. */
+  territorial_extras?: Record<string, number>;
 }
 
 /* ---------- Edge function isochrone ---------- */
@@ -256,13 +266,19 @@ const buildRmCells = async (
     }
     const centroid: [number, number] = [sx / ring.length, sy / ring.length];
 
-    // Intentar overlay GSE para refinar el NSE
+    // Intentar overlay GSE para refinar el NSE + capturar crime_score y clase GSE
     let nse: 1 | 2 | 3 | 4 | 5 = (f.properties.nse as 1 | 2 | 3 | 4 | 5) ?? 3;
     let gseMatched = false;
+    let gseClass: import("@/types/gse").GseClass | null = null;
+    let crimeScore: number | null = null;
     for (const g of gseFeatures) {
       if (!g.geometry || !g.properties.gse) continue;
       if (pointInPoly(centroid, g.geometry)) {
         nse = GSE_TO_NSE[g.properties.gse] ?? nse;
+        gseClass = g.properties.gse;
+        // crime_score y n_hog llegan en el JSON aunque no están en el tipo GseProperties
+        const gp = g.properties as unknown as Record<string, unknown>;
+        if (typeof gp["crime_score"] === "number") crimeScore = gp["crime_score"] as number;
         gseMatched = true;
         break;
       }
@@ -278,6 +294,8 @@ const buildRmCells = async (
       traffic: f.properties.traffic ?? 50,
       centroid,
       area_m2: 10_000,
+      crime_score: crimeScore,
+      gse_class: gseClass,
     });
   }
   return cells;
@@ -704,6 +722,28 @@ export const buildFeaturePayload = async (
     `ancl=${anchors.length}`,
   );
 
+  // ── Features derivados de capas nuevas (crime, comercio, gasto endógeno) ──
+  // Se computan en el cliente (todos los datos ya cargados) y la edge los fusiona.
+  let territorial_extras: Record<string, number> | undefined;
+  try {
+    // En regiones las celdas no traen crime_score por manzana → fallback comunal
+    let crimeFallbackIdx: number | null = null;
+    if (!isRm && comuna) {
+      crimeFallbackIdx = await crimeRiskByCommune(comuna);
+    }
+    const areaKm2 = area(iso) / 1_000_000;
+    territorial_extras = computeTerritorialExtras({
+      cells,
+      isoPolygon: iso,
+      areaKm2,
+      isRm,
+      crimeFallbackIdx,
+    });
+  } catch (e) {
+    console.warn("[features] territorial_extras falló (continúa sin extras):", e);
+    territorial_extras = undefined;
+  }
+
   return {
     poi: {
       id: poi.id, lng: poi.lng, lat: poi.lat,
@@ -716,5 +756,22 @@ export const buildFeaturePayload = async (
     anchors,
     config_version: deps.settings.config_version,
     use_fine_cannibalization: deps.settings.use_fine_cannibalization,
+    territorial_extras,
   };
+};
+
+/** Riesgo delictivo 0-100 de una comuna (fallback para regiones sin GSE manzana). */
+const crimeRiskByCommune = async (comuna: string): Promise<number | null> => {
+  try {
+    const data = await crimeService.load();
+    const norm = normalizeCommuneName(comuna);
+    const feat = data.features.find(
+      (f) => normalizeCommuneName(f.properties.comuna) === norm,
+    );
+    if (!feat) return null;
+    // risk_score viene 0-1000 → normalizar a 0-100
+    return feat.properties.risk_score / 10;
+  } catch {
+    return null;
+  }
 };

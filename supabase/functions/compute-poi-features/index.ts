@@ -76,6 +76,9 @@ interface FeaturePayload {
   complements: ComplementCandidate[];
   config_version: number;
   use_fine_cannibalization: boolean;
+  /** Features derivados de capas nuevas (crime, comercio, gasto endógeno),
+   *  pre-calculados en el cliente. Se fusionan tal cual en `features`. */
+  territorial_extras?: Record<string, number>;
 }
 
 /* ---------- Geometría ---------- */
@@ -297,7 +300,11 @@ serve(async (req) => {
       });
     }
 
-    const features = computeFeatures(payload);
+    // Features territoriales base + extras derivados de capas nuevas (crime,
+    // comercio, gasto endógeno). Los extras vienen pre-calculados del cliente.
+    const baseFeatures = computeFeatures(payload);
+    const extras = (payload.territorial_extras ?? {}) as Record<string, number>;
+    const features = { ...baseFeatures, ...extras };
     const hash = await isoGeomHash(payload.iso_polygon);
 
     // Buscar folder_id del POI

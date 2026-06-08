@@ -37,13 +37,24 @@ const PARQUE_FEATURE_KEYS = [
   "parque_top_marca_1_pct", "parque_top_marca_2_pct", "parque_top_marca_3_pct",
 ];
 
+// Features derivados de capas nuevas (riesgo delictivo, atractores
+// comerciales, gasto endógeno). Entran como CANDIDATOS — el forward-selection
+// decide si aportan; si no, el modelo queda igual.
+const EXTRA_TERRITORIAL_FEATURE_KEYS = [
+  "crime_risk_idx",
+  "commercial_total", "commercial_shops", "commercial_food",
+  "commercial_services", "commercial_health_edu", "commercial_density_km2",
+  "gasto_endogeno_objetivo_clp", "gasto_endogeno_por_hogar",
+];
+
 const ENGINEERED_FEATURE_KEYS = [
   "log_parque_n_vehiculos", // log1p(n_vehiculos) — el lineal satura rápido
 ];
 
-// Modelo A: territoriales + parque (sin nota de gestión)
+// Modelo A: territoriales + parque + capas nuevas (sin nota de gestión)
 const MODEL_A_FEATURES = [
   ...TERRITORIAL_FEATURE_KEYS,
+  ...EXTRA_TERRITORIAL_FEATURE_KEYS,
   ...PARQUE_FEATURE_KEYS,
   ...ENGINEERED_FEATURE_KEYS,
 ];
@@ -69,6 +80,15 @@ const FEATURE_LABELS: Record<string, string> = {
   n_anchors: "Anclas",
   n_complement_medium: "Complementarios medio",
   n_complement_low: "Complementarios bajo",
+  crime_risk_idx: "Riesgo delictivo",
+  commercial_total: "Atractores comerciales (total)",
+  commercial_shops: "Comercios y tiendas",
+  commercial_food: "Alimentación y cafés",
+  commercial_services: "Servicios financieros",
+  commercial_health_edu: "Salud y educación",
+  commercial_density_km2: "Densidad comercial (/km²)",
+  gasto_endogeno_objetivo_clp: "Gasto endógeno objetivo",
+  gasto_endogeno_por_hogar: "Gasto endógeno por hogar",
   parque_n_vehiculos: "Vehículos en isócrona",
   log_parque_n_vehiculos: "Vehículos en isócrona (log)",
   parque_edad_media: "Edad media parque",
@@ -498,10 +518,14 @@ serve(async (req) => {
         ? inYear.reduce((s, p) => s + p.uf, 0) / inYear.length
         : null;
 
-      // Combinar features territoriales + parque
+      // Combinar features territoriales + capas nuevas + parque
       const featuresAll: Record<string, number | null> = {};
       const feats = f.features ?? {};
       for (const k of TERRITORIAL_FEATURE_KEYS) {
+        const v = feats[k];
+        featuresAll[k] = v == null ? null : Number(v);
+      }
+      for (const k of EXTRA_TERRITORIAL_FEATURE_KEYS) {
         const v = feats[k];
         featuresAll[k] = v == null ? null : Number(v);
       }
