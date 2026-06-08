@@ -1,5 +1,6 @@
 import { X, Download, FileJson, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight, ShoppingCart } from "lucide-react";
 import { GastoEndogenoSection } from "./GastoEndogenoSection";
+import { useCommercialCount } from "@/hooks/useCommercialCount";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Isochrone } from "@/types/isochrones";
@@ -134,6 +135,18 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null, width
 
   const analysis = useIsochroneAnalysis({ isochrone, bandSeconds, manzanas });
   const insights = useIsochroneInsights(analysis, open);
+
+  // Isócrona activa (misma banda que el análisis)
+  const isoFeatureActive = useMemo(
+    () => isochrone?.features.find((f) => f.properties?.value === bandSeconds)
+       ?? isochrone?.features[tab]
+       ?? isochrone?.features[0]
+       ?? null,
+    [isochrone, bandSeconds, tab],
+  );
+
+  // Conteo de atractores comerciales OSM dentro de la isócrona
+  const commercialCount = useCommercialCount(isoFeatureActive);
 
   // Estado de secciones colapsadas/expandidas. Se resetea cuando cambia la isócrona.
   const [sectionOpen, setSectionOpen] = useState<Record<SectionKey, boolean>>(DEFAULT_SECTION_OPEN);
@@ -438,6 +451,47 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null, width
               </div>
             </Section>
 
+            {/* ── Atractores Comerciales dentro de la isócrona ── */}
+            {commercialCount && (
+              <Section
+                title={`🏪 Atractores comerciales · ${commercialCount.total.toLocaleString("es-CL")} establec.`}
+                open={sectionOpen.capas}
+                onToggle={() => toggleSection("capas")}
+              >
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { key: "shops",      icon: "🛍️", label: "Comercios y tiendas"   },
+                    { key: "food",       icon: "🍽️", label: "Alimentación"          },
+                    { key: "services",   icon: "🏢", label: "Servicios financ."     },
+                    { key: "health_edu", icon: "🏥", label: "Salud y educación"     },
+                    { key: "other",      icon: "🏨", label: "Turismo y otros"       },
+                  ] as const).map(({ key, icon, label }) => (
+                    <div key={key} className="rounded-lg bg-surface-2/50 p-2">
+                      <div className="text-lg">{icon}</div>
+                      <div className="mt-1 text-[13px] font-bold tabular-nums text-foreground">
+                        {commercialCount[key].toLocaleString("es-CL")}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground">{label}</div>
+                    </div>
+                  ))}
+                  <div className="rounded-lg bg-blue-900/20 border border-blue-500/20 p-2">
+                    <div className="text-[13px] font-bold text-blue-400 tabular-nums">
+                      {commercialCount.total.toLocaleString("es-CL")}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground">Total establec.</div>
+                    <div className="text-[9px] text-muted-foreground/60 mt-0.5">
+                      {analysis.area_km2 > 0
+                        ? `${(commercialCount.total / analysis.area_km2).toFixed(0)}/km²`
+                        : ""}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 rounded-md bg-surface-2/30 px-2.5 py-1.5 text-[9px] text-muted-foreground/70">
+                  Fuente: OSM 2024 · grid 100m · solo establecimientos dentro del polígono de la isócrona
+                </div>
+              </Section>
+            )}
+
             <Section
               title={`Capas territoriales · ${analysis.territorialPoints.total} puntos`}
               open={sectionOpen.capas}
@@ -483,12 +537,7 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null, width
             </Section>
 
             <ParqueAnalysisSection
-              isoFeature={
-                isochrone?.features.find((f) => f.properties?.value === bandSeconds)
-                  ?? isochrone?.features[tab]
-                  ?? isochrone?.features[0]
-                  ?? null
-              }
+              isoFeature={isoFeatureActive}
               open={sectionOpen.parque}
               onToggle={() => toggleSection("parque")}
             />
