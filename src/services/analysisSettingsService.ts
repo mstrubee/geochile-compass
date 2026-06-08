@@ -1,6 +1,20 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { AnalysisSettings, ComplementWeightRule } from "@/types/analysis";
 
+/** Valores por defecto cuando no existe fila en analysis_settings. */
+export const DEFAULT_ANALYSIS_SETTINGS = (folderId: string): AnalysisSettings => ({
+  folder_id: folderId,
+  iso_minutes_rm: 5,
+  iso_minutes_regions: 7,
+  external_competition_folder_ids: [],
+  external_competition_layer_ids: [],
+  use_fine_cannibalization: true,
+  config_version: 1,
+  updated_by: null,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+});
+
 /**
  * CRUD de la configuración de análisis por carpeta y de las reglas
  * globales/por-carpeta de pesos para complementarios.
@@ -10,7 +24,7 @@ import type { AnalysisSettings, ComplementWeightRule } from "@/types/analysis";
 
 export const fetchAnalysisSettings = async (
   folderId: string,
-): Promise<AnalysisSettings | null> => {
+): Promise<AnalysisSettings> => {
   const { data, error } = await supabase
     .from("analysis_settings")
     .select("*")
@@ -18,9 +32,11 @@ export const fetchAnalysisSettings = async (
     .maybeSingle();
   if (error) {
     console.warn("[fetchAnalysisSettings]", error.message);
-    return null;
+    return DEFAULT_ANALYSIS_SETTINGS(folderId);
   }
-  return (data ?? null) as AnalysisSettings | null;
+  // Si no existe fila, devolver defaults (NO null).
+  // Esto evita que el recálculo falle por settings=null.
+  return (data ?? DEFAULT_ANALYSIS_SETTINGS(folderId)) as AnalysisSettings;
 };
 
 export const upsertAnalysisSettings = async (

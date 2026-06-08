@@ -19,6 +19,21 @@ let cache: { map: UfMap; loadedAt: number } | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
 
 /**
+ * Normaliza cualquier representación de período a "YYYY-MM-01".
+ * Supabase puede devolver DATE como "YYYY-MM-DDTHH:mm:ss.sssZ" (ISO UTC) o
+ * "YYYY-MM-DD". La edge function sync-uf-values inserta "YYYY-MM-01".
+ */
+const normalizePeriod = (s: string): string | null => {
+  if (!s) return null;
+  // ISO con tiempo: "2024-03-01T00:00:00.000Z" → "2024-03-01"
+  const dateOnly = s.slice(0, 10);
+  // "YYYY-MM-DD" → "YYYY-MM-01" (siempre el primer día del mes)
+  const parts = dateOnly.split("-");
+  if (parts.length < 2) return null;
+  return `${parts[0]}-${parts[1]}-01`;
+};
+
+/**
  * Carga (con caché) todos los valores UF disponibles.
  */
 export const loadUfMap = async (force = false): Promise<UfMap> => {
@@ -34,7 +49,10 @@ export const loadUfMap = async (force = false): Promise<UfMap> => {
   }
   const map: UfMap = new Map();
   for (const r of (data ?? []) as Array<Pick<UfValue, "period" | "value">>) {
-    map.set(r.period, Number(r.value));
+    // Supabase puede devolver DATE como "YYYY-MM-DDTHH:mm:ss.sssZ" (ISO con tiempo)
+    // o como "YYYY-MM-DD". Normalizamos siempre a "YYYY-MM-01" para consistencia.
+    const period = normalizePeriod(r.period);
+    if (period) map.set(period, Number(r.value));
   }
   cache = { map, loadedAt: Date.now() };
   return map;

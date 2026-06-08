@@ -1731,9 +1731,39 @@ const ComputeFeaturesWrapper = ({
     settings?.external_competition_layer_ids ?? [],
   );
 
-  const externalCompetitors = allPois.filter((p) =>
-    p.folder_id ? externalCompetitorFolderIds.has(p.folder_id) : false,
+  // Bug fix: allPois solo contiene los POIs de carpetas que el usuario expandió
+  // en el sidebar (lazy load). Si las carpetas de competencia externa no fueron
+  // expandidas, externalCompetitors sería [] aunque estén configuradas.
+  // Solución: cargar activamente desde Supabase las carpetas marcadas.
+  const [externalFromDb, setExternalFromDb] = useState<SavedPoi[]>([]);
+  const [loadingExternal, setLoadingExternal] = useState(false);
+
+  useEffect(() => {
+    const folderIds = settings?.external_competition_folder_ids ?? [];
+    if (folderIds.length === 0) { setExternalFromDb([]); return; }
+
+    setLoadingExternal(true);
+    import("@/integrations/supabase/client")
+      .then(({ supabase }) =>
+        supabase
+          .from("pois")
+          .select("id, name, lat, lng, folder_id, address")
+          .in("folder_id", folderIds)
+          .is("deleted_at", null)
+      )
+      .then(({ data }) => {
+        setExternalFromDb((data ?? []) as SavedPoi[]);
+      })
+      .catch((e) => console.warn("[ComputeFeaturesWrapper] external competitors fetch:", e))
+      .finally(() => setLoadingExternal(false));
+  }, [settings?.external_competition_folder_ids?.join(",")]);
+
+  // Combinar: POIs en memoria (pueden estar ya cargados) + los recién traídos de BD
+  const allExternalIds = new Set(externalFromDb.map((p) => p.id));
+  const externalFromMemory = allPois.filter(
+    (p) => p.folder_id && externalCompetitorFolderIds.has(p.folder_id) && !allExternalIds.has(p.id),
   );
+  const externalCompetitors = [...externalFromDb, ...externalFromMemory];
 
   // POIs en otras carpetas distintas a esta y a las marcadas competencia
   const otherPois = allPois.filter(
