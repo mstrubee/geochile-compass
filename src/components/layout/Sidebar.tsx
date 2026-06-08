@@ -1531,13 +1531,7 @@ export const Sidebar = ({
               </p>
             </div>
           )}
-          <div className="mt-3 border-t border-border/40 pt-2">
-            <div className="mb-1 px-1 text-[10px] uppercase tracking-wider text-text-muted">
-              Capas personalizadas
-            </div>
-            <TerritorialGroupsSection />
-          </div>
-          <ParqueLayerToggle />
+          <CollapsibleCustomLayers />
         </SidebarSection>
 
 
@@ -2668,6 +2662,38 @@ export const Sidebar = ({
       />
     )}
     </>
+  );
+};
+
+// ── Sección "Capas personalizadas" colapsable ─────────────────────────────────
+const CollapsibleCustomLayers = () => {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="mt-3 border-t border-border/40 pt-2">
+      {/* Header colapsable */}
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="mb-1 flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-surface-2/50"
+      >
+        {open
+          ? <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+          : <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />}
+        <span className="text-[10px] uppercase tracking-wider text-text-muted">
+          Capas personalizadas
+        </span>
+      </button>
+
+      {open && (
+        <>
+          {/* 1º: Parque Automotor */}
+          <ParqueLayerToggle />
+          {/* 2º: Serv. Automotrices + resto de grupos territoriales */}
+          <TerritorialGroupsSection />
+        </>
+      )}
+    </div>
   );
 };
 

@@ -141,12 +141,26 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
   );
 };
 
+/** Palabras clave que identifican grupos que van primero (case-insensitive). */
+const PINNED_FIRST = ["serv. automotrices", "serv automotrices", "servautomotrices", "automotrices"];
+
+const sortGroups = (groups: TerritorialGroup[]): TerritorialGroup[] => {
+  return [...groups].sort((a, b) => {
+    const aPin = PINNED_FIRST.some(k => a.name.toLowerCase().includes(k));
+    const bPin = PINNED_FIRST.some(k => b.name.toLowerCase().includes(k));
+    if (aPin && !bPin) return -1;
+    if (!aPin && bPin) return 1;
+    return 0; // mantener orden original del resto
+  });
+};
+
 export const TerritorialGroupsSection = () => {
   const { groups: allGroups, layers, loading } = useTerritorialLayers();
-  // Ocultamos el grupo "Parque Automotriz" porque ya está representado por el
-  // toggle dedicado "Parque automotor" (heatmap canvas).
-  const groups = allGroups.filter(
-    (g) => g.name.trim().toLowerCase() !== "parque automotriz",
+  // Ocultamos el grupo "Parque Automotriz" porque ya está en CollapsibleCustomLayers.
+  const groups = sortGroups(
+    allGroups.filter(
+      (g) => g.name.trim().toLowerCase() !== "parque automotriz",
+    )
   );
   const { visibleLayerIds, heatmapEnabled, setHeatmapEnabled } = useTerritorialVisibility();
   const hasVisibleLayers = layers.some((layer) => visibleLayerIds.has(layer.id));
