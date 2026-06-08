@@ -48,7 +48,15 @@ const EXTRA_TERRITORIAL_FEATURE_KEYS = [
 ];
 
 const ENGINEERED_FEATURE_KEYS = [
-  "log_parque_n_vehiculos", // log1p(n_vehiculos) — el lineal satura rápido
+  // Transformaciones log para features con distribución log-normal
+  "log_parque_n_vehiculos",   // log1p(n_vehiculos) — el lineal satura rápido
+  "log_pop_total",            // log1p(pop_total) — igual: 5k→800k
+  "log_income_avg",           // log1p(income_avg) — ingresos log-normales
+  "log_gasto_endogeno",       // log1p(gasto_endogeno_objetivo_clp) — escala CLP muy amplia
+  "log_commercial_total",     // log1p(commercial_total) — counts log-normales
+  // Interacciones de alto valor interpretativo
+  "wealthy_density",          // nse_high_pct × pop_density_avg = densidad de NSE alto
+  "market_quality",           // nse_high_pct × gasto_endogeno_por_hogar = calidad de mercado
 ];
 
 // Modelo A: territoriales + parque + capas nuevas (sin nota de gestión)
@@ -105,6 +113,14 @@ const FEATURE_LABELS: Record<string, string> = {
   parque_top_marca_2_pct: "% marca top 2",
   parque_top_marca_3_pct: "% marca top 3",
   management_score: "Nota de gestión (ponderada)",
+  // Engineered
+  log_parque_n_vehiculos: "Vehículos en isócrona (log)",
+  log_pop_total: "Población (log)",
+  log_income_avg: "Ingreso promedio (log)",
+  log_gasto_endogeno: "Gasto endógeno objetivo (log)",
+  log_commercial_total: "Atractores comerciales (log)",
+  wealthy_density: "Densidad NSE alto × densidad",
+  market_quality: "Calidad de mercado (NSE × gasto/hogar)",
 };
 
 // ----------------------------------------------------------------------------
@@ -533,9 +549,29 @@ serve(async (req) => {
         const v = feats[k];
         featuresAll[k] = v == null ? null : Number(v);
       }
-      // Engineered: log(n_vehiculos)
-      const nVeh = featuresAll["parque_n_vehiculos"];
-      featuresAll["log_parque_n_vehiculos"] = nVeh != null ? Math.log1p(nVeh) : null;
+      // ── Features engineered ──────────────────────────────────────────────────
+      // Log transforms: aplanan distribución log-normal → Ridge aprende mejor
+      const nVeh   = featuresAll["parque_n_vehiculos"];
+      const popT   = featuresAll["pop_total"];
+      const incAvg = featuresAll["income_avg"];
+      const gastoO = featuresAll["gasto_endogeno_objetivo_clp"];
+      const commT  = featuresAll["commercial_total"];
+
+      featuresAll["log_parque_n_vehiculos"] = nVeh   != null ? Math.log1p(nVeh)   : null;
+      featuresAll["log_pop_total"]          = popT   != null ? Math.log1p(popT)   : null;
+      featuresAll["log_income_avg"]         = incAvg != null ? Math.log1p(incAvg) : null;
+      featuresAll["log_gasto_endogeno"]     = gastoO != null ? Math.log1p(gastoO) : null;
+      featuresAll["log_commercial_total"]   = commT  != null ? Math.log1p(commT)  : null;
+
+      // Interacciones de alto valor: proxy de "mercado rico y denso"
+      const nseH  = featuresAll["nse_high_pct"];
+      const dens  = featuresAll["pop_density_avg"];
+      const gPH   = featuresAll["gasto_endogeno_por_hogar"];
+      featuresAll["wealthy_density"] =
+        nseH != null && dens  != null ? nseH * dens             : null;
+      featuresAll["market_quality"]  =
+        nseH != null && gPH   != null ? nseH * gPH              : null;
+
       // Score gestión (si existe)
       const score = scoreMap.get(f.poi_id);
       featuresAll["management_score"] = score != null ? score : null;
