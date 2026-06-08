@@ -6,6 +6,7 @@ import { colorForPopulation } from "@/utils/colorScales";
 import { fmtNum, fmtCLP, fmtArea, fmtDensity } from "@/utils/formatters";
 import {
   loadCommuneOverrides,
+  loadCommuneOverridesFromSupabase,
   saveCommuneOverride,
   type CoordOverrides,
 } from "@/utils/communeOverrides";
@@ -89,6 +90,18 @@ export const CommuneLayer = ({
   const map = useMap();
   const markersRef = useRef<Map<string, LCircleMarker>>(new Map());
   const [overrides, setOverrides] = useState<CoordOverrides>(() => loadCommuneOverrides());
+
+  // Cargar desde Supabase al montar — sobrescribe localStorage si hay diferencias
+  // Esto garantiza que posiciones guardadas en otra sesión/dispositivo se aplican.
+  useEffect(() => {
+    loadCommuneOverridesFromSupabase()
+      .then((remote) => {
+        if (Object.keys(remote).length > 0) {
+          setOverrides((prev) => ({ ...prev, ...remote }));
+        }
+      })
+      .catch(() => { /* silenciar — usará localStorage */ });
+  }, []);
   const [draggingName, setDraggingName] = useState<string | null>(null);
   const draggingRef = useRef<string | null>(null);
   // Posición inicial del mousedown (para distinguir click corto vs drag)
