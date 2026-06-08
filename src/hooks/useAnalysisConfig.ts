@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchAnalysisSettings,
   upsertAnalysisSettings,
@@ -7,6 +7,7 @@ import {
   upsertComplementRule,
   deleteComplementRule,
   compileRules,
+  DEFAULT_ANALYSIS_SETTINGS,
   type CompiledRule,
 } from "@/services/analysisSettingsService";
 import {
@@ -21,13 +22,19 @@ import type { AnalysisSettings, ComplementWeightRule } from "@/types/analysis";
 /* ------------------ analysis_settings ------------------ */
 
 export const useAnalysisSettings = (folderId: string | null) => {
-  const [settings, setSettings] = useState<AnalysisSettings | null>(null);
+  // Inicializar con defaults si hay folderId — evita el estado null transitorio
+  // que bloquea la UI mientras se carga de Supabase.
+  const [settings, setSettings] = useState<AnalysisSettings | null>(
+    () => folderId ? DEFAULT_ANALYSIS_SETTINGS(folderId) : null,
+  );
   const [loading, setLoading] = useState(false);
+  const [savedInDb, setSavedInDb] = useState(false); // true si existe fila real en BD
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!folderId) {
       setSettings(null);
+      setSavedInDb(false);
       return;
     }
     setLoading(true);
@@ -35,11 +42,22 @@ export const useAnalysisSettings = (folderId: string | null) => {
     try {
       const s = await fetchAnalysisSettings(folderId);
       setSettings(s);
+      // Si la configuración devuelta tiene config_version > 1 o fue persistida,
+      // asumimos que existe en BD (heurística: los defaults tienen version=1).
+      setSavedInDb(s.config_version > 1 || s.updated_by !== null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      // Mantener defaults en caso de error — no bloquear la UI.
+      if (folderId) setSettings(DEFAULT_ANALYSIS_SETTINGS(folderId));
     } finally {
       setLoading(false);
     }
+  }, [folderId]);
+
+  // Cuando cambia folderId, actualizar defaults inmediatamente
+  useEffect(() => {
+    if (folderId) setSettings(DEFAULT_ANALYSIS_SETTINGS(folderId));
+    else setSettings(null);
   }, [folderId]);
 
   useEffect(() => {

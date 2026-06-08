@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
 import type { AnalysisSettings } from "@/types/analysis";
 import { useAnalysisSettings, useComplementRules } from "@/hooks/useAnalysisConfig";
+import { DEFAULT_ANALYSIS_SETTINGS } from "@/services/analysisSettingsService";
 import { usePoiFeaturesBatch } from "@/hooks/usePoiFeaturesBatch";
 
 interface Props {
@@ -60,12 +61,17 @@ export const ComputeFeaturesDialog = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Computar settings efectivos
+  // Computar settings efectivos — nunca null cuando hay folderId
+  // (el hook inicializa con defaults, por lo que settings siempre tiene valor)
   const effectiveSettings: AnalysisSettings | null = useMemo(() => {
     if (!settings) return null;
     if (forceFineCanni == null) return settings;
     return { ...settings, use_fine_cannibalization: forceFineCanni };
   }, [settings, forceFineCanni]);
+
+  // Fallback de seguridad: si settings aún es null (race condition mínima),
+  // no bloquear el run — usar defaults directamente.
+  const runSettings = effectiveSettings ?? (folder?.id ? DEFAULT_ANALYSIS_SETTINGS(folder.id) : null);
 
   // Estimación de tiempo
   const estimateMinutes = useMemo(() => {
@@ -78,11 +84,11 @@ export const ComputeFeaturesDialog = ({
   }, [pois.length, effectiveSettings]);
 
   const handleRun = async () => {
-    if (!folder || !effectiveSettings) return;
+    if (!folder || !runSettings) return;
     await batch.run({
       folder,
       pois,
-      settings: effectiveSettings,
+      settings: runSettings,
       rules,
       externalCompetitors,
       otherPois,
@@ -105,7 +111,10 @@ export const ComputeFeaturesDialog = ({
   const isRunning = batch.phase === "running";
   const isDone = batch.phase === "done" || batch.phase === "cancelled";
 
-  const noSettings = !settings;
+  // "noSettings" ahora es solo informativo: el hook siempre devuelve defaults,
+  // por lo que settings nunca es null con folderId válido. Solo es true
+  // si estamos en el estado transitorio antes de que el hook inicialice.
+  const usingDefaults = settings != null && settings.config_version <= 1 && settings.updated_by === null;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !isRunning && onClose()}>
@@ -124,15 +133,18 @@ export const ComputeFeaturesDialog = ({
         </DialogHeader>
 
         <div className="scrollbar-thin max-h-[calc(92vh-180px)] overflow-y-auto px-5 py-4">
-          {noSettings ? (
-            <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-[12px] text-amber-700 dark:text-amber-400">
-              <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
-              Esta carpeta no tiene configuración de análisis. Antes de
-              calcular, abre <b>Configurar análisis…</b> y guarda al menos
-              una vez.
-            </div>
-          ) : batch.phase === "idle" ? (
+          {batch.phase === "idle" ? (
             <div className="space-y-4">
+              {/* Aviso NO bloqueante si se usan valores por defecto */}
+              {usingDefaults && (
+                <div className="rounded-lg bg-blue-500/10 px-3 py-2 text-[12px] text-blue-700 dark:text-blue-400 flex items-start gap-1.5">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                  <span>
+                    Usando configuración por defecto (isócrona 5 min RM / 7 min regiones).
+                    Puedes personalizar en <b>Configurar análisis…</b>
+                  </span>
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-2">
                 <Stat value={String(pois.length)} label="POIs a calcular" />
                 <Stat value={String(externalCompetitors.length)} label="Competidores externos" />
@@ -201,7 +213,7 @@ export const ComputeFeaturesDialog = ({
                 <Button variant="outline" size="sm" onClick={onClose}>
                   Cancelar
                 </Button>
-                <Button size="sm" onClick={handleRun} disabled={!effectiveSettings || pois.length === 0}>
+                <Button size="sm" onClick={handleRun} disabled={!runSettings || pois.length === 0}>
                   <Play className="mr-1.5 h-3 w-3" />
                   Iniciar
                 </Button>
