@@ -23,6 +23,9 @@ export interface GseBreakdown {
   educYearsAvg: number | null;
   hacinAvg: number | null;
   autoScoreAvg: number | null;
+  // Población real desde n_per / n_hog (Censo 2024) — disponible para 334 comunas
+  pop: number;  // personas dentro de la isócrona
+  hh:  number;  // hogares dentro de la isócrona
 }
 
 export interface DensityBreakdown {
@@ -354,11 +357,14 @@ export const gseBreakdown = (
   let totalArea = 0;
   let count = 0;
   const classArea: Partial<Record<GseClass, number>> = {};
+  const classHh:   Partial<Record<GseClass, number>> = {};  // hogares reales por GSE
   const quintilArea: Partial<Record<"Q1" | "Q2" | "Q3" | "Q4" | "Q5", number>> = {};
   let nseScoreNum = 0, nseScoreDen = 0;
   let educNum = 0, educDen = 0;
   let hacinNum = 0, hacinDen = 0;
   let autoNum = 0, autoDen = 0;
+  let totalPop = 0;
+  let totalHh  = 0;
 
   for (const f of gse.features) {
     try {
@@ -370,10 +376,31 @@ export const gseBreakdown = (
     if (!inter) continue;
     const interArea = safeArea(inter);
     if (interArea <= 0) continue;
+
+    const manzanaArea = safeArea(f as never);
+    // share = fracción del polígono de manzana dentro de la isócrona
+    const share = manzanaArea > 0 ? Math.min(1, interArea / manzanaArea) : 1;
+
     count += 1;
     totalArea += interArea;
     const p = f.properties;
-    if (p.gse) classArea[p.gse] = (classArea[p.gse] ?? 0) + interArea;
+
+    // ── Población real (Censo 2024) escalada por share de área ────────────
+    // Los archivos GSE tienen n_per (personas) y n_hog (hogares) por manzana.
+    // Se usa como proxy tipado; los campos extra llegan en el JSON pero no en el tipo.
+    const nPer = (p as unknown as Record<string, unknown>)["n_per"];
+    const nHog = (p as unknown as Record<string, unknown>)["n_hog"];
+    const mPop = typeof nPer === "number" ? nPer * share : 0;
+    const mHh  = typeof nHog === "number" ? nHog * share : 0;
+    totalPop += mPop;
+    totalHh  += mHh;
+
+    // ── Distribución GSE ponderada por hogares reales (si disponible) o área ──
+    const weight = mHh > 0 ? mHh : interArea;
+    if (p.gse) {
+      classArea[p.gse] = (classArea[p.gse] ?? 0) + interArea;
+      classHh[p.gse]   = (classHh[p.gse] ?? 0) + weight;
+    }
     if (p.quintil) quintilArea[p.quintil] = (quintilArea[p.quintil] ?? 0) + interArea;
     if (p.nse_score != null) { nseScoreNum += p.nse_score * interArea; nseScoreDen += interArea; }
     if (p.educ != null) { educNum += p.educ * interArea; educDen += interArea; }
@@ -382,10 +409,15 @@ export const gseBreakdown = (
   }
   if (count === 0 || totalArea <= 0) return null;
 
+  // Distribución GSE: usar hogares reales si disponibles, si no usar área
+  const totalHhGse = Object.values(classHh).reduce((s, v) => s + (v ?? 0), 0);
+  const usePop = totalHhGse > 0;
+  const denom  = usePop ? totalHhGse : totalArea;
+
   const classDistribution: Partial<Record<GseClass, number>> = {};
   for (const k of GSE_CLASSES) {
-    const a = classArea[k];
-    if (a) classDistribution[k] = Math.round((a / totalArea) * 1000) / 10;
+    const v = usePop ? (classHh[k] ?? 0) : (classArea[k] ?? 0);
+    if (v > 0) classDistribution[k] = Math.round((v / denom) * 1000) / 10;
   }
   const quintilDistribution: Partial<Record<"Q1" | "Q2" | "Q3" | "Q4" | "Q5", number>> = {};
   for (const k of QUINTILES) {
@@ -396,10 +428,12 @@ export const gseBreakdown = (
     manzanaCount: count,
     classDistribution,
     quintilDistribution,
-    nseScoreAvg: nseScoreDen > 0 ? Math.round((nseScoreNum / nseScoreDen) * 10) / 10 : null,
-    educYearsAvg: educDen > 0 ? Math.round((educNum / educDen) * 10) / 10 : null,
-    hacinAvg: hacinDen > 0 ? Math.round((hacinNum / hacinDen) * 100) / 100 : null,
-    autoScoreAvg: autoDen > 0 ? Math.round((autoNum / autoDen) * 10) / 10 : null,
+    nseScoreAvg:  nseScoreDen > 0 ? Math.round((nseScoreNum / nseScoreDen) * 10) / 10 : null,
+    educYearsAvg: educDen > 0     ? Math.round((educNum / educDen) * 10) / 10         : null,
+    hacinAvg:     hacinDen > 0    ? Math.round((hacinNum / hacinDen) * 100) / 100      : null,
+    autoScoreAvg: autoDen > 0     ? Math.round((autoNum / autoDen) * 10) / 10          : null,
+    pop: Math.round(totalPop),
+    hh:  Math.round(totalHh),
   };
 };
 
@@ -489,17 +523,33 @@ export const computeIsochroneAnalysis = (params: {
   const manzanasBD = manzanaBreakdown(isoFeature, manzanas);
   const gseBD = gseBreakdown(isoFeature, gse);
 
-  // Decide source for population & households
+  // ── Jerarquía de fuentes de población (mejor → peor) ────────────────────
+  //
+  // 1. Manzanas INE Censo 2017 (solo RM, ~52 comunas) — mayor precisión
+  // 2. GSE Censo 2024 (n_per / n_hog por manzana, 334 comunas) — buena precisión
+  //    Usa share de área para prorratear manzanas parcialmente dentro de la iso.
+  // 3. Fallback comunal por área — solo si no hay GSE. Asume distribución
+  //    uniforme dentro de la comuna: INCORRECTO para comunas grandes/mixtas.
+  //    Se mantiene como último recurso.
+  //
   let pop = 0;
   let hh = 0;
   let source: "manzanas" | "comuna" = "comuna";
+
   if (manzanasBD && manzanasBD.pop > 0) {
+    // Fuente 1: manzanas INE (Censo 2017, solo RM)
     pop = manzanasBD.pop;
     hh = manzanasBD.hh > 0 ? manzanasBD.hh : Math.round(pop / HH_SIZE_FALLBACK);
     source = "manzanas";
+  } else if (gseBD && gseBD.pop > 0) {
+    // Fuente 2: GSE Censo 2024 — n_per/n_hog por manzana × share de área
+    pop = gseBD.pop;
+    hh = gseBD.hh > 0 ? gseBD.hh : Math.round(pop / HH_SIZE_FALLBACK);
+    source = "manzanas"; // misma precisión que manzanas INE, mostrar igual
   } else {
+    // Fuente 3: estimación comunal por área proporcional (último recurso)
     pop = Math.round(communes.reduce((s, c) => s + c.popInIso, 0));
-    hh = Math.round(communes.reduce((s, c) => s + c.hhInIso, 0));
+    hh  = Math.round(communes.reduce((s, c) => s + c.hhInIso, 0));
     source = "comuna";
   }
 
