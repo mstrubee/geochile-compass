@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText, Car } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText, Car, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -104,6 +104,7 @@ interface SidebarProps {
   loadedSavedIsoIds?: Set<string>;
   onToggleSavedIsochrone?: (id: string) => void;
   onAnalyzeSavedIsochrone?: (id: string) => void;
+  onProjectSavedIsochrone?: (id: string) => void;
   onFocusSavedIsochrone?: (id: string) => void;
   onRenameSavedIsochrone?: (id: string, name: string) => Promise<void> | void;
   onMoveSavedIsochrone?: (id: string, folderId: string | null) => Promise<void> | void;
@@ -264,6 +265,7 @@ interface SavedIsoSubProps {
   loadedIds?: Set<string>;
   onToggle?: (id: string) => void;
   onAnalyze?: (id: string) => void;
+  onProject?: (id: string) => void;
   onFocus?: (id: string) => void;
   onRename?: (id: string, name: string) => Promise<void> | void;
   onMove?: (id: string, folderId: string | null) => Promise<void> | void;
@@ -279,6 +281,7 @@ const SavedIsochronesSubsection = ({
   loadedIds,
   onToggle,
   onAnalyze,
+  onProject,
   onFocus,
   onRename,
   onMove,
@@ -377,11 +380,20 @@ const SavedIsochronesSubsection = ({
               </span>
               <IOSSwitch on={visible} />
             </button>
+            {onProject && (
+              <button
+                onClick={() => onProject(s.id)}
+                className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted hover:bg-green-500/20 hover:text-green-400"
+                title="Proyectar potencial de venta"
+              >
+                <TrendingUp className="h-3.5 w-3.5" />
+              </button>
+            )}
             {onAnalyze && (
               <button
                 onClick={() => onAnalyze(s.id)}
                 className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted hover:bg-primary/15 hover:text-primary"
-                title="Análisis"
+                title="Análisis territorial"
               >
                 <BarChart3 className="h-3.5 w-3.5" />
               </button>
@@ -614,6 +626,7 @@ export const Sidebar = ({
   loadedSavedIsoIds,
   onToggleSavedIsochrone,
   onAnalyzeSavedIsochrone,
+  onProjectSavedIsochrone,
   onFocusSavedIsochrone,
   onRenameSavedIsochrone,
   onMoveSavedIsochrone,
@@ -1701,6 +1714,7 @@ export const Sidebar = ({
               loadedIds={loadedSavedIsoIds}
               onToggle={onToggleSavedIsochrone}
               onAnalyze={onAnalyzeSavedIsochrone}
+              onProject={onProjectSavedIsochrone}
               onFocus={onFocusSavedIsochrone}
               onRename={onRenameSavedIsochrone}
               onMove={onMoveSavedIsochrone}
