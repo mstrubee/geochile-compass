@@ -46,7 +46,7 @@ import type { ManzanaVariable } from "@/types/manzanas";
 import type { GseVariable } from "@/types/gse";
 import type { IneVariable } from "@/utils/ineScales";
 import type { UserLayer } from "@/types/userLayers";
-import type { IsoMode, Isochrone } from "@/types/isochrones";
+import { ISO_MODE_LABEL, type IsoMode, type Isochrone } from "@/types/isochrones";
 import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
 import { MICRO_PALETTE } from "@/types/microzones";
 import {
