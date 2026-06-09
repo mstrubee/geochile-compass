@@ -20,8 +20,8 @@ interface AnalysisPanelProps {
   onWidthChange?: (w: number) => void;
   minWidth?: number;
   maxWidth?: number;
-  /** Si se pasa, muestra la sección de proyección de potencial de venta. */
-  projectionFolderId?: string | null;
+  /** Carpetas disponibles para la proyección (el usuario elige cuál usar). */
+  projectionFolders?: Array<{ id: string; name: string }>;
   /** Abre la sección de proyección automáticamente al montar. */
   autoOpenProjection?: boolean;
 }
@@ -134,9 +134,20 @@ const DEFAULT_SECTION_OPEN: Record<SectionKey, boolean> = {
 export const AnalysisPanel = ({
   open, onClose, isochrone, manzanas = null,
   width = 380, onWidthChange, minWidth = 320, maxWidth = 800,
-  projectionFolderId = null,
+  projectionFolders = [],
   autoOpenProjection = false,
 }: AnalysisPanelProps) => {
+  // Folder seleccionado para proyección — default al primero de la lista
+  const [selectedFolderId, setSelectedFolderId] = useState<string>(
+    () => projectionFolders[0]?.id ?? "",
+  );
+  // Actualizar cuando cambian los folders disponibles
+  useEffect(() => {
+    if (projectionFolders.length > 0 && !projectionFolders.find(f => f.id === selectedFolderId)) {
+      setSelectedFolderId(projectionFolders[0].id);
+    }
+  }, [projectionFolders]);
+  const projectionFolderId = selectedFolderId || null;
   const minutesAvailable = useMemo(
     () => (isochrone ? [...isochrone.minutes].sort((a, b) => a - b) : []),
     [isochrone],
@@ -427,14 +438,20 @@ export const AnalysisPanel = ({
             </Section>
 
             {/* ── Proyección de Potencial de Venta ── */}
-            {projectionFolderId && (
+            {projectionFolders.length > 0 && (
               <Section
                 title="📈 Proyección de Potencial de Venta"
                 open={sectionOpen.proyeccion}
                 onToggle={() => toggleSection("proyeccion")}
               >
                 <ProjectionSection
-                  folderId={projectionFolderId}
+                  folders={projectionFolders}
+                  selectedFolderId={selectedFolderId}
+                  onFolderChange={(id) => {
+                    setSelectedFolderId(id);
+                    setProjResult(null);
+                    setProjError(null);
+                  }}
                   result={projResult}
                   loading={projLoading}
                   error={projError}
@@ -785,17 +802,20 @@ const fmtCLPM = (v: number) =>
   `$${new Intl.NumberFormat("es-CL").format(Math.round(v / 1_000_000))}M`;
 
 interface ProjectionSectionProps {
-  folderId:  string;
-  result:    ProjectionResult | null;
-  loading:   boolean;
-  error:     string | null;
-  canRun:    boolean;
-  onRun:     () => void;
-  onReset:   () => void;
+  folders:          Array<{ id: string; name: string }>;
+  selectedFolderId: string;
+  onFolderChange:   (id: string) => void;
+  result:           ProjectionResult | null;
+  loading:          boolean;
+  error:            string | null;
+  canRun:           boolean;
+  onRun:            () => void;
+  onReset:          () => void;
 }
 
 const ProjectionSection = ({
-  folderId, result, loading, error, canRun, onRun, onReset,
+  folders, selectedFolderId, onFolderChange,
+  result, loading, error, canRun, onRun, onReset,
 }: ProjectionSectionProps) => {
   if (loading) {
     return (
@@ -819,9 +839,40 @@ const ProjectionSection = ({
     return (
       <div className="space-y-3">
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Estima el potencial de venta de esta ubicación comparando su perfil territorial
-          con los locales <b className="text-foreground">{folderId ? "de la red" : ""}</b> más similares.
+          Estima el potencial de venta comparando el perfil territorial
+          con los locales de la red seleccionada.
         </p>
+
+        {/* Selector de carpeta/negocio */}
+        {folders.length > 1 && (
+          <div>
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Red de comparación</div>
+            <div className="flex flex-col gap-0.5">
+              {folders.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => onFolderChange(f.id)}
+                  className={[
+                    "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-all",
+                    selectedFolderId === f.id
+                      ? "bg-green-600/20 text-green-300 ring-1 ring-green-500/30"
+                      : "text-muted-foreground hover:bg-surface-2/60 hover:text-foreground",
+                  ].join(" ")}
+                >
+                  <Store className="h-3 w-3 flex-shrink-0" />
+                  {f.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {folders.length === 1 && (
+          <div className="flex items-center gap-2 rounded-lg bg-surface-2/40 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+            <Store className="h-3 w-3" />
+            Comparando con red: <b className="ml-1 text-foreground">{folders[0].name}</b>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-1">
           {["Población", "NSE", "Ingresos", "Parque vehicular", "Atractores"].map((f) => (
             <span key={f} className="rounded bg-surface-2/60 px-2 py-0.5 text-[9px] text-muted-foreground">{f}</span>
@@ -834,10 +885,10 @@ const ProjectionSection = ({
         )}
         <button
           onClick={onRun}
-          disabled={!canRun}
+          disabled={!canRun || !selectedFolderId}
           className={[
             "flex w-full items-center justify-center gap-2 rounded-lg py-2 text-[12px] font-semibold transition-all",
-            canRun
+            canRun && selectedFolderId
               ? "bg-green-600 hover:bg-green-500 text-white"
               : "bg-surface-2/60 text-muted-foreground cursor-not-allowed opacity-50",
           ].join(" ")}
@@ -850,6 +901,7 @@ const ProjectionSection = ({
   }
 
   // Resultado
+  const selectedFolderName = folders.find(f => f.id === selectedFolderId)?.name ?? result.folderName;
   const currentYearProj = result.fiveYearProjection.find((y) => y.isCurrent);
   const baseProj        = result.fiveYearProjection.find((y) => y.isBase);
   const displayProj     = currentYearProj ?? baseProj ?? { uf: result.estimatedUf, clp: result.estimatedClp };
@@ -959,6 +1011,22 @@ const ProjectionSection = ({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Cambio de red si hay más de 1 folder */}
+      {folders.length > 1 && (
+        <div className="flex items-center gap-2 pt-1 border-t border-white/8">
+          <span className="text-[10px] text-muted-foreground">Red comparada:</span>
+          <select
+            value={selectedFolderId}
+            onChange={(e) => { onFolderChange(e.target.value); onReset(); }}
+            className="flex-1 rounded bg-surface-2/60 px-2 py-0.5 text-[11px] text-foreground border-none outline-none cursor-pointer"
+          >
+            {folders.map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
         </div>
       )}
 

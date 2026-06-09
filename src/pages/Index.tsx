@@ -1474,7 +1474,7 @@ const Index = () => {
             onWidthChange={handlePanelWidthChange}
             minWidth={PANEL_MIN_W}
             maxWidth={PANEL_MAX_W}
-            projectionFolderId={folders[0]?.id ?? null}
+            projectionFolders={folders.filter(f => !f.parent_id).map(f => ({ id: f.id, name: f.name }))}
             autoOpenProjection={!!projectionIsoId}
           />
         </div>

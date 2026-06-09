@@ -219,7 +219,7 @@ export async function computeSalesProjection(
   const comparable: ComparableRaw[] = [];
   let nWithSales = 0;
   let nWithPredicted = 0;
-  let maxBaseYear = 2024; // fallback
+  let maxBaseYear = currentYear - 1; // fallback = año anterior
 
   for (const p of perfRows) {
     if (!p.poi_id) continue;
