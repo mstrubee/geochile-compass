@@ -333,13 +333,17 @@ const Index = () => {
       const raw = localStorage.getItem(ISO_DEFAULTS_KEY);
       if (!raw) return { walking: FALLBACK_MINUTES, vehicle: FALLBACK_MINUTES, bike: FALLBACK_MINUTES };
       const parsed = JSON.parse(raw);
+      const toInt = (n: unknown): number => {
+        const num = typeof n === "number" ? n : Number(n);
+        return Number.isFinite(num) ? Math.max(0, Math.round(num)) : 0;
+      };
       const pick = (k: string): [number, number, number] => {
         const v = parsed?.[k];
-        if (v && typeof v === "object" && [v.min1, v.min2, v.min3].every((n) => typeof n === "number")) {
-          return [v.min1, v.min2, v.min3];
+        if (Array.isArray(v)) {
+          return [toInt(v[0]), toInt(v[1]), toInt(v[2])];
         }
-        if (Array.isArray(v) && v.length === 3 && v.every((n: unknown) => typeof n === "number")) {
-          return [v[0], v[1], v[2]];
+        if (v && typeof v === "object") {
+          return [toInt((v as any).min1), toInt((v as any).min2), toInt((v as any).min3)];
         }
         return FALLBACK_MINUTES;
       };
@@ -367,16 +371,21 @@ const Index = () => {
     try {
       const current = readIsoDefaults();
       const modeKey = ISO_MODE_TO_KEY[isoMode];
+      const toInt = (n: unknown): number => {
+        const num = typeof n === "number" ? n : Number(n);
+        return Number.isFinite(num) ? Math.max(0, Math.round(num)) : 0;
+      };
       const next = {
         ...current,
-        [modeKey]: {
-          min1: isoMinutes[0] ?? 0,
-          min2: isoMinutes[1] ?? 0,
-          min3: isoMinutes[2] ?? 0,
-        },
+        [modeKey]: [
+          toInt(isoMinutes[0]),
+          toInt(isoMinutes[1]),
+          toInt(isoMinutes[2]),
+        ] as [number, number, number],
       };
       localStorage.setItem(ISO_DEFAULTS_KEY, JSON.stringify(next));
-      toast.success("Defaults guardados");
+      const modeLabel = ISO_MODE_LABEL[isoMode];
+      toast.success(`Defaults guardados para ${modeLabel}`);
     } catch {
       toast.error("No se pudo guardar");
     }
