@@ -2,14 +2,12 @@ import { X, Download, FileJson, Sparkles, RefreshCw, Loader2, ChevronDown, Chevr
 import { GastoEndogenoSection } from "./GastoEndogenoSection";
 import { useCommercialCount } from "@/hooks/useCommercialCount";
 import { computeSalesProjection, type ProjectionResult } from "@/services/salesProjectionService";
-import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Isochrone } from "@/types/isochrones";
 import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
 import { useIsochroneAnalysis } from "@/hooks/useIsochroneAnalysis";
 import { useIsochroneInsights } from "@/hooks/useIsochroneInsights";
-import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 
 interface AnalysisPanelProps {
@@ -851,25 +849,81 @@ const ProjectionSection = ({
   }
 
   // Resultado
+  const currentYearProj = result.fiveYearProjection.find((y) => y.isCurrent);
+  const baseProj        = result.fiveYearProjection.find((y) => y.isBase);
+  const displayProj     = currentYearProj ?? baseProj ?? { uf: result.estimatedUf, clp: result.estimatedClp };
+  const displayYear     = currentYearProj?.year ?? result.baseYear;
+
   return (
     <div className="space-y-3">
-      {/* KPI central */}
+      {/* Aviso si usó predicciones del modelo en lugar de ventas reales */}
+      {result.usedPredictions && (
+        <div className="rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[10px] text-amber-400/90">
+          ⚠ Sin ventas reales cargadas — usando predicciones del modelo Ridge como referencia.
+        </div>
+      )}
+
+      {/* KPI central — año en curso */}
       <div className="rounded-xl bg-gradient-to-br from-green-900/25 to-emerald-900/10 border border-green-500/20 p-3">
         <div className="text-[10px] text-green-400/70 uppercase tracking-wider mb-1">
-          Potencial estimado · {result.targetYear}
+          Potencial estimado · {displayYear}
+          {currentYearProj && <span className="ml-1 text-green-400/50">(año en curso)</span>}
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-[22px] font-bold text-green-400">{fmtUF(result.estimatedUf)}</span>
+          <span className="text-[22px] font-bold text-green-400">{fmtUF(displayProj.uf)}</span>
           <span className="text-[11px] text-green-400/60">/mes</span>
         </div>
-        <div className="text-[11px] text-muted-foreground">{fmtCLPM(result.estimatedClp)}/mes</div>
+        <div className="text-[11px] text-muted-foreground">{fmtCLPM(displayProj.clp)}/mes</div>
         <div className="mt-1.5 text-[10px] text-muted-foreground">
           Rango: <span className="text-foreground">{fmtUF(result.lowUf)}</span> — <span className="text-foreground">{fmtUF(result.highUf)}</span>
           <span className="ml-1 text-[9px]">(p25–p75 de comparables)</span>
         </div>
       </div>
 
-      {/* Factores */}
+      {/* Proyección 5 años */}
+      {result.fiveYearProjection.length > 1 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+            Proyección {result.baseYear}–{result.fiveYearProjection[result.fiveYearProjection.length - 1].year}
+            <span className="ml-1 normal-case text-[9px]">({(result.growthRate * 100).toFixed(0)}% anual)</span>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-white/8">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="bg-surface-2/60">
+                  <th className="py-1 px-2 text-left text-[10px] text-muted-foreground font-medium">Año</th>
+                  <th className="py-1 px-2 text-right text-[10px] text-muted-foreground font-medium">UF/mes</th>
+                  <th className="py-1 px-2 text-right text-[10px] text-muted-foreground font-medium">CLP/mes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.fiveYearProjection.map((yr, i) => (
+                  <tr key={yr.year} className={[
+                    "border-t border-white/5",
+                    yr.isCurrent ? "bg-green-900/20 font-semibold" :
+                    yr.isBase   ? "bg-surface-2/30" :
+                    i % 2 === 0 ? "bg-surface-1/20" : "",
+                  ].join(" ")}>
+                    <td className="py-1 px-2 flex items-center gap-1">
+                      {yr.year}
+                      {yr.isCurrent && <span className="text-[8px] text-green-400 bg-green-400/15 rounded px-1">hoy</span>}
+                      {yr.isBase && !yr.isCurrent && <span className="text-[8px] text-muted-foreground bg-surface-2/60 rounded px-1">base</span>}
+                    </td>
+                    <td className={["py-1 px-2 text-right tabular-nums font-mono", yr.isCurrent ? "text-green-400" : "text-foreground"].join(" ")}>
+                      {fmtUF(yr.uf)}
+                    </td>
+                    <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
+                      {fmtCLPM(yr.clp)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Factores clave */}
       <div className="space-y-1">
         {result.keyFactors.map((f, i) => (
           <div key={i} className="flex items-start gap-2 text-[11px]">
@@ -888,13 +942,18 @@ const ProjectionSection = ({
         <div>
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
             <Store className="h-3 w-3" />
-            {result.comparables.length} locales comparables (de {result.nWithSales} con ventas)
+            {result.comparables.length} locales comparables
+            <span className="normal-case ml-1">
+              ({result.nWithSales} con ventas reales
+              {result.nWithPredicted > 0 ? ` · ${result.nWithPredicted} predichos` : ""})
+            </span>
           </div>
           <div className="space-y-1">
             {result.comparables.map((c) => (
               <div key={c.poiId} className="flex items-center gap-2 rounded-lg bg-surface-2/30 px-2.5 py-1.5 text-[11px]">
                 <span className="flex-1 truncate text-foreground">{c.name}</span>
-                <span className="font-mono text-green-400">{fmtUF(c.actualUf)}</span>
+                {!c.isActual && <span className="text-[8px] text-amber-400/70 bg-amber-400/10 rounded px-1">pred.</span>}
+                <span className="font-mono text-green-400">{fmtUF(c.ufPerMonth)}</span>
                 <span className="text-[10px] text-muted-foreground">{Math.round((1-c.distanceScore)*100)}% sim.</span>
               </div>
             ))}
