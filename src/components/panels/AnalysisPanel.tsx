@@ -424,6 +424,11 @@ export const AnalysisPanel = ({
                 onToggle={() => toggleSection("nse")}
               >
                 <div className="rounded-xl bg-surface-2/60 p-3">
+                  <p className="mb-2 text-[9px] leading-relaxed text-muted-foreground/70">
+                    <strong className="text-muted-foreground">Ponderado por hogares</strong> (no por área).
+                    C3 puede dominar aunque el mapa muestre "más azul": edificios de dpto.
+                    concentran más hogares/m² que casas ABC1.
+                  </p>
                   {nseDist.map((n) => (
                     <div key={n.label} className="mb-1.5 flex items-center gap-2">
                       <span className="w-9 flex-shrink-0 font-mono text-[11px] text-foreground">{n.label}</span>

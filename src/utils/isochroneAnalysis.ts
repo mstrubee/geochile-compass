@@ -17,7 +17,7 @@ export type NseLabel = "ABC1" | "C2" | "C3" | "D" | "E";
 
 export interface GseBreakdown {
   manzanaCount: number;
-  classDistribution: Partial<Record<GseClass, number>>; // % ponderado por área
+  classDistribution: Partial<Record<GseClass, number>>; // % ponderado por HOGARES (n_hog × share), no por área
   quintilDistribution: Partial<Record<"Q1" | "Q2" | "Q3" | "Q4" | "Q5", number>>;
   nseScoreAvg: number | null; // 0-1000
   educYearsAvg: number | null;
