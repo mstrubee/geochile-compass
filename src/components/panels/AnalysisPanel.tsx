@@ -8,6 +8,7 @@ import type { Isochrone } from "@/types/isochrones";
 import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
 import { useIsochroneAnalysis } from "@/hooks/useIsochroneAnalysis";
 import { useIsochroneInsights } from "@/hooks/useIsochroneInsights";
+import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 
 interface AnalysisPanelProps {
