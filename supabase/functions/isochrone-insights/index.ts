@@ -85,13 +85,26 @@ const buildFallbackSummary = (analysis: any) => {
   }
   recommendations.push("Usar este resumen como contingencia y reintentar el análisis IA cuando se libere cuota de Gemini.");
 
+  // Lectura territorial del NSE — siempre incluida
+  const topGseLabel = topGse?.[0] ?? "C3";
+  const isHighNse = topGseLabel === "ABC1" || topGseLabel === "C1";
+  const nseLecturaSection = `**Lectura territorial del NSE**
+La distribución GSE está ponderada por **hogares**, no por área.
+${isHighNse
+  ? `En este caso NSE alto (${topGseLabel}) domina también en hogares, consistente con el patrón visual del mapa.`
+  : `El mapa puede mostrar visualmente más manzanas ABC1 (azules/grandes), pero por hogares predomina **${topGseLabel}** (${pctText(topGse?.[1])}). Esto se debe a que:
+- Manzana ABC1 típica: ~2.500 m² con ~6 hogares → 2 hog/1.000m² (casas unifamiliares)
+- Manzana ${topGseLabel} típica: ~900 m² con ~60 hogares → 67 hog/1.000m² (edificios de dpto.)
+Para análisis comercial, la distribución por hogares es la correcta: mide clientes potenciales, no metros cuadrados.`}`;
+
   return [
     `**Perfil socioeconómico** ${[
       analysis?.totals?.hh ? `${fmt(analysis.totals.hh)} hogares estimados` : null,
       analysis?.totals?.pop ? `${fmt(analysis.totals.pop)} personas` : null,
       analysis?.totals?.incomeAvgPerHh ? `ingreso promedio hogar ${fmt(analysis.totals.incomeAvgPerHh)} CLP` : null,
-      topGse ? `predomina el segmento ${topGse[0]} (${pctText(topGse[1])})` : null,
+      topGse ? `predomina el segmento ${topGse[0]} (${pctText(topGse[1])}) por hogares` : null,
     ].filter(Boolean).join(", ")}.`,
+    nseLecturaSection,
     `**Densidad y cobertura** ${[
       analysis?.area_km2 ? `${analysis.area_km2.toFixed(2)} km² de cobertura` : null,
       analysis?.density?.popPerKm2 ? `${fmt(analysis.density.popPerKm2)} hab/km²` : null,
@@ -120,12 +133,35 @@ serve(async (req) => {
       });
     }
 
+    // Densidades típicas por NSE para que Gemini pueda construir el ejemplo comparativo.
+    // Basado en datos Censo 2017/2024 RM: casas ABC1 vs edificios C3.
+    const nseTypicalDensity = {
+      ABC1: { area_m2: 2500, hog_per_manzana: 6,  hog_per_1000m2: 2 },
+      C1:   { area_m2: 1800, hog_per_manzana: 18, hog_per_1000m2: 10 },
+      C2:   { area_m2: 1200, hog_per_manzana: 30, hog_per_1000m2: 25 },
+      C3:   { area_m2: 900,  hog_per_manzana: 60, hog_per_1000m2: 67 },
+      D:    { area_m2: 700,  hog_per_manzana: 50, hog_per_1000m2: 71 },
+      E:    { area_m2: 600,  hog_per_manzana: 35, hog_per_1000m2: 58 },
+    };
+    // NSE dominante por hogares vs el de mayor área típica
+    const gseDist = analysis.gse?.classDistribution ?? {};
+    const topGseByHh = Object.entries(gseDist).sort(([,a],[,b]) => Number(b)-Number(a))[0]?.[0] ?? "C3";
+
     const compactAnalysis = {
       bandMinutes: analysis.bandMinutes,
       area_km2: analysis.area_km2,
       totals: analysis.totals,
       density: analysis.density,
       gse: analysis.gse,
+      // Contexto para la sección "Lectura territorial del NSE"
+      nse_context: {
+        nota: "classDistribution ponderado por HOGARES, no por área. Ver nseTypicalDensity.",
+        nseTypicalDensity,
+        topGseByHh,
+        paradoja_esperada: topGseByHh !== "ABC1" && topGseByHh !== "C1"
+          ? `Mapa puede mostrar más azul (ABC1) porque esas manzanas son físicamente más grandes, pero por hogares domina ${topGseByHh}.`
+          : `NSE alto por hogares es consistente con manzanas de tamaño medio-grande.`,
+      },
       manzanas: analysis.manzanas
         ? {
             count: analysis.manzanas.manzanaCount,
@@ -156,17 +192,36 @@ serve(async (req) => {
 Recibes un objeto JSON con datos de una isócrona (zona alcanzable en X minutos desde un punto).
 Tu tarea es producir un resumen ejecutivo en español, en formato Markdown, con secciones:
 
-**Perfil socioeconómico** (1-2 frases sobre NSE, ingreso, escolaridad y composición)
+**Perfil socioeconómico** (2-3 frases sobre NSE, ingreso, escolaridad y composición)
+**Lectura territorial del NSE** (OBLIGATORIO — ver instrucción abajo)
 **Densidad y cobertura** (1-2 frases sobre densidad poblacional y servicios disponibles)
 **Fortalezas** (2-3 bullets)
 **Alertas** (2-3 bullets)
 **Recomendaciones** (2-3 bullets para retail/servicios/inversión)
 
-Reglas:
+── INSTRUCCIÓN OBLIGATORIA: Lectura territorial del NSE ──
+El campo gse.classDistribution está ponderado por HOGARES, no por área.
+Esto puede generar aparente contradicción con el mapa: manzanas ABC1 se ven
+grandes (son casas con lotes amplios) pero tienen pocos hogares por m².
+Manzanas C3 se ven pequeñas (edificios de departamentos) pero concentran
+muchos hogares por m². SIEMPRE incluye esta sección con:
+1. Un ejemplo comparativo concreto usando las cifras reales del payload:
+   "Ej: manzana ABC1 típica → X m² con ~Y hogares (Z hog/1.000m²)"
+   "Ej: manzana C3 típica   → X m² con ~Y hogares (Z hog/1.000m²)"
+   Estima X,Y,Z de forma razonable a partir de gse.classDistribution,
+   density.popPerKm2, gse.hacinAvg y el patrón urbano conocido.
+2. Una conclusión sobre qué métrica es más relevante para el negocio:
+   "Para análisis comercial, la distribución por hogares es la correcta
+    porque mide clientes potenciales, no metros cuadrados."
+Si el NSE dominante en el payload coincide con lo esperable visualmente
+(ej: ABC1 > 40%), igual incluye la sección pero nota que en este caso
+área y hogares coinciden más.
+
+── Reglas generales ──
 - Sé concreto, usa cifras del payload (formatea números grandes con separadores de miles).
 - Compara contra el promedio RM cuando aporte (campo "comparisons").
 - No inventes datos. Si un campo es null, omítelo.
-- Máximo 220 palabras totales.
+- Máximo 300 palabras totales.
 - No incluyas títulos H1.`;
 
     const userPrompt = `Datos de la isócrona:\n\n${JSON.stringify(compactAnalysis, null, 2)}\n\nPromedios RM de referencia:\n${JSON.stringify(rmAverages, null, 2)}`;
