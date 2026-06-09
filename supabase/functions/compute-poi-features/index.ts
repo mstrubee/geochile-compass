@@ -308,14 +308,21 @@ serve(async (req) => {
     const hash = await isoGeomHash(payload.iso_polygon);
 
     // Buscar folder_id del POI
-    const { data: poiRow, error: poiErr } = await supabase
+    const { data: poiRows, error: poiErr } = await supabase
       .from("pois")
       .select("folder_id")
       .eq("id", payload.poi.id)
-      .maybeSingle();
-    if (poiErr || !poiRow?.folder_id) {
+      .limit(1);
+    const poiRow = poiRows?.[0] ?? null;
+    if (poiErr) {
       return new Response(
-        JSON.stringify({ error: poiErr?.message ?? "poi not found" }),
+        JSON.stringify({ error: poiErr.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    if (!poiRow?.folder_id) {
+      return new Response(
+        JSON.stringify({ error: "poi not found or not accessible" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
