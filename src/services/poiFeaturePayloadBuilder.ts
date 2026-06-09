@@ -266,28 +266,40 @@ const buildRmCells = async (
     }
     const centroid: [number, number] = [sx / ring.length, sy / ring.length];
 
-    // Intentar overlay GSE para refinar el NSE + capturar crime_score y clase GSE
+    // Overlay GSE para refinar NSE + capturar crime_score, gse_class y n_hog/n_per
     let nse: 1 | 2 | 3 | 4 | 5 = (f.properties.nse as 1 | 2 | 3 | 4 | 5) ?? 3;
     let gseMatched = false;
     let gseClass: import("@/types/gse").GseClass | null = null;
     let crimeScore: number | null = null;
+    let gseNHog: number | null = null;  // n_hog del GSE Censo 2024 (más reciente que INE 2017)
+    let gseNPer: number | null = null;
     for (const g of gseFeatures) {
       if (!g.geometry || !g.properties.gse) continue;
       if (pointInPoly(centroid, g.geometry)) {
         nse = GSE_TO_NSE[g.properties.gse] ?? nse;
         gseClass = g.properties.gse;
-        // crime_score y n_hog llegan en el JSON aunque no están en el tipo GseProperties
         const gp = g.properties as unknown as Record<string, unknown>;
         if (typeof gp["crime_score"] === "number") crimeScore = gp["crime_score"] as number;
+        // Preferir datos de hogares/personas del Censo 2024 (GSE) sobre el INE 2017
+        if (typeof gp["n_hog"] === "number" && gp["n_hog"] > 0) gseNHog = gp["n_hog"] as number;
+        if (typeof gp["n_per"] === "number" && gp["n_per"] > 0) gseNPer = gp["n_per"] as number;
         gseMatched = true;
         break;
       }
     }
 
+    // Usar datos Censo 2024 (GSE) si están disponibles; fallback a INE 2017
+    // Nota: si n_hog del GSE es null (manzana sin datos), usar INE.
+    // Si n_hog del GSE es 0 (parque/baldío confirmado), respetar el 0.
+    const ineHh  = f.properties.hh  ?? 0;
+    const inePop = f.properties.pop ?? 0;
+    const finalHh  = gseNHog !== null ? gseNHog : ineHh;
+    const finalPop = gseNPer !== null ? gseNPer : inePop;
+
     cells.push({
       id: f.properties.id,
-      pop: f.properties.pop ?? 0,
-      hh: f.properties.hh ?? 0,
+      pop: finalPop,
+      hh:  finalHh,
       nse,
       income: gseMatched ? NSE_INCOME[nse] : (f.properties.income ?? NSE_INCOME[nse]),
       density: f.properties.density,
