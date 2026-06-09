@@ -40,7 +40,7 @@ function ComparableCard({ comp }: { comp: ComparableStore }) {
         className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2/60"
       >
         <span className="flex-1 truncate text-[12px] font-medium text-foreground">{comp.name}</span>
-        <span className="text-[11px] font-mono text-green-400">{fmtUF(comp.actualUf)}/mes</span>
+        <span className="text-[11px] font-mono text-green-400">{fmtUF(comp.ufPerMonth)}/mes</span>
         <span className="text-[10px] text-muted-foreground ml-1">{sim}% sim.</span>
         {expanded
           ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
@@ -191,7 +191,7 @@ export const SalesProjectionPanel = ({
             {/* KPIs principales */}
             <div className="rounded-xl bg-gradient-to-br from-green-900/20 to-emerald-900/10 border border-green-500/20 p-3">
               <div className="text-[10px] text-green-400/70 uppercase tracking-wider mb-1">
-                Potencial de venta estimado · {result.targetYear}
+                Potencial de venta estimado · {result.currentYear}
               </div>
               <div className="text-[26px] font-bold text-green-400 leading-none">
                 {fmtUF(result.estimatedUf)}
@@ -252,7 +252,7 @@ export const SalesProjectionPanel = ({
               Proyección basada en {result.comparables.length} locales {result.folderName} similares
               por perfil territorial (población, NSE, parque vehicular, atractores).
               No incluye factores de gestión, marketing ni estacionalidad.
-              Año base: {result.targetYear}.
+              Año base: {result.baseYear}.
             </div>
 
             {/* Recalcular */}

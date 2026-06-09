@@ -343,6 +343,30 @@ export type Database = {
           },
         ]
       }
+      commune_coord_overrides: {
+        Row: {
+          created_at: string
+          lat: number
+          lng: number
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          lat: number
+          lng: number
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          lat?: number
+          lng?: number
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       complement_weight_rules: {
         Row: {
           created_at: string
