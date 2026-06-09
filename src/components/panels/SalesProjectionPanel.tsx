@@ -191,7 +191,7 @@ export const SalesProjectionPanel = ({
             {/* KPIs principales */}
             <div className="rounded-xl bg-gradient-to-br from-green-900/20 to-emerald-900/10 border border-green-500/20 p-3">
               <div className="text-[10px] text-green-400/70 uppercase tracking-wider mb-1">
-                Potencial de venta estimado · {result.targetYear}
+                Potencial de venta estimado · {result.currentYear}
               </div>
               <div className="text-[26px] font-bold text-green-400 leading-none">
                 {fmtUF(result.estimatedUf)}
