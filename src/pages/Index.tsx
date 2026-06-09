@@ -17,9 +17,7 @@ import { PoiDetailDialog } from "@/components/panels/PoiDetailDialog";
 import { PoiFolderSchemaDialog } from "@/components/panels/PoiFolderSchemaDialog";
 import { AnalysisConfigDialog } from "@/components/panels/AnalysisConfigDialog";
 import { ComputeFeaturesDialog } from "@/components/panels/ComputeFeaturesDialog";
-import { SalesProjectionPanel } from "@/components/panels/SalesProjectionPanel";
-import { useIsochroneAnalysis } from "@/hooks/useIsochroneAnalysis";
-import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
+// SalesProjectionPanel ahora vive dentro de AnalysisPanel
 import { useAnalysisSettings } from "@/hooks/useAnalysisConfig";
 import { useComputePerformanceBatch } from "@/hooks/usePoiPerformance";
 import { useUserRoles } from "@/hooks/useUserRoles";
@@ -1222,7 +1220,20 @@ const Index = () => {
           loadedSavedIsoIds={loadedSavedIsoIds}
           onToggleSavedIsochrone={toggleSavedIso}
           onAnalyzeSavedIsochrone={analyzeSavedIso}
-          onProjectSavedIsochrone={(id) => setProjectionIsoId(id)}
+          onProjectSavedIsochrone={(id) => {
+            // Seleccionar la isócrona guardada en el panel de análisis
+            // y abrir el panel con la sección de proyección activa
+            const savedIso = savedIsos.find((s) => s.id === id);
+            if (savedIso) {
+              // Asegurar que la isócrona esté cargada en el mapa
+              if (!loadedSavedIsoIds.has(id)) toggleSavedIso(id);
+              // Buscar la isócrona activa correspondiente para seleccionarla
+              const activeIso = isochrones.find((i) => i.savedId === id);
+              if (activeIso) setSelectedIsoId(activeIso.id);
+            }
+            setProjectionIsoId(id);
+            userOpenPanel();
+          }}
           onFocusSavedIsochrone={focusSavedIso}
           onRenameSavedIsochrone={(id, name) => updateSavedIso(id, { name })}
           onMoveSavedIsochrone={(id, folder_id) => updateSavedIso(id, { folder_id })}
@@ -1454,6 +1465,8 @@ const Index = () => {
             onWidthChange={handlePanelWidthChange}
             minWidth={PANEL_MIN_W}
             maxWidth={PANEL_MAX_W}
+            projectionFolderId={folders[0]?.id ?? null}
+            autoOpenProjection={!!projectionIsoId}
           />
         </div>
       </main>
@@ -1702,16 +1715,6 @@ const Index = () => {
         />
       )}
 
-      {/* Panel de proyección de potencial de venta */}
-      {projectionIsoId && (
-        <ProjectionWrapper
-          isoId={projectionIsoId}
-          savedIsos={savedIsos}
-          folders={folders}
-          manzanas={manzanaData}
-          onClose={() => setProjectionIsoId(null)}
-        />
-      )}
     </div>
   );
 };
@@ -1835,62 +1838,7 @@ const ComputeFeaturesWrapper = ({
 
 export default Index;
 
-// ── ProjectionWrapper ────────────────────────────────────────────────────────
-
-interface ProjectionWrapperProps {
-  isoId:     string;
-  savedIsos: import("@/types/savedIsochrones").SavedIsochrone[];
-  folders:   import("@/types/pois").PoiFolder[];
-  manzanas:  import("@/types/manzanas").ManzanaFeatureCollection | null;
-  onClose:   () => void;
-}
-
-const ProjectionWrapper = ({ isoId, savedIsos, folders, manzanas, onClose }: ProjectionWrapperProps) => {
-  const iso = savedIsos.find((s) => s.id === isoId);
-  if (!iso) return null;
-
-  // Usar la primera carpeta de POIs que tenga datos de análisis como referencia
-  // El usuario puede cambiar esto en el futuro con un selector
-  const folder = folders[0] ?? null;
-
-  // Obtener el IsochroneAnalysis para esta isócrona
-  // Reutilizamos el hook existente — necesitamos convertir SavedIsochrone → Isochrone
-  const isoAsIsochrone = useRef<import("@/types/isochrones").Isochrone>({
-    id: iso.id,
-    minutes: iso.minutes,
-    features: iso.features.map((f) => ({
-      ...f,
-      properties: { ...f.properties, value: (iso.minutes[0] ?? 10) * 60 },
-    })) as import("@/types/isochrones").Isochrone["features"],
-    color: iso.color ?? undefined,
-    savedId: iso.id,
-  });
-
-  const { data: isoAnalysis } = useIsochroneAnalysis({
-    isochrone: isoAsIsochrone.current,
-    manzanas,
-  });
-  const { stats: parqueStats } = useParqueIsochroneStats(
-    iso.features[0] as import("geojson").Feature<import("geojson").Polygon | import("geojson").MultiPolygon, unknown> | null,
-    true,
-  );
-
-  return (
-    <div className="fixed bottom-8 right-4 z-[1500]">
-      <SalesProjectionPanel
-        isochrone={iso}
-        folderId={folder?.id ?? ""}
-        folderName={folder?.name ?? "Autoplanet"}
-        isoAnalysis={isoAnalysis}
-        parque={parqueStats}
-        onClose={onClose}
-      />
-    </div>
-  );
-};
-
-const { useRef: useRefProjection } = { useRef };
-void useRefProjection;
+// (ProjectionWrapper eliminado — la proyección vive dentro de AnalysisPanel)
 
 const ParqueHexInfoCard = ({
   x,

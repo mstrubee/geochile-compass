@@ -1,7 +1,9 @@
-import { X, Download, FileJson, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight, ShoppingCart } from "lucide-react";
+import { X, Download, FileJson, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight, ShoppingCart, TrendingUp, Store } from "lucide-react";
 import { GastoEndogenoSection } from "./GastoEndogenoSection";
 import { useCommercialCount } from "@/hooks/useCommercialCount";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { computeSalesProjection, type ProjectionResult } from "@/services/salesProjectionService";
+import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Isochrone } from "@/types/isochrones";
 import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
@@ -19,6 +21,10 @@ interface AnalysisPanelProps {
   onWidthChange?: (w: number) => void;
   minWidth?: number;
   maxWidth?: number;
+  /** Si se pasa, muestra la sección de proyección de potencial de venta. */
+  projectionFolderId?: string | null;
+  /** Abre la sección de proyección automáticamente al montar. */
+  autoOpenProjection?: boolean;
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
@@ -106,6 +112,7 @@ type SectionKey =
   | "gse"
   | "nse"
   | "gasto_endogeno"
+  | "proyeccion"
   | "capas"
   | "parque"
   | "comunas"
@@ -116,6 +123,7 @@ const DEFAULT_SECTION_OPEN: Record<SectionKey, boolean> = {
   gse: true,
   nse: true,
   gasto_endogeno: true,
+  proyeccion: false,
   comparativo: false,
   resumen_ia: false,
   capas: false,
@@ -124,7 +132,12 @@ const DEFAULT_SECTION_OPEN: Record<SectionKey, boolean> = {
   exportar: false,
 };
 
-export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null, width = 380, onWidthChange, minWidth = 320, maxWidth = 800 }: AnalysisPanelProps) => {
+export const AnalysisPanel = ({
+  open, onClose, isochrone, manzanas = null,
+  width = 380, onWidthChange, minWidth = 320, maxWidth = 800,
+  projectionFolderId = null,
+  autoOpenProjection = false,
+}: AnalysisPanelProps) => {
   const minutesAvailable = useMemo(
     () => (isochrone ? [...isochrone.minutes].sort((a, b) => a - b) : []),
     [isochrone],
@@ -151,8 +164,41 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null, width
   // Estado de secciones colapsadas/expandidas. Se resetea cuando cambia la isócrona.
   const [sectionOpen, setSectionOpen] = useState<Record<SectionKey, boolean>>(DEFAULT_SECTION_OPEN);
   useEffect(() => {
-    setSectionOpen(DEFAULT_SECTION_OPEN);
+    setSectionOpen({
+      ...DEFAULT_SECTION_OPEN,
+      proyeccion: autoOpenProjection,
+    });
+  }, [isochrone?.id, autoOpenProjection]);
+
+  // Proyección de potencial de venta
+  const { stats: parqueForProjection } = useParqueIsochroneStats(isoFeatureActive, open);
+  const [projResult,  setProjResult]  = useState<ProjectionResult | null>(null);
+  const [projLoading, setProjLoading] = useState(false);
+  const [projError,   setProjError]   = useState<string | null>(null);
+
+  // Reset projection cuando cambia la isócrona
+  useEffect(() => {
+    setProjResult(null);
+    setProjError(null);
   }, [isochrone?.id]);
+
+  const runProjection = useCallback(async () => {
+    if (!projectionFolderId || !analysis) return;
+    setProjLoading(true);
+    setProjError(null);
+    try {
+      const r = await computeSalesProjection({
+        folderId:    projectionFolderId,
+        isoAnalysis: analysis,
+        parque:      parqueForProjection,
+      });
+      setProjResult(r);
+    } catch (e) {
+      setProjError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setProjLoading(false);
+    }
+  }, [projectionFolderId, analysis, parqueForProjection]);
   const toggleSection = (k: SectionKey) =>
     setSectionOpen((s) => ({ ...s, [k]: !s[k] }));
 
@@ -380,6 +426,25 @@ export const AnalysisPanel = ({ open, onClose, isochrone, manzanas = null, width
             >
               <GastoEndogenoSection analysis={analysis} />
             </Section>
+
+            {/* ── Proyección de Potencial de Venta ── */}
+            {projectionFolderId && (
+              <Section
+                title="📈 Proyección de Potencial de Venta"
+                open={sectionOpen.proyeccion}
+                onToggle={() => toggleSection("proyeccion")}
+              >
+                <ProjectionSection
+                  folderId={projectionFolderId}
+                  result={projResult}
+                  loading={projLoading}
+                  error={projError}
+                  canRun={!!analysis}
+                  onRun={runProjection}
+                  onReset={() => { setProjResult(null); setProjError(null); }}
+                />
+              </Section>
+            )}
 
             {analysis.comparisons.length > 0 && (
               <Section
@@ -711,5 +776,140 @@ const ParqueAnalysisSection = ({
         )}
       </div>
     </Section>
+  );
+};
+
+// ── ProjectionSection ────────────────────────────────────────────────────────
+
+const fmtUF  = (v: number) => `${v.toFixed(1)} UF`;
+const fmtCLPM = (v: number) =>
+  `$${new Intl.NumberFormat("es-CL").format(Math.round(v / 1_000_000))}M`;
+
+interface ProjectionSectionProps {
+  folderId:  string;
+  result:    ProjectionResult | null;
+  loading:   boolean;
+  error:     string | null;
+  canRun:    boolean;
+  onRun:     () => void;
+  onReset:   () => void;
+}
+
+const ProjectionSection = ({
+  folderId, result, loading, error, canRun, onRun, onReset,
+}: ProjectionSectionProps) => {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-4 justify-center text-[11px] text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-green-400" />
+        Analizando comparables de la red…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-2">
+        <div className="rounded-lg bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{error}</div>
+        <button onClick={onReset} className="text-[10px] text-muted-foreground hover:text-foreground">↺ Reintentar</button>
+      </div>
+    );
+  }
+
+  if (!result) {
+    return (
+      <div className="space-y-3">
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Estima el potencial de venta de esta ubicación comparando su perfil territorial
+          con los locales <b className="text-foreground">{folderId ? "de la red" : ""}</b> más similares.
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {["Población", "NSE", "Ingresos", "Parque vehicular", "Atractores"].map((f) => (
+            <span key={f} className="rounded bg-surface-2/60 px-2 py-0.5 text-[9px] text-muted-foreground">{f}</span>
+          ))}
+        </div>
+        {!canRun && (
+          <div className="text-[10px] text-amber-500/80 flex items-center gap-1.5">
+            <Loader2 className="h-3 w-3 animate-spin" /> Cargando datos territoriales…
+          </div>
+        )}
+        <button
+          onClick={onRun}
+          disabled={!canRun}
+          className={[
+            "flex w-full items-center justify-center gap-2 rounded-lg py-2 text-[12px] font-semibold transition-all",
+            canRun
+              ? "bg-green-600 hover:bg-green-500 text-white"
+              : "bg-surface-2/60 text-muted-foreground cursor-not-allowed opacity-50",
+          ].join(" ")}
+        >
+          <TrendingUp className="h-3.5 w-3.5" />
+          Proyectar potencial de venta
+        </button>
+      </div>
+    );
+  }
+
+  // Resultado
+  return (
+    <div className="space-y-3">
+      {/* KPI central */}
+      <div className="rounded-xl bg-gradient-to-br from-green-900/25 to-emerald-900/10 border border-green-500/20 p-3">
+        <div className="text-[10px] text-green-400/70 uppercase tracking-wider mb-1">
+          Potencial estimado · {result.targetYear}
+        </div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-[22px] font-bold text-green-400">{fmtUF(result.estimatedUf)}</span>
+          <span className="text-[11px] text-green-400/60">/mes</span>
+        </div>
+        <div className="text-[11px] text-muted-foreground">{fmtCLPM(result.estimatedClp)}/mes</div>
+        <div className="mt-1.5 text-[10px] text-muted-foreground">
+          Rango: <span className="text-foreground">{fmtUF(result.lowUf)}</span> — <span className="text-foreground">{fmtUF(result.highUf)}</span>
+          <span className="ml-1 text-[9px]">(p25–p75 de comparables)</span>
+        </div>
+      </div>
+
+      {/* Factores */}
+      <div className="space-y-1">
+        {result.keyFactors.map((f, i) => (
+          <div key={i} className="flex items-start gap-2 text-[11px]">
+            <span className={[
+              "mt-1 h-2 w-2 flex-shrink-0 rounded-full",
+              f.impact === "positive" ? "bg-green-400" :
+              f.impact === "negative" ? "bg-red-400" : "bg-muted-foreground",
+            ].join(" ")} />
+            <span className="text-foreground leading-snug">{f.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Comparables */}
+      {result.comparables.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
+            <Store className="h-3 w-3" />
+            {result.comparables.length} locales comparables (de {result.nWithSales} con ventas)
+          </div>
+          <div className="space-y-1">
+            {result.comparables.map((c) => (
+              <div key={c.poiId} className="flex items-center gap-2 rounded-lg bg-surface-2/30 px-2.5 py-1.5 text-[11px]">
+                <span className="flex-1 truncate text-foreground">{c.name}</span>
+                <span className="font-mono text-green-400">{fmtUF(c.actualUf)}</span>
+                <span className="text-[10px] text-muted-foreground">{Math.round((1-c.distanceScore)*100)}% sim.</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="text-[9px] text-muted-foreground/60 leading-relaxed">
+        Basado en {result.comparables.length} locales similares por perfil territorial.
+        Excluye factores de gestión y marketing.
+      </div>
+
+      <button onClick={onReset} className="text-[10px] text-muted-foreground hover:text-foreground">
+        ↺ Nueva proyección
+      </button>
+    </div>
   );
 };
