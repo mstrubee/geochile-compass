@@ -1,3 +1,7 @@
+# ETL data y outputs (archivos pesados, no en git)
+etl/data/
+etl/output/
+
 # Logs
 logs
 *.log
