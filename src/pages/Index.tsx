@@ -1228,7 +1228,7 @@ const Index = () => {
               // Asegurar que la isócrona esté cargada en el mapa
               if (!loadedSavedIsoIds.has(id)) toggleSavedIso(id);
               // Buscar la isócrona activa correspondiente para seleccionarla
-              const activeIso = isochrones.find((i) => i.savedId === id);
+              const activeIso = isochrones.find((i) => i.id === `saved:${id}`);
               if (activeIso) setSelectedIsoId(activeIso.id);
             }
             setProjectionIsoId(id);
