@@ -312,7 +312,7 @@ serve(async (req) => {
       .from("pois")
       .select("folder_id")
       .eq("id", payload.poi.id)
-      .single();
+      .maybeSingle();
     if (poiErr || !poiRow?.folder_id) {
       return new Response(
         JSON.stringify({ error: poiErr?.message ?? "poi not found" }),

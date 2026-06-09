@@ -79,33 +79,49 @@ Deno.serve(async (req) => {
     // Retry con backoff exponencial ante 429 (rate limit) o 5xx transitorios
     let orsRes: Response | null = null;
     let text = "";
+    let lastNetErr: string | null = null;
     const maxAttempts = 5;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      orsRes = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: apiKey,
-          "Content-Type": "application/json",
-          Accept: "application/geo+json",
-        },
-        body: orsBody,
-      });
-      text = await orsRes.text();
-      if (orsRes.ok) break;
-      const retryable = orsRes.status === 429 || orsRes.status >= 500;
-      if (!retryable || attempt === maxAttempts) {
-        console.error("ORS error", orsRes.status, text);
-        const status = orsRes.status === 429 ? 429 : 502;
-        return new Response(
-          JSON.stringify({ error: "ORS request failed", status: orsRes.status, details: text }),
-          { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+      try {
+        const ctrl = new AbortController();
+        const timeoutId = setTimeout(() => ctrl.abort(), 20000);
+        orsRes = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: apiKey,
+            "Content-Type": "application/json",
+            Accept: "application/geo+json",
+          },
+          body: orsBody,
+          signal: ctrl.signal,
+        });
+        clearTimeout(timeoutId);
+        text = await orsRes.text();
+        if (orsRes.ok) break;
+        const retryable = orsRes.status === 429 || orsRes.status >= 500;
+        if (!retryable || attempt === maxAttempts) {
+          console.error("ORS error", orsRes.status, text);
+          const status = orsRes.status === 429 ? 429 : 502;
+          return new Response(
+            JSON.stringify({ error: "ORS request failed", status: orsRes.status, details: text }),
+            { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        console.warn(`ORS ${orsRes.status} — retry ${attempt}/${maxAttempts}`);
+      } catch (netErr) {
+        lastNetErr = netErr instanceof Error ? netErr.message : String(netErr);
+        console.warn(`ORS network error attempt ${attempt}/${maxAttempts}: ${lastNetErr}`);
+        if (attempt === maxAttempts) {
+          return new Response(
+            JSON.stringify({ error: "ORS unreachable", details: lastNetErr }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
       }
-      // Backoff: 2s, 4s, 8s, 16s
       const waitMs = Math.min(16000, 2000 * 2 ** (attempt - 1));
-      console.warn(`ORS ${orsRes.status} — retry ${attempt}/${maxAttempts} en ${waitMs}ms`);
       await new Promise((r) => setTimeout(r, waitMs));
     }
+
     if (!orsRes) {
       return new Response(JSON.stringify({ error: "ORS no response" }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
