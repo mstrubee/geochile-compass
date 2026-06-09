@@ -252,7 +252,7 @@ export const SalesProjectionPanel = ({
               Proyección basada en {result.comparables.length} locales {result.folderName} similares
               por perfil territorial (población, NSE, parque vehicular, atractores).
               No incluye factores de gestión, marketing ni estacionalidad.
-              Año base: {result.targetYear}.
+              Año base: {result.baseYear}.
             </div>
 
             {/* Recalcular */}
