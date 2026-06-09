@@ -40,7 +40,7 @@ function ComparableCard({ comp }: { comp: ComparableStore }) {
         className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2/60"
       >
         <span className="flex-1 truncate text-[12px] font-medium text-foreground">{comp.name}</span>
-        <span className="text-[11px] font-mono text-green-400">{fmtUF(comp.actualUf)}/mes</span>
+        <span className="text-[11px] font-mono text-green-400">{fmtUF(comp.ufPerMonth)}/mes</span>
         <span className="text-[10px] text-muted-foreground ml-1">{sim}% sim.</span>
         {expanded
           ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
