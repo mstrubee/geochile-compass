@@ -395,11 +395,20 @@ export const gseBreakdown = (
     totalPop += mPop;
     totalHh  += mHh;
 
-    // ── Distribución GSE ponderada por hogares reales (si disponible) o área ──
-    const weight = mHh > 0 ? mHh : interArea;
+    // ── Distribución GSE ─────────────────────────────────────────────────────
+    // classArea: siempre se acumula (fallback si no hay datos de hogares)
+    // classHh:   SOLO se acumula cuando la manzana tiene hogares reales (mHh > 0).
+    //
+    // BUG anterior: usaba interArea como fallback cuando mHh = 0.
+    // Resultado: parques, terrenos baldíos e industriales (n_hog=0)
+    // inflaban artificialmente el % de su clase GSE porque sus m² eran
+    // mucho mayores que los hogares de las manzanas con edificios.
+    // Fix: si n_hog = 0 → no contribuye a classHh (distribución por hogares).
     if (p.gse) {
       classArea[p.gse] = (classArea[p.gse] ?? 0) + interArea;
-      classHh[p.gse]   = (classHh[p.gse] ?? 0) + weight;
+      if (mHh > 0) {
+        classHh[p.gse] = (classHh[p.gse] ?? 0) + mHh;
+      }
     }
     if (p.quintil) quintilArea[p.quintil] = (quintilArea[p.quintil] ?? 0) + interArea;
     if (p.nse_score != null) { nseScoreNum += p.nse_score * interArea; nseScoreDen += interArea; }
