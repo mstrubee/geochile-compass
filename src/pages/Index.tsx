@@ -1767,7 +1767,7 @@ const ComputeFeaturesWrapper = ({
       .then(({ supabase }) =>
         supabase
           .from("pois")
-          .select("id, name, lat, lng, folder_id, address")
+          .select("id, name, lat, lng, folder_id")
           .in("folder_id", folderIds)
           .is("deleted_at", null)
       )
