@@ -24,6 +24,8 @@ interface AnalysisPanelProps {
   projectionFolders?: Array<{ id: string; name: string }>;
   /** Abre la sección de proyección automáticamente al montar. */
   autoOpenProjection?: boolean;
+  /** Nombre de la isócrona guardada que se está analizando (para el header). */
+  isochroneName?: string | null;
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
@@ -136,6 +138,7 @@ export const AnalysisPanel = ({
   width = 380, onWidthChange, minWidth = 320, maxWidth = 800,
   projectionFolders = [],
   autoOpenProjection = false,
+  isochroneName = null,
 }: AnalysisPanelProps) => {
   // Folder seleccionado para proyección — default al primero de la lista
   const [selectedFolderId, setSelectedFolderId] = useState<string>(
@@ -318,7 +321,13 @@ export const AnalysisPanel = ({
         </h2>
         <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
           {isochrone
-            ? `Isócrona ${isochrone.mode === "driving-car" ? "vehículo" : isochrone.mode === "foot-walking" ? "caminata" : "bici"} · ${minutesAvailable.join(" / ")} min`
+            ? <>
+                {/* Nombre de la isócrona guardada si existe */}
+                {isochroneName && (
+                  <span className="mr-1 font-semibold text-foreground">{isochroneName} ·</span>
+                )}
+                {`Isócrona ${isochrone.mode === "driving-car" ? "vehículo" : isochrone.mode === "foot-walking" ? "caminata" : "bici"} · ${minutesAvailable.join(" / ")} min`}
+              </>
             : "Crea o selecciona una isócrona para ver datos."}
         </p>
         <button

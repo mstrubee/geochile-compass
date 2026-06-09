@@ -1468,7 +1468,21 @@ const Index = () => {
           <AnalysisPanel
             open={panelOpen}
             onClose={userClosePanel}
-            isochrone={isochrones.find((i) => i.id === selectedIsoId) ?? isochrones[isochrones.length - 1] ?? null}
+            isochrone={(() => {
+              // 1. Preferir la isócrona explícitamente seleccionada
+              if (selectedIsoId) {
+                const found = isochrones.find((i) => i.id === selectedIsoId);
+                if (found) return found;
+                // Si selectedIsoId está seteado pero aún no se cargó (race condition),
+                // retornar null en lugar del fallback silencioso incorrecto.
+                // El panel mostrará "Selecciona una isócrona" hasta que cargue.
+                return null;
+              }
+              // 2. Sin selección explícita: usar la más reciente (createdAt mayor)
+              return isochrones.length > 0
+                ? [...isochrones].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))[0]
+                : null;
+            })()}
             manzanas={manzanaData ?? densityData ?? null}
             width={panelWidth}
             onWidthChange={handlePanelWidthChange}
@@ -1476,6 +1490,11 @@ const Index = () => {
             maxWidth={PANEL_MAX_W}
             projectionFolders={folders.filter(f => !f.parent_id).map(f => ({ id: f.id, name: f.name }))}
             autoOpenProjection={!!projectionIsoId}
+            isochroneName={
+              selectedIsoId
+                ? savedIsos.find((s) => `saved:${s.id}` === selectedIsoId)?.name ?? null
+                : null
+            }
           />
         </div>
       </main>
