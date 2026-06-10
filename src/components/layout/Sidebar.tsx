@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText, Car, TrendingUp } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText, Car, TrendingUp, Sheet, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,6 +27,9 @@ import { parseFile, getExtension, splitByFolderPath } from "@/utils/fileParsers"
 import { OVERPASS_PRESETS } from "@/services/overpassService";
 import { exportPoiAsKmz, exportFolderAsKmz } from "@/utils/kmzExport";
 import { exportFolderDataset } from "@/services/exportFolderDataset";
+import { buildPoiFolderReport } from "@/services/poiFolderReportService";
+import { exportFolderReportToXlsx } from "@/utils/poiFolderReportXlsx";
+import { exportFolderReportToPdf } from "@/utils/poiFolderReportPdf";
 import { CommuneSearch } from "./CommuneSearch";
 import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
@@ -2178,6 +2184,59 @@ export const Sidebar = ({
                                 <FileText className="mr-2 h-3.5 w-3.5" />
                                 Exportar dataset (CSV)…
                               </ContextMenuItem>
+                              {/* ── Informe de ventas PDF / Excel ─────────── */}
+                              <ContextMenuSub>
+                                <ContextMenuSubTrigger>
+                                  <TrendingUp className="mr-2 h-3.5 w-3.5" />
+                                  Descargar informe de ventas…
+                                </ContextMenuSubTrigger>
+                                <ContextMenuSubContent className="z-[1200] w-52">
+                                  <ContextMenuItem
+                                    onSelect={async () => {
+                                      const tId = toast.loading("Generando informe PDF…");
+                                      try {
+                                        const schema = poiFolderSchemas.find((s) => s.folder_id === f.id);
+                                        const data = await buildPoiFolderReport(f, poiFolders, savedPois, schema);
+                                        exportFolderReportToPdf(data);
+                                        toast.success(
+                                          `PDF generado · ${data.totals.nWithSales} locales · ${data.last12Periods.length} meses`,
+                                          { id: tId },
+                                        );
+                                      } catch (err) {
+                                        toast.error(
+                                          err instanceof Error ? err.message : "Error al generar PDF",
+                                          { id: tId },
+                                        );
+                                      }
+                                    }}
+                                  >
+                                    <FileDown className="mr-2 h-3.5 w-3.5" />
+                                    Informe PDF (ejecutivo)
+                                  </ContextMenuItem>
+                                  <ContextMenuItem
+                                    onSelect={async () => {
+                                      const tId = toast.loading("Generando informe Excel…");
+                                      try {
+                                        const schema = poiFolderSchemas.find((s) => s.folder_id === f.id);
+                                        const data = await buildPoiFolderReport(f, poiFolders, savedPois, schema);
+                                        exportFolderReportToXlsx(data);
+                                        toast.success(
+                                          `Excel generado · ${data.totals.nWithSales} locales · ${data.allPeriods.length} períodos`,
+                                          { id: tId },
+                                        );
+                                      } catch (err) {
+                                        toast.error(
+                                          err instanceof Error ? err.message : "Error al generar Excel",
+                                          { id: tId },
+                                        );
+                                      }
+                                    }}
+                                  >
+                                    <Sheet className="mr-2 h-3.5 w-3.5" />
+                                    Informe Excel (completo)
+                                  </ContextMenuItem>
+                                </ContextMenuSubContent>
+                              </ContextMenuSub>
                               <ContextMenuItem
                                 disabled={!canPasteHere}
                                 onSelect={() => handlePaste(f.id)}
