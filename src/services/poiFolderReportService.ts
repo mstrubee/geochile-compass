@@ -194,7 +194,7 @@ export const buildPoiFolderReport = async (
       .in("poi_id", chunk)
       .range(from, to);
     if (error) throw new Error(`poi_performance_analysis: ${error.message}`);
-    return (data ?? []) as Array<Record<string, unknown>>;
+    return (data ?? []) as unknown as Array<Record<string, unknown>>;
   });
   // Nos quedamos con el análisis más reciente por poi_id
   const perfByPoi = new Map<string, Record<string, unknown>>();
