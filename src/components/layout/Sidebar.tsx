@@ -41,8 +41,7 @@ import { useAgroplanetCompetitors } from "@/hooks/useAgroplanetCompetitors";
 import type { CrimeType, RiskFilter } from "@/components/map/CrimeHeatLayer";
 import { ComercialPOISection } from "@/components/layout/ComercialPOISection";
 import { BrandCatalogManager } from "@/components/admin/BrandCatalogManager";
-import type { ComercialLayerState } from "@/types/comercial";
-import type { CategoriaEntry } from "@/hooks/useComercialCategorias";
+import type { ComercialCategoria, ComercialLayerState } from "@/types/comercial";
 import { CATEGORY_META } from "@/components/map/CommercialHeatLayer";
 import type { CommercialCategory } from "@/components/map/CommercialHeatLayer";
 
@@ -209,13 +208,11 @@ interface SidebarProps {
   onRecomputePerformance?: (folderId: string) => void;
   // Red Comercial Nacional (POIs OSM)
   comercialLayers?: ComercialLayerState;
-  comercialCounts?: Record<string, number>;
-  comercialHiddenBrands?: Record<string, Set<string>>;
-  comercialCategorias?: CategoriaEntry[];
-  onComercialToggle?: (cat: string) => void;
-  onComercialBrandToggle?: (cat: string, brand: string) => void;
-  onSetComercialHiddenBrands?: (cat: string, brands: Set<string>) => void;
-  onComercialesCatRefresh?: () => void;
+  comercialCounts?: Partial<Record<ComercialCategoria, number>>;
+  comercialHiddenBrands?: Partial<Record<ComercialCategoria, Set<string>>>;
+  onComercialToggle?: (cat: ComercialCategoria) => void;
+  onComercialBrandToggle?: (cat: ComercialCategoria, brand: string) => void;
+  onSetComercialHiddenBrands?: (cat: ComercialCategoria, brands: Set<string>) => void;
 }
 
 interface LayerRow {
@@ -735,11 +732,9 @@ export const Sidebar = ({
   comercialLayers,
   comercialCounts = {},
   comercialHiddenBrands = {},
-  comercialCategorias = [],
   onComercialToggle,
   onComercialBrandToggle,
   onSetComercialHiddenBrands,
-  onComercialesCatRefresh,
 }: SidebarProps) => {
   const [brandCatalogOpen, setBrandCatalogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1493,7 +1488,6 @@ export const Sidebar = ({
               layers={comercialLayers}
               counts={comercialCounts}
               hiddenBrands={comercialHiddenBrands}
-              categorias={comercialCategorias}
               onToggle={onComercialToggle}
               onBrandToggle={onComercialBrandToggle}
               onSetHiddenBrands={onSetComercialHiddenBrands}
@@ -2696,13 +2690,7 @@ export const Sidebar = ({
     )}
 
     {/* ── Admin: catálogo de marcas OSM ── */}
-    <BrandCatalogManager
-      open={brandCatalogOpen}
-      onOpenChange={(v) => {
-        setBrandCatalogOpen(v);
-        if (!v) onComercialesCatRefresh?.();   // refrescar categorías en mapa/sidebar al cerrar
-      }}
-    />
+    <BrandCatalogManager open={brandCatalogOpen} onOpenChange={setBrandCatalogOpen} />
 
     </>
   );

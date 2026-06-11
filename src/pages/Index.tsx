@@ -58,8 +58,7 @@ import {
 } from "@/utils/microzones";
 import { useNavigate } from "react-router-dom";
 import { TerritorialLayerFloatingPanel } from "@/components/map/TerritorialLayerFloatingPanel";
-import type { ComercialLayerState } from "@/types/comercial";
-import { useComercialCategorias } from "@/hooks/useComercialCategorias";
+import type { ComercialLayerState, ComercialCategoria } from "@/types/comercial";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -126,37 +125,26 @@ const Index = () => {
     agroplanet_competitors: false,
   });
   // ── Red Comercial Nacional (POIs OSM) ────────────────────────────────────
-  const { categorias: comercialCategorias, reload: reloadCategorias } = useComercialCategorias();
-
-  // Estado dinámico: se inicializa con las 9 categorías base y crece al cargar la DB
   const [comercialLayers, setComercialLayers] = useState<ComercialLayerState>({
-    supermercado: false, conveniencia: false, farmacia: false, combustible: false,
-    mejoramiento_hogar: false, retail_departamental: false, banco: false,
-    restaurante: false, centro_comercial: false,
+    supermercado:         false,
+    conveniencia:         false,
+    farmacia:             false,
+    combustible:          false,
+    mejoramiento_hogar:   false,
+    retail_departamental: false,
+    banco:                false,
+    restaurante:          false,
+    centro_comercial:     false,
   });
-
-  // Agregar claves nuevas cuando llegan categorías de la DB
-  useEffect(() => {
-    if (!comercialCategorias.length) return;
-    setComercialLayers((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      comercialCategorias.forEach((c) => {
-        if (!(c.key in next)) { next[c.key] = false; changed = true; }
-      });
-      return changed ? next : prev;
-    });
-  }, [comercialCategorias]);
-
-  const [comercialCounts, setComercialCounts] = useState<Record<string, number>>({});
-  const [comercialHiddenBrands, setComercialHiddenBrands] = useState<Record<string, Set<string>>>({});
-  const handleComercialToggle = useCallback((cat: string) => {
+  const [comercialCounts, setComercialCounts] = useState<Partial<Record<ComercialCategoria, number>>>({});
+  const [comercialHiddenBrands, setComercialHiddenBrands] = useState<Partial<Record<ComercialCategoria, Set<string>>>>({});
+  const handleComercialToggle = useCallback((cat: ComercialCategoria) => {
     setComercialLayers((prev) => ({ ...prev, [cat]: !prev[cat] }));
   }, []);
-  const handleComercialCountChange = useCallback((cat: string, n: number) => {
+  const handleComercialCountChange = useCallback((cat: ComercialCategoria, n: number) => {
     setComercialCounts((prev) => ({ ...prev, [cat]: n }));
   }, []);
-  const handleComercialBrandToggle = useCallback((cat: string, brand: string) => {
+  const handleComercialBrandToggle = useCallback((cat: ComercialCategoria, brand: string) => {
     setComercialHiddenBrands((prev) => {
       const cur = prev[cat] ?? new Set<string>();
       const next = new Set(cur);
@@ -164,7 +152,7 @@ const Index = () => {
       return { ...prev, [cat]: next };
     });
   }, []);
-  const handleSetComercialHiddenBrands = useCallback((cat: string, brands: Set<string>) => {
+  const handleSetComercialHiddenBrands = useCallback((cat: ComercialCategoria, brands: Set<string>) => {
     setComercialHiddenBrands((prev) => ({ ...prev, [cat]: brands }));
   }, []);
   // ────────────────────────────────────────────────────────────────────────
@@ -1359,11 +1347,9 @@ const Index = () => {
           comercialLayers={comercialLayers}
           comercialCounts={comercialCounts}
           comercialHiddenBrands={comercialHiddenBrands}
-          comercialCategorias={comercialCategorias}
           onComercialToggle={handleComercialToggle}
           onComercialBrandToggle={handleComercialBrandToggle}
           onSetComercialHiddenBrands={handleSetComercialHiddenBrands}
-          onComercialesCatRefresh={reloadCategorias}
           onRecomputePerformance={async (folderId) => {
             try {
               const r = await performanceBatch.run(folderId);
@@ -1464,7 +1450,6 @@ const Index = () => {
             }}
             comercialLayers={comercialLayers}
             comercialHiddenBrands={comercialHiddenBrands}
-            comercialCategorias={comercialCategorias}
             onComercialCountChange={handleComercialCountChange}
           />
 

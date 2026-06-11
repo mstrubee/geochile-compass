@@ -1,14 +1,13 @@
 /**
- * ComercialPOISection.tsx — v3
+ * ComercialPOISection.tsx — v2
  * ─────────────────────────────
- * Cada categoría (cargada dinámicamente desde la DB) tiene chevron para
- * desplegar lista de marcas con toggles individuales.
+ * Cada categoría tiene chevron para desplegar lista de marcas con toggles individuales.
  */
 
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Globe } from "lucide-react";
-import type { ComercialLayerState } from "@/types/comercial";
-import type { CategoriaEntry } from "@/hooks/useComercialCategorias";
+import type { ComercialCategoria, ComercialLayerState } from "@/types/comercial";
+import { COMERCIAL_LAYER_META } from "@/types/comercial";
 import { useComercialMarcas } from "@/hooks/useComercialPOI";
 
 const IOSSwitch = ({ on }: { on: boolean }) => (
@@ -19,18 +18,23 @@ const IOSSwitch = ({ on }: { on: boolean }) => (
 
 interface Props {
   layers:             ComercialLayerState;
-  counts:             Record<string, number>;
-  hiddenBrands:       Record<string, Set<string>>;
-  categorias:         CategoriaEntry[];
-  onToggle:           (cat: string) => void;
-  onBrandToggle:      (cat: string, brand: string) => void;
-  onSetHiddenBrands:  (cat: string, brands: Set<string>) => void;
+  counts:             Partial<Record<ComercialCategoria, number>>;
+  hiddenBrands:       Partial<Record<ComercialCategoria, Set<string>>>;
+  onToggle:           (cat: ComercialCategoria) => void;
+  onBrandToggle:      (cat: ComercialCategoria, brand: string) => void;
+  onSetHiddenBrands:  (cat: ComercialCategoria, brands: Set<string>) => void;
 }
+
+const CATEGORY_ORDER: ComercialCategoria[] = [
+  "supermercado", "farmacia", "combustible", "banco",
+  "retail_departamental", "mejoramiento_hogar", "restaurante",
+  "conveniencia", "centro_comercial",
+];
 
 // ── Fila por categoría ────────────────────────────────────────────────────────
 
 interface CategoryRowProps {
-  cat:               CategoriaEntry;
+  cat:               ComercialCategoria;
   on:                boolean;
   count?:            number;
   hidden:            Set<string>;
@@ -41,7 +45,8 @@ interface CategoryRowProps {
 
 const CategoryRow = ({ cat, on, count, hidden, onToggle, onBrandToggle, onSetHiddenBrands }: CategoryRowProps) => {
   const [brandOpen, setBrandOpen] = useState(false);
-  const { marcas, loading } = useComercialMarcas(cat.key, on && brandOpen);
+  const meta = COMERCIAL_LAYER_META[cat];
+  const { marcas, loading } = useComercialMarcas(cat, on && brandOpen);
 
   const allVisible   = hidden.size === 0;
   const visibleCount = marcas.filter((m) => !hidden.has(m.marca_estandar)).length;
@@ -63,17 +68,17 @@ const CategoryRow = ({ cat, on, count, hidden, onToggle, onBrandToggle, onSetHid
             : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
         </button>
 
-        <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: cat.color_hex }} />
-        <span className="flex-shrink-0 text-[13px] leading-none">{cat.icon_emoji}</span>
+        <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: meta.color }} />
+        <span className="flex-shrink-0 text-[13px] leading-none">{meta.icon}</span>
 
         {/* Nombre (activa/desactiva) */}
         <button type="button" onClick={onToggle} className="flex flex-1 items-center text-left" aria-pressed={on}>
           <span className={["flex-1 text-[13px] leading-tight", on ? "text-foreground" : "text-muted-foreground"].join(" ")}>
-            {cat.label_es}
+            {meta.label}
           </span>
         </button>
 
-        {/* Conteo */}
+        {/* Conteo + badge marcas parciales */}
         {on && count !== undefined && (
           <span className="font-mono text-[10px] text-text-muted">{count.toLocaleString()}</span>
         )}
@@ -112,7 +117,7 @@ const CategoryRow = ({ cat, on, count, hidden, onToggle, onBrandToggle, onSetHid
 
               <div className="border-t border-border/20 my-0.5" />
 
-              {/* Marcas con cadena (todo excepto "Otros") */}
+              {/* Marcas con cadena (todo excepto "Otros"), ordenadas por count */}
               {marcas.filter((m) => m.marca_estandar !== "Otros").map((m) => {
                 const brandOn = !hidden.has(m.marca_estandar);
                 return (
@@ -123,7 +128,7 @@ const CategoryRow = ({ cat, on, count, hidden, onToggle, onBrandToggle, onSetHid
                     className="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-all hover:bg-surface-2/60"
                     aria-pressed={brandOn}
                   >
-                    <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: cat.color_hex, opacity: brandOn ? 1 : 0.25 }} />
+                    <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: meta.color, opacity: brandOn ? 1 : 0.25 }} />
                     <span className={["flex-1 text-[12px] leading-tight truncate text-left", brandOn ? "text-foreground" : "text-muted-foreground"].join(" ")}>
                       {m.marca_estandar}
                     </span>
@@ -133,19 +138,20 @@ const CategoryRow = ({ cat, on, count, hidden, onToggle, onBrandToggle, onSetHid
                 );
               })}
 
-              {/* "Otros" siempre al final */}
+              {/* "Otros" siempre al final, si existe */}
               {marcas.some((m) => m.marca_estandar === "Otros") && (() => {
-                const otros  = marcas.find((m) => m.marca_estandar === "Otros")!;
+                const otros = marcas.find((m) => m.marca_estandar === "Otros")!;
                 const brandOn = !hidden.has("Otros");
                 return (
                   <>
                     <div className="border-t border-border/20 my-0.5" />
                     <button
+                      key="Otros"
                       type="button"
                       onClick={() => onBrandToggle("Otros")}
                       className="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-all hover:bg-surface-2/60"
                       aria-pressed={brandOn}
-                      title="POIs sin cadena reconocida"
+                      title="POIs sin cadena reconocida (nombre local, sin normalizar)"
                     >
                       <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-400" style={{ opacity: brandOn ? 0.7 : 0.25 }} />
                       <span className={["flex-1 text-[12px] leading-tight truncate text-left italic", brandOn ? "text-muted-foreground" : "text-muted-foreground/50"].join(" ")}>
@@ -167,12 +173,9 @@ const CategoryRow = ({ cat, on, count, hidden, onToggle, onBrandToggle, onSetHid
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export const ComercialPOISection = ({
-  layers, counts, hiddenBrands, categorias,
-  onToggle, onBrandToggle, onSetHiddenBrands,
-}: Props) => {
+export const ComercialPOISection = ({ layers, counts, hiddenBrands, onToggle, onBrandToggle, onSetHiddenBrands }: Props) => {
   const [open, setOpen] = useState(false);
-  const activeCount = categorias.filter((c) => layers[c.key]).length;
+  const activeCount = CATEGORY_ORDER.filter((c) => layers[c]).length;
 
   return (
     <div className="mt-0.5 border-t border-border/30 pt-1">
@@ -197,19 +200,16 @@ export const ComercialPOISection = ({
 
       {open && (
         <div className="ml-3 mt-0.5 space-y-0">
-          {categorias.length === 0 && (
-            <p className="px-3 py-2 text-[11px] text-text-muted animate-pulse">Cargando categorías…</p>
-          )}
-          {categorias.map((cat) => (
+          {CATEGORY_ORDER.map((cat) => (
             <CategoryRow
-              key={cat.key}
+              key={cat}
               cat={cat}
-              on={layers[cat.key] ?? false}
-              count={counts[cat.key]}
-              hidden={hiddenBrands[cat.key] ?? new Set()}
-              onToggle={() => onToggle(cat.key)}
-              onBrandToggle={(brand) => onBrandToggle(cat.key, brand)}
-              onSetHiddenBrands={(brands) => onSetHiddenBrands(cat.key, brands)}
+              on={layers[cat]}
+              count={counts[cat]}
+              hidden={hiddenBrands[cat] ?? new Set()}
+              onToggle={() => onToggle(cat)}
+              onBrandToggle={(brand) => onBrandToggle(cat, brand)}
+              onSetHiddenBrands={(brands) => onSetHiddenBrands(cat, brands)}
             />
           ))}
           <p className="px-2 py-1 text-[10px] text-text-muted">
