@@ -86,14 +86,24 @@ export const AgroplanetComunasLayer = ({ visible, scoreMode }: Props) => {
     ).padStart(5, "0");
     const d = agroData.get(cut);
 
+    const fmt = (n: number | null | undefined) =>
+      (n ?? 0).toLocaleString("es-CL", { maximumFractionDigits: 0 });
+
+    const tractoresLine = d?.tractores_total != null && d.tractores_total > 0
+      ? `🚜 Tractores (CAF): ${fmt(d.tractores_total)}<br/>`
+      : "";
+    const explotLine = d?.total_explotaciones != null && d.total_explotaciones > 0
+      ? `🏡 Explotaciones (CAF): ${fmt(d.total_explotaciones)}<br/>`
+      : "";
+
     const label = d
       ? `<div class="text-[11px] leading-snug">
           <strong>${d.nombre}</strong><br/>
           <span class="text-muted-foreground">${d.region}</span><br/>
-          🌾 Score combinado: <strong>${d.score_combined.toFixed(1)}</strong><br/>
+          🌾 Score IDPA: <strong>${d.score_combined.toFixed(1)}</strong> &nbsp;<span class="text-muted-foreground">Q${d.quintil_combined}</span><br/>
           🏭 Grandes: ${d.score_grandes.toFixed(1)} &nbsp;·&nbsp; INDAP: ${d.score_indap.toFixed(1)}<br/>
-          🍎 Frutales riego: ${d.ha_frutales_riego.toLocaleString("es-CL", { maximumFractionDigits: 0 })} ha<br/>
-          🌾 Cereales: ${d.ha_cereales_total.toLocaleString("es-CL", { maximumFractionDigits: 0 })} ha
+          ${tractoresLine}${explotLine}🍎 Frutales riego: ${fmt(d.ha_frutales_riego)} ha<br/>
+          🌾 Cereales: ${fmt(d.ha_cereales_total)} ha
         </div>`
       : `<strong>${cut}</strong> — sin datos`;
 

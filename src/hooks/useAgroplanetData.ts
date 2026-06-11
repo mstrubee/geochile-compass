@@ -16,7 +16,10 @@ export interface AgroplanetComuna {
   ha_cereales_total: number;
   ha_vinas_riego: number;
   ha_forrajeras_total: number;
+  ha_forestal_total: number | null;   // v2.0 — CAF 2021 §9
   diversidad_especies: number;
+  total_explotaciones: number | null; // v2.0 — CAF 2021 §9
+  tractores_total: number | null;     // v2.0 — CAF 2021 §13
   macrozona: string | null;
   tipologia: string | null;
 }
@@ -43,7 +46,9 @@ export function useAgroplanetData(enabled: boolean): UseAgroplanetDataReturn {
         "cut,nombre,region,region_id,score_combined,score_grandes,score_indap," +
         "quintil_combined,quintil_grandes,quintil_indap," +
         "ha_frutales_riego,ha_cereales_total,ha_vinas_riego,ha_forrajeras_total," +
-        "diversidad_especies,macrozona,tipologia"
+        "ha_forestal_total,diversidad_especies," +
+        "total_explotaciones,tractores_total," +
+        "macrozona,tipologia"
       )
       .then(({ data: rows, error: err }) => {
         if (err) {

@@ -354,6 +354,7 @@ export type Database = {
           cut: string
           diversidad_especies: number | null
           ha_cereales_total: number | null
+          ha_forestal_total: number | null
           ha_forrajeras_total: number | null
           ha_frutales_riego: number | null
           ha_frutales_total: number | null
@@ -372,6 +373,8 @@ export type Database = {
           score_grandes: number | null
           score_indap: number | null
           tipologia: string | null
+          total_explotaciones: number | null
+          tractores_total: number | null
         }
         Insert: {
           codigo_tipologia?: string | null
@@ -379,6 +382,7 @@ export type Database = {
           cut: string
           diversidad_especies?: number | null
           ha_cereales_total?: number | null
+          ha_forestal_total?: number | null
           ha_forrajeras_total?: number | null
           ha_frutales_riego?: number | null
           ha_frutales_total?: number | null
@@ -397,6 +401,8 @@ export type Database = {
           score_grandes?: number | null
           score_indap?: number | null
           tipologia?: string | null
+          total_explotaciones?: number | null
+          tractores_total?: number | null
         }
         Update: {
           codigo_tipologia?: string | null
@@ -404,6 +410,7 @@ export type Database = {
           cut?: string
           diversidad_especies?: number | null
           ha_cereales_total?: number | null
+          ha_forestal_total?: number | null
           ha_forrajeras_total?: number | null
           ha_frutales_riego?: number | null
           ha_frutales_total?: number | null
@@ -422,6 +429,8 @@ export type Database = {
           score_grandes?: number | null
           score_indap?: number | null
           tipologia?: string | null
+          total_explotaciones?: number | null
+          tractores_total?: number | null
         }
         Relationships: []
       }
