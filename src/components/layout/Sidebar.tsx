@@ -1660,7 +1660,7 @@ export const Sidebar = ({
               </p>
             </div>
           )}
-          <CollapsibleCustomLayers />
+          <CollapsibleCustomLayers isAdmin={isAdmin} />
         </SidebarSection>
 
 
@@ -2849,7 +2849,7 @@ export const Sidebar = ({
 };
 
 // ── Sección "Capas personalizadas" colapsable ─────────────────────────────────
-const CollapsibleCustomLayers = () => {
+const CollapsibleCustomLayers = ({ isAdmin = false }: { isAdmin?: boolean }) => {
   const [open, setOpen] = useState(true);
 
   return (
