@@ -2,8 +2,18 @@ import { ChevronDown, ChevronRight, Wrench, Settings2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
+import { useLayerStyles } from "@/hooks/useLayerStyles";
 import type { TerritorialGroup, TerritorialLayer } from "@/types/territorial";
 import { TerritorialLayerManagerDialog } from "@/components/panels/TerritorialLayerManagerDialog";
+import { BrandStyleEditorDialog } from "@/components/panels/BrandStyleEditorDialog";
+import type { BrandStyle } from "@/hooks/useBrandStyles";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 const STORAGE_KEY = "territorial_groups_expanded_v1";
 
@@ -31,17 +41,23 @@ const IOSSwitch = ({ on }: { on: boolean }) => (
   </div>
 );
 
+const isUrlLike = (s: string | null) =>
+  !!s && (s.startsWith("http") || s.startsWith("/") || s.startsWith("data:"));
+
 interface GroupBlockProps {
-  group: TerritorialGroup;
+  group:  TerritorialGroup;
   layers: TerritorialLayer[];
 }
 
 const GroupBlock = ({ group, layers }: GroupBlockProps) => {
   const { isVisible, toggleLayer, setLayers } = useTerritorialVisibility();
+  const { getStyle, setLayerStyle, resetLayerStyle } = useLayerStyles();
   const [expanded, setExpanded] = useState<boolean>(() => {
     const map = readMap();
     return typeof map[group.id] === "boolean" ? map[group.id] : false;
   });
+  // Capa que se está editando actualmente (null = ninguna / dialog cerrado)
+  const [editingLayer, setEditingLayer] = useState<TerritorialLayer | null>(null);
 
   const updateExpanded = (next: boolean) => {
     setExpanded(next);
@@ -65,6 +81,19 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
   };
 
   const accent = group.color || "#F59E0B";
+
+  // Preparar el BrandStyle para el dialog a partir del LayerStyle efectivo
+  const editingStyle: BrandStyle | null = editingLayer
+    ? (() => {
+        const s = getStyle(editingLayer.id, editingLayer.color, editingLayer.icon);
+        return {
+          color:    s.color    ?? accent,
+          icon:     s.icon,
+          iconSize: s.iconSize,
+          visible:  true,
+        };
+      })()
+    : null;
 
   return (
     <div className="mb-0.5">
@@ -99,6 +128,7 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
           <IOSSwitch on={allOn} />
         </button>
       </div>
+
       {expanded && (
         <div className="ml-5">
           {layers.length === 0 && (
@@ -107,37 +137,93 @@ const GroupBlock = ({ group, layers }: GroupBlockProps) => {
             </p>
           )}
           {layers.map((l) => {
-            const on = isVisible(l.id);
-            const color = l.color || accent;
+            const on  = isVisible(l.id);
+            const eff = getStyle(l.id, l.color, l.icon);
+            const color    = eff.color ?? accent;
+            const hasEmoji = !!eff.icon && !isUrlLike(eff.icon);
+
             return (
-              <button
-                key={l.id}
-                type="button"
-                onClick={() => toggleLayer(l.id)}
-                className="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
-                aria-pressed={on}
-              >
-                <span
-                  className="h-2 w-2 flex-shrink-0 rounded-full"
-                  style={{ backgroundColor: color }}
-                />
-                <span
-                  className={[
-                    "flex-1 text-[13px] leading-tight",
-                    on ? "text-foreground" : "text-muted-foreground",
-                  ].join(" ")}
-                >
-                  {l.name}
-                </span>
-                <span className="font-mono text-[10px] text-text-muted">
-                  {l.feature_count}
-                </span>
-                <IOSSwitch on={on} />
-              </button>
+              <ContextMenu key={l.id}>
+                <ContextMenuTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => toggleLayer(l.id)}
+                    className="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
+                    aria-pressed={on}
+                  >
+                    {/* Dot de color (o imagen si es URL) */}
+                    {eff.icon && isUrlLike(eff.icon) ? (
+                      <img
+                        src={eff.icon}
+                        alt=""
+                        className="h-4 w-4 flex-shrink-0 rounded-full object-cover"
+                        style={{ border: `1.5px solid ${color}` }}
+                      />
+                    ) : (
+                      <span
+                        className="h-2 w-2 flex-shrink-0 rounded-full"
+                        style={{ backgroundColor: color }}
+                      />
+                    )}
+
+                    {/* Emoji ícono si aplica */}
+                    {hasEmoji && (
+                      <span className="flex-shrink-0 text-[12px] leading-none">
+                        {eff.icon}
+                      </span>
+                    )}
+
+                    <span
+                      className={[
+                        "flex-1 text-[13px] leading-tight",
+                        on ? "text-foreground" : "text-muted-foreground",
+                      ].join(" ")}
+                    >
+                      {l.name}
+                    </span>
+                    <span className="font-mono text-[10px] text-text-muted">
+                      {l.feature_count}
+                    </span>
+                    <IOSSwitch on={on} />
+                  </button>
+                </ContextMenuTrigger>
+
+                <ContextMenuContent className="z-[1200] w-52">
+                  <ContextMenuItem onSelect={() => setEditingLayer(l)}>
+                    ✏️ Editar estilo (color, ícono, tamaño)
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem
+                    onSelect={() => resetLayerStyle(l.id)}
+                    className="text-muted-foreground"
+                  >
+                    ↩ Restaurar estilo por defecto
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             );
           })}
         </div>
       )}
+
+      {/* Dialog de edición (portal al body, no afecta el layout) */}
+      <BrandStyleEditorDialog
+        brand={editingLayer?.name ?? null}
+        currentStyle={editingStyle}
+        onSave={(_, style) => {
+          if (!editingLayer) return;
+          setLayerStyle(editingLayer.id, {
+            color:    style.color,
+            icon:     style.icon,
+            iconSize: style.iconSize,
+          });
+        }}
+        onReset={() => {
+          if (!editingLayer) return;
+          resetLayerStyle(editingLayer.id);
+        }}
+        onClose={() => setEditingLayer(null)}
+      />
     </div>
   );
 };
@@ -151,7 +237,7 @@ const sortGroups = (groups: TerritorialGroup[]): TerritorialGroup[] => {
     const bPin = PINNED_FIRST.some(k => b.name.toLowerCase().includes(k));
     if (aPin && !bPin) return -1;
     if (!aPin && bPin) return 1;
-    return 0; // mantener orden original del resto
+    return 0;
   });
 };
 

@@ -4,6 +4,7 @@ import L from "leaflet";
 import "leaflet.heat";
 import type { TerritorialLayer } from "@/types/territorial";
 import { useTerritorialFeatures } from "@/hooks/useTerritorialLayers";
+import { useLayerStyles } from "@/hooks/useLayerStyles";
 
 interface Props {
   layers: TerritorialLayer[];
@@ -17,14 +18,16 @@ const escapeHtml = (s: string) =>
 export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = false }: Props) => {
   const map = useMap();
   const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
-  
+  const { getStyle, version: layerStylesVersion } = useLayerStyles();
+
   const visibleIds = useMemo(
     () => layers.filter((l) => visibleLayerIds.has(l.id)).map((l) => l.id),
     [layers, visibleLayerIds],
   );
   const showHeatmap = heatmap && visibleIds.length > 0;
   const features = useTerritorialFeatures(visibleIds);
-  const groupsRef = useRef<Map<string, L.LayerGroup>>(new Map());
+  // __count y __styleVersion evitan re-render si no cambió nada
+  const groupsRef = useRef<Map<string, L.LayerGroup & { __count?: number; __styleVersion?: number }>>(new Map());
   const heatLayerRef = useRef<L.Layer | null>(null);
 
   // Nota: deliberadamente NO se hace fitBounds al activar capas, para preservar
@@ -102,11 +105,13 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
   }, [features, layers, showHeatmap, map]);
 
   useEffect(() => {
-    const layerColorById = new Map(layers.map((l) => [l.id, l.color || "#F59E0B"]));
-    const layerNameById  = new Map(layers.map((l) => [l.id, l.name]));
-    const layerIconById  = new Map(layers.map((l) => [l.id, l.icon || null]));
+    // Construir mapa id→estilo efectivo (DB + override local)
+    const layerNameById = new Map(layers.map((l) => [l.id, l.name]));
+    const layerStyleMap = new Map(
+      layers.map((l) => [l.id, getStyle(l.id, l.color, l.icon)] as const),
+    );
 
-    // remove groups for layers no longer visible (or all, if heatmap is on)
+    // Eliminar grupos de capas que ya no son visibles (o todas si heatmap activo)
     groupsRef.current.forEach((g, id) => {
       if (showHeatmap || !visibleLayerIds.has(id)) {
         g.remove();
@@ -114,32 +119,43 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
       }
     });
 
-    // In heatmap mode, do not render individual point/geometry markers
+    // En modo heatmap no renderizamos marcadores individuales
     if (showHeatmap) return;
 
-    // group features by layer
+    // Agrupar features por capa
     const byLayer = new Map<string, typeof features>();
     features.forEach((f) => {
       if (!byLayer.has(f.layer_id)) byLayer.set(f.layer_id, []);
       byLayer.get(f.layer_id)!.push(f);
     });
 
+    // Helper: determina si el ícono es una URL, data-URI o emoji
+    const isUrl = (s: string | null) =>
+      !!s && (s.startsWith("http") || s.startsWith("/") || s.startsWith("data:"));
+
     byLayer.forEach((feats, layerId) => {
-      // Si la capa ya está pintada con la misma cantidad de features, no recrear.
       const existing = groupsRef.current.get(layerId);
-      if (existing && (existing as L.LayerGroup & { __count?: number }).__count === feats.length) {
+      // Saltar si ya está pintado con mismas features Y mismo versión de estilos
+      if (
+        existing &&
+        existing.__count        === feats.length &&
+        existing.__styleVersion === layerStylesVersion
+      ) {
         return;
       }
       if (existing) existing.remove();
-      const group = L.layerGroup().addTo(map) as L.LayerGroup & { __count?: number };
-      group.__count = feats.length;
-      groupsRef.current.set(layerId, group);
-      const color     = layerColorById.get(layerId) || "#F59E0B";
-      const layerName = layerNameById.get(layerId) || "";
-      const layerIcon = layerIconById.get(layerId) || null;
 
-      // Helper: determina si el ícono es una URL o un emoji/texto
-      const isUrl = (s: string | null) => !!s && (s.startsWith("http") || s.startsWith("/"));
+      const group = L.layerGroup().addTo(map) as L.LayerGroup & { __count?: number; __styleVersion?: number };
+      group.__count        = feats.length;
+      group.__styleVersion = layerStylesVersion;
+      groupsRef.current.set(layerId, group);
+
+      const eff       = layerStyleMap.get(layerId);
+      const color     = eff?.color    ?? "#F59E0B";
+      const layerIcon = eff?.icon     ?? null;
+      const iconSize  = Math.max(12, Math.min(40, eff?.iconSize ?? 22));
+      const layerName = layerNameById.get(layerId) || "";
+      const half      = iconSize / 2;
 
       feats.forEach((f) => {
         try {
@@ -147,38 +163,42 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
           if (!geom) return;
           if (geom.type === "Point" && f.lat != null && f.lng != null) {
             let marker: L.Marker | L.CircleMarker;
+
             if (layerIcon && isUrl(layerIcon)) {
-              // URL → ícono imagen
+              // URL / data-URI → ícono imagen con tamaño configurable
               marker = L.marker([f.lat, f.lng], {
                 icon: L.icon({
-                  iconUrl: layerIcon,
-                  iconSize: [22, 22],
-                  iconAnchor: [11, 11],
-                  popupAnchor: [0, -12],
+                  iconUrl:     layerIcon,
+                  iconSize:    [iconSize, iconSize],
+                  iconAnchor:  [half, half],
+                  popupAnchor: [0, -(half + 2)],
                 }),
               });
             } else if (layerIcon) {
-              // Emoji / texto → divIcon
+              // Emoji / texto → divIcon con tamaño configurable
+              const fontSize = Math.max(9, Math.round(iconSize * 0.55));
               marker = L.marker([f.lat, f.lng], {
                 icon: L.divIcon({
                   className: "",
-                  html: `<div style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,0.8);font-size:14px;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.35)">${escapeHtml(layerIcon)}</div>`,
-                  iconSize: [26, 26],
-                  iconAnchor: [13, 13],
-                  popupAnchor: [0, -14],
+                  html: `<div style="display:flex;align-items:center;justify-content:center;width:${iconSize}px;height:${iconSize}px;border-radius:50%;background:${escapeHtml(color)};border:2px solid rgba(255,255,255,0.8);font-size:${fontSize}px;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.35)">${escapeHtml(layerIcon)}</div>`,
+                  iconSize:    [iconSize, iconSize],
+                  iconAnchor:  [half, half],
+                  popupAnchor: [0, -(half + 2)],
                 }),
               });
             } else {
               // Círculo por defecto (canvas renderer, eficiente)
+              const radius = Math.max(3, Math.round(iconSize / 2 - 2));
               marker = L.circleMarker([f.lat, f.lng], {
-                renderer: canvasRenderer,
-                radius: 6,
-                color: "#fff",
-                weight: 1.5,
-                fillColor: color,
+                renderer:    canvasRenderer,
+                radius,
+                color:       "#fff",
+                weight:      1.5,
+                fillColor:   color,
                 fillOpacity: 0.95,
               });
             }
+
             marker.bindPopup(
               `<div style="font-size:12px"><b>${escapeHtml(f.name || layerName)}</b></div>`,
             );
@@ -197,7 +217,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
         }
       });
     });
-  }, [features, layers, visibleLayerIds, map, canvasRenderer, showHeatmap]);
+  }, [features, layers, visibleLayerIds, map, canvasRenderer, showHeatmap, getStyle, layerStylesVersion]);
 
   useEffect(() => {
     return () => {
