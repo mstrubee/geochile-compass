@@ -351,17 +351,18 @@ export type Database = {
         Row: {
           computed_at: string | null
           cut: string
+          codigo_tipologia: string | null
           diversidad_especies: number | null
-          especie_dominante: string | null
-          ha_agricola_total: number | null
-          ha_cereales_oleaginosas: number | null
+          ha_cereales_total: number | null
+          ha_forrajeras_total: number | null
           ha_frutales_riego: number | null
           ha_frutales_total: number | null
-          ha_suelo_clase_i_ii: number | null
+          ha_vinas_riego: number | null
+          ha_vinas_total: number | null
+          indice_mecanizable: number | null
+          macrozona: string | null
           model_version: string | null
           nombre: string
-          num_explot_medianas: number | null
-          pct_predios_grandes: number | null
           quintil_combined: number | null
           quintil_grandes: number | null
           quintil_indap: number | null
@@ -370,24 +371,23 @@ export type Database = {
           score_combined: number | null
           score_grandes: number | null
           score_indap: number | null
-          total_explotaciones: number | null
-          total_tractores: number | null
-          tractores_x100ha: number | null
+          tipologia: string | null
         }
         Insert: {
           computed_at?: string | null
           cut: string
+          codigo_tipologia?: string | null
           diversidad_especies?: number | null
-          especie_dominante?: string | null
-          ha_agricola_total?: number | null
-          ha_cereales_oleaginosas?: number | null
+          ha_cereales_total?: number | null
+          ha_forrajeras_total?: number | null
           ha_frutales_riego?: number | null
           ha_frutales_total?: number | null
-          ha_suelo_clase_i_ii?: number | null
+          ha_vinas_riego?: number | null
+          ha_vinas_total?: number | null
+          indice_mecanizable?: number | null
+          macrozona?: string | null
           model_version?: string | null
           nombre: string
-          num_explot_medianas?: number | null
-          pct_predios_grandes?: number | null
           quintil_combined?: number | null
           quintil_grandes?: number | null
           quintil_indap?: number | null
@@ -396,24 +396,23 @@ export type Database = {
           score_combined?: number | null
           score_grandes?: number | null
           score_indap?: number | null
-          total_explotaciones?: number | null
-          total_tractores?: number | null
-          tractores_x100ha?: number | null
+          tipologia?: string | null
         }
         Update: {
           computed_at?: string | null
           cut?: string
+          codigo_tipologia?: string | null
           diversidad_especies?: number | null
-          especie_dominante?: string | null
-          ha_agricola_total?: number | null
-          ha_cereales_oleaginosas?: number | null
+          ha_cereales_total?: number | null
+          ha_forrajeras_total?: number | null
           ha_frutales_riego?: number | null
           ha_frutales_total?: number | null
-          ha_suelo_clase_i_ii?: number | null
+          ha_vinas_riego?: number | null
+          ha_vinas_total?: number | null
+          indice_mecanizable?: number | null
+          macrozona?: string | null
           model_version?: string | null
           nombre?: string
-          num_explot_medianas?: number | null
-          pct_predios_grandes?: number | null
           quintil_combined?: number | null
           quintil_grandes?: number | null
           quintil_indap?: number | null
@@ -422,9 +421,7 @@ export type Database = {
           score_combined?: number | null
           score_grandes?: number | null
           score_indap?: number | null
-          total_explotaciones?: number | null
-          total_tractores?: number | null
-          tractores_x100ha?: number | null
+          tipologia?: string | null
         }
         Relationships: []
       }
