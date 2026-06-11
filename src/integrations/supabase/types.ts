@@ -352,6 +352,7 @@ export type Database = {
           codigo_tipologia: string | null
           computed_at: string | null
           cut: string
+          dist_nearest_competitor: number | null
           diversidad_especies: number | null
           ha_cereales_total: number | null
           ha_forestal_total: number | null
@@ -363,7 +364,10 @@ export type Database = {
           indice_mecanizable: number | null
           macrozona: string | null
           model_version: string | null
+          nearest_competitor: string | null
           nombre: string
+          oportunidad_norm: number | null
+          oportunidad_score: number | null
           quintil_combined: number | null
           quintil_grandes: number | null
           quintil_indap: number | null
@@ -380,6 +384,7 @@ export type Database = {
           codigo_tipologia?: string | null
           computed_at?: string | null
           cut: string
+          dist_nearest_competitor?: number | null
           diversidad_especies?: number | null
           ha_cereales_total?: number | null
           ha_forestal_total?: number | null
@@ -391,7 +396,10 @@ export type Database = {
           indice_mecanizable?: number | null
           macrozona?: string | null
           model_version?: string | null
+          nearest_competitor?: string | null
           nombre: string
+          oportunidad_norm?: number | null
+          oportunidad_score?: number | null
           quintil_combined?: number | null
           quintil_grandes?: number | null
           quintil_indap?: number | null
@@ -408,6 +416,7 @@ export type Database = {
           codigo_tipologia?: string | null
           computed_at?: string | null
           cut?: string
+          dist_nearest_competitor?: number | null
           diversidad_especies?: number | null
           ha_cereales_total?: number | null
           ha_forestal_total?: number | null
@@ -419,7 +428,10 @@ export type Database = {
           indice_mecanizable?: number | null
           macrozona?: string | null
           model_version?: string | null
+          nearest_competitor?: string | null
           nombre?: string
+          oportunidad_norm?: number | null
+          oportunidad_score?: number | null
           quintil_combined?: number | null
           quintil_grandes?: number | null
           quintil_indap?: number | null
