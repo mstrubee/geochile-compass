@@ -1,0 +1,1 @@
+ALTER TABLE brand_catalog ADD CONSTRAINT brand_catalog_raw_name_key UNIQUE (raw_name);
