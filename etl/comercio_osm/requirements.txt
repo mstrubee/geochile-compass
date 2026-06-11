@@ -1,0 +1,7 @@
+# Red Comercial Nacional — ETL OSM
+# Instalar: pip install -r etl/comercio_osm/requirements.txt
+
+requests>=2.31.0
+psycopg2-binary>=2.9.9
+python-dotenv>=1.0.0
+shapely>=2.0.0

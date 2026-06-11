@@ -1,0 +1,100 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# sync_comercio_osm.yml
+# Sincronización automática semanal: OpenStreetMap → Supabase
+#
+# Ejecución: domingos a las 03:00 UTC (00:00 Chile hora de verano)
+# Manual:    Actions → "Sync Red Comercial OSM" → Run workflow
+#
+# Secrets requeridos en GitHub → Settings → Secrets:
+#   SUPABASE_URL
+#   SUPABASE_SERVICE_ROLE_KEY
+#   SUPABASE_DB_URL          (postgres://postgres:pwd@db.xxx.supabase.co:5432/postgres)
+# ═══════════════════════════════════════════════════════════════════════════
+
+name: Sync Red Comercial OSM
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"    # Domingos 03:00 UTC
+
+  workflow_dispatch:
+    inputs:
+      categoria:
+        description: "Categoría específica (vacío = todas)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Solo extraer, no escribir en DB"
+        type: boolean
+        default: false
+      seed_catalog:
+        description: "Poblar brand_catalog y salir"
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  sync:
+    name: "Sync POIs OSM → Supabase"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Python ────────────────────────────────────────────────────────────
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: "etl/comercio_osm/requirements.txt"
+
+      - name: Install dependencies
+        run: pip install -r etl/comercio_osm/requirements.txt
+
+      # ── Seed catalog (solo si se solicita explícitamente) ─────────────────
+      - name: Seed brand_catalog
+        if: ${{ inputs.seed_catalog == true }}
+        env:
+          SUPABASE_URL:               ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY:  ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_DB_URL:            ${{ secrets.SUPABASE_DB_URL }}
+        run: python -m etl.comercio_osm.run_sync --seed-catalog
+
+      # ── Sincronización principal ───────────────────────────────────────────
+      - name: Run sync
+        if: ${{ inputs.seed_catalog != true }}
+        env:
+          SUPABASE_URL:               ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY:  ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_DB_URL:            ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.categoria }}" ]; then
+            ARGS="$ARGS --categoria ${{ inputs.categoria }}"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python -m etl.comercio_osm.run_sync $ARGS --verbose
+
+      # ── Subir CSV de diagnóstico como artefacto ────────────────────────────
+      - name: Upload diagnostic CSV
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: comercio-osm-extract-${{ github.run_number }}
+          path: etl/output/comercio_osm_extract.csv
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # ── Notificar en caso de error ─────────────────────────────────────────
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::La sincronización de Red Comercial OSM falló. Revisa los logs del workflow."
