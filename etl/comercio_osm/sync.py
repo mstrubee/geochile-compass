@@ -185,6 +185,30 @@ def sync_all(new_records: list[dict[str, Any]]) -> dict[str, int]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Cargar catálogo desde la DB al inicio del sync
+# ─────────────────────────────────────────────────────────────────────────────
+
+def load_db_catalog() -> int:
+    """
+    Descarga las reglas activas de brand_catalog desde la Edge Function
+    y las inyecta en el módulo catalog con prioridad sobre el Python hardcodeado.
+
+    Devuelve el número de reglas cargadas (0 si falla o tabla vacía).
+    """
+    from . import catalog as cat
+
+    try:
+        data = _call("get_catalog")
+        rows = data.get("data") or []
+        n = cat.override_with_db(rows)
+        log.info("Catálogo DB cargado: %d reglas activas antepuestas al Python hardcodeado", n)
+        return n
+    except Exception as exc:
+        log.warning("No se pudo cargar brand_catalog desde la DB (%s). Se usará solo el catálogo Python.", exc)
+        return 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Poblar brand_catalog (run once / --seed-catalog)
 # ─────────────────────────────────────────────────────────────────────────────
 

@@ -77,6 +77,10 @@ def main() -> int:
         log.info("Listo.")
         return 0
 
+    # ── Cargar catálogo de marcas desde la DB ───────────────────────────────
+    log.info("Cargando catálogo de marcas desde brand_catalog…")
+    sync.load_db_catalog()
+
     # ── Extracción OSM ───────────────────────────────────────────────────────
     log.info("═══ Inicio extracción OSM ═══")
     t_start = time.time()

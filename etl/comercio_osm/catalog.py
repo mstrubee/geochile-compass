@@ -285,3 +285,50 @@ def apply_catalog(tags: dict) -> BrandEntry | None:
 def all_entries() -> list[tuple[str, BrandEntry]]:
     """Devuelve la lista completa de reglas (para poblar brand_catalog en la DB)."""
     return _BRAND_RULES
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Inyección de reglas desde la DB (Piece 2)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def override_with_db(db_rows: list[dict]) -> int:
+    """
+    Recibe filas de brand_catalog (activo=True) y las antepone a las reglas
+    Python para que tengan prioridad durante la normalización.
+
+    Cada fila debe tener al menos:
+      raw_name, marca_estandar, categoria
+    Opcionales:
+      subcategoria, color_hex, icon_emoji
+
+    Devuelve el número de reglas DB cargadas.
+    """
+    global _BRAND_RULES, _EXACT
+
+    if not db_rows:
+        return 0
+
+    db_rules: list[tuple[str, BrandEntry]] = []
+    for row in db_rows:
+        raw = (row.get("raw_name") or "").strip()
+        if not raw:
+            continue
+        entry: BrandEntry = {
+            "marca_estandar": row.get("marca_estandar") or raw,
+            "categoria":      row.get("categoria") or "",
+            "subcategoria":   row.get("subcategoria") or "",
+            "cadena":         "",
+            "color":          row.get("color_hex")   or "#6B7280",
+            "icon":           row.get("icon_emoji")  or "📍",
+        }
+        db_rules.append((raw.lower(), entry))
+
+    if not db_rules:
+        return 0
+
+    # DB primero → mayor prioridad en substring matching
+    _BRAND_RULES = db_rules + _BRAND_RULES
+    # Reconstruir índice exacto (DB sobrescribe Python si hay colisión de clave)
+    _EXACT = {k.lower(): v for k, v in _BRAND_RULES}
+
+    return len(db_rules)
