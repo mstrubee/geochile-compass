@@ -72,6 +72,32 @@ const BrandRow = ({ entry, onUpdate, onRemove, onToggle }: RowProps) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft]     = useState<Partial<BrandInsert>>({});
   const [confirm, setConfirm] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const safe = entry.raw_name.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+      const path = `${entry.id}-${safe}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("brand-logos")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("brand-logos").getPublicUrl(path);
+      const publicUrl = `${pub.publicUrl}?t=${Date.now()}`;
+      await onUpdate(entry.id, { logo_url: publicUrl });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error("Error subiendo logo", { description: msg });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
 
   const startEdit = () => {
     setDraft({
