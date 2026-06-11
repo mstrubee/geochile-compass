@@ -786,6 +786,39 @@ export type Database = {
           },
         ]
       }
+      custom_layers: {
+        Row: {
+          activo: boolean | null
+          color_hex: string
+          created_at: string | null
+          feature_count: number | null
+          geojson: Json
+          icon_emoji: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          activo?: boolean | null
+          color_hex?: string
+          created_at?: string | null
+          feature_count?: number | null
+          geojson: Json
+          icon_emoji?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          activo?: boolean | null
+          color_hex?: string
+          created_at?: string | null
+          feature_count?: number | null
+          geojson?: Json
+          icon_emoji?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       custom_roles: {
         Row: {
           created_at: string
