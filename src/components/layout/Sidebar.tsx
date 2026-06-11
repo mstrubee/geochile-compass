@@ -221,7 +221,12 @@ const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "crime",      color: "bg-red-600",    name: "🚨 Riesgo Delictivo Comunal", count: 346,   sub: "CEAD 2022-2024 · comunas"  },
   { key: "commercial", color: "bg-blue-500",   name: "Atractores comerciales",   count: 98102, sub: "OSM 2024 · 16 regiones"    },
   { key: "gasto",      color: "bg-emerald-500", name: "Gasto endógeno hogares",  count: 346,   sub: "EPF × GSE · canasta Autoplanet" },
-  { key: "agroplanet",             color: "bg-lime-600",  name: "AGROPLANET — Potencial agrícola", count: 346, sub: "Score 0–100 · Censo 2021 + ODEPA" },
+  // agroplanet y competitors → AgronomyGroupBlock (sección colapsable)
+];
+
+/** Capas que van dentro del grupo colapsable "Capas Agronomía". */
+const AGRONOMY_LAYERS: LayerRow[] = [
+  { key: "agroplanet",             color: "bg-lime-600",   name: "AGROPLANET — Potencial agrícola", count: 346, sub: "Score 0–100 · Censo 2021 + ODEPA"       },
   { key: "agroplanet_competitors", color: "bg-orange-500", name: "Competidores maquinaria",          count: 58,  sub: "John Deere · New Holland · Case · OSM" },
 ];
 
@@ -1457,12 +1462,9 @@ export const Sidebar = ({
               </div>
             </div>
           )}
-          {/* Atractores comerciales, Gasto endógeno, Comunas de Chile y GSE →
-              ahora en el panel flotante TerritorialLayerFloatingPanel */}
-          {/* ── Gap Analysis Panel (requiere ambas capas activas) ──────── */}
-          {(layers.agroplanet && layers.agroplanet_competitors) && (
-            <AgroplanetGapPanelConnected />
-          )}
+          {/* Atractores comerciales, Gasto endógeno, Comunas, GSE → panel flotante */}
+          {/* ── Capas Agronomía (colapsado por defecto) ─────────────────── */}
+          <AgronomyGroupBlock layers={layers} onToggleLayer={onToggleLayer} />
           <CollapsibleCustomLayers isAdmin={isAdmin} />
         </SidebarSection>
 
@@ -2651,9 +2653,50 @@ export const Sidebar = ({
   );
 };
 
+// ── Grupo colapsable "Capas Agronomía" ────────────────────────────────────────
+interface AgronomyGroupProps {
+  layers:        LayerState;
+  onToggleLayer: (key: LayerKey) => void;
+}
+
+const AgronomyGroupBlock = ({ layers, onToggleLayer }: AgronomyGroupProps) => {
+  const [open, setOpen] = useState(false); // colapsado por defecto
+
+  return (
+    <div className="mt-0.5 border-t border-border/30 pt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="mb-0.5 flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
+      >
+        {open
+          ? <ChevronDown  className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+          : <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />}
+        <span className="flex-1 text-[13px] text-muted-foreground">🌿 Capas Agronomía</span>
+      </button>
+
+      {open && (
+        <>
+          {AGRONOMY_LAYERS.map((row) => (
+            <LayerItem
+              key={row.name}
+              row={row}
+              on={row.key ? !!layers[row.key] : false}
+              onToggle={row.key ? () => onToggleLayer(row.key!) : undefined}
+            />
+          ))}
+          {(layers.agroplanet && layers.agroplanet_competitors) && (
+            <AgroplanetGapPanelConnected />
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
 // ── Sección "Capas personalizadas" colapsable ─────────────────────────────────
 const CollapsibleCustomLayers = ({ isAdmin = false }: { isAdmin?: boolean }) => {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false); // colapsado por defecto
 
   return (
     <div className="mt-3 border-t border-border/40 pt-2">

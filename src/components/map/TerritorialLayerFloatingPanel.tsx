@@ -215,10 +215,7 @@ export const TerritorialLayerFloatingPanel = ({
 
         {/* ── Cuerpo con scroll ────────────────────────────────────────────── */}
         {!collapsed && (
-          <div
-            className="border-t border-border/40"
-            style={{ maxHeight: "min(60vh, 440px)", overflowY: "auto" }}
-          >
+          <div className="max-h-[460px] overflow-y-auto border-t border-border/40">
             <div className="px-3 pb-3 pt-2.5 space-y-3">
 
               {/* ── 1. Comunas de Chile ────────────────────────────────── */}
@@ -475,8 +472,8 @@ export const TerritorialLayerFloatingPanel = ({
                     )}
                   </div>
 
-                  {/* Lista filtrada */}
-                  <div className="space-y-0.5">
+                  {/* Lista filtrada — scroll propio para que el buscador quede fijo */}
+                  <div className="max-h-[240px] overflow-y-auto space-y-0.5 pr-0.5">
                     {filteredBrands.length === 0 ? (
                       <p className="px-1 py-2 text-center text-[11px] text-muted-foreground/60">
                         Sin resultados para &ldquo;{brandSearch}&rdquo;
