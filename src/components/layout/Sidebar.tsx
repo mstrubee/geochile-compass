@@ -37,6 +37,9 @@ import { useParqueLayer } from "@/hooks/useParqueLayer";
 
 import type { AgroplanetScoreMode } from "@/components/map/AgroplanetComunasLayer";
 import { AGRO_IS_SCORE } from "@/components/map/AgroplanetComunasLayer";
+import { AgroplanetGapPanel } from "@/components/map/AgroplanetGapPanel";
+import { useAgroplanetData }        from "@/hooks/useAgroplanetData";
+import { useAgroplanetCompetitors } from "@/hooks/useAgroplanetCompetitors";
 import type { CrimeType, RiskFilter } from "@/components/map/CrimeHeatLayer";
 import { CATEGORY_META } from "@/components/map/CommercialHeatLayer";
 import type { CommercialCategory } from "@/components/map/CommercialHeatLayer";
@@ -225,6 +228,19 @@ const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "agroplanet",             color: "bg-lime-600",  name: "AGROPLANET — Potencial agrícola", count: 346, sub: "Score 0–100 · Censo 2021 + ODEPA" },
   { key: "agroplanet_competitors", color: "bg-orange-500", name: "Competidores maquinaria",          count: 58,  sub: "John Deere · New Holland · Case · OSM" },
 ];
+
+/** Wrapper auto-fetching para el gap panel — llama hooks en el nivel correcto */
+function AgroplanetGapPanelConnected() {
+  const { data: comunasData } = useAgroplanetData(true);
+  const { data: compData }    = useAgroplanetCompetitors(true);
+  return (
+    <AgroplanetGapPanel
+      comunas={comunasData}
+      competitors={compData}
+      visible={true}
+    />
+  );
+}
 
 const StatCard = ({ value, label }: { value: string | number; label: string }) => (
   <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
@@ -1608,6 +1624,10 @@ export const Sidebar = ({
                 </div>
               )}
             </div>
+          )}
+          {/* ── Gap Analysis Panel (requiere ambas capas activas) ──────── */}
+          {(layers.agroplanet && layers.agroplanet_competitors) && (
+            <AgroplanetGapPanelConnected />
           )}
           {layers.communesGeo && (
             <div className="mt-2 rounded-lg bg-surface-2/40 p-2">
