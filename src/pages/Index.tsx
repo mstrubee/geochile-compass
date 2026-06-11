@@ -118,6 +118,7 @@ const Index = () => {
     crime: false,
     commercial: false,
     gasto: false,
+    agroplanet: false,
   });
   const [nseFilter, setNseFilter] = useState<NSE | null>(null);
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
@@ -160,6 +161,7 @@ const Index = () => {
   // Capa Riesgo Delictivo
   const [crimeView, setCrimeView] = useState<"heat" | "manzana">("heat");
   const [gastoView, setGastoView] = useState<"heat" | "manzana">("heat");
+  const [agroplanetScoreMode, setAgroplanetScoreMode] = useState<"combined" | "grandes" | "indap">("combined");
   const [crimeType, setCrimeType] = useState<import("@/components/map/CrimeHeatLayer").CrimeType>("total");
   const [activeRisk, setActiveRisk] = useState<Set<import("@/components/map/CrimeHeatLayer").RiskFilter>>(
     new Set(["Muy Alto", "Alto", "Medio", "Bajo", "Muy Bajo"])
@@ -1197,6 +1199,8 @@ const Index = () => {
           onRiskToggle={handleRiskToggle}
           gastoView={gastoView}
           onGastoViewChange={setGastoView}
+          agroplanetScoreMode={agroplanetScoreMode}
+          onAgroplanetScoreModeChange={setAgroplanetScoreMode}
           chileCommunesVariable={chileCommunesVariable}
           onChileCommunesVariableChange={setChileCommunesVariable}
           userLayers={userLayers}
@@ -1359,6 +1363,7 @@ const Index = () => {
             crimeView={crimeView}
             crimeType={crimeType}
             gastoView={gastoView}
+            agroplanetScoreMode={agroplanetScoreMode}
             activeRisk={activeRisk}
             activeCommercialCats={activeCommercialCats}
             isAdmin={isAdmin}

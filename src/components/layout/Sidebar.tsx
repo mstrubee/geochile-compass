@@ -79,6 +79,8 @@ interface SidebarProps {
   onRiskToggle: (r: RiskFilter) => void;
   gastoView: "heat" | "manzana";
   onGastoViewChange: (v: "heat" | "manzana") => void;
+  agroplanetScoreMode: "combined" | "grandes" | "indap";
+  onAgroplanetScoreModeChange: (m: "combined" | "grandes" | "indap") => void;
   chileCommunesVariable: IneVariable;
   onChileCommunesVariableChange: (v: IneVariable) => void;
   userLayers: UserLayer[];
@@ -218,6 +220,7 @@ const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "crime",      color: "bg-red-600",    name: "Riesgo delictivo",         count: 346,   sub: "CEAD 2022-2024 · comunas"  },
   { key: "commercial", color: "bg-blue-500",   name: "Atractores comerciales",   count: 98102, sub: "OSM 2024 · 16 regiones"    },
   { key: "gasto",      color: "bg-emerald-500", name: "Gasto endógeno hogares",  count: 346,   sub: "EPF × GSE · canasta Autoplanet" },
+  { key: "agroplanet", color: "bg-lime-600",    name: "AGROPLANET — Potencial agrícola", count: 346, sub: "Score 0–100 · Censo 2021 + ODEPA" },
 ];
 
 const StatCard = ({ value, label }: { value: string | number; label: string }) => (
@@ -603,6 +606,8 @@ export const Sidebar = ({
   onRiskToggle,
   gastoView,
   onGastoViewChange,
+  agroplanetScoreMode,
+  onAgroplanetScoreModeChange,
   chileCommunesVariable,
   onChileCommunesVariableChange,
   userLayers = [],
@@ -1495,6 +1500,48 @@ export const Sidebar = ({
               </div>
               <p className="text-[10px] leading-relaxed text-text-muted">
                 EPF Autoplanet: ABC1 $49k · C2 $25k · C3 $13k · D $4k.
+              </p>
+            </div>
+          )}
+          {layers.agroplanet && (
+            <div className="mt-2 rounded-lg bg-surface-2/40 p-2 space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">Modo de score</div>
+              <div className="flex gap-1 rounded-md bg-surface-2/60 p-0.5">
+                {([
+                  { key: "combined", label: "🌱 Combinado" },
+                  { key: "grandes",  label: "🏭 Grandes"   },
+                  { key: "indap",    label: "🌾 INDAP"      },
+                ] as const).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => onAgroplanetScoreModeChange(key)}
+                    className={[
+                      "flex-1 rounded px-2 py-1.5 text-[11px] font-medium transition-all text-center",
+                      agroplanetScoreMode === key
+                        ? "bg-surface-3 text-foreground shadow-apple-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    ].join(" ")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                {[
+                  { color: "#d1fae5", label: "1" },
+                  { color: "#6ee7b7", label: "2" },
+                  { color: "#f59e0b", label: "3" },
+                  { color: "#f97316", label: "4" },
+                  { color: "#15803d", label: "5" },
+                ].map(({ color, label }) => (
+                  <div key={label} className="flex flex-col items-center gap-0.5">
+                    <div className="h-2.5 w-8 rounded-sm" style={{ background: color }} />
+                    <span className="text-[9px] text-muted-foreground/60">Q{label}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] leading-relaxed text-text-muted">
+                Score 0–100 · Frutales riego, cereales, viñas, forrajeras + diversidad de especies.
               </p>
             </div>
           )}

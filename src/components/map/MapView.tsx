@@ -18,6 +18,8 @@ import ParqueHeatmapLayer from "./ParqueHeatmapLayer";
 import { CrimeHeatLayer } from "./CrimeHeatLayer";
 import { CommercialHeatLayer } from "./CommercialHeatLayer";
 import { GastoHeatLayer } from "./GastoHeatLayer";
+import { AgroplanetComunasLayer } from "./AgroplanetComunasLayer";
+import type { AgroplanetScoreMode } from "./AgroplanetComunasLayer";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { GseFeatureCollection, GseVariable } from "@/types/gse";
@@ -213,6 +215,7 @@ interface MapViewProps {
   /** Modo selección de POI (para el flujo de import manual). */
   poiPickMode?: boolean;
   onPoiPickSelect?: (poi: SavedPoi) => void;
+  agroplanetScoreMode?: AgroplanetScoreMode;
 }
 
 export const MapView = ({
@@ -268,6 +271,7 @@ export const MapView = ({
   onPoiClick,
   poiPickMode = false,
   onPoiPickSelect,
+  agroplanetScoreMode = "combined",
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -362,6 +366,7 @@ export const MapView = ({
         isAdmin={isAdmin}
       />
       <GastoHeatLayer visible={layers.gasto && gastoView !== "manzana"} />
+      <AgroplanetComunasLayer visible={layers.agroplanet} scoreMode={agroplanetScoreMode} />
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
 
