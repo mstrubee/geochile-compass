@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 """
-AGROPLANET ETL — Score Comunal Nacional (Fase 1)
+AGROPLANET ETL — Score Comunal Nacional v1.1
 ═══════════════════════════════════════════════════════════════════════════════
-Score 0-100 por comuna para retail de repuestos de maquinaria agrícola.
+Genera score 0–100 por comuna para retail de repuestos de maquinaria agrícola.
 
-FUENTES:
-  1. Catastro Frutícola 2025        → ODEPA/CIREN (descarga automática)
-  2. Censo Agropecuario 2021 (INE)  → descarga MANUAL (ver PASO 3)
-  3. ODEPA Cultivos Regionales 2025 → descarga automática (factor ajuste)
-  4. Suelos Agrológicos CIREN       → OPCIONAL (ver PASO 4b)
+FUENTES REALES (confirmadas):
+  1. superficie-categoría-cultivo-región-comuna.xlsx  ← INE Censo 2021, comunal
+  2. seccion_9_frutales.csv                           ← microdata predial Censo 2021
+  3. catastro_fruticola_2025.csv                      ← ODEPA (descarga automática)
+  4. Atlas_Rural_de_Chile.zip                         ← INDAP tipologías territoriales
+
+VARIABLES DEL SCORE (v1.1 — sin datos de tamaño predial):
+  ha_frutales_riego    Fruticultura intensiva bajo riego
+  ha_cereales_total    Cereales + cultivos industriales (raps, tomate)
+  ha_vinas_riego       Viñas — sector con mayor mecanización especializada
+  diversidad_especies  N° especies frutícolas — proxy de variedad de maquinaria
+  ha_forrajeras_total  Forrajeras + praderas — ganadería mecanizada (sur)
 
 USO:
   pip install -r requirements.txt
   python agroplanet_etl.py
 
-  # Con carga automática a Supabase:
-  SUPABASE_URL=https://xxx.supabase.co SUPABASE_SERVICE_KEY=eyJ... python agroplanet_etl.py
-
-SALIDA:
-  etl/output/agroplanet_comunas.csv       ← tabla completa (346 comunas)
-  etl/output/agroplanet_model_config.csv  ← pesos del modelo activo
+  # Con carga a Supabase:
+  VITE_SUPABASE_URL=https://xxx.supabase.co SUPABASE_SERVICE_KEY=eyJ... python agroplanet_etl.py
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
@@ -28,71 +31,94 @@ import sys
 import logging
 import unicodedata
 import warnings
+import zipfile
+import tempfile
 from pathlib import Path
-from io import BytesIO, StringIO
 
 import numpy as np
 import pandas as pd
 import requests
 
-warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# RUTAS Y CONFIGURACIÓN
+# RUTAS — ajustar si los archivos están en otra ubicación
 # ─────────────────────────────────────────────────────────────────────────────
 
-REPO_ROOT   = Path(__file__).resolve().parent.parent
-DATA_DIR    = Path(__file__).parent / "data"
-OUTPUT_DIR  = Path(__file__).parent / "output"
-SQL_DIR     = Path(__file__).parent / "sql"
-CODIGOS_CSV = REPO_ROOT / "public" / "codigos_territoriales.csv"
+REPO_ROOT  = Path(__file__).resolve().parent.parent
+DATA_DIR   = Path(__file__).parent / "data"
+OUTPUT_DIR = Path(__file__).parent / "output"
+
+# Archivos fuente (el script los busca primero en DATA_DIR, luego aquí)
+FUENTES = {
+    "xlsx_superficie": Path(
+        "/Users/mstrubee/Library/CloudStorage/OneDrive-GrupoPlanetSpA"
+        "/Locales Grupo Planet/Varios/Geoloc/Agroplanet"
+        "/superficie-categoría-cultivo-región-comuna.xlsx"
+    ),
+    "csv_frutales": Path(
+        "/Users/mstrubee/Library/CloudStorage/OneDrive-GrupoPlanetSpA"
+        "/Locales Grupo Planet/Varios/Geoloc/Agroplanet"
+        "/seccion_9_frutales.csv"
+    ),
+    "atlas_rural_zip": Path("/Users/mstrubee/Downloads/Atlas_Rural_de_Chile.zip"),
+    "codigos_csv":    REPO_ROOT / "public" / "codigos_territoriales.csv",
+    "comunas_geojson": REPO_ROOT / "public" / "comunas.geojson",
+}
+
+# Catastro Frutícola 2025 (descarga automática)
+URL_CATASTRO = (
+    "https://datos.odepa.gob.cl/dataset/"
+    "ea82304e-917f-4cdb-abf6-555782483dc1/resource/"
+    "1bbc9838-6032-4b89-96e5-8c2ed5d91e3f/download/catastro_fruticola_2025.csv"
+)
+
+# Credenciales Supabase
+SUPABASE_URL = os.environ.get("VITE_SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+MODEL_VERSION = "v1.1"
 
 DATA_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# Credenciales Supabase (opcionales — solo para carga automática)
-SUPABASE_URL = os.environ.get("VITE_SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")  # service_role key
-MODEL_VERSION = "v1.0"
+# ─────────────────────────────────────────────────────────────────────────────
+# PESOS DEL MODELO v1.1
+# (sin tractores ni tamaño predial — datos no disponibles en este dataset)
+# ─────────────────────────────────────────────────────────────────────────────
 
-# ── URLS ──────────────────────────────────────────────────────────────────────
-URLS = {
-    "catastro_2025": (
-        "https://datos.odepa.gob.cl/dataset/"
-        "ea82304e-917f-4cdb-abf6-555782483dc1/resource/"
-        "1bbc9838-6032-4b89-96e5-8c2ed5d91e3f/download/catastro_fruticola_2025.csv"
-    ),
-    "odepa_regional_2025": (
-        "https://bibliotecadigital.odepa.gob.cl/bitstream/handle/"
-        "20.500.12650/74178/CultivosRegional072025.xls"
-    ),
-}
-
-# ── PESOS DEL MODELO ──────────────────────────────────────────────────────────
 PESOS_GRANDES = {
-    "tractores_x100ha":        0.30,
-    "ha_frutales_riego":       0.20,
-    "ha_cereales_oleaginosas": 0.15,
-    "pct_predios_grandes":     0.20,
-    "num_explot_medianas":     0.05,
-    "diversidad_especies":     0.05,
-    "ha_suelo_clase_I_II":     0.05,
-}
-PESOS_INDAP = {
-    "tractores_x100ha":        0.35,
-    "ha_frutales_riego":       0.10,
-    "ha_cereales_oleaginosas": 0.30,
-    "pct_predios_grandes":     0.05,
-    "num_explot_medianas":     0.15,
-    "diversidad_especies":     0.00,
-    "ha_suelo_clase_I_II":     0.05,
+    "ha_frutales_riego":   0.35,  # Fruticultura = maquinaria especializada y costosa
+    "ha_cereales_total":   0.20,  # Cereales + raps → combinadas, tractores pesados
+    "ha_vinas_riego":      0.20,  # Viñas = mayor densidad de maquinaria de Chile
+    "diversidad_especies": 0.15,  # Variedad de frutas → variedad de repuestos
+    "ha_forrajeras_total": 0.10,  # Ganadería mecanizada (menos relevante en sur)
 }
 
-# Cereales + oleaginosas que buscaremos en el Censo 2021
-CEREALES_COLS = [
-    "trigo", "maiz", "maíz", "cebada", "avena", "centeno",
-    "triticale", "raps", "canola", "girasol", "remolacha", "arroz",
-]
+PESOS_INDAP = {
+    "ha_frutales_riego":   0.15,  # Menor peso: fruticultura industrial es de grandes
+    "ha_cereales_total":   0.40,  # Principal cultivo INDAP: trigo, avena, cebada
+    "ha_vinas_riego":      0.05,
+    "diversidad_especies": 0.10,
+    "ha_forrajeras_total": 0.30,  # INDAP sur = ganadería + forrajeras
+}
+
+# Columnas del xlsx (índices 0-based confirmados empíricamente)
+XLSX_COLS = {
+    "region":              1,
+    "comuna":              2,
+    "cereales_riego":      6,
+    "cereales_secano":     7,
+    "industriales_riego":  12,
+    "industriales_secano": 13,
+    "frutales_riego":      18,
+    "frutales_secano":     19,
+    "vinas_riego":         21,
+    "vinas_secano":        22,
+    "forrajeras_riego":    33,
+    "forrajeras_secano":   34,
+    "praderas_riego":      36,
+    "praderas_secano":     37,
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LOGGING
@@ -114,59 +140,44 @@ log = logging.getLogger("agroplanet-etl")
 # ─────────────────────────────────────────────────────────────────────────────
 
 def normalize_name(name: str) -> str:
-    """
-    Normaliza nombre de comuna para matching robusto.
-    'Los Ángeles' → 'los angeles' | 'Ñuble' → 'nuble'
-    """
+    """'Los Ángeles' → 'los angeles' | 'Ñuble' → 'nuble'"""
     if pd.isna(name):
         return ""
     nfkd = unicodedata.normalize("NFKD", str(name))
-    ascii_str = nfkd.encode("ASCII", "ignore").decode("ASCII")
-    return ascii_str.lower().strip()
+    return nfkd.encode("ASCII", "ignore").decode("ASCII").lower().strip()
 
 
-# Alias para comunas con nombres problemáticos entre fuentes
-NOMBRE_ALIASES: dict[str, str] = {
-    "ohiggins":              "o higgins",
-    "o'higgins":             "o higgins",
-    "padre las casas":       "padre las casas",
-    "p. las casas":          "padre las casas",
-    "cabo de hornos":        "cabo de hornos",
-    "la calera":             "calera",
-    "san pedro de atacama":  "san pedro de atacama",
-    "la serena":             "la serena",
-    "coelemu":               "coelemu",
+# Alias para comunas con nombre combinado o problemático en las fuentes
+NAME_ALIASES: dict[str, str] = {
+    "iquique/alto hospicio":     "iquique",      # xlsx combina dos comunas → quedarse con Iquique
+    "o higgins":                 "o'higgins",
+    "ohiggins":                  "o'higgins",
+    "padre las casas":           "padre las casas",
+    "p. las casas":              "padre las casas",
+    "la calera":                 "calera",
+    "cabo de hornos (ex navarino)": "cabo de hornos",
+    "antartica":                 "antartica",
+    "la antartica":              "antartica",
 }
 
 
 def clean_name(name: str) -> str:
     n = normalize_name(name)
-    return NOMBRE_ALIASES.get(n, n)
+    return NAME_ALIASES.get(n, n)
 
 
-def download_file(url: str, dest: Path, label: str) -> Path:
-    """Descarga un archivo si no existe ya en cache."""
-    if dest.exists():
-        log.info(f"  {label}: usando cache → {dest.name}")
-        return dest
-    log.info(f"  {label}: descargando desde ODEPA/INE …")
+def to_float(val) -> float:
+    """Convierte valor (puede ser str con coma, NaN, None) a float."""
+    if pd.isna(val):
+        return 0.0
     try:
-        r = requests.get(url, timeout=120, headers={"User-Agent": "Mozilla/5.0"})
-        r.raise_for_status()
-        dest.write_bytes(r.content)
-        log.info(f"  {label}: guardado ({dest.stat().st_size // 1024} KB)")
-        return dest
-    except Exception as e:
-        log.error(f"  {label}: ERROR descargando — {e}")
-        raise
+        return float(str(val).replace(",", ".").replace(" ", ""))
+    except (ValueError, TypeError):
+        return 0.0
 
 
-def normalize_score(series: pd.Series, clip_pct: float = 98) -> pd.Series:
-    """
-    Normalización min-max con clip al percentil clip_pct para robustez
-    ante outliers (ej: Curicó con 10× más frutales que la media).
-    Retorna valores 0.0–1.0.
-    """
+def normalize_score(series: pd.Series, clip_pct: float = 97) -> pd.Series:
+    """Min-max con clip al percentil clip_pct para robustez ante outliers."""
     s = series.fillna(0.0)
     upper = s.quantile(clip_pct / 100)
     if upper == 0:
@@ -179,652 +190,427 @@ def normalize_score(series: pd.Series, clip_pct: float = 98) -> pd.Series:
 
 
 def assign_quintiles(scores: pd.Series) -> pd.Series:
-    """
-    Quintiles nacionales 1–5 (1 = más bajo, 5 = más alto).
-    Usa qcut con labels para distribuir las 346 comunas en 5 grupos iguales.
-    """
-    return pd.qcut(scores, q=5, labels=[1, 2, 3, 4, 5], duplicates="drop").astype(int)
+    """Quintiles nacionales 1–5 (5 = mayor potencial)."""
+    return pd.qcut(
+        scores, q=5, labels=[1, 2, 3, 4, 5], duplicates="drop"
+    ).astype(int)
+
+
+def resolve_path(key: str) -> Path | None:
+    """Busca archivo en DATA_DIR primero, luego en la ruta OneDrive original."""
+    onedrive_path = FUENTES[key]
+    local_copy    = DATA_DIR / onedrive_path.name
+    if local_copy.exists():
+        return local_copy
+    if onedrive_path.exists():
+        return onedrive_path
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 1: Tabla maestra de CUT codes
+# PASO 1 — Tabla maestra de CUT codes (346 comunas)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_cut_lookup() -> pd.DataFrame:
-    """
-    Carga codigos_territoriales.csv del repo.
-    Retorna DataFrame con columnas: cut, nombre, region, region_id
-    """
-    log.info("PASO 1 — Cargando tabla de CUT codes …")
-    df = pd.read_csv(CODIGOS_CSV, dtype=str)
+    log.info("PASO 1 — Cargando tabla CUT codes …")
+    df = pd.read_csv(FUENTES["codigos_csv"], dtype=str)
     df.columns = ["region_id", "region", "province_id", "province", "cut", "nombre"]
-    df["cut"]       = df["cut"].str.zfill(5)
-    df["region_id"] = df["region_id"].str.zfill(2)
+    df["cut"]        = df["cut"].str.zfill(5)
+    df["region_id"]  = df["region_id"].str.zfill(2)
     df["nombre_norm"] = df["nombre"].apply(clean_name)
-    log.info(f"  {len(df)} comunas cargadas")
+    log.info(f"  {len(df)} comunas")
     return df[["cut", "nombre", "region", "region_id", "nombre_norm"]]
 
 
 def build_name_to_cut(lookup: pd.DataFrame) -> dict[str, str]:
-    """Diccionario nombre_normalizado → cut para JOIN desde fuentes externas."""
     return dict(zip(lookup["nombre_norm"], lookup["cut"]))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 2: Catastro Frutícola 2025
+# PASO 2 — xlsx: Superficie por categoría de cultivo y comuna (INE Censo 2021)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def load_catastro_fruticola(name_to_cut: dict) -> pd.DataFrame:
+def load_xlsx_superficie(name_to_cut: dict) -> pd.DataFrame:
     """
-    Fuente: ODEPA open data (descarga automática)
-    Variables extraídas por comuna:
-      ha_frutales_total, ha_frutales_riego, diversidad_especies, especie_dominante
+    Parsea el Excel con estructura multi-header del INE.
+    Extrae filas de comunas y renombra columnas por posición confirmada.
     """
-    log.info("PASO 2 — Catastro Frutícola 2025 …")
-    dest = DATA_DIR / "catastro_fruticola_2025.csv"
-    download_file(URLS["catastro_2025"], dest, "Catastro Frutícola 2025")
+    log.info("PASO 2 — Cargando xlsx superficie cultivos …")
+    path = resolve_path("xlsx_superficie")
+    if path is None:
+        log.error("  ❌ archivo no encontrado. Verificar ruta en FUENTES['xlsx_superficie']")
+        raise FileNotFoundError("superficie-categoría-cultivo-región-comuna.xlsx")
 
-    # Intentar distintos encodings (los archivos ODEPA varían)
-    for enc in ("utf-8", "latin-1", "iso-8859-1", "cp1252"):
+    raw = pd.read_excel(path, header=None)
+    log.info(f"  Shape raw: {raw.shape}")
+
+    # Filtrar filas de comunas (col 2 no nula y no totales)
+    EXCLUIR = {"Total Región", "Total Nacional", "Comuna 5,6", "nan", ""}
+    mask = (
+        raw.iloc[:, 2].notna() &
+        (~raw.iloc[:, 2].astype(str).isin(EXCLUIR)) &
+        (~raw.iloc[:, 1].astype(str).str.startswith("21."))  # fila de título
+    )
+    comunas = raw[mask].copy().reset_index(drop=True)
+    log.info(f"  Filas de comunas detectadas: {len(comunas)}")
+
+    # Renombrar columnas clave por posición
+    col_rename = {v: k for k, v in XLSX_COLS.items()}
+    comunas = comunas.rename(columns=col_rename)
+
+    # Convertir columnas numéricas a float (excluir region y comuna que son texto)
+    COLS_NUMERICAS = {k for k in XLSX_COLS.keys() if k not in ("region", "comuna")}
+    for col in COLS_NUMERICAS:
+        if col in comunas.columns:
+            comunas[col] = comunas[col].apply(to_float)
+
+    # Calcular variables derivadas
+    comunas["ha_cereales_total"]   = (
+        comunas["cereales_riego"] + comunas["cereales_secano"] +
+        comunas["industriales_riego"] + comunas["industriales_secano"]
+    )
+    comunas["ha_frutales_total"]   = comunas["frutales_riego"] + comunas["frutales_secano"]
+    comunas["ha_frutales_riego"]   = comunas["frutales_riego"]
+    comunas["ha_vinas_riego"]      = comunas["vinas_riego"]
+    comunas["ha_vinas_total"]      = comunas["vinas_riego"] + comunas["vinas_secano"]
+    comunas["ha_forrajeras_total"] = (
+        comunas["forrajeras_riego"] + comunas["forrajeras_secano"] +
+        comunas["praderas_riego"]  + comunas["praderas_secano"]
+    )
+    # Índice de mecanización (proxy tractores — para display/contexto)
+    comunas["indice_mecanizable"] = (
+        comunas["ha_cereales_total"] +
+        comunas["ha_frutales_total"] +
+        comunas["ha_vinas_total"]
+    )
+
+    # JOIN con CUT por nombre de comuna (col 2)
+    comunas["nombre_norm"] = comunas["comuna"].astype(str).apply(clean_name)
+    comunas["cut"] = comunas["nombre_norm"].map(name_to_cut)
+
+    sin_cut = comunas[comunas["cut"].isna()]["comuna"].unique()
+    if len(sin_cut) > 0:
+        log.warning(f"  Comunas sin CUT match ({len(sin_cut)}): {list(sin_cut[:8])}")
+
+    # Agregar por CUT (puede haber duplicados si un nombre matchea varias veces)
+    vars_num = [
+        "ha_cereales_total", "ha_frutales_total", "ha_frutales_riego",
+        "ha_vinas_riego", "ha_vinas_total", "ha_forrajeras_total",
+        "indice_mecanizable",
+    ]
+    result = (
+        comunas.dropna(subset=["cut"])
+        .groupby("cut")[vars_num]
+        .sum()
+        .reset_index()
+    )
+    log.info(
+        f"  Comunas con datos superficie: {len(result)} | "
+        f"ha frutales riego: {result['ha_frutales_riego'].sum():,.0f} | "
+        f"ha cereales: {result['ha_cereales_total'].sum():,.0f}"
+    )
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PASO 3 — CSV frutales: Diversidad de especies por comuna
+# ─────────────────────────────────────────────────────────────────────────────
+
+def load_diversidad_especies() -> pd.DataFrame:
+    """
+    Cuenta n° de especies frutícolas distintas por CUT_COMUNA.
+    Fuente: seccion_9_frutales.csv (microdata predial Censo 2021)
+    """
+    log.info("PASO 3 — CSV frutales: diversidad de especies …")
+    path = resolve_path("csv_frutales")
+    if path is None:
+        log.warning("  CSV frutales no encontrado → diversidad_especies = 0")
+        return pd.DataFrame(columns=["cut", "diversidad_especies"])
+
+    # Probar encodings
+    for enc in ("utf-8-sig", "utf-8", "latin-1"):
+        try:
+            df = pd.read_csv(path, sep=";", decimal=",", encoding=enc, low_memory=False)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        log.error("  No se pudo leer el CSV con ningún encoding")
+        return pd.DataFrame(columns=["cut", "diversidad_especies"])
+
+    # Limpiar nombre de la primera columna (posible BOM)
+    df.columns = [c.strip().strip('"').lstrip("﻿") for c in df.columns]
+
+    # CUT_COMUNA como string 5 dígitos
+    if "CUT_COMUNA" not in df.columns:
+        log.error(f"  Columna CUT_COMUNA no encontrada. Columnas: {list(df.columns[:8])}")
+        return pd.DataFrame(columns=["cut", "diversidad_especies"])
+
+    df["cut"] = df["CUT_COMUNA"].astype(str).str.strip().str.zfill(5)
+
+    # Limpiar nombre de especie
+    especie_col = next(
+        (c for c in ["SS92_Glo", "SS92_GLO", "ESPECIE"] if c in df.columns), None
+    )
+    if not especie_col:
+        log.warning("  Columna de especie no encontrada")
+        return pd.DataFrame(columns=["cut", "diversidad_especies"])
+
+    div = (
+        df[df[especie_col].notna()]
+        .groupby("cut")[especie_col]
+        .nunique()
+        .reset_index(name="diversidad_especies")
+    )
+    log.info(
+        f"  Comunas con frutales: {len(div)} | "
+        f"máx especies: {div['diversidad_especies'].max()} "
+        f"({div.loc[div['diversidad_especies'].idxmax(), 'cut']})"
+    )
+    return div
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PASO 4 — Catastro Frutícola 2025: validación y actualización (ODEPA)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def load_catastro_fruticola_2025(name_to_cut: dict) -> pd.DataFrame:
+    """
+    Descarga el Catastro Frutícola 2025 y extrae ha_frutales_riego actualizado.
+    Si la descarga falla, retorna DataFrame vacío (el xlsx del Censo cubre este campo).
+    """
+    log.info("PASO 4 — Catastro Frutícola 2025 (ODEPA) …")
+    dest = DATA_DIR / "catastro_fruticola_2025.csv"
+
+    if not dest.exists():
+        try:
+            log.info("  Descargando …")
+            r = requests.get(URL_CATASTRO, timeout=90, headers={"User-Agent": "Mozilla/5.0"})
+            r.raise_for_status()
+            dest.write_bytes(r.content)
+            log.info(f"  Guardado ({dest.stat().st_size // 1024} KB)")
+        except Exception as e:
+            log.warning(f"  Descarga fallida: {e}. Usando Censo 2021 para frutales.")
+            return pd.DataFrame(columns=["cut", "ha_frutales_riego_2025", "diversidad_esp_2025"])
+    else:
+        log.info(f"  Usando cache → {dest.name}")
+
+    for enc in ("utf-8", "latin-1", "utf-8-sig"):
         try:
             df = pd.read_csv(dest, encoding=enc, low_memory=False)
             break
         except UnicodeDecodeError:
             continue
     else:
-        raise ValueError("No se pudo leer el CSV con ningún encoding estándar")
+        return pd.DataFrame(columns=["cut", "ha_frutales_riego_2025", "diversidad_esp_2025"])
 
-    log.info(f"  Columnas disponibles: {list(df.columns)}")
+    # Detectar columnas clave
+    cols = {c.lower().strip(): c for c in df.columns}
 
-    # ── Detectar columnas clave (ODEPA cambia nombres entre versiones) ────────
-    col_map = _detect_catastro_columns(df)
-    log.info(f"  Columnas detectadas: {col_map}")
+    def find(*cands):
+        for c in cands:
+            if c in cols:
+                return cols[c]
+        # búsqueda parcial
+        for c in cands:
+            for k, v in cols.items():
+                if c in k:
+                    return v
+        return None
 
-    df = df.rename(columns=col_map)
+    col_comuna  = find("comuna", "nombre_comuna", "nmcomuna")
+    col_especie = find("especie", "nom_especie", "especie_nombre")
+    col_metodo  = find("metodo de riego", "metodo_riego", "sistema_riego")   # string col
+    col_total   = find("superficie (ha)", "superficie_total", "ha_total",
+                       "superficie", "superficiehectareas")                  # numeric col
+    col_riego   = None  # el catastro 2025 no tiene ha_riego como columna numérica
 
-    # ── Normalizar nombre de comuna y hacer JOIN con CUT ─────────────────────
-    df["nombre_norm"] = df["comuna"].apply(clean_name)
-    df["cut"] = df["nombre_norm"].map(name_to_cut)
+    if not col_comuna:
+        log.warning("  Columna COMUNA no encontrada en catastro 2025")
+        return pd.DataFrame(columns=["cut", "ha_frutales_riego_2025", "diversidad_esp_2025"])
 
-    unmatched = df[df["cut"].isna()]["comuna"].unique()
-    if len(unmatched) > 0:
-        log.warning(f"  Comunas sin match CUT ({len(unmatched)}): {list(unmatched[:10])}")
+    df["nombre_norm"] = df[col_comuna].apply(clean_name)
+    df["cut"]         = df["nombre_norm"].map(name_to_cut)
 
-    df = df.dropna(subset=["cut"])
+    def parse_ha(series: pd.Series) -> pd.Series:
+        """Convierte columnas con decimal coma chilena ('1,30') a float."""
+        return pd.to_numeric(
+            series.astype(str).str.replace(",", ".", regex=False),
+            errors="coerce"
+        ).fillna(0)
 
-    # ── Convertir hectáreas a numérico ────────────────────────────────────────
-    for col in ["ha_total", "ha_riego", "ha_secano"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    if col_riego:
+        df["_riego"] = parse_ha(df[col_riego])
+    elif col_total:
+        df["_riego"] = parse_ha(df[col_total])
+    else:
+        df["_riego"] = 0
 
-    # ── Agregar por comuna ────────────────────────────────────────────────────
-    agg = df.groupby("cut").agg(
-        ha_frutales_total=("ha_total", "sum"),
-        ha_frutales_riego=("ha_riego", "sum"),
-        diversidad_especies=("especie", pd.Series.nunique),
+    agg = df.dropna(subset=["cut"]).groupby("cut").agg(
+        ha_frutales_riego_2025=("_riego", "sum"),
+        diversidad_esp_2025=(col_especie, pd.Series.nunique) if col_especie else ("_riego", "count"),
     ).reset_index()
 
-    # Especie dominante (mayor superficie total por comuna)
-    if "especie" in df.columns:
-        dom = (
-            df.groupby(["cut", "especie"])["ha_total"]
-            .sum()
-            .reset_index()
-            .sort_values("ha_total", ascending=False)
-            .drop_duplicates("cut")[["cut", "especie"]]
-            .rename(columns={"especie": "especie_dominante"})
-        )
-        agg = agg.merge(dom, on="cut", how="left")
-    else:
-        agg["especie_dominante"] = None
-
     log.info(
-        f"  Comunas con datos frutícolas: {len(agg)} | "
-        f"ha totales: {agg['ha_frutales_total'].sum():,.0f}"
+        f"  Catastro 2025: {len(agg)} comunas | "
+        f"ha riego total: {agg['ha_frutales_riego_2025'].sum():,.0f}"
     )
     return agg
 
 
-def _detect_catastro_columns(df: pd.DataFrame) -> dict:
-    """
-    Detecta nombres de columnas del CSV de Catastro Frutícola.
-    ODEPA ha cambiado los nombres entre 2022, 2024 y 2025.
-    """
-    cols_lower = {c.lower().strip(): c for c in df.columns}
-
-    def find_col(*candidates) -> str | None:
-        for c in candidates:
-            if c in cols_lower:
-                return cols_lower[c]
-        return None
-
-    col_map = {}
-
-    c = find_col("comuna", "nombre_comuna", "nom_comuna", "nmcomuna")
-    if c:
-        col_map[c] = "comuna"
-
-    c = find_col("especie", "nombre_especie", "nom_especie", "especie_nombre")
-    if c:
-        col_map[c] = "especie"
-
-    for cand, std in [
-        (("superficie_total", "sup_total", "ha_total", "hectareas_total",
-          "superficiehectareas", "superficie"), "ha_total"),
-        (("superficie_riego", "sup_riego", "ha_riego", "hectareas_riego",
-          "riego"), "ha_riego"),
-        (("superficie_secano", "sup_secano", "ha_secano", "secano"), "ha_secano"),
-    ]:
-        c = find_col(*cand)
-        if c:
-            col_map[c] = std
-
-    # Validar que tenemos lo mínimo
-    needed = {"comuna", "especie", "ha_total"}
-    mapped = set(col_map.values())
-    missing = needed - mapped
-    if missing:
-        log.warning(
-            f"  Columnas no encontradas: {missing}. "
-            f"Columnas disponibles: {list(df.columns)}"
-        )
-    return col_map
-
-
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 3: Censo Agropecuario 2021 (INE)
-# ─────────────────────────────────────────────────────────────────────────────
-#
-# DESCARGA MANUAL REQUERIDA
-# ─────────────────────────────────────────────────────────────────────────────
-# 1. Ir a https://www.ine.gob.cl/censoagropecuario → "Resultados del Censo"
-# 2. Descargar las siguientes tablas y guardarlas en etl/data/:
-#
-#   ARCHIVO ESPERADO              TABLA INE
-#   censo2021_maquinaria.xlsx  →  Maquinaria y equipos agrícolas por comuna
-#   censo2021_explotaciones.xlsx  Explotaciones por tramos de superficie y comuna
-#   censo2021_cultivos.xlsx    →  Superficie sembrada/plantada por cultivo y comuna
-#
-# Los archivos pueden tener nombres distintos (ej: "Cuadro_10_Maquinaria...xlsx").
-# Renombrarlos o ajustar las rutas en CENSO_FILES abajo.
+# PASO 5 — Atlas Rural: tipología territorial por comuna (join espacial)
 # ─────────────────────────────────────────────────────────────────────────────
 
-CENSO_FILES = {
-    "maquinaria":    DATA_DIR / "censo2021_maquinaria.xlsx",
-    "explotaciones": DATA_DIR / "censo2021_explotaciones.xlsx",
-    "cultivos":      DATA_DIR / "censo2021_cultivos.xlsx",
-}
-
-
-def _read_censo_excel(path: Path, label: str) -> pd.DataFrame | None:
-    """Lee un Excel del Censo 2021, intentando múltiples sheets."""
-    if not path.exists():
-        log.warning(f"  {label}: archivo no encontrado → {path.name}. Saltando.")
-        return None
-    try:
-        xl = pd.ExcelFile(path)
-        # Buscar sheet con datos (no portada)
-        target_sheet = None
-        for s in xl.sheet_names:
-            if any(k in s.lower() for k in ["datos", "comunal", "resultado", "tabla"]):
-                target_sheet = s
-                break
-        target_sheet = target_sheet or xl.sheet_names[-1]
-        df = pd.read_excel(path, sheet_name=target_sheet, header=None)
-        # Detectar fila de encabezado (primera fila que empiece con código o nombre)
-        df = _fix_censo_header(df)
-        log.info(f"  {label}: {len(df)} filas | {list(df.columns[:6])}")
-        return df
-    except Exception as e:
-        log.error(f"  {label}: error al leer — {e}")
-        return None
-
-
-def _fix_censo_header(df: pd.DataFrame) -> pd.DataFrame:
+def load_tipologia_rural() -> pd.DataFrame:
     """
-    Los Excel del INE suelen tener filas de título antes del encabezado real.
-    Detecta la fila que contiene 'código' o 'cut' o 'región' y la usa como header.
+    Join espacial: centroide de cada comuna → tipología territorial del Atlas Rural.
+    Requiere geopandas. Si no está instalado, retorna DataFrame vacío.
     """
-    for i, row in df.iterrows():
-        row_vals = [str(v).lower() for v in row.values if not pd.isna(v)]
-        if any(k in " ".join(row_vals) for k in ["código", "codigo", "cut", "región", "region"]):
-            new_df = df.iloc[i + 1:].copy()
-            new_df.columns = df.iloc[i].values
-            new_df.columns = [
-                str(c).strip().lower().replace(" ", "_").replace("ó", "o")
-                .replace("é", "e").replace("á", "a").replace("í", "i")
-                .replace("ú", "u").replace("ñ", "n")
-                for c in new_df.columns
-            ]
-            return new_df.reset_index(drop=True)
-    # Si no se encontró header, usar la primera fila
-    df.columns = [str(c).strip().lower() for c in df.iloc[0]]
-    return df.iloc[1:].reset_index(drop=True)
+    log.info("PASO 5 — Atlas Rural: tipología territorial …")
 
-
-def _extract_cut_column(df: pd.DataFrame) -> pd.Series | None:
-    """Busca la columna de CUT code en un DataFrame del Censo."""
-    for col in df.columns:
-        sample = df[col].dropna().astype(str).str.strip()
-        # CUT codes: 5 dígitos, empieza con 01-16
-        if sample.str.match(r"^(0[1-9]|1[0-6])\d{3}$").mean() > 0.5:
-            return df[col].astype(str).str.zfill(5)
-    return None
-
-
-def load_censo_maquinaria(name_to_cut: dict) -> pd.DataFrame:
-    """
-    Extrae por comuna: total_tractores, ha_agricola_total
-    Variables derivadas: tractores_x100ha
-    """
-    log.info("PASO 3a — Censo 2021: Maquinaria …")
-    df = _read_censo_excel(CENSO_FILES["maquinaria"], "Maquinaria")
-    if df is None:
-        log.warning("  Usando datos de maquinaria = 0 (archivo no disponible)")
-        return pd.DataFrame(columns=["cut", "total_tractores"])
-
-    cut_col = _extract_cut_column(df)
-    if cut_col is None:
-        # Fallback: buscar por nombre de comuna
-        nombre_col = _find_column(df, ["nombre_comuna", "comuna", "nom_comuna"])
-        if nombre_col:
-            df["cut"] = df[nombre_col].apply(clean_name).map(name_to_cut)
-        else:
-            log.error("  No se encontró columna de identificación en maquinaria.xlsx")
-            return pd.DataFrame(columns=["cut", "total_tractores"])
-    else:
-        df["cut"] = cut_col
-
-    # Buscar columna de tractores
-    tractor_col = _find_column(df, [
-        "tractores_de_ruedas", "tractor_ruedas", "tractores_ruedas",
-        "tractores", "n_tractores", "numero_tractores",
-        "tractor", "ruedas"
-    ])
-    if tractor_col:
-        df["tractores_ruedas"] = pd.to_numeric(df[tractor_col], errors="coerce").fillna(0)
-    else:
-        df["tractores_ruedas"] = 0
-        log.warning("  Columna de tractores de ruedas no encontrada")
-
-    oruga_col = _find_column(df, [
-        "tractores_de_oruga", "tractor_oruga", "tractores_oruga", "oruga"
-    ])
-    if oruga_col:
-        df["tractores_oruga"] = pd.to_numeric(df[oruga_col], errors="coerce").fillna(0)
-    else:
-        df["tractores_oruga"] = 0
-
-    # Buscar hectáreas agrícolas totales (para calcular tractores/100ha)
-    ha_col = _find_column(df, [
-        "superficie_total", "ha_total", "superficie_agricola",
-        "total_hectareas", "hectareas"
-    ])
-    if ha_col:
-        df["ha_agricola"] = pd.to_numeric(df[ha_col], errors="coerce").fillna(0)
-    else:
-        df["ha_agricola"] = 0
-        log.warning("  Columna de superficie agrícola no encontrada en maquinaria")
-
-    agg = (
-        df.dropna(subset=["cut"])
-        .groupby("cut")
-        .agg(
-            total_tractores=("tractores_ruedas", "sum"),
-            total_tractores_oruga=("tractores_oruga", "sum"),
-            ha_agricola_total=("ha_agricola", "sum"),
-        )
-        .reset_index()
-    )
-    agg["total_tractores"] += agg["total_tractores_oruga"]
-    agg = agg.drop(columns=["total_tractores_oruga"])
-
-    log.info(f"  Comunas con maquinaria: {len(agg)} | tractores: {agg['total_tractores'].sum():,.0f}")
-    return agg
-
-
-def load_censo_explotaciones(name_to_cut: dict) -> pd.DataFrame:
-    """
-    Extrae por comuna:
-      pct_predios_grandes (% explot >= 20ha)
-      num_explot_medianas (n° explot 5-50ha)
-      total_explotaciones
-    """
-    log.info("PASO 3b — Censo 2021: Explotaciones por tramo …")
-    df = _read_censo_excel(CENSO_FILES["explotaciones"], "Explotaciones")
-    if df is None:
-        return pd.DataFrame(columns=[
-            "cut", "total_explotaciones", "pct_predios_grandes", "num_explot_medianas"
-        ])
-
-    cut_col = _extract_cut_column(df)
-    if cut_col is not None:
-        df["cut"] = cut_col
-    else:
-        nombre_col = _find_column(df, ["nombre_comuna", "comuna"])
-        if nombre_col:
-            df["cut"] = df[nombre_col].apply(clean_name).map(name_to_cut)
-        else:
-            log.error("  No se encontró columna de identificación en explotaciones.xlsx")
-            return pd.DataFrame(columns=[
-                "cut", "total_explotaciones", "pct_predios_grandes", "num_explot_medianas"
-            ])
-
-    # Mapeo flexible de tramos de superficie
-    TRAMOS = {
-        # Clave estándar: posibles nombres en el Excel
-        "tramo_menos_1ha": [
-            "menos_de_1", "0-1", "0_a_1", "menores_1",
-            "inferior_a_1", "menos_1", "<1"
-        ],
-        "tramo_1_5ha": ["1_a_5", "1-5", "de_1_a_5", "1_menos_5"],
-        "tramo_5_10ha": ["5_a_10", "5-10", "de_5_a_10"],
-        "tramo_10_20ha": ["10_a_20", "10-20", "de_10_a_20"],
-        "tramo_20_50ha": ["20_a_50", "20-50", "de_20_a_50"],
-        "tramo_50_100ha": ["50_a_100", "50-100", "de_50_a_100"],
-        "tramo_100_200ha": ["100_a_200", "100-200", "de_100_a_200"],
-        "tramo_mas_200ha": ["200_y_mas", "200+", "mas_de_200", ">200", "mayores_200"],
-        "total": ["total", "total_explotaciones", "total_explot"],
-    }
-    for std_name, candidates in TRAMOS.items():
-        c = _find_column(df, candidates)
-        if c:
-            df[std_name] = pd.to_numeric(df[c], errors="coerce").fillna(0)
-        else:
-            df[std_name] = 0
-
-    agg = (
-        df.dropna(subset=["cut"])
-        .groupby("cut")
-        .agg({k: "sum" for k in TRAMOS.keys()})
-        .reset_index()
-    )
-
-    # Total explotaciones: usar columna total si existe, sino sumar tramos
-    agg["total_explotaciones"] = np.where(
-        agg["total"] > 0,
-        agg["total"],
-        agg[[c for c in TRAMOS.keys() if c != "total"]].sum(axis=1),
-    )
-
-    # Predios grandes: >= 20 ha
-    agg["explot_grandes"] = (
-        agg["tramo_20_50ha"] +
-        agg["tramo_50_100ha"] +
-        agg["tramo_100_200ha"] +
-        agg["tramo_mas_200ha"]
-    )
-    agg["pct_predios_grandes"] = np.where(
-        agg["total_explotaciones"] > 0,
-        agg["explot_grandes"] / agg["total_explotaciones"] * 100,
-        0,
-    )
-
-    # Explotaciones medianas: 5-50 ha (cliente INDAP)
-    agg["num_explot_medianas"] = agg["tramo_5_10ha"] + agg["tramo_10_20ha"] + agg["tramo_20_50ha"]
-
-    result = agg[["cut", "total_explotaciones", "pct_predios_grandes", "num_explot_medianas"]]
-    log.info(
-        f"  Comunas con explotaciones: {len(result)} | "
-        f"total explot: {result['total_explotaciones'].sum():,.0f}"
-    )
-    return result
-
-
-def load_censo_cultivos(name_to_cut: dict) -> pd.DataFrame:
-    """
-    Extrae por comuna: ha_cereales_oleaginosas (trigo + maíz + raps + cebada + avena...)
-    """
-    log.info("PASO 3c — Censo 2021: Cultivos anuales …")
-    df = _read_censo_excel(CENSO_FILES["cultivos"], "Cultivos")
-    if df is None:
-        return pd.DataFrame(columns=["cut", "ha_cereales_oleaginosas"])
-
-    cut_col = _extract_cut_column(df)
-    if cut_col is not None:
-        df["cut"] = cut_col
-    else:
-        nombre_col = _find_column(df, ["nombre_comuna", "comuna"])
-        if nombre_col:
-            df["cut"] = df[nombre_col].apply(clean_name).map(name_to_cut)
-        else:
-            log.error("  No se encontró columna de identificación en cultivos.xlsx")
-            return pd.DataFrame(columns=["cut", "ha_cereales_oleaginosas"])
-
-    # Sumar todas las columnas de cereales/oleaginosas presentes
-    cereal_cols_found = []
-    for col in df.columns:
-        if any(c in col.lower() for c in CEREALES_COLS):
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-            cereal_cols_found.append(col)
-
-    if not cereal_cols_found:
-        log.warning(
-            "  No se encontraron columnas de cereales. "
-            f"Columnas disponibles: {list(df.columns[:15])}"
-        )
-        df["ha_cereales_oleaginosas"] = 0
-    else:
-        log.info(f"  Columnas de cereales encontradas: {cereal_cols_found}")
-        df["ha_cereales_oleaginosas"] = df[cereal_cols_found].sum(axis=1)
-
-    agg = (
-        df.dropna(subset=["cut"])
-        .groupby("cut")["ha_cereales_oleaginosas"]
-        .sum()
-        .reset_index()
-    )
-    log.info(
-        f"  Comunas con cultivos: {len(agg)} | "
-        f"ha cereales: {agg['ha_cereales_oleaginosas'].sum():,.0f}"
-    )
-    return agg
-
-
-def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    """Busca la primera columna que coincida con alguno de los candidatos."""
-    cols_lower = {c.lower().replace(" ", "_"): c for c in df.columns}
-    for cand in candidates:
-        if cand.lower() in cols_lower:
-            return cols_lower[cand.lower()]
-    # Búsqueda parcial (contains)
-    for cand in candidates:
-        for col_lower, col_orig in cols_lower.items():
-            if cand.lower() in col_lower:
-                return col_orig
-    return None
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PASO 4: Factor de ajuste ODEPA regional (cereales 2021 → 2024)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def load_odepa_factor_ajuste() -> dict[str, float]:
-    """
-    Descarga el Excel regional de ODEPA y calcula el factor de crecimiento
-    de cereales + oleaginosas entre la temporada del Censo 2021 y 2024.
-
-    Retorna dict {region_id: factor} para aplicar a ha_cereales del Censo.
-    Default: 1.0 (sin ajuste) si la descarga falla.
-    """
-    log.info("PASO 4 — ODEPA: factor de ajuste regional cereales …")
-    dest = DATA_DIR / "odepa_cultivos_regional_2025.xls"
-    try:
-        download_file(URLS["odepa_regional_2025"], dest, "ODEPA Cultivos Regional 2025")
-    except Exception:
-        log.warning("  Usando factor de ajuste = 1.0 (descarga falló)")
-        return {}
+    atlas_zip = FUENTES["atlas_rural_zip"]
+    if not atlas_zip.exists():
+        log.warning(f"  Atlas Rural ZIP no encontrado: {atlas_zip}. Saltando tipología.")
+        return pd.DataFrame(columns=["cut", "macrozona", "tipologia", "codigo_tipologia"])
 
     try:
-        xl = pd.ExcelFile(dest)
-        # El Excel tiene múltiples sheets (una por cultivo o una general)
-        # Buscar la sheet que tenga datos regionales
-        target = None
-        for s in xl.sheet_names:
-            s_lower = s.lower()
-            if any(k in s_lower for k in ["region", "regional", "total"]):
-                target = s
-                break
-        target = target or xl.sheet_names[0]
+        import geopandas as gpd
+    except ImportError:
+        log.warning("  geopandas no instalado. Ejecutar: pip install geopandas")
+        log.warning("  Saltando join de tipología rural.")
+        return pd.DataFrame(columns=["cut", "macrozona", "tipologia", "codigo_tipologia"])
 
-        df = pd.read_excel(dest, sheet_name=target, header=None)
-        df = _fix_censo_header(df)
+    # Extraer SHP a directorio temporal
+    with tempfile.TemporaryDirectory() as tmp:
+        with zipfile.ZipFile(atlas_zip, "r") as zf:
+            zf.extractall(tmp)
+        shp_files = list(Path(tmp).glob("*.shp"))
+        if not shp_files:
+            log.error("  No se encontró .shp dentro del ZIP")
+            return pd.DataFrame(columns=["cut", "macrozona", "tipologia", "codigo_tipologia"])
 
-        # Buscar columnas de año 2020/21 (Censo) y 2023/24 (más reciente)
-        year_cols = {}
-        for col in df.columns:
-            col_str = str(col).replace("/", "_")
-            if "2020" in col_str or "2021" in col_str:
-                year_cols["base"] = col
-            if "2023" in col_str or "2024" in col_str:
-                year_cols["reciente"] = col
+        atlas = gpd.read_file(shp_files[0], encoding="utf-8")
+        if atlas.crs is None or atlas.crs.to_epsg() != 4326:
+            atlas = atlas.to_crs(epsg=4326)
+        log.info(f"  Atlas Rural: {len(atlas)} tipologías | CRS: {atlas.crs}")
 
-        if "base" not in year_cols or "reciente" not in year_cols:
-            log.warning(
-                f"  No se encontraron columnas de año en ODEPA. "
-                f"Usando factor = 1.0. Columnas: {list(df.columns[:10])}"
-            )
-            return {}
+        # Cargar geometrías de comunas
+        comunas_geo_path = FUENTES["comunas_geojson"]
+        if not comunas_geo_path.exists():
+            log.warning("  comunas.geojson no encontrado en repo")
+            return pd.DataFrame(columns=["cut", "macrozona", "tipologia", "codigo_tipologia"])
 
-        region_col = _find_column(df, ["region", "nombre_region", "region_nombre"])
-        if not region_col:
-            return {}
+        comunas_geo = gpd.read_file(comunas_geo_path)
+        if comunas_geo.crs is None or comunas_geo.crs.to_epsg() != 4326:
+            comunas_geo = comunas_geo.to_crs(epsg=4326)
 
-        # Mapa de nombre de región a region_id
-        REGION_IDS = {
-            "tarapaca": "01", "antofagasta": "02", "atacama": "03",
-            "coquimbo": "04", "valparaiso": "05", "metropolitana": "13",
-            "ohiggins": "06", "maule": "07", "biobio": "08", "nuble": "16",
-            "araucania": "09", "los rios": "14", "los lagos": "10",
-            "aysen": "11", "magallanes": "12",
-        }
+        # Detectar columna CUT en el GeoJSON
+        cut_col = next(
+            (c for c in ["codigo_comuna", "cod_comuna", "CUT", "cut"]
+             if c in comunas_geo.columns),
+            None
+        )
+        if not cut_col:
+            log.warning(f"  Columna CUT no encontrada. Columnas: {list(comunas_geo.columns[:8])}")
+            return pd.DataFrame(columns=["cut", "macrozona", "tipologia", "codigo_tipologia"])
 
-        factors = {}
-        for _, row in df.iterrows():
-            region_name = clean_name(str(row.get(region_col, "")))
-            region_id = REGION_IDS.get(region_name)
-            if not region_id:
-                continue
-            val_base = pd.to_numeric(row.get(year_cols["base"], 0), errors="coerce") or 0
-            val_rec  = pd.to_numeric(row.get(year_cols["reciente"], 0), errors="coerce") or 0
-            if val_base > 0:
-                factors[region_id] = val_rec / val_base
-            else:
-                factors[region_id] = 1.0
+        comunas_geo["cut"] = comunas_geo[cut_col].astype(str).str.zfill(5)
 
-        log.info(f"  Factores de ajuste por región: {factors}")
-        return factors
+        # Usar centroides para el join
+        centroides = comunas_geo[["cut", "geometry"]].copy()
+        centroides["geometry"] = centroides.geometry.centroid
 
-    except Exception as e:
-        log.warning(f"  Error procesando ODEPA: {e}. Usando factor = 1.0")
-        return {}
+        # Join espacial: centroide → tipología
+        joined = gpd.sjoin(
+            centroides, atlas[["MACROZONA", "TIPOLOGIA", "CODIGO", "geometry"]],
+            how="left", predicate="within"
+        )
+
+        result = (
+            joined[["cut", "MACROZONA", "TIPOLOGIA", "CODIGO"]]
+            .drop_duplicates("cut")
+            .rename(columns={
+                "MACROZONA": "macrozona",
+                "TIPOLOGIA": "tipologia",
+                "CODIGO":    "codigo_tipologia",
+            })
+        )
+
+        matched = result["macrozona"].notna().sum()
+        log.info(f"  Tipología asignada a {matched}/{len(result)} comunas")
+        return result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 5: Merge de todas las fuentes
+# PASO 6 — Merge de todas las fuentes
 # ─────────────────────────────────────────────────────────────────────────────
 
-def merge_all_sources(
-    lookup:          pd.DataFrame,
-    catastro:        pd.DataFrame,
-    maquinaria:      pd.DataFrame,
-    explotaciones:   pd.DataFrame,
-    cultivos:        pd.DataFrame,
-    odepa_factores:  dict,
+def merge_all(
+    lookup:       pd.DataFrame,
+    superficie:   pd.DataFrame,
+    diversidad:   pd.DataFrame,
+    catastro_25:  pd.DataFrame,
+    tipologia:    pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    Une todas las fuentes sobre la tabla maestra de 346 comunas.
-    Comunas sin datos en alguna fuente reciben 0 (no se descartan).
-    """
-    log.info("PASO 5 — Merging fuentes …")
+    log.info("PASO 6 — Merging fuentes …")
 
     df = lookup.copy()
 
-    for src, src_df in [
-        ("catastro",      catastro),
-        ("maquinaria",    maquinaria),
-        ("explotaciones", explotaciones),
-        ("cultivos",      cultivos),
+    for label, src in [
+        ("xlsx superficie",     superficie),
+        ("diversidad especies", diversidad),
+        ("catastro 2025",       catastro_25),
+        ("tipología rural",     tipologia),
     ]:
-        df = df.merge(src_df, on="cut", how="left")
-        log.info(f"  Merge {src}: {src_df.shape[0]} filas → {df.shape[0]} total")
+        before = len(df)
+        df = df.merge(src, on="cut", how="left")
+        log.info(f"  Merge {label}: {len(src)} filas → {before} → {len(df)}")
 
-    # ── Aplicar factor de ajuste ODEPA a ha_cereales ─────────────────────────
-    if odepa_factores:
-        df["factor_ajuste"] = df["region_id"].map(odepa_factores).fillna(1.0)
-        df["ha_cereales_oleaginosas"] = (
-            df["ha_cereales_oleaginosas"].fillna(0) * df["factor_ajuste"]
+    # ── Resolver ha_frutales_riego: usar Catastro 2025 si disponible, sino xlsx ──
+    if "ha_frutales_riego_2025" in df.columns:
+        df["ha_frutales_riego"] = np.where(
+            df["ha_frutales_riego_2025"].notna() & (df["ha_frutales_riego_2025"] > 0),
+            df["ha_frutales_riego_2025"],
+            df.get("ha_frutales_riego", 0),
         )
-    else:
-        df["ha_cereales_oleaginosas"] = df["ha_cereales_oleaginosas"].fillna(0)
-        df["factor_ajuste"] = 1.0
+        # Diversidad: usar Catastro 2025 si supera al Censo
+        if "diversidad_esp_2025" in df.columns:
+            df["diversidad_especies"] = df[["diversidad_especies", "diversidad_esp_2025"]].max(axis=1)
 
-    # ── Rellenar NaN con 0 ────────────────────────────────────────────────────
-    numeric_cols = [
-        "ha_frutales_total", "ha_frutales_riego", "diversidad_especies",
-        "total_tractores", "ha_agricola_total",
-        "pct_predios_grandes", "num_explot_medianas", "total_explotaciones",
-        "ha_cereales_oleaginosas",
+    # ── Rellenar NaN ────────────────────────────────────────────────────────────
+    VARS_SCORE = [
+        "ha_frutales_riego", "ha_cereales_total", "ha_vinas_riego",
+        "diversidad_especies", "ha_forrajeras_total",
     ]
-    for col in numeric_cols:
+    VARS_AUX = [
+        "ha_frutales_total", "ha_vinas_total", "indice_mecanizable",
+    ]
+    for col in VARS_SCORE + VARS_AUX:
         if col not in df.columns:
             df[col] = 0.0
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-
-    # ── Variable derivada: tractores por 100 ha agrícola ─────────────────────
-    df["tractores_x100ha"] = np.where(
-        df["ha_agricola_total"] > 0,
-        df["total_tractores"] / df["ha_agricola_total"] * 100,
-        df["total_tractores"] / 100.0  # fallback si no hay dato de superficie
-    )
-
-    # Suelos Agrológicos: placeholder 0.0 (se completa si hay datos)
-    if "ha_suelo_clase_I_II" not in df.columns:
-        df["ha_suelo_clase_I_II"] = 0.0
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
     log.info(f"  Merge final: {len(df)} comunas | {len(df.columns)} columnas")
     return df
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 6: Calcular scores
+# PASO 7 — Calcular scores y quintiles
 # ─────────────────────────────────────────────────────────────────────────────
 
 def compute_scores(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    1. Normaliza cada variable (min-max con clip al percentil 98)
-    2. Aplica pesos para Score A (grandes) y Score B (INDAP)
-    3. Score combinado = 0.6 × A + 0.4 × B (ajustable con ventas reales)
-    4. Multiplica por 100 → escala 0-100
-    5. Asigna quintiles nacionales
-    """
-    log.info("PASO 6 — Calculando scores …")
+    log.info("PASO 7 — Calculando scores …")
 
     VARIABLES = list(PESOS_GRANDES.keys())
-
-    # Normalización
-    norm = pd.DataFrame({"cut": df["cut"]})
+    norm = {}
     for var in VARIABLES:
-        if var in df.columns:
-            norm[f"norm_{var}"] = normalize_score(df[var])
-        else:
-            norm[f"norm_{var}"] = 0.0
-            log.warning(f"  Variable '{var}' no disponible → 0")
+        norm[var] = normalize_score(df[var]) if var in df.columns else pd.Series(0.0, index=df.index)
 
-    # Score grandes
-    df["score_grandes"] = sum(
-        PESOS_GRANDES[var] * norm[f"norm_{var}"] for var in VARIABLES
-    ) * 100
+    df["score_grandes"]  = sum(PESOS_GRANDES[v] * norm[v] for v in VARIABLES) * 100
+    df["score_indap"]    = sum(PESOS_INDAP[v]   * norm[v] for v in VARIABLES) * 100
+    df["score_combined"] = 0.60 * df["score_grandes"] + 0.40 * df["score_indap"]
 
-    # Score INDAP
-    df["score_indap"] = sum(
-        PESOS_INDAP[var] * norm[f"norm_{var}"] for var in VARIABLES
-    ) * 100
-
-    # Score combinado (pesos ajustables con ventas → tabla agroplanet_model_config)
-    df["score_combined"] = 0.6 * df["score_grandes"] + 0.4 * df["score_indap"]
-
-    # Quintiles
     for score_col, quintil_col in [
         ("score_grandes",  "quintil_grandes"),
         ("score_indap",    "quintil_indap"),
@@ -833,7 +619,8 @@ def compute_scores(df: pd.DataFrame) -> pd.DataFrame:
         df[quintil_col] = assign_quintiles(df[score_col])
 
     log.info(
-        f"  Score combined — media: {df['score_combined'].mean():.1f} | "
+        f"  Score combined — "
+        f"media: {df['score_combined'].mean():.1f} | "
         f"max: {df['score_combined'].max():.1f} | "
         f"min: {df['score_combined'].min():.1f}"
     )
@@ -841,101 +628,86 @@ def compute_scores(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 7: Validar output
+# PASO 8 — Validar
 # ─────────────────────────────────────────────────────────────────────────────
 
-def validate_output(df: pd.DataFrame, lookup: pd.DataFrame) -> None:
-    log.info("PASO 7 — Validación …")
+def validate(df: pd.DataFrame, lookup: pd.DataFrame) -> None:
+    log.info("PASO 8 — Validación …")
+    log.info(f"  Comunas en output: {len(df)} (esperadas: 346)")
+    if len(df) != 346:
+        missing = set(lookup["nombre"]) - set(
+            lookup.merge(df[["cut"]], on="cut", how="inner")["nombre"]
+        )
+        log.warning(f"  Comunas sin score: {sorted(missing)[:10]}")
 
-    # 346 comunas esperadas
-    total = len(df)
-    log.info(f"  Comunas en output: {total} (esperadas: 346)")
-    if total != 346:
-        log.warning(f"  ⚠️  Diferencia de {abs(total - 346)} comunas vs total esperado")
+    # Variables con demasiados ceros
+    for var in PESOS_GRANDES:
+        pct_zero = (df.get(var, pd.Series(0)) == 0).mean() * 100
+        if pct_zero > 70:
+            log.warning(f"  '{var}': {pct_zero:.0f}% de comunas en 0 — revisar fuente")
 
-    # CUT codes faltantes
-    missing_cuts = set(lookup["cut"]) - set(df["cut"])
-    if missing_cuts:
-        missing_names = lookup[lookup["cut"].isin(missing_cuts)]["nombre"].tolist()
-        log.warning(f"  Comunas sin score: {missing_names[:10]}")
+    # Top 30
+    top = df.nlargest(30, "score_combined")[
+        ["nombre", "region", "score_combined", "quintil_combined",
+         "score_grandes", "score_indap"]
+    ]
+    log.info(f"\n  TOP 30 COMUNAS:\n{top.to_string(index=False)}\n")
 
-    # Variables con alto porcentaje de ceros (posible problema de datos)
-    for var in PESOS_GRANDES.keys():
-        if var in df.columns:
-            pct_zero = (df[var] == 0).mean() * 100
-            if pct_zero > 60:
-                log.warning(
-                    f"  '{var}': {pct_zero:.0f}% de comunas con valor 0 "
-                    f"(revisar si Censo 2021 fue cargado)"
-                )
+    # Distribución quintiles
+    log.info(f"  Quintiles combined: {df['quintil_combined'].value_counts().sort_index().to_dict()}")
 
-    # Top 20 comunas
-    top20 = (
-        df.nlargest(20, "score_combined")[["nombre", "region", "score_combined", "quintil_combined"]]
-        .to_string(index=False)
-    )
-    log.info(f"\n  TOP 20 COMUNAS:\n{top20}\n")
-
-    # Distribución de quintiles
-    dist = df["quintil_combined"].value_counts().sort_index()
-    log.info(f"  Quintiles: {dist.to_dict()}")
+    # Por región (top 5)
+    reg = df.groupby("region")["score_combined"].mean().sort_values(ascending=False)
+    log.info(f"\n  Score promedio por región (top 5):\n{reg.head(5).to_string()}\n")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 8: Guardar output
+# PASO 9 — Guardar CSV
 # ─────────────────────────────────────────────────────────────────────────────
 
 COLUMNAS_SALIDA = [
     "cut", "nombre", "region", "region_id",
     # Variables raw
-    "tractores_x100ha", "ha_frutales_total", "ha_frutales_riego",
-    "ha_cereales_oleaginosas", "pct_predios_grandes", "num_explot_medianas",
-    "diversidad_especies", "ha_suelo_clase_I_II",
-    # Auxiliares
-    "total_tractores", "total_explotaciones", "ha_agricola_total", "especie_dominante",
+    "ha_frutales_riego", "ha_frutales_total",
+    "ha_cereales_total", "ha_vinas_riego", "ha_vinas_total",
+    "ha_forrajeras_total", "diversidad_especies", "indice_mecanizable",
     # Scores
     "score_grandes", "score_indap", "score_combined",
     # Quintiles
     "quintil_grandes", "quintil_indap", "quintil_combined",
+    # Tipología
+    "macrozona", "tipologia", "codigo_tipologia",
 ]
 
 
 def save_output(df: pd.DataFrame) -> Path:
-    # Ordenar columnas de salida (ignorar las que no existan)
     cols = [c for c in COLUMNAS_SALIDA if c in df.columns]
-    out = df[cols].sort_values("score_combined", ascending=False)
-
-    out_path = OUTPUT_DIR / "agroplanet_comunas.csv"
-    out.to_csv(out_path, index=False, encoding="utf-8")
-    log.info(f"PASO 8 — Output guardado: {out_path} ({out_path.stat().st_size // 1024} KB)")
-    return out_path
+    out  = df[cols].sort_values("score_combined", ascending=False)
+    path = OUTPUT_DIR / "agroplanet_comunas.csv"
+    out.to_csv(path, index=False, encoding="utf-8")
+    log.info(f"PASO 9 — CSV guardado: {path.name} ({path.stat().st_size // 1024} KB)")
+    return path
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 9: Subir a Supabase
+# PASO 10 — Subir a Supabase
 # ─────────────────────────────────────────────────────────────────────────────
 
-def upload_to_supabase(df: pd.DataFrame) -> None:
-    """
-    Carga la tabla en Supabase usando upsert por CUT code.
-    Requiere SUPABASE_URL y SUPABASE_SERVICE_KEY como variables de entorno.
-    La SUPABASE_KEY debe ser la service_role key (no la anon key).
-    """
+def upload_supabase(df: pd.DataFrame) -> None:
     if not SUPABASE_URL or not SUPABASE_KEY:
-        log.info("PASO 9 — Supabase: credenciales no configuradas, saltando carga.")
         log.info(
-            "  Para cargar, ejecutar:\n"
+            "PASO 10 — Supabase: sin credenciales. Para cargar:\n"
             "  VITE_SUPABASE_URL=https://xxx.supabase.co "
             "SUPABASE_SERVICE_KEY=eyJ... python agroplanet_etl.py"
         )
         return
 
-    log.info("PASO 9 — Subiendo a Supabase …")
+    log.info("PASO 10 — Subiendo a Supabase …")
     try:
         from supabase import create_client
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-        cols = [c for c in COLUMNAS_SALIDA if c in df.columns]
+        cols    = [c for c in COLUMNAS_SALIDA if c in df.columns]
         records = (
             df[cols]
             .where(pd.notna(df[cols]), other=None)
@@ -943,19 +715,16 @@ def upload_to_supabase(df: pd.DataFrame) -> None:
             .to_dict(orient="records")
         )
 
-        # Upsert en lotes de 100
-        batch_size = 100
-        for i in range(0, len(records), batch_size):
-            batch = records[i : i + batch_size]
+        for i in range(0, len(records), 100):
+            batch = records[i: i + 100]
             client.table("agroplanet_comunas").upsert(batch, on_conflict="cut").execute()
-            log.info(f"  Lote {i // batch_size + 1}/{-(-len(records) // batch_size)} cargado")
 
-        log.info(f"  ✓ {len(records)} comunas cargadas en Supabase")
+        log.info(f"  ✓ {len(records)} comunas cargadas (versión {MODEL_VERSION})")
 
     except ImportError:
-        log.error("  supabase no instalado. Ejecutar: pip install supabase")
+        log.error("  pip install supabase")
     except Exception as e:
-        log.error(f"  Error Supabase: {e}")
+        log.error(f"  Error: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -964,43 +733,26 @@ def upload_to_supabase(df: pd.DataFrame) -> None:
 
 def main():
     log.info("═" * 70)
-    log.info("  AGROPLANET ETL — Score Comunal Nacional v1.0")
+    log.info(f"  AGROPLANET ETL — Score Comunal Nacional {MODEL_VERSION}")
     log.info("═" * 70)
 
-    # 1. Tabla maestra de CUT codes
-    lookup = load_cut_lookup()
-    name_to_cut = build_name_to_cut(lookup)
+    lookup       = load_cut_lookup()
+    name_to_cut  = build_name_to_cut(lookup)
 
-    # 2. Catastro Frutícola (descarga automática)
-    catastro = load_catastro_fruticola(name_to_cut)
+    superficie   = load_xlsx_superficie(name_to_cut)
+    diversidad   = load_diversidad_especies()
+    catastro_25  = load_catastro_fruticola_2025(name_to_cut)
+    tipologia    = load_tipologia_rural()
 
-    # 3. Censo Agropecuario 2021 (requiere descarga manual → ver instrucciones)
-    maquinaria    = load_censo_maquinaria(name_to_cut)
-    explotaciones = load_censo_explotaciones(name_to_cut)
-    cultivos      = load_censo_cultivos(name_to_cut)
-
-    # 4. Factor de ajuste ODEPA (descarga automática, no crítico)
-    odepa_factores = load_odepa_factor_ajuste()
-
-    # 5. Merge
-    df = merge_all_sources(
-        lookup, catastro, maquinaria, explotaciones, cultivos, odepa_factores
-    )
-
-    # 6. Scores
+    df = merge_all(lookup, superficie, diversidad, catastro_25, tipologia)
     df = compute_scores(df)
 
-    # 7. Validar
-    validate_output(df, lookup)
-
-    # 8. Guardar
+    validate(df, lookup)
     save_output(df)
-
-    # 9. Supabase (solo si hay credenciales)
-    upload_to_supabase(df)
+    upload_supabase(df)
 
     log.info("═" * 70)
-    log.info("  ETL completado exitosamente")
+    log.info("  ETL completado. Output: etl/output/agroplanet_comunas.csv")
     log.info("═" * 70)
 
 
