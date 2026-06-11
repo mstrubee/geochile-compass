@@ -40,6 +40,8 @@ import { AGRO_IS_SCORE } from "@/components/map/AgroplanetComunasLayer";
 import { AgroplanetGapPanel } from "@/components/map/AgroplanetGapPanel";
 import { useAgroplanetData }        from "@/hooks/useAgroplanetData";
 import { useAgroplanetCompetitors } from "@/hooks/useAgroplanetCompetitors";
+import { useBrandStyles, getBrandKey } from "@/hooks/useBrandStyles";
+import { BrandStyleEditorDialog }   from "@/components/panels/BrandStyleEditorDialog";
 import type { CrimeType, RiskFilter } from "@/components/map/CrimeHeatLayer";
 import { CATEGORY_META } from "@/components/map/CommercialHeatLayer";
 import type { CommercialCategory } from "@/components/map/CommercialHeatLayer";
@@ -229,10 +231,9 @@ const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "agroplanet_competitors", color: "bg-orange-500", name: "Competidores maquinaria",          count: 58,  sub: "John Deere · New Holland · Case · OSM" },
 ];
 
-/** Wrapper auto-fetching para el gap panel — llama hooks en el nivel correcto */
-function AgroplanetGapPanelConnected() {
+/** Wrapper para el gap panel — recibe compData del Sidebar para evitar doble fetch */
+function AgroplanetGapPanelConnected({ compData }: { compData: import("@/hooks/useAgroplanetCompetitors").AgroplanetCompetitor[] }) {
   const { data: comunasData } = useAgroplanetData(true);
-  const { data: compData }    = useAgroplanetCompetitors(true);
   return (
     <AgroplanetGapPanel
       comunas={comunasData}
@@ -730,6 +731,23 @@ export const Sidebar = ({
   const [busy, setBusy] = useState(false);
   const [osmText, setOsmText] = useState("");
   const [osmLoading, setOsmLoading] = useState(false);
+
+  // ── Competidores maquinaria — datos y estilos por marca ────────────────────
+  const { data: compData } = useAgroplanetCompetitors(layers.agroplanet_competitors ?? false);
+  const { getStyle, setBrandStyle, resetBrandStyle } = useBrandStyles();
+  const [editingBrand, setEditingBrand] = useState<string | null>(null);
+
+  const brandGroups = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of compData) {
+      const brand = getBrandKey(c);
+      counts.set(brand, (counts.get(brand) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([brand, count]) => ({ brand, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [compData]);
+
   // Selección múltiple de capas de archivo (sección "Archivos")
   const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(new Set());
   const toggleLayerSelected = (id: string) =>
@@ -1625,9 +1643,68 @@ export const Sidebar = ({
               )}
             </div>
           )}
+          {/* ── Competidores: lista por marca con estilos editables ─────── */}
+          {layers.agroplanet_competitors && brandGroups.length > 0 && (
+            <div className="mt-2 rounded-lg bg-surface-2/40 p-2 space-y-0.5">
+              <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+                Por marca <span className="normal-case font-normal">(clic derecho para editar)</span>
+              </div>
+              {brandGroups.map(({ brand, count }) => {
+                const style = getStyle(brand);
+                return (
+                  <ContextMenu key={brand}>
+                    <ContextMenuTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setBrandStyle(brand, { visible: !style.visible })}
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
+                        style={{ opacity: style.visible ? 1 : 0.42 }}
+                      >
+                        {/* Color dot */}
+                        <span
+                          className="h-3 w-3 flex-shrink-0 rounded-full border border-white/30"
+                          style={{ backgroundColor: style.color, boxShadow: style.visible ? `0 0 0 1.5px ${style.color}55` : "none" }}
+                        />
+                        {/* Icon preview */}
+                        {style.icon && !style.icon.startsWith("http") && !style.icon.startsWith("data:") && !style.icon.startsWith("/") && (
+                          <span className="flex-shrink-0 text-[12px] leading-none">{style.icon}</span>
+                        )}
+                        <span className={["flex-1 truncate text-[11px]", style.visible ? "text-foreground" : "text-muted-foreground"].join(" ")}>
+                          {brand}
+                        </span>
+                        <span className="font-mono text-[10px] text-text-muted">{count}</span>
+                        <div
+                          className={["relative h-[18px] w-[30px] flex-shrink-0 rounded-full transition-colors", style.visible ? "bg-brand-green" : "bg-surface-3"].join(" ")}
+                        >
+                          <span className={["absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow-apple-sm transition-all", style.visible ? "left-[14px]" : "left-[2px]"].join(" ")} />
+                        </div>
+                      </button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="z-[1200] w-52">
+                      <ContextMenuItem onSelect={() => setEditingBrand(brand)}>
+                        ✏️ Editar estilo (color, ícono, tamaño)
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem onSelect={() => setBrandStyle(brand, { visible: !style.visible })}>
+                        {style.visible ? "🙈 Ocultar en mapa" : "👁 Mostrar en mapa"}
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onSelect={() => resetBrandStyle(brand)}
+                        className="text-muted-foreground"
+                      >
+                        ↩ Restaurar estilo por defecto
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                );
+              })}
+            </div>
+          )}
+
           {/* ── Gap Analysis Panel (requiere ambas capas activas) ──────── */}
           {(layers.agroplanet && layers.agroplanet_competitors) && (
-            <AgroplanetGapPanelConnected />
+            <AgroplanetGapPanelConnected compData={compData} />
           )}
           {layers.communesGeo && (
             <div className="mt-2 rounded-lg bg-surface-2/40 p-2">
@@ -2897,6 +2974,15 @@ const CollapsibleCustomLayers = ({ isAdmin = false }: { isAdmin?: boolean }) => 
           <TerritorialGroupsSection isAdmin={isAdmin} />
         </>
       )}
+
+      {/* ── Editor de estilo por marca (abre desde context menu) ─────── */}
+      <BrandStyleEditorDialog
+        brand={editingBrand}
+        currentStyle={editingBrand ? getStyle(editingBrand) : null}
+        onSave={(brand, style) => setBrandStyle(brand, style)}
+        onReset={(brand) => resetBrandStyle(brand)}
+        onClose={() => setEditingBrand(null)}
+      />
     </div>
   );
 };
