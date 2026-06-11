@@ -514,7 +514,7 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-10 text-[13px] text-muted-foreground">
+                    <td colSpan={7} className="text-center py-10 text-[13px] text-muted-foreground">
                       {search ? "Sin resultados para esa búsqueda" : "Catálogo vacío"}
                     </td>
                   </tr>
