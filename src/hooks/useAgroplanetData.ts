@@ -50,10 +50,28 @@ export function useAgroplanetData(enabled: boolean): UseAgroplanetDataReturn {
           setError(err.message);
         } else {
           const m = new Map<string, AgroplanetComuna>();
-          for (const r of rows ?? []) {
+          for (const r of (rows ?? []) as unknown as Array<Partial<AgroplanetComuna>>) {
             // Normalizar CUT a 5 dígitos con ceros a la izquierda
             const cut = String(r.cut).padStart(5, "0");
-            m.set(cut, { ...r, cut } as AgroplanetComuna);
+            m.set(cut, {
+              cut,
+              nombre: r.nombre ?? "",
+              region: r.region ?? "",
+              region_id: r.region_id ?? "",
+              score_combined: r.score_combined ?? 0,
+              score_grandes: r.score_grandes ?? 0,
+              score_indap: r.score_indap ?? 0,
+              quintil_combined: r.quintil_combined ?? 0,
+              quintil_grandes: r.quintil_grandes ?? 0,
+              quintil_indap: r.quintil_indap ?? 0,
+              ha_frutales_riego: r.ha_frutales_riego ?? 0,
+              ha_cereales_total: r.ha_cereales_total ?? 0,
+              ha_vinas_riego: r.ha_vinas_riego ?? 0,
+              ha_forrajeras_total: r.ha_forrajeras_total ?? 0,
+              diversidad_especies: r.diversidad_especies ?? 0,
+              macrozona: r.macrozona ?? null,
+              tipologia: r.tipologia ?? null,
+            });
           }
           setData(m);
         }

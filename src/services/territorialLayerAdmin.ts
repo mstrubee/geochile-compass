@@ -6,6 +6,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { clearTerritorialFeaturesCache } from "@/hooks/useTerritorialLayers";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -124,8 +125,8 @@ export const replaceFeaturesFromCsv = async (
       name:     r.name || null,
       lat:      r.lat,
       lng:      r.lng,
-      geometry: { type: "Point", coordinates: [r.lng, r.lat] },
-      properties: r.properties,
+      geometry: { type: "Point", coordinates: [r.lng, r.lat] } as Json,
+      properties: r.properties as unknown as Json,
     }));
     const { error: insErr } = await supabase
       .from("territorial_features")
