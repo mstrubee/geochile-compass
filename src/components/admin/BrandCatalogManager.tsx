@@ -507,6 +507,7 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
                   <th className="px-2 py-2 text-left font-medium">Categoría</th>
                   <th className="px-2 py-2 text-center font-medium">Icon</th>
                   <th className="px-2 py-2 text-left font-medium">Color</th>
+                  <th className="px-2 py-2 text-center font-medium">Logo</th>
                   <th className="px-4 py-2 text-left font-medium">Acciones</th>
                 </tr>
               </thead>
