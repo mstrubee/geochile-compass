@@ -52,9 +52,9 @@ export function useBrandCatalog(categoriaFilter?: string | null) {
       .from("brand_catalog")
       .select("*")
       .order("marca_estandar")
-      .order("raw_name");
+      .order("raw_name") as any;
 
-    if (categoriaFilter) q = (q as ReturnType<typeof q.eq>).eq("categoria", categoriaFilter);
+    if (categoriaFilter) q = q.eq("categoria", categoriaFilter);
 
     const { data, error: err } = await q;
     if (err) setError(err.message);
