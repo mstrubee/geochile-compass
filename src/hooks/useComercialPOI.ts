@@ -151,9 +151,10 @@ export function useComercialMarcas(
     setLoading(true);
 
     // Agregar en la DB para no traer miles de registros al frontend
-    supabase
-      .rpc("fn_participacion_marcas", { p_categoria: categoria })
-      .then(({ data, error }) => {
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .rpc("fn_participacion_marcas", { p_categoria: categoria });
         if (cancelled) return;
         if (error) { console.error(error); return; }
         setMarcas(
@@ -161,8 +162,10 @@ export function useComercialMarcas(
             (r) => ({ marca_estandar: r.marca_estandar, n: r.total_locales }),
           ),
         );
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
 
     return () => { cancelled = true; };
   }, [enabled, categoria]);
