@@ -1,0 +1,10 @@
+ALTER VIEW public.v_supermercados       SET (security_invoker = true);
+ALTER VIEW public.v_farmacias           SET (security_invoker = true);
+ALTER VIEW public.v_combustibles        SET (security_invoker = true);
+ALTER VIEW public.v_bancos              SET (security_invoker = true);
+ALTER VIEW public.v_retail              SET (security_invoker = true);
+ALTER VIEW public.v_mejoramiento_hogar  SET (security_invoker = true);
+ALTER VIEW public.v_restaurantes        SET (security_invoker = true);
+ALTER VIEW public.v_conveniencias       SET (security_invoker = true);
+ALTER VIEW public.v_centros_comerciales SET (security_invoker = true);
+ALTER VIEW public.v_resumen_comercial   SET (security_invoker = true);
