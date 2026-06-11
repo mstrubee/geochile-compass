@@ -1439,6 +1439,15 @@ const Index = () => {
             layers={layers}
             agroplanetScoreMode={agroplanetScoreMode}
             onAgroplanetScoreModeChange={setAgroplanetScoreMode}
+            chileCommunesVariable={chileCommunesVariable}
+            onChileCommunesVariableChange={setChileCommunesVariable}
+            gseVariable={gseVariable}
+            onGseVariableChange={setGseVariable}
+            gseCount={gseData?.features.length ?? 0}
+            activeCommercialCats={activeCommercialCats}
+            onCommercialToggle={handleCommercialToggle}
+            gastoView={gastoView}
+            onGastoViewChange={setGastoView}
           />
 
           {/* Mode hint */}

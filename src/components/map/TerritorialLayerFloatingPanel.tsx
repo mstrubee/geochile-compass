@@ -1,20 +1,18 @@
 /**
  * TerritorialLayerFloatingPanel
  * ─────────────────────────────
- * Panel flotante en la esquina inferior izquierda del mapa.
- * Se activa cuando hay capas territoriales con controles asociados
- * (Agroplanet, Competidores) y desaparece al apagarlas.
- * Colapsable con el mismo patrón que AnalysisPanel.
+ * Panel flotante (esquina inferior izquierda del mapa) para todas las capas
+ * que necesitan controles secundarios: Comunas de Chile, GSE por manzana,
+ * Atractores comerciales, Gasto endógeno, Agroplanet y Competidores.
  *
- * Mejoras UX:
- * - Cuerpo con max-height + scroll para listas largas.
- * - Buscador por nombre en la sección de competidores (y cualquier
- *   sección futura que lo implemente).
+ * Colapsable · scroll automático · búsqueda en sección Competidores.
  */
 
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import type { LayerState } from "@/types/layers";
+
+// ── Agroplanet ────────────────────────────────────────────────────────────────
 import type { AgroplanetScoreMode } from "@/components/map/AgroplanetComunasLayer";
 import { AGRO_IS_SCORE } from "@/components/map/AgroplanetComunasLayer";
 import { useAgroplanetCompetitors } from "@/hooks/useAgroplanetCompetitors";
@@ -28,15 +26,39 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 
-// ── Props ────────────────────────────────────────────────────────────────────
+// ── Comunas de Chile ──────────────────────────────────────────────────────────
+import { INE_VARIABLE_LABEL, type IneVariable } from "@/utils/ineScales";
+
+// ── GSE por manzana ───────────────────────────────────────────────────────────
+import { GSE_VARIABLE_LABEL } from "@/utils/gseScales";
+import type { GseVariable } from "@/types/gse";
+
+// ── Atractores comerciales ────────────────────────────────────────────────────
+import { CATEGORY_META, type CommercialCategory } from "@/components/map/CommercialHeatLayer";
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   layers: LayerState;
+  // Agroplanet
   agroplanetScoreMode: AgroplanetScoreMode;
   onAgroplanetScoreModeChange: (m: AgroplanetScoreMode) => void;
+  // Comunas de Chile
+  chileCommunesVariable: IneVariable;
+  onChileCommunesVariableChange: (v: IneVariable) => void;
+  // GSE por manzana
+  gseVariable: GseVariable;
+  onGseVariableChange: (v: GseVariable) => void;
+  gseCount: number;
+  // Atractores comerciales
+  activeCommercialCats: Set<CommercialCategory>;
+  onCommercialToggle: (c: CommercialCategory) => void;
+  // Gasto endógeno
+  gastoView: "heat" | "manzana";
+  onGastoViewChange: (v: "heat" | "manzana") => void;
 }
 
-// ── IOSSwitch compacto ────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const IOSSwitch = ({ on }: { on: boolean }) => (
   <div
@@ -54,12 +76,60 @@ const IOSSwitch = ({ on }: { on: boolean }) => (
   </div>
 );
 
+/** Botones de selección de variable (segmented control). */
+const VarSelector = <T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) => (
+  <div className="flex flex-wrap gap-0.5 rounded-md bg-surface-2/60 p-0.5">
+    {options.map(({ key, label }) => (
+      <button
+        key={key}
+        type="button"
+        onClick={() => onChange(key)}
+        className={[
+          "rounded px-1.5 py-1 text-[10px] font-medium transition-all",
+          value === key
+            ? "bg-surface-3 text-foreground shadow-apple-sm"
+            : "text-muted-foreground hover:text-foreground",
+        ].join(" ")}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+);
+
+/** Título de sección dentro del panel. */
+const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+    {children}
+  </div>
+);
+
+/** Divisor entre secciones. */
+const Divider = () => <div className="border-t border-border/35" />;
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export const TerritorialLayerFloatingPanel = ({
   layers,
   agroplanetScoreMode,
   onAgroplanetScoreModeChange,
+  chileCommunesVariable,
+  onChileCommunesVariableChange,
+  gseVariable,
+  onGseVariableChange,
+  gseCount,
+  activeCommercialCats,
+  onCommercialToggle,
+  gastoView,
+  onGastoViewChange,
 }: Props) => {
   const [collapsed, setCollapsed]       = useState(false);
   const [editingBrand, setEditingBrand] = useState<string | null>(null);
@@ -70,7 +140,6 @@ export const TerritorialLayerFloatingPanel = ({
     layers.agroplanet_competitors ?? false,
   );
 
-  // Todas las marcas, ordenadas por cantidad descendente
   const brandGroups = useMemo(() => {
     const counts = new Map<string, number>();
     for (const c of compData) {
@@ -82,29 +151,45 @@ export const TerritorialLayerFloatingPanel = ({
       .sort((a, b) => b.count - a.count);
   }, [compData]);
 
-  // Marcas filtradas por búsqueda
   const filteredBrands = useMemo(() => {
     const q = brandSearch.trim().toLowerCase();
     if (!q) return brandGroups;
     return brandGroups.filter(({ brand }) => brand.toLowerCase().includes(q));
   }, [brandGroups, brandSearch]);
 
+  // ── Qué secciones están activas ────────────────────────────────────────────
+  const hasComunas     = !!layers.communesGeo;
+  const hasGse         = !!layers.nse;
+  const hasComercial   = !!layers.commercial;
+  const hasGasto       = !!layers.gasto;
   const hasAgroplanet  = !!layers.agroplanet;
   const hasCompetitors = !!layers.agroplanet_competitors;
 
   // Nada que mostrar → no renderizar
-  if (!hasAgroplanet && !hasCompetitors) return null;
+  if (!hasComunas && !hasGse && !hasComercial && !hasGasto && !hasAgroplanet && !hasCompetitors) {
+    return null;
+  }
+
+  // ── Título dinámico ────────────────────────────────────────────────────────
+  const SECTION_META = [
+    { active: hasComunas,     emoji: "🗺️",  name: "Comunas de Chile"        },
+    { active: hasGse,         emoji: "📊",  name: "GSE por manzana"          },
+    { active: hasComercial,   emoji: "🏪",  name: "Atractores comerciales"   },
+    { active: hasGasto,       emoji: "💸",  name: "Gasto endógeno"           },
+    { active: hasAgroplanet,  emoji: "🌱",  name: "Agroplanet"               },
+    { active: hasCompetitors, emoji: "🚜",  name: "Competidores maquinaria"  },
+  ].filter((s) => s.active);
 
   const panelTitle =
-    hasAgroplanet && hasCompetitors
-      ? "🌱 Agroplanet · 🚜 Competidores"
-      : hasAgroplanet
-      ? "🌱 Agroplanet"
-      : "🚜 Competidores maquinaria";
+    SECTION_META.length === 1
+      ? `${SECTION_META[0].emoji} ${SECTION_META[0].name}`
+      : SECTION_META.length === 2
+      ? `${SECTION_META[0].emoji} ${SECTION_META[0].name.split(" ")[0]} · ${SECTION_META[1].emoji} ${SECTION_META[1].name.split(" ")[0]}`
+      : `⚙️ Controles de capas (${SECTION_META.length})`;
 
   return (
     <>
-      {/* ─── Panel flotante ─────────────────────────────────────────────── */}
+      {/* ─── Panel flotante ──────────────────────────────────────────────── */}
       <div className="absolute bottom-10 left-4 z-[550] w-[268px] overflow-hidden rounded-xl border border-border/55 bg-surface/92 shadow-apple backdrop-blur-2xl backdrop-saturate-150">
 
         {/* Header colapsable */}
@@ -121,7 +206,6 @@ export const TerritorialLayerFloatingPanel = ({
           <span className="flex-1 truncate text-[11px] font-semibold text-foreground">
             {panelTitle}
           </span>
-          {/* Contador de marcas visibles */}
           {hasCompetitors && brandGroups.length > 0 && !collapsed && (
             <span className="font-mono text-[9px] text-text-muted">
               {filteredBrands.length}/{brandGroups.length}
@@ -129,22 +213,135 @@ export const TerritorialLayerFloatingPanel = ({
           )}
         </button>
 
-        {/* ── Cuerpo colapsable con scroll ──────────────────────────────── */}
+        {/* ── Cuerpo con scroll ────────────────────────────────────────────── */}
         {!collapsed && (
           <div
             className="border-t border-border/40"
-            style={{ maxHeight: "min(58vh, 420px)", overflowY: "auto" }}
+            style={{ maxHeight: "min(60vh, 440px)", overflowY: "auto" }}
           >
             <div className="px-3 pb-3 pt-2.5 space-y-3">
 
-              {/* ── Bloque Agroplanet ──────────────────────────────────── */}
+              {/* ── 1. Comunas de Chile ────────────────────────────────── */}
+              {hasComunas && (
+                <div className="space-y-1.5">
+                  <SectionLabel>Variable INE · 346 comunas</SectionLabel>
+                  <VarSelector
+                    options={(Object.keys(INE_VARIABLE_LABEL) as IneVariable[]).map((v) => ({
+                      key: v,
+                      label: INE_VARIABLE_LABEL[v],
+                    }))}
+                    value={chileCommunesVariable}
+                    onChange={onChileCommunesVariableChange}
+                  />
+                  <p className="text-[9.5px] leading-relaxed text-text-muted">
+                    Sin CSV INE, solo 52 comunas RM tienen datos. Sube <code>/ine_communes.csv</code> para cobertura nacional.
+                  </p>
+                </div>
+              )}
+
+              {hasComunas && (hasGse || hasComercial || hasGasto || hasAgroplanet || hasCompetitors) && <Divider />}
+
+              {/* ── 2. GSE por manzana ─────────────────────────────────── */}
+              {hasGse && (
+                <div className="space-y-1.5">
+                  <SectionLabel>Variable GSE · {gseCount.toLocaleString("es-CL")} manzanas</SectionLabel>
+                  <VarSelector
+                    options={(Object.keys(GSE_VARIABLE_LABEL) as GseVariable[]).map((v) => ({
+                      key: v,
+                      label: GSE_VARIABLE_LABEL[v],
+                    }))}
+                    value={gseVariable}
+                    onChange={onGseVariableChange}
+                  />
+                  <p className="text-[9.5px] leading-relaxed text-text-muted">
+                    Censo 2012 — comunas sin datos muestran círculo estimado.
+                  </p>
+                </div>
+              )}
+
+              {hasGse && (hasComercial || hasGasto || hasAgroplanet || hasCompetitors) && <Divider />}
+
+              {/* ── 3. Atractores comerciales ───────────────────────────── */}
+              {hasComercial && (
+                <div className="space-y-1">
+                  <SectionLabel>
+                    Categoría{" "}
+                    <span className="normal-case font-normal">(clic para filtrar)</span>
+                  </SectionLabel>
+                  {(Object.keys(CATEGORY_META) as CommercialCategory[]).map((cat) => {
+                    const { icon, label, color } = CATEGORY_META[cat];
+                    const on = activeCommercialCats.has(cat);
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => onCommercialToggle(cat)}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1 transition-all hover:bg-surface-2/60"
+                        style={{ opacity: on ? 1 : 0.35 }}
+                      >
+                        <span className="text-[13px]">{icon}</span>
+                        <span className={["flex-1 text-[11px]", on ? "text-foreground font-medium" : "text-muted-foreground"].join(" ")}>
+                          {label}
+                        </span>
+                        {on
+                          ? <div className="h-2 w-2 flex-shrink-0 rounded-full" style={{ background: color, boxShadow: `0 0 4px ${color}` }} />
+                          : <span className="text-[9px] text-muted-foreground/50">oculto</span>
+                        }
+                      </button>
+                    );
+                  })}
+                  <div className="h-1.5 rounded-full mt-1" style={{ background: "linear-gradient(to right,#1565c0,#00897b,#c0ca33,#e64a19,#b71c1c)" }} />
+                  <div className="flex justify-between text-[9px] text-muted-foreground/60">
+                    <span>Disperso</span><span>Concentrado</span>
+                  </div>
+                </div>
+              )}
+
+              {hasComercial && (hasGasto || hasAgroplanet || hasCompetitors) && <Divider />}
+
+              {/* ── 4. Gasto endógeno hogares ───────────────────────────── */}
+              {hasGasto && (
+                <div className="space-y-2">
+                  <SectionLabel>Vista</SectionLabel>
+                  <div className="flex gap-1 rounded-md bg-surface-2/60 p-0.5">
+                    {([
+                      { key: "heat"    as const, label: "🌡️ Heatmap",  desc: "Comunas ponderadas por hogares × EPF" },
+                      { key: "manzana" as const, label: "🗺️ Manzanas", desc: "Coeficiente EPF por clase GSE"         },
+                    ]).map(({ key, label, desc }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => onGastoViewChange(key)}
+                        title={desc}
+                        className={[
+                          "flex-1 rounded px-2 py-1.5 text-[11px] font-medium transition-all text-center",
+                          gastoView === key
+                            ? "bg-surface-3 text-foreground shadow-apple-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        ].join(" ")}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="h-1.5 rounded-full" style={{ background: "linear-gradient(to right,#fee5d9,#fcae91,#fb6a4a,#de2d26,#a50f15)" }} />
+                  <div className="flex justify-between text-[9px] text-muted-foreground/60">
+                    <span>Bajo gasto</span><span>Alto gasto</span>
+                  </div>
+                  <p className="text-[9.5px] leading-relaxed text-text-muted">
+                    EPF Autoplanet: ABC1 $49k · C2 $25k · C3 $13k · D $4k.
+                  </p>
+                </div>
+              )}
+
+              {hasGasto && (hasAgroplanet || hasCompetitors) && <Divider />}
+
+              {/* ── 5. Agroplanet ──────────────────────────────────────── */}
               {hasAgroplanet && (
                 <div className="space-y-2">
                   {/* Score */}
                   <div>
-                    <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-text-muted">
-                      Score
-                    </div>
+                    <SectionLabel>Score</SectionLabel>
                     <div className="flex gap-1 rounded-md bg-surface-2/60 p-0.5">
                       {([
                         { key: "combined" as const, label: "🌱 Combinado" },
@@ -170,9 +367,7 @@ export const TerritorialLayerFloatingPanel = ({
 
                   {/* Cultivos */}
                   <div>
-                    <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-text-muted">
-                      Cultivos
-                    </div>
+                    <SectionLabel>Cultivos</SectionLabel>
                     <div className="flex flex-wrap gap-1 rounded-md bg-surface-2/60 p-0.5">
                       {([
                         { key: "frutales"   as const, label: "🍇 Frutales"  },
@@ -248,23 +443,17 @@ export const TerritorialLayerFloatingPanel = ({
                 </div>
               )}
 
-              {/* Separador entre secciones */}
-              {hasAgroplanet && hasCompetitors && brandGroups.length > 0 && (
-                <div className="border-t border-border/35" />
-              )}
+              {hasAgroplanet && hasCompetitors && brandGroups.length > 0 && <Divider />}
 
-              {/* ── Bloque Competidores ──────────────────────────────────── */}
+              {/* ── 6. Competidores maquinaria ────────────────────────── */}
               {hasCompetitors && brandGroups.length > 0 && (
                 <div className="space-y-1.5">
-                  {/* Encabezado */}
-                  <div className="text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+                  <SectionLabel>
                     Por marca{" "}
-                    <span className="normal-case font-normal">
-                      (clic derecho para editar)
-                    </span>
-                  </div>
+                    <span className="normal-case font-normal">(clic derecho para editar)</span>
+                  </SectionLabel>
 
-                  {/* Buscador — siempre visible para consistencia */}
+                  {/* Buscador */}
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground/50" />
                     <input
@@ -300,9 +489,7 @@ export const TerritorialLayerFloatingPanel = ({
                             <ContextMenuTrigger asChild>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  setBrandStyle(brand, { visible: !style.visible })
-                                }
+                                onClick={() => setBrandStyle(brand, { visible: !style.visible })}
                                 className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
                                 style={{ opacity: style.visible ? 1 : 0.42 }}
                               >
@@ -310,9 +497,7 @@ export const TerritorialLayerFloatingPanel = ({
                                   className="h-3 w-3 flex-shrink-0 rounded-full border border-white/30"
                                   style={{
                                     backgroundColor: style.color,
-                                    boxShadow: style.visible
-                                      ? `0 0 0 1.5px ${style.color}55`
-                                      : "none",
+                                    boxShadow: style.visible ? `0 0 0 1.5px ${style.color}55` : "none",
                                   }}
                                 />
                                 {style.icon &&
@@ -326,16 +511,12 @@ export const TerritorialLayerFloatingPanel = ({
                                 <span
                                   className={[
                                     "flex-1 truncate text-[11px]",
-                                    style.visible
-                                      ? "text-foreground"
-                                      : "text-muted-foreground",
+                                    style.visible ? "text-foreground" : "text-muted-foreground",
                                   ].join(" ")}
                                 >
                                   {brand}
                                 </span>
-                                <span className="font-mono text-[10px] text-text-muted">
-                                  {count}
-                                </span>
+                                <span className="font-mono text-[10px] text-text-muted">{count}</span>
                                 <IOSSwitch on={style.visible} />
                               </button>
                             </ContextMenuTrigger>
@@ -345,9 +526,7 @@ export const TerritorialLayerFloatingPanel = ({
                               </ContextMenuItem>
                               <ContextMenuSeparator />
                               <ContextMenuItem
-                                onSelect={() =>
-                                  setBrandStyle(brand, { visible: !style.visible })
-                                }
+                                onSelect={() => setBrandStyle(brand, { visible: !style.visible })}
                               >
                                 {style.visible ? "🙈 Ocultar en mapa" : "👁 Mostrar en mapa"}
                               </ContextMenuItem>
@@ -372,7 +551,7 @@ export const TerritorialLayerFloatingPanel = ({
         )}
       </div>
 
-      {/* Editor de estilo por marca (dialog separado del panel) */}
+      {/* Editor de estilo por marca */}
       <BrandStyleEditorDialog
         brand={editingBrand}
         currentStyle={editingBrand ? getStyle(editingBrand) : null}
