@@ -534,6 +534,7 @@ export type Database = {
           created_at: string | null
           icon_emoji: string | null
           id: number
+          logo_url: string | null
           marca_estandar: string
           raw_name: string
           subcategoria: string | null
@@ -545,6 +546,7 @@ export type Database = {
           created_at?: string | null
           icon_emoji?: string | null
           id?: number
+          logo_url?: string | null
           marca_estandar: string
           raw_name: string
           subcategoria?: string | null
@@ -556,9 +558,46 @@ export type Database = {
           created_at?: string | null
           icon_emoji?: string | null
           id?: number
+          logo_url?: string | null
           marca_estandar?: string
           raw_name?: string
           subcategoria?: string | null
+        }
+        Relationships: []
+      }
+      comercial_categorias: {
+        Row: {
+          activo: boolean
+          color_hex: string
+          created_at: string | null
+          icon_emoji: string
+          id: number
+          key: string
+          label_es: string
+          osm_tags: Json | null
+          sort_order: number
+        }
+        Insert: {
+          activo?: boolean
+          color_hex?: string
+          created_at?: string | null
+          icon_emoji?: string
+          id?: number
+          key: string
+          label_es: string
+          osm_tags?: Json | null
+          sort_order?: number
+        }
+        Update: {
+          activo?: boolean
+          color_hex?: string
+          created_at?: string | null
+          icon_emoji?: string
+          id?: number
+          key?: string
+          label_es?: string
+          osm_tags?: Json | null
+          sort_order?: number
         }
         Relationships: []
       }
@@ -2954,10 +2993,9 @@ export type Database = {
       enablelongtransactions: { Args: never; Returns: string }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
       fn_participacion_marcas: {
-        Args: { p_categoria: string; p_region?: string }
+        Args: { p_categoria: string }
         Returns: {
           marca_estandar: string
-          pct_participacion: number
           total_locales: number
         }[]
       }
