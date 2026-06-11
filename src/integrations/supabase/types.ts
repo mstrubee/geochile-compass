@@ -349,9 +349,9 @@ export type Database = {
       }
       agroplanet_comunas: {
         Row: {
+          codigo_tipologia: string | null
           computed_at: string | null
           cut: string
-          codigo_tipologia: string | null
           diversidad_especies: number | null
           ha_cereales_total: number | null
           ha_forrajeras_total: number | null
@@ -374,9 +374,9 @@ export type Database = {
           tipologia: string | null
         }
         Insert: {
+          codigo_tipologia?: string | null
           computed_at?: string | null
           cut: string
-          codigo_tipologia?: string | null
           diversidad_especies?: number | null
           ha_cereales_total?: number | null
           ha_forrajeras_total?: number | null
@@ -399,9 +399,9 @@ export type Database = {
           tipologia?: string | null
         }
         Update: {
+          codigo_tipologia?: string | null
           computed_at?: string | null
           cut?: string
-          codigo_tipologia?: string | null
           diversidad_especies?: number | null
           ha_cereales_total?: number | null
           ha_forrajeras_total?: number | null
