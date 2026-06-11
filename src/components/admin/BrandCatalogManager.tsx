@@ -16,7 +16,7 @@
 import { useState, useMemo } from "react";
 import {
   Plus, Search, Trash2, Pencil, Check, X, ChevronDown,
-  Package, Loader2, Upload, ToggleLeft, ToggleRight,
+  Package, Loader2, Upload, ToggleLeft, ToggleRight, RefreshCw,
 } from "lucide-react";
 import { AppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { useBrandCatalog, type BrandEntry, type BrandInsert } from "@/hooks/useBrandCatalog";
 import { COMERCIAL_LAYER_META } from "@/types/comercial";
 import type { ComercialCategoria } from "@/types/comercial";
@@ -225,6 +227,9 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
   const [bulkCat,  setBulkCat]    = useState<string>("supermercado");
   const [bulkMarca,setBulkMarca]  = useState("");
 
+  // Trigger sync
+  const [syncing, setSyncing] = useState(false);
+
   const { entries, loading, saving, insert, update, remove, bulkInsert, toggleActivo } =
     useBrandCatalog(catFilter === "all" ? null : catFilter);
 
@@ -245,6 +250,21 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
     if (!form.raw_name.trim() || !form.marca_estandar.trim()) return;
     const ok = await insert(form);
     if (ok) { setForm({ ...DEFAULT_FORM }); setShowForm(false); }
+  };
+
+  const handleTriggerSync = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("trigger-sync");
+      if (error) throw error;
+      const msg = (data as { message?: string })?.message ?? "Sync disparado";
+      toast.success(msg, { description: "El workflow de GitHub Actions está en cola. Tarda ~10 min." });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error("Error al disparar sync", { description: msg });
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const handleBulkImport = async () => {
@@ -280,9 +300,27 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
       contentClassName="p-0"
       footer={
         <div className="flex items-center justify-between w-full gap-2 flex-wrap">
-          <span className="text-[11px] text-muted-foreground">
-            {filtered.length} / {entries.length} entradas
-          </span>
+          {/* Izquierda: contador + trigger sync */}
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-muted-foreground">
+              {filtered.length} / {entries.length} entradas
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTriggerSync}
+              disabled={syncing}
+              title="Dispara el workflow de GitHub Actions para resincronizar POIs desde OpenStreetMap"
+              className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-400 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950"
+            >
+              {syncing
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <RefreshCw className="h-3.5 w-3.5" />}
+              {syncing ? "Disparando…" : "Sincronizar OSM"}
+            </Button>
+          </div>
+
+          {/* Derecha: acciones de catálogo */}
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowBulk(v => !v)}>
               <Upload className="h-3.5 w-3.5 mr-1.5" />
