@@ -53,5 +53,15 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({ ok: true, n: body.entries.length }), { headers: cors })
   }
 
+  if (action === "get_catalog") {
+    const { data, error } = await sb
+      .from("brand_catalog")
+      .select("raw_name, marca_estandar, categoria, subcategoria, color_hex, icon_emoji")
+      .eq("activo", true)
+      .order("raw_name")
+    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: cors })
+    return new Response(JSON.stringify({ data }), { status: 200, headers: cors })
+  }
+
   return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: cors })
 })
