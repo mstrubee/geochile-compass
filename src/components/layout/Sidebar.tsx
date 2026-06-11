@@ -222,7 +222,8 @@ const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "crime",      color: "bg-red-600",    name: "Riesgo delictivo",         count: 346,   sub: "CEAD 2022-2024 · comunas"  },
   { key: "commercial", color: "bg-blue-500",   name: "Atractores comerciales",   count: 98102, sub: "OSM 2024 · 16 regiones"    },
   { key: "gasto",      color: "bg-emerald-500", name: "Gasto endógeno hogares",  count: 346,   sub: "EPF × GSE · canasta Autoplanet" },
-  { key: "agroplanet", color: "bg-lime-600",    name: "AGROPLANET — Potencial agrícola", count: 346, sub: "Score 0–100 · Censo 2021 + ODEPA" },
+  { key: "agroplanet",             color: "bg-lime-600",  name: "AGROPLANET — Potencial agrícola", count: 346, sub: "Score 0–100 · Censo 2021 + ODEPA" },
+  { key: "agroplanet_competitors", color: "bg-orange-500", name: "Competidores maquinaria",          count: 58,  sub: "John Deere · New Holland · Case · OSM" },
 ];
 
 const StatCard = ({ value, label }: { value: string | number; label: string }) => (

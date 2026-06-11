@@ -20,6 +20,7 @@ import { CommercialHeatLayer } from "./CommercialHeatLayer";
 import { GastoHeatLayer } from "./GastoHeatLayer";
 import { AgroplanetComunasLayer } from "./AgroplanetComunasLayer";
 import type { AgroplanetScoreMode } from "./AgroplanetComunasLayer";
+import { AgroplanetCompetitorsLayer } from "./AgroplanetCompetitorsLayer";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { GseFeatureCollection, GseVariable } from "@/types/gse";
@@ -367,6 +368,7 @@ export const MapView = ({
       />
       <GastoHeatLayer visible={layers.gasto && gastoView !== "manzana"} />
       <AgroplanetComunasLayer visible={layers.agroplanet} scoreMode={agroplanetScoreMode} />
+      <AgroplanetCompetitorsLayer visible={layers.agroplanet_competitors ?? false} />
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
 

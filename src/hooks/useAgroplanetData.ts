@@ -73,7 +73,10 @@ export function useAgroplanetData(enabled: boolean): UseAgroplanetDataReturn {
               ha_cereales_total: r.ha_cereales_total ?? 0,
               ha_vinas_riego: r.ha_vinas_riego ?? 0,
               ha_forrajeras_total: r.ha_forrajeras_total ?? 0,
+              ha_forestal_total:   r.ha_forestal_total   ?? null,
               diversidad_especies: r.diversidad_especies ?? 0,
+              total_explotaciones: r.total_explotaciones ?? null,
+              tractores_total:     r.tractores_total     ?? null,
               macrozona: r.macrozona ?? null,
               tipologia: r.tipologia ?? null,
             });

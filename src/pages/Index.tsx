@@ -120,6 +120,7 @@ const Index = () => {
     commercial: false,
     gasto: false,
     agroplanet: false,
+    agroplanet_competitors: false,
   });
   const [nseFilter, setNseFilter] = useState<NSE | null>(null);
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
