@@ -194,6 +194,34 @@ const BrandRow = ({ entry, onUpdate, onRemove, onToggle }: RowProps) => {
               style={{ background: entry.color_hex ?? "#6B7280" }}
             />
           </td>
+          <td className="py-1.5 pr-2">
+            <div className="flex items-center justify-center gap-1">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={handleLogoUpload}
+              />
+              {uploading ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : entry.logo_url ? (
+                <img src={entry.logo_url} alt={entry.marca_estandar} className="h-6 w-6 rounded object-contain bg-white/5 border border-border/30" />
+              ) : (
+                <ImageIcon className="h-4 w-4 text-muted-foreground/50" />
+              )}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                title="Subir logo"
+              >
+                <Upload className="h-3 w-3 text-muted-foreground" />
+              </Button>
+            </div>
+          </td>
           <td className="py-1.5">
             <div className="flex gap-0.5">
               <Button
