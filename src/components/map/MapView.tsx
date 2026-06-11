@@ -221,6 +221,8 @@ interface MapViewProps {
   agroplanetScoreMode?: AgroplanetScoreMode;
   /** Estado de capas de la Red Comercial Nacional (POIs OSM). */
   comercialLayers?: ComercialLayerState;
+  /** Marcas ocultas por categoría (filtro client-side). */
+  comercialHiddenBrands?: Partial<Record<ComercialCategoria, Set<string>>>;
   /** Callback para actualizar el conteo de POIs cargados por categoría. */
   onComercialCountChange?: (cat: ComercialCategoria, n: number) => void;
 }
@@ -280,6 +282,7 @@ export const MapView = ({
   onPoiPickSelect,
   agroplanetScoreMode = "combined",
   comercialLayers,
+  comercialHiddenBrands,
   onComercialCountChange,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
@@ -383,6 +386,7 @@ export const MapView = ({
           key={cat}
           categoria={cat}
           visible={comercialLayers?.[cat] ?? false}
+          hiddenBrands={comercialHiddenBrands?.[cat]}
           onCountChange={(n) => onComercialCountChange?.(cat, n)}
         />
       ))}

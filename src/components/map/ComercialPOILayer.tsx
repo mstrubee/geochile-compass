@@ -25,7 +25,8 @@ import Supercluster from "supercluster";
 interface Props {
   categoria:      ComercialCategoria;
   visible:        boolean;
-  filtroMarca?:   string | null;   // null = todas las marcas
+  filtroMarca?:   string | null;        // null = todas las marcas
+  hiddenBrands?:  Set<string>;          // marcas ocultas (filtro client-side)
   onCountChange?: (n: number) => void;
 }
 
@@ -87,7 +88,7 @@ function buildPopupHtml(poi: ComercialPOI): string {
 // Componente principal
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const ComercialPOILayer = ({ categoria, visible, filtroMarca, onCountChange }: Props) => {
+export const ComercialPOILayer = ({ categoria, visible, filtroMarca, hiddenBrands, onCountChange }: Props) => {
   const map  = useMap();
   const meta = COMERCIAL_LAYER_META[categoria];
 
@@ -103,16 +104,19 @@ export const ComercialPOILayer = ({ categoria, visible, filtroMarca, onCountChan
     onCountChange?.(data.length);
   }, [data.length, onCountChange]);
 
-  // Convertir POIs a GeoJSON features para supercluster
-  const features = useMemo(
-    () =>
-      data.map((poi) => ({
-        type: "Feature" as const,
-        geometry: { type: "Point" as const, coordinates: [poi.longitud, poi.latitud] },
-        properties: { poi },
-      })),
-    [data],
-  );
+  // Convertir POIs a GeoJSON features; aplicar filtro de marcas ocultas (client-side)
+  const features = useMemo(() => {
+    const base = data.map((poi) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [poi.longitud, poi.latitud] },
+      properties: { poi },
+    }));
+    if (!hiddenBrands || hiddenBrands.size === 0) return base;
+    return base.filter((f) => {
+      const brand = f.properties.poi.marca_estandar ?? "";
+      return !hiddenBrands.has(brand);
+    });
+  }, [data, hiddenBrands]);
 
   // ── Render de clusters según viewport ──────────────────────────────────
 

@@ -208,7 +208,10 @@ interface SidebarProps {
   // Red Comercial Nacional (POIs OSM)
   comercialLayers?: ComercialLayerState;
   comercialCounts?: Partial<Record<ComercialCategoria, number>>;
+  comercialHiddenBrands?: Partial<Record<ComercialCategoria, Set<string>>>;
   onComercialToggle?: (cat: ComercialCategoria) => void;
+  onComercialBrandToggle?: (cat: ComercialCategoria, brand: string) => void;
+  onSetComercialHiddenBrands?: (cat: ComercialCategoria, brands: Set<string>) => void;
 }
 
 interface LayerRow {
@@ -727,7 +730,10 @@ export const Sidebar = ({
   onRecomputePerformance,
   comercialLayers,
   comercialCounts = {},
+  comercialHiddenBrands = {},
   onComercialToggle,
+  onComercialBrandToggle,
+  onSetComercialHiddenBrands,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Input separado para "Cargar KMZ a esta carpeta" (clic derecho sobre carpeta POI)
@@ -1475,11 +1481,14 @@ export const Sidebar = ({
           {/* ── Capas Agronomía (colapsado por defecto) ─────────────────── */}
           <AgronomyGroupBlock layers={layers} onToggleLayer={onToggleLayer} />
           <CollapsibleCustomLayers isAdmin={isAdmin} />
-          {comercialLayers && onComercialToggle && (
+          {comercialLayers && onComercialToggle && onComercialBrandToggle && onSetComercialHiddenBrands && (
             <ComercialPOISection
               layers={comercialLayers}
               counts={comercialCounts}
+              hiddenBrands={comercialHiddenBrands}
               onToggle={onComercialToggle}
+              onBrandToggle={onComercialBrandToggle}
+              onSetHiddenBrands={onSetComercialHiddenBrands}
             />
           )}
         </SidebarSection>

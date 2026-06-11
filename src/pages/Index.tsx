@@ -137,11 +137,23 @@ const Index = () => {
     centro_comercial:     false,
   });
   const [comercialCounts, setComercialCounts] = useState<Partial<Record<ComercialCategoria, number>>>({});
+  const [comercialHiddenBrands, setComercialHiddenBrands] = useState<Partial<Record<ComercialCategoria, Set<string>>>>({});
   const handleComercialToggle = useCallback((cat: ComercialCategoria) => {
     setComercialLayers((prev) => ({ ...prev, [cat]: !prev[cat] }));
   }, []);
   const handleComercialCountChange = useCallback((cat: ComercialCategoria, n: number) => {
     setComercialCounts((prev) => ({ ...prev, [cat]: n }));
+  }, []);
+  const handleComercialBrandToggle = useCallback((cat: ComercialCategoria, brand: string) => {
+    setComercialHiddenBrands((prev) => {
+      const cur = prev[cat] ?? new Set<string>();
+      const next = new Set(cur);
+      if (next.has(brand)) next.delete(brand); else next.add(brand);
+      return { ...prev, [cat]: next };
+    });
+  }, []);
+  const handleSetComercialHiddenBrands = useCallback((cat: ComercialCategoria, brands: Set<string>) => {
+    setComercialHiddenBrands((prev) => ({ ...prev, [cat]: brands }));
   }, []);
   // ────────────────────────────────────────────────────────────────────────
   const [nseFilter, setNseFilter] = useState<NSE | null>(null);
@@ -1334,7 +1346,10 @@ const Index = () => {
           onComputeFeatures={(folderId) => setComputeFeaturesFolderId(folderId)}
           comercialLayers={comercialLayers}
           comercialCounts={comercialCounts}
+          comercialHiddenBrands={comercialHiddenBrands}
           onComercialToggle={handleComercialToggle}
+          onComercialBrandToggle={handleComercialBrandToggle}
+          onSetComercialHiddenBrands={handleSetComercialHiddenBrands}
           onRecomputePerformance={async (folderId) => {
             try {
               const r = await performanceBatch.run(folderId);
@@ -1434,6 +1449,7 @@ const Index = () => {
               toast.success(`POI "${poi.name}" asignado`);
             }}
             comercialLayers={comercialLayers}
+            comercialHiddenBrands={comercialHiddenBrands}
             onComercialCountChange={handleComercialCountChange}
           />
 
