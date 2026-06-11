@@ -166,6 +166,7 @@ const BrandRow = ({ entry, onUpdate, onRemove, onToggle }: RowProps) => {
               className="h-7 w-10 cursor-pointer rounded border border-border/40"
             />
           </td>
+          <td className="py-1 pr-2" />
           <td className="py-1">
             <div className="flex gap-1">
               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={save}>
