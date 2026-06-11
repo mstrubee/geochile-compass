@@ -181,18 +181,48 @@ export function useComercialMarcas(
     let cancelled = false;
     setLoading(true);
 
-    // Agregar en la DB para no traer miles de registros al frontend
     (async () => {
       try {
-        const { data, error } = await supabase
+        // 1. Marcas registradas en el catálogo para esta categoría
+        const { data: catalogData } = await supabase
+          .from("brand_catalog")
+          .select("marca_estandar")
+          .eq("categoria", categoria)
+          .eq("activo", true);
+
+        // 2. Conteos reales desde comercio_poi
+        const { data: countData, error } = await supabase
           .rpc("fn_participacion_marcas", { p_categoria: categoria });
+
         if (cancelled) return;
         if (error) { console.error(error); return; }
-        setMarcas(
-          (data as Array<{ marca_estandar: string; total_locales: number }> ?? []).map(
-            (r) => ({ marca_estandar: r.marca_estandar, n: r.total_locales }),
-          ),
-        );
+
+        // 3. Mapa de conteos desde POIs
+        const countMap = new Map<string, number>();
+        for (const r of (countData as Array<{ marca_estandar: string; total_locales: number }> ?? [])) {
+          countMap.set(r.marca_estandar, r.total_locales);
+        }
+
+        // 4. Base = todas las marcas del catálogo (distintas, sin duplicados)
+        const allBrands = new Set<string>();
+        for (const r of (catalogData ?? [])) {
+          if (r.marca_estandar) allBrands.add(r.marca_estandar);
+        }
+        // Agregar también marcas que vienen de POIs pero no están en el catálogo (ej. "Otros")
+        for (const [m] of countMap) {
+          allBrands.add(m);
+        }
+
+        // 5. Construir lista final: orden descendente por conteo, "Otros" siempre al final
+        const merged: MarcaCount[] = Array.from(allBrands)
+          .map((m) => ({ marca_estandar: m, n: countMap.get(m) ?? 0 }))
+          .sort((a, b) => {
+            if (a.marca_estandar === "Otros") return 1;
+            if (b.marca_estandar === "Otros") return -1;
+            return b.n - a.n;
+          });
+
+        setMarcas(merged);
       } finally {
         if (!cancelled) setLoading(false);
       }

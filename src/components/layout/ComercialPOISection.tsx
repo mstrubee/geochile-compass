@@ -148,6 +148,7 @@ const CategoryRow = ({
               {/* Marcas con cadena (todo excepto "Otros"), ordenadas por count */}
               {marcas.filter((m) => m.marca_estandar !== "Otros").map((m) => {
                 const brandOn = !hidden.has(m.marca_estandar);
+                const noPOIs  = m.n === 0;
                 return (
                   <button
                     key={m.marca_estandar}
@@ -156,13 +157,16 @@ const CategoryRow = ({
                     onContextMenu={(e) => onCtxMenu(e, m.marca_estandar)}
                     className="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-all hover:bg-surface-2/60"
                     aria-pressed={brandOn}
+                    title={noPOIs ? "Sin locales sincronizados aún. Ejecuta una sincronización OSM." : undefined}
                   >
-                    <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: meta.color, opacity: brandOn ? 1 : 0.25 }} />
-                    <span className={["flex-1 text-[12px] leading-tight truncate text-left", brandOn ? "text-foreground" : "text-muted-foreground"].join(" ")}>
+                    <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: noPOIs ? "#9CA3AF" : meta.color, opacity: brandOn ? 1 : 0.25 }} />
+                    <span className={["flex-1 text-[12px] leading-tight truncate text-left", brandOn && !noPOIs ? "text-foreground" : "text-muted-foreground"].join(" ")}>
                       {m.marca_estandar}
                     </span>
-                    <span className="font-mono text-[10px] text-text-muted flex-shrink-0">{m.n.toLocaleString()}</span>
-                    <IOSSwitch on={brandOn} />
+                    <span className={["font-mono text-[10px] flex-shrink-0", noPOIs ? "text-amber-500 dark:text-amber-400" : "text-text-muted"].join(" ")}>
+                      {noPOIs ? "sin sync" : m.n.toLocaleString()}
+                    </span>
+                    <IOSSwitch on={brandOn && !noPOIs} />
                   </button>
                 );
               })}
