@@ -58,6 +58,7 @@ import {
 } from "@/utils/microzones";
 import { useNavigate } from "react-router-dom";
 import { TerritorialLayerFloatingPanel } from "@/components/map/TerritorialLayerFloatingPanel";
+import type { ComercialLayerState, ComercialCategoria } from "@/types/comercial";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -123,6 +124,26 @@ const Index = () => {
     agroplanet: false,
     agroplanet_competitors: false,
   });
+  // ── Red Comercial Nacional (POIs OSM) ────────────────────────────────────
+  const [comercialLayers, setComercialLayers] = useState<ComercialLayerState>({
+    supermercado:         false,
+    conveniencia:         false,
+    farmacia:             false,
+    combustible:          false,
+    mejoramiento_hogar:   false,
+    retail_departamental: false,
+    banco:                false,
+    restaurante:          false,
+    centro_comercial:     false,
+  });
+  const [comercialCounts, setComercialCounts] = useState<Partial<Record<ComercialCategoria, number>>>({});
+  const handleComercialToggle = useCallback((cat: ComercialCategoria) => {
+    setComercialLayers((prev) => ({ ...prev, [cat]: !prev[cat] }));
+  }, []);
+  const handleComercialCountChange = useCallback((cat: ComercialCategoria, n: number) => {
+    setComercialCounts((prev) => ({ ...prev, [cat]: n }));
+  }, []);
+  // ────────────────────────────────────────────────────────────────────────
   const [nseFilter, setNseFilter] = useState<NSE | null>(null);
   const [trafficFilter, setTrafficFilter] = useState<TrafficLevel | null>(null);
   const [manzanaVariable, setManzanaVariable] = useState<ManzanaVariable>("nse");
@@ -1311,6 +1332,9 @@ const Index = () => {
           onConfigureFolderSchema={(folderId) => setSchemaDialogFolderId(folderId)}
           onConfigureAnalysis={(folderId) => setAnalysisConfigFolderId(folderId)}
           onComputeFeatures={(folderId) => setComputeFeaturesFolderId(folderId)}
+          comercialLayers={comercialLayers}
+          comercialCounts={comercialCounts}
+          onComercialToggle={handleComercialToggle}
           onRecomputePerformance={async (folderId) => {
             try {
               const r = await performanceBatch.run(folderId);
@@ -1409,6 +1433,8 @@ const Index = () => {
               setPoiPickContext(null);
               toast.success(`POI "${poi.name}" asignado`);
             }}
+            comercialLayers={comercialLayers}
+            onComercialCountChange={handleComercialCountChange}
           />
 
           <SearchBar

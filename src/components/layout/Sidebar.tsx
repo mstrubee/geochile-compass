@@ -39,6 +39,8 @@ import { AgroplanetGapPanel } from "@/components/map/AgroplanetGapPanel";
 import { useAgroplanetData }        from "@/hooks/useAgroplanetData";
 import { useAgroplanetCompetitors } from "@/hooks/useAgroplanetCompetitors";
 import type { CrimeType, RiskFilter } from "@/components/map/CrimeHeatLayer";
+import { ComercialPOISection } from "@/components/layout/ComercialPOISection";
+import type { ComercialCategoria, ComercialLayerState } from "@/types/comercial";
 import { CATEGORY_META } from "@/components/map/CommercialHeatLayer";
 import type { CommercialCategory } from "@/components/map/CommercialHeatLayer";
 
@@ -203,6 +205,10 @@ interface SidebarProps {
   onConfigureAnalysis?: (folderId: string) => void;
   onComputeFeatures?: (folderId: string) => void;
   onRecomputePerformance?: (folderId: string) => void;
+  // Red Comercial Nacional (POIs OSM)
+  comercialLayers?: ComercialLayerState;
+  comercialCounts?: Partial<Record<ComercialCategoria, number>>;
+  onComercialToggle?: (cat: ComercialCategoria) => void;
 }
 
 interface LayerRow {
@@ -719,6 +725,9 @@ export const Sidebar = ({
   onConfigureAnalysis,
   onComputeFeatures,
   onRecomputePerformance,
+  comercialLayers,
+  comercialCounts = {},
+  onComercialToggle,
 }: SidebarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Input separado para "Cargar KMZ a esta carpeta" (clic derecho sobre carpeta POI)
@@ -1466,6 +1475,13 @@ export const Sidebar = ({
           {/* ── Capas Agronomía (colapsado por defecto) ─────────────────── */}
           <AgronomyGroupBlock layers={layers} onToggleLayer={onToggleLayer} />
           <CollapsibleCustomLayers isAdmin={isAdmin} />
+          {comercialLayers && onComercialToggle && (
+            <ComercialPOISection
+              layers={comercialLayers}
+              counts={comercialCounts}
+              onToggle={onComercialToggle}
+            />
+          )}
         </SidebarSection>
 
 

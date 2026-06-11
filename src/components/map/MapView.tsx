@@ -21,6 +21,8 @@ import { GastoHeatLayer } from "./GastoHeatLayer";
 import { AgroplanetComunasLayer } from "./AgroplanetComunasLayer";
 import type { AgroplanetScoreMode } from "./AgroplanetComunasLayer";
 import { AgroplanetCompetitorsLayer } from "./AgroplanetCompetitorsLayer";
+import { ComercialPOILayer } from "./ComercialPOILayer";
+import type { ComercialCategoria, ComercialLayerState } from "@/types/comercial";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import type { ManzanaFeatureCollection, ManzanaVariable } from "@/types/manzanas";
 import type { GseFeatureCollection, GseVariable } from "@/types/gse";
@@ -217,6 +219,10 @@ interface MapViewProps {
   poiPickMode?: boolean;
   onPoiPickSelect?: (poi: SavedPoi) => void;
   agroplanetScoreMode?: AgroplanetScoreMode;
+  /** Estado de capas de la Red Comercial Nacional (POIs OSM). */
+  comercialLayers?: ComercialLayerState;
+  /** Callback para actualizar el conteo de POIs cargados por categoría. */
+  onComercialCountChange?: (cat: ComercialCategoria, n: number) => void;
 }
 
 export const MapView = ({
@@ -273,6 +279,8 @@ export const MapView = ({
   poiPickMode = false,
   onPoiPickSelect,
   agroplanetScoreMode = "combined",
+  comercialLayers,
+  onComercialCountChange,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -369,6 +377,15 @@ export const MapView = ({
       <GastoHeatLayer visible={layers.gasto && gastoView !== "manzana"} />
       <AgroplanetComunasLayer visible={layers.agroplanet} scoreMode={agroplanetScoreMode} />
       <AgroplanetCompetitorsLayer visible={layers.agroplanet_competitors ?? false} />
+      {/* ── Red Comercial Nacional (POIs OSM) ─────────────────────────────── */}
+      {(["supermercado","conveniencia","farmacia","combustible","mejoramiento_hogar","retail_departamental","banco","restaurante","centro_comercial"] as ComercialCategoria[]).map((cat) => (
+        <ComercialPOILayer
+          key={cat}
+          categoria={cat}
+          visible={comercialLayers?.[cat] ?? false}
+          onCountChange={(n) => onComercialCountChange?.(cat, n)}
+        />
+      ))}
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
 
