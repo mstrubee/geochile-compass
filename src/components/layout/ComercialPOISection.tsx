@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ChevronDown, ChevronRight, Globe, FileDown, Map } from "lucide-react";
+import { ChevronDown, ChevronRight, Globe, FileDown, Map, X } from "lucide-react";
 import { toast } from "sonner";
 import type { ComercialCategoria, ComercialLayerState } from "@/types/comercial";
 import { COMERCIAL_LAYER_META } from "@/types/comercial";
@@ -247,13 +247,23 @@ const ExportMenu = ({ ctx, onExport, onClose }: ExportMenuProps) => {
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Header */}
-      <div className="px-3 py-2 border-b border-border/50 bg-surface-2/40">
-        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">
-          {ctx.marca ? "Marca" : "Categoría"}
-        </p>
-        <p className="text-[13px] font-semibold text-foreground truncate max-w-[172px]">
-          {label}
-        </p>
+      <div className="px-3 py-2 border-b border-border/50 bg-surface-2/40 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">
+            {ctx.marca ? "Marca" : "Categoría"}
+          </p>
+          <p className="text-[13px] font-semibold text-foreground truncate max-w-[148px]">
+            {label}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-shrink-0 mt-0.5 rounded p-0.5 text-muted-foreground hover:bg-surface-2 hover:text-foreground transition-colors"
+          title="Cerrar"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       {/* Opciones */}

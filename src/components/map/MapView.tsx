@@ -227,6 +227,8 @@ interface MapViewProps {
   comercialBrandLogos?: Map<string, string>;
   /** Callback para actualizar el conteo de POIs cargados por categoría. */
   onComercialCountChange?: (cat: ComercialCategoria, n: number) => void;
+  /** Capas personalizadas subidas por el admin (se renderizan junto a userLayers). */
+  customLayers?: import("@/types/userLayers").UserLayer[];
 }
 
 export const MapView = ({
@@ -287,6 +289,7 @@ export const MapView = ({
   comercialHiddenBrands,
   comercialBrandLogos,
   onComercialCountChange,
+  customLayers,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -354,7 +357,7 @@ export const MapView = ({
       />
       <TrafficLayer visible={layers.traffic} nseFilter={nseFilter} trafficFilter={trafficFilter} />
       <UserLayersLayer
-        layers={userLayers}
+        layers={[...userLayers, ...(customLayers ?? [])]}
         fitId={fitUserLayerId}
         onFitDone={onFitUserLayerDone}
       />

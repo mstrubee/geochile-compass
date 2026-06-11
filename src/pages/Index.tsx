@@ -60,6 +60,7 @@ import { useNavigate } from "react-router-dom";
 import { TerritorialLayerFloatingPanel } from "@/components/map/TerritorialLayerFloatingPanel";
 import type { ComercialLayerState, ComercialCategoria } from "@/types/comercial";
 import { useBrandLogos } from "@/hooks/useComercialPOI";
+import { useCustomLayers } from "@/hooks/useCustomLayers";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -127,6 +128,7 @@ const Index = () => {
   });
   // ── Red Comercial Nacional (POIs OSM) ────────────────────────────────────
   const brandLogos = useBrandLogos();
+  const { asUserLayers: customMapLayers, reload: reloadCustomLayers } = useCustomLayers();
   const [comercialLayers, setComercialLayers] = useState<ComercialLayerState>({
     supermercado:         false,
     conveniencia:         false,
@@ -1454,6 +1456,7 @@ const Index = () => {
             comercialHiddenBrands={comercialHiddenBrands}
             comercialBrandLogos={brandLogos}
             onComercialCountChange={handleComercialCountChange}
+            customLayers={customMapLayers}
           />
 
           <SearchBar

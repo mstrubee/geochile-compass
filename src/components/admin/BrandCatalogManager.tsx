@@ -16,7 +16,7 @@
 import { useState, useMemo, useRef } from "react";
 import {
   Plus, Search, Trash2, Pencil, Check, X, ChevronDown,
-  Package, Loader2, Upload, ToggleLeft, ToggleRight, RefreshCw, Image as ImageIcon,
+  Package, Loader2, Upload, ToggleLeft, ToggleRight, RefreshCw, Image as ImageIcon, Layers,
 } from "lucide-react";
 import { AppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBrandCatalog, type BrandEntry, type BrandInsert } from "@/hooks/useBrandCatalog";
+import { CustomLayerUpload } from "@/components/admin/CustomLayerUpload";
 import { COMERCIAL_LAYER_META } from "@/types/comercial";
 import type { ComercialCategoria } from "@/types/comercial";
 
@@ -285,6 +286,9 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
   // Trigger sync
   const [syncing, setSyncing] = useState(false);
 
+  // Capas personalizadas
+  const [customLayerOpen, setCustomLayerOpen] = useState(false);
+
   const { entries, loading, saving, insert, update, remove, bulkInsert, toggleActivo } =
     useBrandCatalog(catFilter === "all" ? null : catFilter);
 
@@ -376,7 +380,17 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
           </div>
 
           {/* Derecha: acciones de catálogo */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCustomLayerOpen(true)}
+              title="Subir archivos CSV, GeoJSON o KML como capas del mapa"
+              className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-400 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-950"
+            >
+              <Layers className="h-3.5 w-3.5" />
+              Capas
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setShowBulk(v => !v)}>
               <Upload className="h-3.5 w-3.5 mr-1.5" />
               Import rápido
@@ -535,5 +549,11 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
         </div>
       </div>
     </AppDialog>
+
+    {/* Dialog de capas personalizadas */}
+    <CustomLayerUpload
+      open={customLayerOpen}
+      onOpenChange={setCustomLayerOpen}
+    />
   );
 };
