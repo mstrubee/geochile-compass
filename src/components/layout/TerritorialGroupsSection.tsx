@@ -1,8 +1,9 @@
-import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
+import { ChevronDown, ChevronRight, Wrench, Settings2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
 import type { TerritorialGroup, TerritorialLayer } from "@/types/territorial";
+import { TerritorialLayerManagerDialog } from "@/components/panels/TerritorialLayerManagerDialog";
 
 const STORAGE_KEY = "territorial_groups_expanded_v1";
 
@@ -154,8 +155,9 @@ const sortGroups = (groups: TerritorialGroup[]): TerritorialGroup[] => {
   });
 };
 
-export const TerritorialGroupsSection = () => {
+export const TerritorialGroupsSection = ({ isAdmin = false }: { isAdmin?: boolean }) => {
   const { groups: allGroups, layers, loading } = useTerritorialLayers();
+  const [managerOpen, setManagerOpen] = useState(false);
   // Ocultamos el grupo "Parque Automotriz" porque ya está en CollapsibleCustomLayers.
   const groups = sortGroups(
     allGroups.filter(
@@ -177,30 +179,49 @@ export const TerritorialGroupsSection = () => {
   }
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setHeatmapEnabled(!(heatmapEnabled && hasVisibleLayers) && hasVisibleLayers)}
-        disabled={!hasVisibleLayers}
-        className="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60 disabled:cursor-not-allowed disabled:opacity-50"
-        aria-pressed={heatmapEnabled && hasVisibleLayers}
-      >
-        <span className="h-2 w-2 flex-shrink-0 rounded-full bg-brand-orange" />
-        <span
-          className={[
-            "flex-1 text-[13px] leading-tight",
-            heatmapEnabled && hasVisibleLayers ? "text-foreground" : "text-muted-foreground",
-          ].join(" ")}
+      {/* Fila heatmap + botón admin (solo visible para admins) */}
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setHeatmapEnabled(!(heatmapEnabled && hasVisibleLayers) && hasVisibleLayers)}
+          disabled={!hasVisibleLayers}
+          className="mb-0.5 flex flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-pressed={heatmapEnabled && hasVisibleLayers}
         >
-          Mapa de calor
-        </span>
-        <span className="font-mono text-[10px] text-text-muted">
-          {hasVisibleLayers ? "azul→rojo" : "—"}
-        </span>
-        <IOSSwitch on={heatmapEnabled && hasVisibleLayers} />
-      </button>
+          <span className="h-2 w-2 flex-shrink-0 rounded-full bg-brand-orange" />
+          <span
+            className={[
+              "flex-1 text-[13px] leading-tight",
+              heatmapEnabled && hasVisibleLayers ? "text-foreground" : "text-muted-foreground",
+            ].join(" ")}
+          >
+            Mapa de calor
+          </span>
+          <span className="font-mono text-[10px] text-text-muted">
+            {hasVisibleLayers ? "azul→rojo" : "—"}
+          </span>
+          <IOSSwitch on={heatmapEnabled && hasVisibleLayers} />
+        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setManagerOpen(true)}
+            className="mb-0.5 flex-shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+            title="Gestionar capas territoriales (admin)"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
       {groups.map((g) => (
         <GroupBlock key={g.id} group={g} layers={layers.filter((l) => l.group_id === g.id)} />
       ))}
+      {isAdmin && (
+        <TerritorialLayerManagerDialog
+          open={managerOpen}
+          onClose={() => setManagerOpen(false)}
+        />
+      )}
     </>
   );
 };

@@ -103,7 +103,8 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
 
   useEffect(() => {
     const layerColorById = new Map(layers.map((l) => [l.id, l.color || "#F59E0B"]));
-    const layerNameById = new Map(layers.map((l) => [l.id, l.name]));
+    const layerNameById  = new Map(layers.map((l) => [l.id, l.name]));
+    const layerIconById  = new Map(layers.map((l) => [l.id, l.icon || null]));
 
     // remove groups for layers no longer visible (or all, if heatmap is on)
     groupsRef.current.forEach((g, id) => {
@@ -133,26 +134,55 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
       const group = L.layerGroup().addTo(map) as L.LayerGroup & { __count?: number };
       group.__count = feats.length;
       groupsRef.current.set(layerId, group);
-      const color = layerColorById.get(layerId) || "#F59E0B";
+      const color     = layerColorById.get(layerId) || "#F59E0B";
       const layerName = layerNameById.get(layerId) || "";
+      const layerIcon = layerIconById.get(layerId) || null;
+
+      // Helper: determina si el ícono es una URL o un emoji/texto
+      const isUrl = (s: string | null) => !!s && (s.startsWith("http") || s.startsWith("/"));
 
       feats.forEach((f) => {
         try {
           const geom = f.geometry;
           if (!geom) return;
           if (geom.type === "Point" && f.lat != null && f.lng != null) {
-            const m = L.circleMarker([f.lat, f.lng], {
-              renderer: canvasRenderer,
-              radius: 6,
-              color: "#fff",
-              weight: 1.5,
-              fillColor: color,
-              fillOpacity: 0.95,
-            });
-            m.bindPopup(
+            let marker: L.Marker | L.CircleMarker;
+            if (layerIcon && isUrl(layerIcon)) {
+              // URL → ícono imagen
+              marker = L.marker([f.lat, f.lng], {
+                icon: L.icon({
+                  iconUrl: layerIcon,
+                  iconSize: [22, 22],
+                  iconAnchor: [11, 11],
+                  popupAnchor: [0, -12],
+                }),
+              });
+            } else if (layerIcon) {
+              // Emoji / texto → divIcon
+              marker = L.marker([f.lat, f.lng], {
+                icon: L.divIcon({
+                  className: "",
+                  html: `<div style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,0.8);font-size:14px;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.35)">${escapeHtml(layerIcon)}</div>`,
+                  iconSize: [26, 26],
+                  iconAnchor: [13, 13],
+                  popupAnchor: [0, -14],
+                }),
+              });
+            } else {
+              // Círculo por defecto (canvas renderer, eficiente)
+              marker = L.circleMarker([f.lat, f.lng], {
+                renderer: canvasRenderer,
+                radius: 6,
+                color: "#fff",
+                weight: 1.5,
+                fillColor: color,
+                fillOpacity: 0.95,
+              });
+            }
+            marker.bindPopup(
               `<div style="font-size:12px"><b>${escapeHtml(f.name || layerName)}</b></div>`,
             );
-            m.addTo(group);
+            marker.addTo(group);
           } else {
             const gj = L.geoJSON(geom as GeoJSON.Geometry, {
               style: { renderer: canvasRenderer, color, weight: 2, fillColor: color, fillOpacity: 0.25 },

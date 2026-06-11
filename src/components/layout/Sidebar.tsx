@@ -2763,7 +2763,7 @@ const CollapsibleCustomLayers = () => {
           {/* 1º: Parque Automotor */}
           <ParqueLayerToggle />
           {/* 2º: Serv. Automotrices + resto de grupos territoriales */}
-          <TerritorialGroupsSection />
+          <TerritorialGroupsSection isAdmin={isAdmin} />
         </>
       )}
     </div>
