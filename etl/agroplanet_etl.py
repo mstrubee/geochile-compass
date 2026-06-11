@@ -835,8 +835,8 @@ ALTER TABLE agroplanet_comunas
 
 -- Actualizar versión en model_config (si la tabla existe)
 UPDATE agroplanet_model_config
-SET    model_version = 'v2.0',
-       notas         = 'IDPA v2.0: tractores (30%) + explotaciones (25%) + frutales (20%) + cereales (15%) + viñas (7%) + forestal (3%)'
+SET    version = 'v2.0',
+       notas   = 'IDPA v2.0: tractores (30%) + explotaciones (25%) + frutales (20%) + cereales (15%) + viñas (7%) + forestal (3%)'
 WHERE  active = true;
 """
     migrate_path = OUTPUT_DIR / "migrate_v2.sql"
