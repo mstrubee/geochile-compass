@@ -1,341 +1,220 @@
 """
-sync.py — Sincronización incremental de POIs OSM → Supabase/PostGIS.
+sync.py — Sincronización incremental POIs OSM → Supabase via Edge Function.
 
-Estrategia:
-  1. Carga todos los osm_id existentes en la DB (solo IDs, no geometrías).
-  2. Compara con los IDs extraídos de Overpass:
-       • Nuevos     → INSERT
-       • Existentes → UPDATE si osm_version cambió o han pasado >7 días
-       • Ausentes   → soft-delete (eliminado = TRUE)
-  3. Todo en batches de UPSERT_BATCH_SIZE para no saturar el pool de conexiones.
-  4. Registra el resultado en comercio_poi_sync_log.
+Estrategia idéntica a la versión psycopg2, pero las escrituras van a través
+de la Edge Function `sync-comercio-osm` autenticada con SYNC_API_TOKEN.
+La Edge Function usa internamente el service_role key (gestionado por Lovable).
+
+Flujo:
+  1. Carga osm_id+version existentes por categoría (via Edge Function).
+  2. Clasifica: nuevos / actualizar / sin cambio.
+  3. Upsert en batches de UPSERT_BATCH_SIZE.
+  4. Soft-delete de los osm_ids que ya no aparecen en OSM (por categoría).
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import time
-from datetime import datetime, timezone
 from typing import Any
 
-import psycopg2
-import psycopg2.extras
+import requests
 
 from .config import (
-    SUPABASE_DB_URL,
-    TABLE_COMERCIO_POI,
-    TABLE_SYNC_LOG,
+    SYNC_API_ENDPOINT,
+    SYNC_API_TOKEN,
     UPSERT_BATCH_SIZE,
 )
 
 log = logging.getLogger("comercio_osm.sync")
 
-
 # ─────────────────────────────────────────────────────────────────────────────
-# Conexión a la DB
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _get_conn():
-    return psycopg2.connect(SUPABASE_DB_URL, connect_timeout=30)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
+# HTTP helper
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+def _call(action: str, **payload) -> dict:
+    """POST a la Edge Function; lanza excepción si la respuesta no es 2xx."""
+    resp = requests.post(
+        SYNC_API_ENDPOINT,
+        json={"action": action, **payload},
+        headers={
+            "Authorization": f"Bearer {SYNC_API_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        timeout=120,
+    )
+    try:
+        body = resp.json()
+    except Exception:
+        body = {"raw": resp.text}
+
+    if not resp.ok:
+        raise RuntimeError(f"Edge Function error [{resp.status_code}]: {body}")
+
+    return body
 
 
 def _batches(lst: list, size: int):
     for i in range(0, len(lst), size):
-        yield lst[i : i + size]
+        yield lst[i: i + size]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Operaciones de DB
+# Operaciones DB (via Edge Function)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _load_existing_ids(conn) -> dict[str, tuple[int | None, bool]]:
+def _load_existing_ids(
+    categorias: set[str],
+) -> dict[str, tuple[int | None, str]]:
     """
-    Carga {osm_id: (osm_version, eliminado)} de todos los registros en la DB.
+    Devuelve {osm_id: (osm_version, categoria)} consultando la Edge Function
+    por cada categoría.
     """
-    with conn.cursor() as cur:
-        cur.execute(
-            f"SELECT osm_id, osm_version, eliminado FROM {TABLE_COMERCIO_POI}"
-        )
-        return {row[0]: (row[1], row[2]) for row in cur.fetchall()}
+    result: dict[str, tuple[int | None, str]] = {}
+    for cat in categorias:
+        data = _call("get_existing_ids", categoria=cat)
+        for row in data.get("data") or []:
+            result[row["osm_id"]] = (row.get("osm_version"), cat)
+    return result
 
 
-def _upsert_batch(conn, records: list[dict]) -> tuple[int, int]:
-    """
-    Inserta o actualiza un batch de registros.
-    Devuelve (nuevos, actualizados).
-    """
+def _upsert_batch(records: list[dict]) -> None:
+    """Envía un batch de registros al Edge Function para upsert."""
     if not records:
-        return 0, 0
-
-    sql = f"""
-        INSERT INTO {TABLE_COMERCIO_POI} (
-            osm_id, osm_type, nombre, marca, marca_estandar,
-            categoria, subcategoria, cadena,
-            direccion, comuna, region, codigo_region,
-            latitud, longitud,
-            geom,
-            tags, fuente, osm_version,
-            fecha_actualizacion, fecha_creacion, eliminado
-        ) VALUES (
-            %(osm_id)s, %(osm_type)s, %(nombre)s, %(marca)s, %(marca_estandar)s,
-            %(categoria)s, %(subcategoria)s, %(cadena)s,
-            %(direccion)s, %(comuna)s, %(region)s, %(codigo_region)s,
-            %(latitud)s, %(longitud)s,
-            ST_SetSRID(ST_MakePoint(%(longitud)s, %(latitud)s), 4326),
-            %(tags)s::jsonb, %(fuente)s, %(osm_version)s,
-            NOW(), NOW(), FALSE
-        )
-        ON CONFLICT (osm_id) DO UPDATE SET
-            osm_type            = EXCLUDED.osm_type,
-            nombre              = EXCLUDED.nombre,
-            marca               = EXCLUDED.marca,
-            marca_estandar      = EXCLUDED.marca_estandar,
-            categoria           = EXCLUDED.categoria,
-            subcategoria        = EXCLUDED.subcategoria,
-            cadena              = EXCLUDED.cadena,
-            direccion           = EXCLUDED.direccion,
-            comuna              = EXCLUDED.comuna,
-            region              = EXCLUDED.region,
-            latitud             = EXCLUDED.latitud,
-            longitud            = EXCLUDED.longitud,
-            geom                = EXCLUDED.geom,
-            tags                = EXCLUDED.tags,
-            osm_version         = EXCLUDED.osm_version,
-            fecha_actualizacion = NOW(),
-            eliminado           = FALSE,
-            fecha_eliminacion   = NULL
-        RETURNING (xmax = 0) AS is_insert   -- TRUE si fue INSERT, FALSE si fue UPDATE
-    """
-
-    params_list = []
+        return
+    clean = []
     for rec in records:
-        row = dict(rec)
-        # tags debe ser JSON string para psycopg2
-        row["tags"] = json.dumps(row.get("tags") or {})
-        params_list.append(row)
-
-    with conn.cursor() as cur:
-        psycopg2.extras.execute_batch(cur, sql, params_list, page_size=100)
-        # execute_batch no devuelve RETURNING; contamos manualmente.
-        # Para una versión más precisa usar executemany + fetchall.
-
-    conn.commit()
-
-    # Heurística: asumimos que registros con osm_id ya conocido son updates
-    return len(records), 0   # se ajusta en sync_all
+        r = dict(rec)
+        r["tags"] = r.get("tags") or {}   # asegurar dict (no string)
+        clean.append(r)
+    _call("upsert", records=clean)
 
 
-def _soft_delete_batch(conn, osm_ids: list[str]) -> int:
-    """Marca como eliminados todos los osm_ids de la lista."""
+def _soft_delete_batch(osm_ids: list[str], categoria: str) -> None:
+    """Marca como eliminados los osm_ids de una categoría dada."""
     if not osm_ids:
-        return 0
-    total = 0
-    with conn.cursor() as cur:
-        for batch in _batches(osm_ids, UPSERT_BATCH_SIZE):
-            cur.execute(
-                f"""
-                UPDATE {TABLE_COMERCIO_POI}
-                SET eliminado = TRUE, fecha_eliminacion = NOW()
-                WHERE osm_id = ANY(%s) AND NOT eliminado
-                """,
-                (batch,),
-            )
-            total += cur.rowcount
-    conn.commit()
-    return total
-
-
-def _start_log(conn) -> int:
-    """Inserta una fila en sync_log con status='running' y devuelve su id."""
-    with conn.cursor() as cur:
-        cur.execute(
-            f"INSERT INTO {TABLE_SYNC_LOG} (status) VALUES ('running') RETURNING id"
-        )
-        log_id = cur.fetchone()[0]
-    conn.commit()
-    return log_id
-
-
-def _finish_log(conn, log_id: int, stats: dict, error: str | None = None) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            UPDATE {TABLE_SYNC_LOG} SET
-                sync_end               = NOW(),
-                registros_nuevos       = %(nuevos)s,
-                registros_actualizados = %(actualizados)s,
-                registros_eliminados   = %(eliminados)s,
-                registros_sin_cambio   = %(sin_cambio)s,
-                total_osm_features     = %(total)s,
-                error                  = %(error)s,
-                status                 = %(status)s
-            WHERE id = %(id)s
-            """,
-            {
-                "id":          log_id,
-                "nuevos":      stats.get("nuevos", 0),
-                "actualizados":stats.get("actualizados", 0),
-                "eliminados":  stats.get("eliminados", 0),
-                "sin_cambio":  stats.get("sin_cambio", 0),
-                "total":       stats.get("total", 0),
-                "error":       error,
-                "status":      "error" if error else "ok",
-            },
-        )
-    conn.commit()
+        return
+    for batch in _batches(osm_ids, UPSERT_BATCH_SIZE):
+        _call("soft_delete", categoria=categoria, osm_ids=batch)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Función principal de sincronización
+# Función principal
 # ─────────────────────────────────────────────────────────────────────────────
 
 def sync_all(new_records: list[dict[str, Any]]) -> dict[str, int]:
     """
-    Sincroniza la lista de registros extraídos de Overpass con la tabla
-    comercio_poi de Supabase/PostGIS.
+    Sincroniza la lista de registros extraídos de Overpass con Supabase
+    a través de la Edge Function sync-comercio-osm.
 
-    Devuelve un dict de estadísticas.
+    Devuelve estadísticas del proceso.
     """
-    log.info("Conectando a Supabase DB…")
-    conn = _get_conn()
-
-    log_id = _start_log(conn)
     stats: dict[str, int] = {
-        "total":       len(new_records),
-        "nuevos":      0,
-        "actualizados":0,
-        "eliminados":  0,
-        "sin_cambio":  0,
+        "total":        len(new_records),
+        "nuevos":       0,
+        "actualizados": 0,
+        "eliminados":   0,
+        "sin_cambio":   0,
     }
 
-    try:
-        # ── Cargar estado actual de la DB ───────────────────────────────────
-        log.info("Cargando IDs existentes en la DB…")
-        existing = _load_existing_ids(conn)
-        existing_ids = set(existing.keys())
-        incoming_ids = {r["osm_id"] for r in new_records}
+    # Categorías presentes en este lote de extracción
+    categorias = {r["categoria"] for r in new_records}
 
-        log.info("  DB: %d registros  |  OSM: %d registros", len(existing_ids), len(incoming_ids))
+    log.info("Cargando IDs existentes para %d categorías…", len(categorias))
+    existing = _load_existing_ids(categorias)
+    existing_ids  = set(existing.keys())
+    incoming_ids  = {r["osm_id"] for r in new_records}
 
-        # ── Clasificar registros ────────────────────────────────────────────
-        to_insert: list[dict] = []
-        to_update: list[dict] = []
+    log.info("  DB: %d  |  OSM: %d registros", len(existing_ids), len(incoming_ids))
 
-        for rec in new_records:
-            oid = rec["osm_id"]
-            if oid not in existing_ids:
-                to_insert.append(rec)
+    # ── Clasificar ─────────────────────────────────────────────────────────
+    to_insert: list[dict] = []
+    to_update: list[dict] = []
+
+    for rec in new_records:
+        oid = rec["osm_id"]
+        if oid not in existing_ids:
+            to_insert.append(rec)
+        else:
+            db_version, _ = existing[oid]
+            new_version = rec.get("osm_version")
+            if db_version != new_version or new_version is None:
+                to_update.append(rec)
             else:
-                db_version, db_eliminado = existing[oid]
-                new_version = rec.get("osm_version")
-                # Actualizar si: versión cambió, estaba eliminado, o versión desconocida
-                if db_eliminado or db_version != new_version or new_version is None:
-                    to_update.append(rec)
-                else:
-                    stats["sin_cambio"] += 1
+                stats["sin_cambio"] += 1
 
-        # ── Soft-delete de POIs que ya no existen en OSM ───────────────────
-        ids_to_delete = [
-            oid for oid in existing_ids
-            if oid not in incoming_ids and not existing[oid][1]  # solo los no eliminados
-        ]
+    # ── Soft-delete por categoría ──────────────────────────────────────────
+    # Agrupar osm_ids desaparecidos de OSM por la categoría que tenían en DB
+    cat_to_delete: dict[str, list[str]] = {}
+    for oid in existing_ids:
+        if oid not in incoming_ids:
+            _, cat = existing[oid]
+            cat_to_delete.setdefault(cat, []).append(oid)
 
-        # ── Ejecutar operaciones en la DB ───────────────────────────────────
-        if to_insert:
-            log.info("Insertando %d registros nuevos…", len(to_insert))
-            t0 = time.time()
-            for i, batch in enumerate(_batches(to_insert, UPSERT_BATCH_SIZE), 1):
-                _upsert_batch(conn, batch)
-                if i % 5 == 0:
-                    log.info("  … %d/%d insertados", min(i * UPSERT_BATCH_SIZE, len(to_insert)), len(to_insert))
-            stats["nuevos"] = len(to_insert)
-            log.info("  ✓ %d inserts en %.1fs", len(to_insert), time.time() - t0)
+    # ── Ejecutar en la DB (via Edge Function) ──────────────────────────────
+    if to_insert:
+        log.info("Insertando %d registros nuevos…", len(to_insert))
+        t0 = time.time()
+        for i, batch in enumerate(_batches(to_insert, UPSERT_BATCH_SIZE), 1):
+            _upsert_batch(batch)
+            if i % 5 == 0:
+                log.info("  … %d/%d", min(i * UPSERT_BATCH_SIZE, len(to_insert)), len(to_insert))
+        stats["nuevos"] = len(to_insert)
+        log.info("  ✓ %d inserts en %.1fs", len(to_insert), time.time() - t0)
 
-        if to_update:
-            log.info("Actualizando %d registros…", len(to_update))
-            t0 = time.time()
-            for batch in _batches(to_update, UPSERT_BATCH_SIZE):
-                _upsert_batch(conn, batch)
-            stats["actualizados"] = len(to_update)
-            log.info("  ✓ %d updates en %.1fs", len(to_update), time.time() - t0)
+    if to_update:
+        log.info("Actualizando %d registros…", len(to_update))
+        t0 = time.time()
+        for batch in _batches(to_update, UPSERT_BATCH_SIZE):
+            _upsert_batch(batch)
+        stats["actualizados"] = len(to_update)
+        log.info("  ✓ %d updates en %.1fs", len(to_update), time.time() - t0)
 
-        if ids_to_delete:
-            log.info("Marcando como eliminados: %d registros…", len(ids_to_delete))
-            stats["eliminados"] = _soft_delete_batch(conn, ids_to_delete)
-            log.info("  ✓ %d soft-deletes", stats["eliminados"])
+    if cat_to_delete:
+        for cat, ids in cat_to_delete.items():
+            log.info("Soft-delete %d registros de '%s'…", len(ids), cat)
+            _soft_delete_batch(ids, cat)
+            stats["eliminados"] += len(ids)
+        log.info("  ✓ %d total soft-deletes", stats["eliminados"])
 
-        _finish_log(conn, log_id, stats)
-        log.info(
-            "═══ Sync completada: +%d nuevos, ~%d actualizados, ✗%d eliminados, =%d sin cambio ═══",
-            stats["nuevos"], stats["actualizados"], stats["eliminados"], stats["sin_cambio"],
-        )
-
-    except Exception as exc:
-        log.error("Error durante la sync: %s", exc, exc_info=True)
-        _finish_log(conn, log_id, stats, error=str(exc))
-        raise
-
-    finally:
-        conn.close()
-
+    log.info(
+        "═══ Sync completada: +%d nuevos, ~%d actualizados, ✗%d eliminados, =%d sin cambio ═══",
+        stats["nuevos"], stats["actualizados"], stats["eliminados"], stats["sin_cambio"],
+    )
     return stats
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Inicializar / poblar brand_catalog en la DB (run once)
+# Poblar brand_catalog (run once / --seed-catalog)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def seed_brand_catalog() -> None:
     """
-    Puebla la tabla brand_catalog con todas las entradas del catálogo Python.
-    Es idempotente (usa INSERT … ON CONFLICT DO UPDATE).
+    Puebla brand_catalog con todas las entradas del catálogo Python.
+    Idempotente (upsert por marca_normalizada + categoría).
     """
     from . import catalog as cat
-    from .config import TABLE_BRAND_CATALOG
 
-    entries = cat.all_entries()
-    log.info("Poblando brand_catalog con %d entradas…", len(entries))
+    entries_raw = cat.all_entries()
+    log.info("Poblando brand_catalog con %d entradas…", len(entries_raw))
 
-    conn = _get_conn()
-    try:
-        sql = f"""
-            INSERT INTO {TABLE_BRAND_CATALOG} (raw_name, marca_estandar, categoria, subcategoria, color_hex, icon_emoji)
-            VALUES (%(raw)s, %(marca)s, %(cat)s, %(subcat)s, %(color)s, %(icon)s)
-            ON CONFLICT (LOWER(raw_name)) DO UPDATE SET
-                marca_estandar = EXCLUDED.marca_estandar,
-                categoria      = EXCLUDED.categoria,
-                subcategoria   = EXCLUDED.subcategoria,
-                color_hex      = EXCLUDED.color_hex,
-                icon_emoji     = EXCLUDED.icon_emoji
-        """
-        params = []
-        seen_raw = set()
-        for raw, entry in entries:
-            r = raw.lower()
-            if r in seen_raw:
-                continue
-            seen_raw.add(r)
-            params.append({
-                "raw":   raw,
-                "marca": entry["marca_estandar"],
-                "cat":   entry["categoria"],
-                "subcat":entry.get("subcategoria"),
-                "color": entry.get("color", "#6B7280"),
-                "icon":  entry.get("icon", "📍"),
-            })
+    params: list[dict] = []
+    seen: set[str] = set()
+    for raw, entry in entries_raw:
+        key = raw.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        params.append({
+            "raw_name":       raw,
+            "marca_estandar": entry["marca_estandar"],
+            "categoria":      entry["categoria"],
+            "subcategoria":   entry.get("subcategoria"),
+            "color_hex":      entry.get("color", "#6B7280"),
+            "icon_emoji":     entry.get("icon", "📍"),
+        })
 
-        with conn.cursor() as cur:
-            psycopg2.extras.execute_batch(cur, sql, params, page_size=200)
-        conn.commit()
-        log.info("  ✓ brand_catalog poblado con %d entradas únicas", len(params))
-    finally:
-        conn.close()
+    for batch in _batches(params, UPSERT_BATCH_SIZE):
+        _call("seed_catalog", entries=batch)
+
+    log.info("  ✓ brand_catalog poblado con %d entradas únicas", len(params))

@@ -6,9 +6,11 @@
 # Manual:    Actions → "Sync Red Comercial OSM" → Run workflow
 #
 # Secrets requeridos en GitHub → Settings → Secrets:
-#   SUPABASE_URL
-#   SUPABASE_SERVICE_ROLE_KEY
-#   SUPABASE_DB_URL          (postgres://postgres:pwd@db.xxx.supabase.co:5432/postgres)
+#   SUPABASE_URL       → https://tcmyidycqdrrtwuaovbk.supabase.co
+#   SYNC_API_TOKEN     → token que generaste con: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+#
+# NO se necesita SUPABASE_SERVICE_ROLE_KEY ni SUPABASE_DB_URL.
+# Las escrituras van via Edge Function sync-comercio-osm (HTTP + SYNC_API_TOKEN).
 # ═══════════════════════════════════════════════════════════════════════════
 
 name: Sync Red Comercial OSM
@@ -61,18 +63,16 @@ jobs:
       - name: Seed brand_catalog
         if: ${{ inputs.seed_catalog == true }}
         env:
-          SUPABASE_URL:               ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY:  ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_DB_URL:            ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL:     ${{ secrets.SUPABASE_URL }}
+          SYNC_API_TOKEN:   ${{ secrets.SYNC_API_TOKEN }}
         run: python -m etl.comercio_osm.run_sync --seed-catalog
 
       # ── Sincronización principal ───────────────────────────────────────────
       - name: Run sync
         if: ${{ inputs.seed_catalog != true }}
         env:
-          SUPABASE_URL:               ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY:  ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_DB_URL:            ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL:     ${{ secrets.SUPABASE_URL }}
+          SYNC_API_TOKEN:   ${{ secrets.SYNC_API_TOKEN }}
         run: |
           ARGS=""
           if [ -n "${{ inputs.categoria }}" ]; then

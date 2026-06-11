@@ -2,10 +2,11 @@
 config.py — Configuración centralizada para el ETL de Red Comercial Nacional.
 
 Variables de entorno requeridas (.env en la raíz del repo):
-  SUPABASE_URL              → URL del proyecto Supabase (https://xxx.supabase.co)
-  SUPABASE_SERVICE_ROLE_KEY → Service-role key (tiene escritura, NO exponer en frontend)
-  SUPABASE_DB_URL           → Cadena de conexión directa PostgreSQL para bulk-inserts
-                              postgresql://postgres:[pwd]@db.[ref].supabase.co:5432/postgres
+  SUPABASE_URL      → URL del proyecto Supabase (https://xxx.supabase.co)
+  SYNC_API_TOKEN    → Token secreto compartido con la Edge Function sync-comercio-osm
+
+La Edge Function (desplegada en Lovable/Supabase) gestiona internamente el
+service_role key. El ETL nunca necesita acceso directo a la DB.
 """
 
 from __future__ import annotations
@@ -27,11 +28,13 @@ ENV_FILE  = REPO_ROOT / ".env"
 load_dotenv(ENV_FILE)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Supabase / PostgreSQL
+# Supabase / Edge Function
 # ─────────────────────────────────────────────────────────────────────────────
-SUPABASE_URL              = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
-SUPABASE_DB_URL           = os.environ.get("SUPABASE_DB_URL", "")
+SUPABASE_URL    = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SYNC_API_TOKEN  = os.environ.get("SYNC_API_TOKEN", "")
+
+# Endpoint derivado automáticamente de SUPABASE_URL
+SYNC_API_ENDPOINT = f"{SUPABASE_URL}/functions/v1/sync-comercio-osm"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Overpass API
@@ -41,12 +44,11 @@ OVERPASS_ENDPOINTS: list[str] = [
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.openstreetmap.ru/api/interpreter",
 ]
-OVERPASS_TIMEOUT_S: int  = 180   # segundos de timeout por petición
-OVERPASS_RETRY_WAIT: int = 20    # segundos entre reintentos
+OVERPASS_TIMEOUT_S: int   = 180
+OVERPASS_RETRY_WAIT: int  = 20
 OVERPASS_MAX_RETRIES: int = 3
 
-# Bounding box de Chile continental + Isla de Pascua
-# (Overpass: S, W, N, E)
+# Bounding box de Chile continental + Isla de Pascua  (S, W, N, E)
 CHILE_BBOX = (-56.0, -76.0, -17.5, -65.5)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -56,13 +58,11 @@ TABLE_COMERCIO_POI  = "comercio_poi"
 TABLE_BRAND_CATALOG = "brand_catalog"
 TABLE_SYNC_LOG      = "comercio_poi_sync_log"
 
-# Tamaño de batch para upserts (registros por transacción)
+# Tamaño de batch para upserts (registros por llamada HTTP)
 UPSERT_BATCH_SIZE = 500
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Categorías OSM → modelo interno
-#   clave: nombre interno de la categoría
-#   valor: lista de (tag_key, tag_value) de OSM
 # ─────────────────────────────────────────────────────────────────────────────
 CATEGORY_TAG_MAP: dict[str, list[tuple[str, str]]] = {
     "supermercado": [
@@ -107,17 +107,16 @@ CATEGORY_TAG_MAP: dict[str, list[tuple[str, str]]] = {
     ],
 }
 
-# Colores y emojis por defecto por categoría (fallback si la marca no tiene color)
 CATEGORY_DEFAULTS: dict[str, dict] = {
-    "supermercado":       {"color": "#0046AD", "icon": "🛒"},
-    "conveniencia":       {"color": "#F59E0B", "icon": "🏪"},
-    "farmacia":           {"color": "#00A651", "icon": "💊"},
-    "combustible":        {"color": "#EF4444", "icon": "⛽"},
-    "mejoramiento_hogar": {"color": "#F5821F", "icon": "🔨"},
-    "retail_departamental":{"color": "#7C3AED", "icon": "🛍️"},
-    "banco":              {"color": "#1D4ED8", "icon": "🏦"},
-    "restaurante":        {"color": "#EA580C", "icon": "🍽️"},
-    "centro_comercial":   {"color": "#BE123C", "icon": "🏬"},
+    "supermercado":         {"color": "#0046AD", "icon": "🛒"},
+    "conveniencia":         {"color": "#F59E0B", "icon": "🏪"},
+    "farmacia":             {"color": "#00A651", "icon": "💊"},
+    "combustible":          {"color": "#EF4444", "icon": "⛽"},
+    "mejoramiento_hogar":   {"color": "#F5821F", "icon": "🔨"},
+    "retail_departamental": {"color": "#7C3AED", "icon": "🛍️"},
+    "banco":                {"color": "#1D4ED8", "icon": "🏦"},
+    "restaurante":          {"color": "#EA580C", "icon": "🍽️"},
+    "centro_comercial":     {"color": "#BE123C", "icon": "🏬"},
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -139,10 +138,8 @@ def validate_env() -> None:
     missing = []
     if not SUPABASE_URL:
         missing.append("SUPABASE_URL")
-    if not SUPABASE_SERVICE_ROLE_KEY:
-        missing.append("SUPABASE_SERVICE_ROLE_KEY")
-    if not SUPABASE_DB_URL:
-        missing.append("SUPABASE_DB_URL")
+    if not SYNC_API_TOKEN:
+        missing.append("SYNC_API_TOKEN")
     if missing:
         raise EnvironmentError(
             f"Variables de entorno faltantes: {', '.join(missing)}\n"
