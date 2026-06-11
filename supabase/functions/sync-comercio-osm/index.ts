@@ -48,7 +48,7 @@ serve(async (req: Request) => {
 
   if (action === "seed_catalog") {
     const { error } = await sb.from("brand_catalog")
-      .upsert(body.entries, { onConflict: "marca_normalizada,categoria" })
+      .upsert(body.entries, { onConflict: "raw_name" })
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: cors })
     return new Response(JSON.stringify({ ok: true, n: body.entries.length }), { headers: cors })
   }
