@@ -40,6 +40,7 @@ import { useAgroplanetData }        from "@/hooks/useAgroplanetData";
 import { useAgroplanetCompetitors } from "@/hooks/useAgroplanetCompetitors";
 import type { CrimeType, RiskFilter } from "@/components/map/CrimeHeatLayer";
 import { ComercialPOISection } from "@/components/layout/ComercialPOISection";
+import { BrandCatalogManager } from "@/components/admin/BrandCatalogManager";
 import type { ComercialCategoria, ComercialLayerState } from "@/types/comercial";
 import { CATEGORY_META } from "@/components/map/CommercialHeatLayer";
 import type { CommercialCategory } from "@/components/map/CommercialHeatLayer";
@@ -735,6 +736,7 @@ export const Sidebar = ({
   onComercialBrandToggle,
   onSetComercialHiddenBrands,
 }: SidebarProps) => {
+  const [brandCatalogOpen, setBrandCatalogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Input separado para "Cargar KMZ a esta carpeta" (clic derecho sobre carpeta POI)
   const folderImportInputRef = useRef<HTMLInputElement>(null);
@@ -1490,6 +1492,18 @@ export const Sidebar = ({
               onBrandToggle={onComercialBrandToggle}
               onSetHiddenBrands={onSetComercialHiddenBrands}
             />
+          )}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setBrandCatalogOpen(true)}
+              className="mt-1 flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
+            >
+              <Sheet className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+              <span className="flex-1 text-[12px] text-muted-foreground hover:text-foreground">
+                Admin · Catálogo de marcas OSM
+              </span>
+            </button>
           )}
         </SidebarSection>
 
@@ -2674,6 +2688,10 @@ export const Sidebar = ({
         }}
       />
     )}
+
+    {/* ── Admin: catálogo de marcas OSM ── */}
+    <BrandCatalogManager open={brandCatalogOpen} onOpenChange={setBrandCatalogOpen} />
+
     </>
   );
 };
