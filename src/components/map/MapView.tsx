@@ -223,6 +223,8 @@ interface MapViewProps {
   comercialLayers?: ComercialLayerState;
   /** Marcas ocultas por categoría (filtro client-side). */
   comercialHiddenBrands?: Partial<Record<ComercialCategoria, Set<string>>>;
+  /** Logos por marca: Map<marca_estandar, logo_url> */
+  comercialBrandLogos?: Map<string, string>;
   /** Callback para actualizar el conteo de POIs cargados por categoría. */
   onComercialCountChange?: (cat: ComercialCategoria, n: number) => void;
 }
@@ -283,6 +285,7 @@ export const MapView = ({
   agroplanetScoreMode = "combined",
   comercialLayers,
   comercialHiddenBrands,
+  comercialBrandLogos,
   onComercialCountChange,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
@@ -387,6 +390,7 @@ export const MapView = ({
           categoria={cat}
           visible={comercialLayers?.[cat] ?? false}
           hiddenBrands={comercialHiddenBrands?.[cat]}
+          brandLogos={comercialBrandLogos}
           onCountChange={(n) => onComercialCountChange?.(cat, n)}
         />
       ))}

@@ -59,6 +59,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { TerritorialLayerFloatingPanel } from "@/components/map/TerritorialLayerFloatingPanel";
 import type { ComercialLayerState, ComercialCategoria } from "@/types/comercial";
+import { useBrandLogos } from "@/hooks/useComercialPOI";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -125,6 +126,7 @@ const Index = () => {
     agroplanet_competitors: false,
   });
   // ── Red Comercial Nacional (POIs OSM) ────────────────────────────────────
+  const brandLogos = useBrandLogos();
   const [comercialLayers, setComercialLayers] = useState<ComercialLayerState>({
     supermercado:         false,
     conveniencia:         false,
@@ -1450,6 +1452,7 @@ const Index = () => {
             }}
             comercialLayers={comercialLayers}
             comercialHiddenBrands={comercialHiddenBrands}
+            comercialBrandLogos={brandLogos}
             onComercialCountChange={handleComercialCountChange}
           />
 

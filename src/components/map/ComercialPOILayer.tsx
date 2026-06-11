@@ -25,8 +25,9 @@ import Supercluster from "supercluster";
 interface Props {
   categoria:      ComercialCategoria;
   visible:        boolean;
-  filtroMarca?:   string | null;        // null = todas las marcas
-  hiddenBrands?:  Set<string>;          // marcas ocultas (filtro client-side)
+  filtroMarca?:   string | null;
+  hiddenBrands?:  Set<string>;
+  brandLogos?:    Map<string, string>;  // marca_estandar → logo_url
   onCountChange?: (n: number) => void;
 }
 
@@ -37,14 +38,22 @@ interface Props {
 const escHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-function buildMarkerIcon(poi: ComercialPOI, meta: (typeof COMERCIAL_LAYER_META)[ComercialCategoria]) {
-  const icon  = meta.icon;
-  const color = meta.color;
-  const size  = 26;
-  const font  = Math.round(size * 0.55);
+function buildMarkerIcon(
+  poi: ComercialPOI,
+  meta: (typeof COMERCIAL_LAYER_META)[ComercialCategoria],
+  logoUrl?: string,
+) {
+  const size = 28;
+  const inner = logoUrl
+    ? `<img src="${logoUrl}" style="width:${size - 6}px;height:${size - 6}px;object-fit:contain;border-radius:2px;display:block" />`
+    : `<span style="font-size:${Math.round(size * 0.55)}px;line-height:1">${meta.icon}</span>`;
+
+  const bg = logoUrl ? "#ffffff" : meta.color;
+  const border = logoUrl ? "2px solid rgba(0,0,0,0.12)" : "2px solid rgba(255,255,255,0.85)";
+
   return L.divIcon({
     className: "",
-    html: `<div style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,0.85);font-size:${font}px;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer">${icon}</div>`,
+    html: `<div style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:50%;background:${bg};border:${border};box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer;overflow:hidden">${inner}</div>`,
     iconSize:    [size, size],
     iconAnchor:  [size / 2, size / 2],
     popupAnchor: [0, -(size / 2 + 4)],
@@ -73,14 +82,22 @@ function clusterColor(count: number, baseColor: string): string {
 // Popup HTML
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildPopupHtml(poi: ComercialPOI): string {
-  const nombre  = escHtml(poi.nombre  ?? poi.marca_estandar ?? "—");
-  const marca   = poi.marca_estandar ? `<span style="color:#6B7280;font-size:11px">${escHtml(poi.marca_estandar)}</span>` : "";
-  const dir     = poi.direccion ? `<div style="font-size:11px;color:#6B7280;margin-top:2px">📍 ${escHtml(poi.direccion)}</div>` : "";
-  const comuna  = poi.comuna    ? `<div style="font-size:11px;color:#6B7280">${escHtml(poi.comuna)}</div>` : "";
+function buildPopupHtml(poi: ComercialPOI, logoUrl?: string): string {
+  const nombre = escHtml(poi.nombre ?? "—");
+  const dir    = poi.direccion ? `<div style="font-size:11px;color:#6B7280;margin-top:3px">📍 ${escHtml(poi.direccion)}</div>` : "";
+  const comuna = poi.comuna    ? `<div style="font-size:11px;color:#6B7280">${escHtml(poi.comuna)}</div>` : "";
+
+  // Cuando hay logo: imagen de marca (32px) + nombre del local debajo
+  // Cuando no hay logo: nombre en negrita + marca en gris
+  const header = logoUrl
+    ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+         <img src="${logoUrl}" style="width:32px;height:32px;object-fit:contain;border-radius:4px;border:1px solid #e5e7eb;flex-shrink:0" />
+         <b style="font-size:13px">${nombre}</b>
+       </div>`
+    : `<b>${nombre}</b>${poi.marca_estandar ? `<br><span style="color:#6B7280;font-size:11px">${escHtml(poi.marca_estandar)}</span>` : ""}`;
+
   return `<div style="font-size:13px;font-family:system-ui,sans-serif;min-width:140px">
-    <b>${nombre}</b>${marca ? `<br>${marca}` : ""}
-    ${dir}${comuna}
+    ${header}${dir}${comuna}
   </div>`;
 }
 
@@ -88,9 +105,9 @@ function buildPopupHtml(poi: ComercialPOI): string {
 // Componente principal
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const ComercialPOILayer = ({ categoria, visible, filtroMarca, hiddenBrands, onCountChange }: Props) => {
+export const ComercialPOILayer = ({ categoria, visible, filtroMarca, hiddenBrands, brandLogos, onCountChange }: Props) => {
   const map  = useMap();
-  const meta = COMERCIAL_LAYER_META[categoria];
+  const meta = COMERCIAL_LAYER_META[categoria] ?? { icon: "📍", color: "#6B7280", label: categoria, shortLabel: categoria };
 
   const { data } = useComercialPOI(categoria, visible, { marca: filtroMarca });
 
@@ -157,10 +174,11 @@ export const ComercialPOILayer = ({ categoria, visible, filtroMarca, hiddenBrand
         marker.addTo(layerRef.current!);
       } else {
         // Es un punto individual
-        const poi  = (cl.properties as { poi: ComercialPOI }).poi;
-        const icon = buildMarkerIcon(poi, meta);
-        const marker = L.marker([lat, lng], { icon });
-        marker.bindPopup(buildPopupHtml(poi), { maxWidth: 240 });
+        const poi     = (cl.properties as { poi: ComercialPOI }).poi;
+        const logoUrl = poi.marca_estandar ? brandLogos?.get(poi.marca_estandar) : undefined;
+        const icon    = buildMarkerIcon(poi, meta, logoUrl);
+        const marker  = L.marker([lat, lng], { icon });
+        marker.bindPopup(buildPopupHtml(poi, logoUrl), { maxWidth: 240 });
         marker.addTo(layerRef.current!);
       }
     }

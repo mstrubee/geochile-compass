@@ -130,6 +130,37 @@ export function useComercialPOI(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Hook: logos por marca (para iconos en el mapa)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Carga un Map<marca_estandar, logo_url> con todas las marcas que tienen logo.
+ * Se usa en ComercialPOILayer para reemplazar el emoji por el logo en el marcador.
+ */
+export function useBrandLogos(): Map<string, string> {
+  const [logos, setLogos] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("brand_catalog")
+        .select("marca_estandar, logo_url")
+        .not("logo_url", "is", null);
+      if (cancelled || !data) return;
+      const map = new Map<string, string>();
+      for (const row of data as { marca_estandar: string; logo_url: string }[]) {
+        if (row.logo_url) map.set(row.marca_estandar, row.logo_url);
+      }
+      setLogos(map);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  return logos;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Hook para resumen por marca (para el panel flotante)
 // ─────────────────────────────────────────────────────────────────────────────
 
