@@ -58,7 +58,7 @@ const ColorDot = ({
   onClick,
 }: {
   color: string | null;
-  onClick: () => void;
+  onClick: React.MouseEventHandler<HTMLButtonElement>;
 }) => (
   <button
     type="button"
