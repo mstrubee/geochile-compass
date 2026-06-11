@@ -57,6 +57,7 @@ import {
   computeMicrozoneStats,
 } from "@/utils/microzones";
 import { useNavigate } from "react-router-dom";
+import { TerritorialLayerFloatingPanel } from "@/components/map/TerritorialLayerFloatingPanel";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -1201,8 +1202,6 @@ const Index = () => {
           onRiskToggle={handleRiskToggle}
           gastoView={gastoView}
           onGastoViewChange={setGastoView}
-          agroplanetScoreMode={agroplanetScoreMode}
-          onAgroplanetScoreModeChange={setAgroplanetScoreMode}
           chileCommunesVariable={chileCommunesVariable}
           onChileCommunesVariableChange={setChileCommunesVariable}
           userLayers={userLayers}
@@ -1434,6 +1433,13 @@ const Index = () => {
             chileCommunesVariable={chileCommunesVariable}
           />
           <CoordsBar coords={coords} />
+
+          {/* Panel flotante inferior-izquierdo: controles de capas territoriales */}
+          <TerritorialLayerFloatingPanel
+            layers={layers}
+            agroplanetScoreMode={agroplanetScoreMode}
+            onAgroplanetScoreModeChange={setAgroplanetScoreMode}
+          />
 
           {/* Mode hint */}
           {mode !== "none" && (

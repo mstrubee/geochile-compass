@@ -35,13 +35,9 @@ import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 
-import type { AgroplanetScoreMode } from "@/components/map/AgroplanetComunasLayer";
-import { AGRO_IS_SCORE } from "@/components/map/AgroplanetComunasLayer";
 import { AgroplanetGapPanel } from "@/components/map/AgroplanetGapPanel";
 import { useAgroplanetData }        from "@/hooks/useAgroplanetData";
 import { useAgroplanetCompetitors } from "@/hooks/useAgroplanetCompetitors";
-import { useBrandStyles, getBrandKey } from "@/hooks/useBrandStyles";
-import { BrandStyleEditorDialog }   from "@/components/panels/BrandStyleEditorDialog";
 import type { CrimeType, RiskFilter } from "@/components/map/CrimeHeatLayer";
 import { CATEGORY_META } from "@/components/map/CommercialHeatLayer";
 import type { CommercialCategory } from "@/components/map/CommercialHeatLayer";
@@ -86,8 +82,6 @@ interface SidebarProps {
   onRiskToggle: (r: RiskFilter) => void;
   gastoView: "heat" | "manzana";
   onGastoViewChange: (v: "heat" | "manzana") => void;
-  agroplanetScoreMode: AgroplanetScoreMode;
-  onAgroplanetScoreModeChange: (m: AgroplanetScoreMode) => void;
   chileCommunesVariable: IneVariable;
   onChileCommunesVariableChange: (v: IneVariable) => void;
   userLayers: UserLayer[];
@@ -231,9 +225,10 @@ const TERRITORIAL_LAYERS: LayerRow[] = [
   { key: "agroplanet_competitors", color: "bg-orange-500", name: "Competidores maquinaria",          count: 58,  sub: "John Deere · New Holland · Case · OSM" },
 ];
 
-/** Wrapper para el gap panel — recibe compData del Sidebar para evitar doble fetch */
-function AgroplanetGapPanelConnected({ compData }: { compData: import("@/hooks/useAgroplanetCompetitors").AgroplanetCompetitor[] }) {
+/** Wrapper auto-fetching para el gap panel */
+function AgroplanetGapPanelConnected() {
   const { data: comunasData } = useAgroplanetData(true);
+  const { data: compData }    = useAgroplanetCompetitors(true);
   return (
     <AgroplanetGapPanel
       comunas={comunasData}
@@ -626,8 +621,6 @@ export const Sidebar = ({
   onRiskToggle,
   gastoView,
   onGastoViewChange,
-  agroplanetScoreMode,
-  onAgroplanetScoreModeChange,
   chileCommunesVariable,
   onChileCommunesVariableChange,
   userLayers = [],
@@ -731,22 +724,6 @@ export const Sidebar = ({
   const [busy, setBusy] = useState(false);
   const [osmText, setOsmText] = useState("");
   const [osmLoading, setOsmLoading] = useState(false);
-
-  // ── Competidores maquinaria — datos y estilos por marca ────────────────────
-  const { data: compData } = useAgroplanetCompetitors(layers.agroplanet_competitors ?? false);
-  const { getStyle, setBrandStyle, resetBrandStyle } = useBrandStyles();
-  const [editingBrand, setEditingBrand] = useState<string | null>(null);
-
-  const brandGroups = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const c of compData) {
-      const brand = getBrandKey(c);
-      counts.set(brand, (counts.get(brand) ?? 0) + 1);
-    }
-    return Array.from(counts.entries())
-      .map(([brand, count]) => ({ brand, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [compData]);
 
   // Selección múltiple de capas de archivo (sección "Archivos")
   const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(new Set());
@@ -1540,171 +1517,9 @@ export const Sidebar = ({
               </p>
             </div>
           )}
-          {layers.agroplanet && (
-            <div className="mt-2 rounded-lg bg-surface-2/40 p-2 space-y-2">
-              {/* ─── Fila 1: Modos de score ─── */}
-              <div>
-                <div className="text-[9px] uppercase tracking-wider text-text-muted mb-0.5">Score</div>
-                <div className="flex gap-1 rounded-md bg-surface-2/60 p-0.5">
-                  {([
-                    { key: "combined" as const, label: "🌱 Combinado" },
-                    { key: "grandes"  as const, label: "🏭 Grandes"   },
-                    { key: "indap"    as const, label: "🌾 INDAP"      },
-                  ]).map(({ key, label }) => (
-                    <button
-                      key={key}
-                      onClick={() => onAgroplanetScoreModeChange(key)}
-                      className={[
-                        "flex-1 rounded px-1.5 py-1.5 text-[10px] font-medium transition-all text-center",
-                        agroplanetScoreMode === key
-                          ? "bg-surface-3 text-foreground shadow-apple-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      ].join(" ")}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* ─── Fila 2: Sub-capas cultivos ─── */}
-              <div>
-                <div className="text-[9px] uppercase tracking-wider text-text-muted mb-0.5">Cultivos</div>
-                <div className="flex flex-wrap gap-1 rounded-md bg-surface-2/60 p-0.5">
-                  {([
-                    { key: "frutales"   as const, label: "🍇 Frutales"  },
-                    { key: "cereales"   as const, label: "🌾 Cereales"   },
-                    { key: "vinas"      as const, label: "🍷 Viñas"      },
-                    { key: "forrajeras" as const, label: "🌿 Forraje"    },
-                    { key: "diversidad" as const, label: "🔬 Diversidad" },
-                  ]).map(({ key, label }) => (
-                    <button
-                      key={key}
-                      onClick={() => onAgroplanetScoreModeChange(key)}
-                      className={[
-                        "rounded px-1.5 py-1 text-[10px] font-medium transition-all text-center",
-                        agroplanetScoreMode === key
-                          ? "bg-surface-3 text-foreground shadow-apple-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      ].join(" ")}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* ─── Leyenda dinámica ─── */}
-              {AGRO_IS_SCORE(agroplanetScoreMode) ? (
-                <div className="flex items-center gap-1.5">
-                  {[
-                    { color: "#d1fae5", label: "Q1" },
-                    { color: "#6ee7b7", label: "Q2" },
-                    { color: "#f59e0b", label: "Q3" },
-                    { color: "#f97316", label: "Q4" },
-                    { color: "#15803d", label: "Q5" },
-                  ].map(({ color, label }) => (
-                    <div key={label} className="flex flex-col items-center gap-0.5">
-                      <div className="h-2.5 w-8 rounded-sm" style={{ background: color }} />
-                      <span className="text-[9px] text-muted-foreground/60">{label}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : agroplanetScoreMode === "diversidad" ? (
-                <div className="flex items-center gap-1.5">
-                  {[
-                    { color: "#f1f5f9", label: "0" },
-                    { color: "#d1fae5", label: "Q1" },
-                    { color: "#34d399", label: "Q2" },
-                    { color: "#059669", label: "Q3" },
-                    { color: "#4338ca", label: "Q4+" },
-                  ].map(({ color, label }) => (
-                    <div key={label} className="flex flex-col items-center gap-0.5">
-                      <div className="h-2.5 w-8 rounded-sm" style={{ background: color }} />
-                      <span className="text-[9px] text-muted-foreground/60">{label}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  {[
-                    { color: "#f1f5f9", label: "0 ha" },
-                    { color: "#bfdbfe", label: "Q1" },
-                    { color: "#60a5fa", label: "Q2" },
-                    { color: "#2563eb", label: "Q3" },
-                    { color: "#1e3a8a", label: "Q4+" },
-                  ].map(({ color, label }) => (
-                    <div key={label} className="flex flex-col items-center gap-0.5">
-                      <div className="h-2.5 w-8 rounded-sm" style={{ background: color }} />
-                      <span className="text-[9px] text-muted-foreground/60">{label}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          {/* ── Competidores: lista por marca con estilos editables ─────── */}
-          {layers.agroplanet_competitors && brandGroups.length > 0 && (
-            <div className="mt-2 rounded-lg bg-surface-2/40 p-2 space-y-0.5">
-              <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-text-muted">
-                Por marca <span className="normal-case font-normal">(clic derecho para editar)</span>
-              </div>
-              {brandGroups.map(({ brand, count }) => {
-                const style = getStyle(brand);
-                return (
-                  <ContextMenu key={brand}>
-                    <ContextMenuTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => setBrandStyle(brand, { visible: !style.visible })}
-                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
-                        style={{ opacity: style.visible ? 1 : 0.42 }}
-                      >
-                        {/* Color dot */}
-                        <span
-                          className="h-3 w-3 flex-shrink-0 rounded-full border border-white/30"
-                          style={{ backgroundColor: style.color, boxShadow: style.visible ? `0 0 0 1.5px ${style.color}55` : "none" }}
-                        />
-                        {/* Icon preview */}
-                        {style.icon && !style.icon.startsWith("http") && !style.icon.startsWith("data:") && !style.icon.startsWith("/") && (
-                          <span className="flex-shrink-0 text-[12px] leading-none">{style.icon}</span>
-                        )}
-                        <span className={["flex-1 truncate text-[11px]", style.visible ? "text-foreground" : "text-muted-foreground"].join(" ")}>
-                          {brand}
-                        </span>
-                        <span className="font-mono text-[10px] text-text-muted">{count}</span>
-                        <div
-                          className={["relative h-[18px] w-[30px] flex-shrink-0 rounded-full transition-colors", style.visible ? "bg-brand-green" : "bg-surface-3"].join(" ")}
-                        >
-                          <span className={["absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow-apple-sm transition-all", style.visible ? "left-[14px]" : "left-[2px]"].join(" ")} />
-                        </div>
-                      </button>
-                    </ContextMenuTrigger>
-                    <ContextMenuContent className="z-[1200] w-52">
-                      <ContextMenuItem onSelect={() => setEditingBrand(brand)}>
-                        ✏️ Editar estilo (color, ícono, tamaño)
-                      </ContextMenuItem>
-                      <ContextMenuSeparator />
-                      <ContextMenuItem onSelect={() => setBrandStyle(brand, { visible: !style.visible })}>
-                        {style.visible ? "🙈 Ocultar en mapa" : "👁 Mostrar en mapa"}
-                      </ContextMenuItem>
-                      <ContextMenuSeparator />
-                      <ContextMenuItem
-                        onSelect={() => resetBrandStyle(brand)}
-                        className="text-muted-foreground"
-                      >
-                        ↩ Restaurar estilo por defecto
-                      </ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
-                );
-              })}
-            </div>
-          )}
-
           {/* ── Gap Analysis Panel (requiere ambas capas activas) ──────── */}
           {(layers.agroplanet && layers.agroplanet_competitors) && (
-            <AgroplanetGapPanelConnected compData={compData} />
+            <AgroplanetGapPanelConnected />
           )}
           {layers.communesGeo && (
             <div className="mt-2 rounded-lg bg-surface-2/40 p-2">
@@ -1759,14 +1574,6 @@ export const Sidebar = ({
             </div>
           )}
           <CollapsibleCustomLayers isAdmin={isAdmin} />
-          {/* Editor de estilo por marca (abre desde context menu) */}
-          <BrandStyleEditorDialog
-            brand={editingBrand}
-            currentStyle={editingBrand ? getStyle(editingBrand) : null}
-            onSave={(brand, style) => setBrandStyle(brand, style)}
-            onReset={(brand) => resetBrandStyle(brand)}
-            onClose={() => setEditingBrand(null)}
-          />
         </SidebarSection>
 
 
