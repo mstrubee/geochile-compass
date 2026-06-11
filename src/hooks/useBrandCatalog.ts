@@ -19,6 +19,7 @@ export interface BrandEntry {
   subcategoria:   string | null;
   color_hex:      string | null;
   icon_emoji:     string | null;
+  logo_url:       string | null;
   activo:         boolean | null;
   created_at:     string | null;
 }
@@ -30,6 +31,7 @@ export interface BrandInsert {
   subcategoria?:  string | null;
   color_hex?:     string;
   icon_emoji?:    string;
+  logo_url?:      string | null;
   activo?:        boolean;
 }
 
