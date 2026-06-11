@@ -2983,14 +2983,6 @@ const CollapsibleCustomLayers = ({ isAdmin = false }: { isAdmin?: boolean }) => 
         </>
       )}
 
-      {/* ── Editor de estilo por marca (abre desde context menu) ─────── */}
-      <BrandStyleEditorDialog
-        brand={editingBrand}
-        currentStyle={editingBrand ? getStyle(editingBrand) : null}
-        onSave={(brand, style) => setBrandStyle(brand, style)}
-        onReset={(brand) => resetBrandStyle(brand)}
-        onClose={() => setEditingBrand(null)}
-      />
     </div>
   );
 };
