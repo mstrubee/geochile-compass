@@ -134,12 +134,12 @@ def _osm_element_to_record(
         marca_est    = brand_entry["marca_estandar"]
         cadena       = brand_entry.get("cadena")
     else:
-        # Fallback: inferir categoría desde los tags pero no asignar marca
+        # Fallback: inferir categoría desde los tags; POI sin cadena → "Otros"
         categoria = forced_categoria or _infer_categoria_from_tags(tags)
         if not categoria:
             return None
         subcategoria = None
-        marca_est    = None
+        marca_est    = "Otros"   # agrupa en "Otros" en vez de quedar huérfano
         cadena       = None
 
     nombre   = _best_name(tags)

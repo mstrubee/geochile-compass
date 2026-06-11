@@ -117,7 +117,8 @@ const CategoryRow = ({ cat, on, count, hidden, onToggle, onBrandToggle, onSetHid
 
               <div className="border-t border-border/20 my-0.5" />
 
-              {marcas.map((m) => {
+              {/* Marcas con cadena (todo excepto "Otros"), ordenadas por count */}
+              {marcas.filter((m) => m.marca_estandar !== "Otros").map((m) => {
                 const brandOn = !hidden.has(m.marca_estandar);
                 return (
                   <button
@@ -136,6 +137,32 @@ const CategoryRow = ({ cat, on, count, hidden, onToggle, onBrandToggle, onSetHid
                   </button>
                 );
               })}
+
+              {/* "Otros" siempre al final, si existe */}
+              {marcas.some((m) => m.marca_estandar === "Otros") && (() => {
+                const otros = marcas.find((m) => m.marca_estandar === "Otros")!;
+                const brandOn = !hidden.has("Otros");
+                return (
+                  <>
+                    <div className="border-t border-border/20 my-0.5" />
+                    <button
+                      key="Otros"
+                      type="button"
+                      onClick={() => onBrandToggle("Otros")}
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-all hover:bg-surface-2/60"
+                      aria-pressed={brandOn}
+                      title="POIs sin cadena reconocida (nombre local, sin normalizar)"
+                    >
+                      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-400" style={{ opacity: brandOn ? 0.7 : 0.25 }} />
+                      <span className={["flex-1 text-[12px] leading-tight truncate text-left italic", brandOn ? "text-muted-foreground" : "text-muted-foreground/50"].join(" ")}>
+                        Otros
+                      </span>
+                      <span className="font-mono text-[10px] text-text-muted flex-shrink-0">{otros.n.toLocaleString()}</span>
+                      <IOSSwitch on={brandOn} />
+                    </button>
+                  </>
+                );
+              })()}
             </>
           )}
         </div>

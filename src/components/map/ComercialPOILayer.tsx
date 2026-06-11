@@ -113,7 +113,8 @@ export const ComercialPOILayer = ({ categoria, visible, filtroMarca, hiddenBrand
     }));
     if (!hiddenBrands || hiddenBrands.size === 0) return base;
     return base.filter((f) => {
-      const brand = f.properties.poi.marca_estandar ?? "";
+      // NULL en DB → "Otros" (datos anteriores al ETL fix)
+      const brand = f.properties.poi.marca_estandar ?? "Otros";
       return !hiddenBrands.has(brand);
     });
   }, [data, hiddenBrands]);
