@@ -55,6 +55,13 @@ export const defaultColorForBrand = (brand: string): string => {
 
 export const getBrandKey = (c: AgroplanetCompetitor): string => {
   if (c.marca?.trim()) return c.marca.trim();
+  // Categorías "tienda_*" son tipos genéricos de comercio (ej. tienda_agraria);
+  // en esos casos el nombre real del local es más informativo que la categoría.
+  // Así "Agroriego Tattersall" y "Tattersall Agroinsumos" aparecen por su nombre
+  // real en lugar de quedar sepultados bajo un genérico "Agraria (50)".
+  if (c.categoria.startsWith("tienda_") && c.nombre?.trim()) {
+    return c.nombre.trim();
+  }
   return c.categoria
     .replace(/^(dealer_|tienda_|taller_|maquinaria_)/, "")
     .split("_")
