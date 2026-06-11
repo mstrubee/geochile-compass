@@ -296,6 +296,171 @@ export type Database = {
         }
         Relationships: []
       }
+      agroplanet_competitors: {
+        Row: {
+          categoria: string
+          created_at: string | null
+          cut: string | null
+          direccion: string | null
+          fuente: string
+          id: string
+          lat: number
+          lng: number
+          marca: string | null
+          nombre: string
+          region: string | null
+          telefono: string | null
+          url: string | null
+          verified: boolean
+        }
+        Insert: {
+          categoria: string
+          created_at?: string | null
+          cut?: string | null
+          direccion?: string | null
+          fuente?: string
+          id?: string
+          lat: number
+          lng: number
+          marca?: string | null
+          nombre: string
+          region?: string | null
+          telefono?: string | null
+          url?: string | null
+          verified?: boolean
+        }
+        Update: {
+          categoria?: string
+          created_at?: string | null
+          cut?: string | null
+          direccion?: string | null
+          fuente?: string
+          id?: string
+          lat?: number
+          lng?: number
+          marca?: string | null
+          nombre?: string
+          region?: string | null
+          telefono?: string | null
+          url?: string | null
+          verified?: boolean
+        }
+        Relationships: []
+      }
+      agroplanet_comunas: {
+        Row: {
+          computed_at: string | null
+          cut: string
+          diversidad_especies: number | null
+          especie_dominante: string | null
+          ha_agricola_total: number | null
+          ha_cereales_oleaginosas: number | null
+          ha_frutales_riego: number | null
+          ha_frutales_total: number | null
+          ha_suelo_clase_i_ii: number | null
+          model_version: string | null
+          nombre: string
+          num_explot_medianas: number | null
+          pct_predios_grandes: number | null
+          quintil_combined: number | null
+          quintil_grandes: number | null
+          quintil_indap: number | null
+          region: string | null
+          region_id: string | null
+          score_combined: number | null
+          score_grandes: number | null
+          score_indap: number | null
+          total_explotaciones: number | null
+          total_tractores: number | null
+          tractores_x100ha: number | null
+        }
+        Insert: {
+          computed_at?: string | null
+          cut: string
+          diversidad_especies?: number | null
+          especie_dominante?: string | null
+          ha_agricola_total?: number | null
+          ha_cereales_oleaginosas?: number | null
+          ha_frutales_riego?: number | null
+          ha_frutales_total?: number | null
+          ha_suelo_clase_i_ii?: number | null
+          model_version?: string | null
+          nombre: string
+          num_explot_medianas?: number | null
+          pct_predios_grandes?: number | null
+          quintil_combined?: number | null
+          quintil_grandes?: number | null
+          quintil_indap?: number | null
+          region?: string | null
+          region_id?: string | null
+          score_combined?: number | null
+          score_grandes?: number | null
+          score_indap?: number | null
+          total_explotaciones?: number | null
+          total_tractores?: number | null
+          tractores_x100ha?: number | null
+        }
+        Update: {
+          computed_at?: string | null
+          cut?: string
+          diversidad_especies?: number | null
+          especie_dominante?: string | null
+          ha_agricola_total?: number | null
+          ha_cereales_oleaginosas?: number | null
+          ha_frutales_riego?: number | null
+          ha_frutales_total?: number | null
+          ha_suelo_clase_i_ii?: number | null
+          model_version?: string | null
+          nombre?: string
+          num_explot_medianas?: number | null
+          pct_predios_grandes?: number | null
+          quintil_combined?: number | null
+          quintil_grandes?: number | null
+          quintil_indap?: number | null
+          region?: string | null
+          region_id?: string | null
+          score_combined?: number | null
+          score_grandes?: number | null
+          score_indap?: number | null
+          total_explotaciones?: number | null
+          total_tractores?: number | null
+          tractores_x100ha?: number | null
+        }
+        Relationships: []
+      }
+      agroplanet_model_config: {
+        Row: {
+          active: boolean
+          created_at: string | null
+          id: number
+          notas: string | null
+          peso_grandes: number
+          peso_indap: number
+          variable: string
+          version: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string | null
+          id?: number
+          notas?: string | null
+          peso_grandes: number
+          peso_indap: number
+          variable: string
+          version?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string | null
+          id?: number
+          notas?: string | null
+          peso_grandes?: number
+          peso_indap?: number
+          variable?: string
+          version?: string
+        }
+        Relationships: []
+      }
       analysis_settings: {
         Row: {
           config_version: number
