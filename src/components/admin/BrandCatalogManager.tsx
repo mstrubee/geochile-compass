@@ -13,10 +13,10 @@
  *  • Filtro por categoría
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import {
   Plus, Search, Trash2, Pencil, Check, X, ChevronDown,
-  Package, Loader2, Upload, ToggleLeft, ToggleRight, RefreshCw,
+  Package, Loader2, Upload, ToggleLeft, ToggleRight, RefreshCw, Image as ImageIcon,
 } from "lucide-react";
 import { AppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
