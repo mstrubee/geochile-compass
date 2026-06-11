@@ -48,6 +48,7 @@ import type { IneVariable } from "@/utils/ineScales";
 import type { UserLayer } from "@/types/userLayers";
 import { ISO_MODE_LABEL, type IsoMode, type Isochrone } from "@/types/isochrones";
 import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
+import type { AgroplanetScoreMode } from "@/components/map/AgroplanetComunasLayer";
 import { MICRO_PALETTE } from "@/types/microzones";
 import {
   polygonFromLatLngs,
@@ -161,7 +162,7 @@ const Index = () => {
   // Capa Riesgo Delictivo
   const [crimeView, setCrimeView] = useState<"heat" | "manzana">("heat");
   const [gastoView, setGastoView] = useState<"heat" | "manzana">("heat");
-  const [agroplanetScoreMode, setAgroplanetScoreMode] = useState<"combined" | "grandes" | "indap">("combined");
+  const [agroplanetScoreMode, setAgroplanetScoreMode] = useState<AgroplanetScoreMode>("combined");
   const [crimeType, setCrimeType] = useState<import("@/components/map/CrimeHeatLayer").CrimeType>("total");
   const [activeRisk, setActiveRisk] = useState<Set<import("@/components/map/CrimeHeatLayer").RiskFilter>>(
     new Set(["Muy Alto", "Alto", "Medio", "Bajo", "Muy Bajo"])

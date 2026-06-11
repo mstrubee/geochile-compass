@@ -145,3 +145,22 @@
   border-radius: 6px !important;
 }
 .leaflet-control-attribution a { color: hsl(var(--primary)) !important; }
+
+/* Agroplanet tooltip — glass card, ancho generoso */
+.leaflet-tooltip-agroplanet {
+  background: hsl(var(--surface) / 0.97) !important;
+  backdrop-filter: saturate(160%) blur(20px);
+  -webkit-backdrop-filter: saturate(160%) blur(20px);
+  border: 1px solid hsl(var(--border) / 0.55) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.22), 0 16px 40px rgba(0,0,0,0.28) !important;
+  padding: 9px 12px !important;
+  color: hsl(var(--foreground));
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 11px !important;
+  line-height: 1.5;
+  pointer-events: none;
+  white-space: normal !important;
+  max-width: 270px;
+}
+.leaflet-tooltip-agroplanet::before { display: none !important; }

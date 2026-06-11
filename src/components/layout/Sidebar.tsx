@@ -35,6 +35,8 @@ import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 
+import type { AgroplanetScoreMode } from "@/components/map/AgroplanetComunasLayer";
+import { AGRO_IS_SCORE } from "@/components/map/AgroplanetComunasLayer";
 import type { CrimeType, RiskFilter } from "@/components/map/CrimeHeatLayer";
 import { CATEGORY_META } from "@/components/map/CommercialHeatLayer";
 import type { CommercialCategory } from "@/components/map/CommercialHeatLayer";
@@ -79,8 +81,8 @@ interface SidebarProps {
   onRiskToggle: (r: RiskFilter) => void;
   gastoView: "heat" | "manzana";
   onGastoViewChange: (v: "heat" | "manzana") => void;
-  agroplanetScoreMode: "combined" | "grandes" | "indap";
-  onAgroplanetScoreModeChange: (m: "combined" | "grandes" | "indap") => void;
+  agroplanetScoreMode: AgroplanetScoreMode;
+  onAgroplanetScoreModeChange: (m: AgroplanetScoreMode) => void;
   chileCommunesVariable: IneVariable;
   onChileCommunesVariableChange: (v: IneVariable) => void;
   userLayers: UserLayer[];
@@ -1505,44 +1507,105 @@ export const Sidebar = ({
           )}
           {layers.agroplanet && (
             <div className="mt-2 rounded-lg bg-surface-2/40 p-2 space-y-2">
-              <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">Modo de score</div>
-              <div className="flex gap-1 rounded-md bg-surface-2/60 p-0.5">
-                {([
-                  { key: "combined", label: "🌱 Combinado" },
-                  { key: "grandes",  label: "🏭 Grandes"   },
-                  { key: "indap",    label: "🌾 INDAP"      },
-                ] as const).map(({ key, label }) => (
-                  <button
-                    key={key}
-                    onClick={() => onAgroplanetScoreModeChange(key)}
-                    className={[
-                      "flex-1 rounded px-2 py-1.5 text-[11px] font-medium transition-all text-center",
-                      agroplanetScoreMode === key
-                        ? "bg-surface-3 text-foreground shadow-apple-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    ].join(" ")}
-                  >
-                    {label}
-                  </button>
-                ))}
+              {/* ─── Fila 1: Modos de score ─── */}
+              <div>
+                <div className="text-[9px] uppercase tracking-wider text-text-muted mb-0.5">Score</div>
+                <div className="flex gap-1 rounded-md bg-surface-2/60 p-0.5">
+                  {([
+                    { key: "combined" as const, label: "🌱 Combinado" },
+                    { key: "grandes"  as const, label: "🏭 Grandes"   },
+                    { key: "indap"    as const, label: "🌾 INDAP"      },
+                  ]).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => onAgroplanetScoreModeChange(key)}
+                      className={[
+                        "flex-1 rounded px-1.5 py-1.5 text-[10px] font-medium transition-all text-center",
+                        agroplanetScoreMode === key
+                          ? "bg-surface-3 text-foreground shadow-apple-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      ].join(" ")}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                {[
-                  { color: "#d1fae5", label: "1" },
-                  { color: "#6ee7b7", label: "2" },
-                  { color: "#f59e0b", label: "3" },
-                  { color: "#f97316", label: "4" },
-                  { color: "#15803d", label: "5" },
-                ].map(({ color, label }) => (
-                  <div key={label} className="flex flex-col items-center gap-0.5">
-                    <div className="h-2.5 w-8 rounded-sm" style={{ background: color }} />
-                    <span className="text-[9px] text-muted-foreground/60">Q{label}</span>
-                  </div>
-                ))}
+
+              {/* ─── Fila 2: Sub-capas cultivos ─── */}
+              <div>
+                <div className="text-[9px] uppercase tracking-wider text-text-muted mb-0.5">Cultivos</div>
+                <div className="flex flex-wrap gap-1 rounded-md bg-surface-2/60 p-0.5">
+                  {([
+                    { key: "frutales"   as const, label: "🍇 Frutales"  },
+                    { key: "cereales"   as const, label: "🌾 Cereales"   },
+                    { key: "vinas"      as const, label: "🍷 Viñas"      },
+                    { key: "forrajeras" as const, label: "🌿 Forraje"    },
+                    { key: "diversidad" as const, label: "🔬 Diversidad" },
+                  ]).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => onAgroplanetScoreModeChange(key)}
+                      className={[
+                        "rounded px-1.5 py-1 text-[10px] font-medium transition-all text-center",
+                        agroplanetScoreMode === key
+                          ? "bg-surface-3 text-foreground shadow-apple-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      ].join(" ")}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <p className="text-[10px] leading-relaxed text-text-muted">
-                Score 0–100 · Frutales riego, cereales, viñas, forrajeras + diversidad de especies.
-              </p>
+
+              {/* ─── Leyenda dinámica ─── */}
+              {AGRO_IS_SCORE(agroplanetScoreMode) ? (
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { color: "#d1fae5", label: "Q1" },
+                    { color: "#6ee7b7", label: "Q2" },
+                    { color: "#f59e0b", label: "Q3" },
+                    { color: "#f97316", label: "Q4" },
+                    { color: "#15803d", label: "Q5" },
+                  ].map(({ color, label }) => (
+                    <div key={label} className="flex flex-col items-center gap-0.5">
+                      <div className="h-2.5 w-8 rounded-sm" style={{ background: color }} />
+                      <span className="text-[9px] text-muted-foreground/60">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : agroplanetScoreMode === "diversidad" ? (
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { color: "#f1f5f9", label: "0" },
+                    { color: "#d1fae5", label: "Q1" },
+                    { color: "#34d399", label: "Q2" },
+                    { color: "#059669", label: "Q3" },
+                    { color: "#4338ca", label: "Q4+" },
+                  ].map(({ color, label }) => (
+                    <div key={label} className="flex flex-col items-center gap-0.5">
+                      <div className="h-2.5 w-8 rounded-sm" style={{ background: color }} />
+                      <span className="text-[9px] text-muted-foreground/60">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { color: "#f1f5f9", label: "0 ha" },
+                    { color: "#bfdbfe", label: "Q1" },
+                    { color: "#60a5fa", label: "Q2" },
+                    { color: "#2563eb", label: "Q3" },
+                    { color: "#1e3a8a", label: "Q4+" },
+                  ].map(({ color, label }) => (
+                    <div key={label} className="flex flex-col items-center gap-0.5">
+                      <div className="h-2.5 w-8 rounded-sm" style={{ background: color }} />
+                      <span className="text-[9px] text-muted-foreground/60">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           {layers.communesGeo && (
