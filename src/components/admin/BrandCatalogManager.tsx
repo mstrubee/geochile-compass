@@ -349,6 +349,7 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <>
     <AppDialog
       open={open}
       onOpenChange={onOpenChange}
@@ -555,5 +556,6 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
       open={customLayerOpen}
       onOpenChange={setCustomLayerOpen}
     />
+    </>
   );
 };
