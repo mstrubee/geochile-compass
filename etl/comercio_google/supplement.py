@@ -35,6 +35,7 @@ Costo estimado
 from __future__ import annotations
 
 import logging
+import math
 import time
 from typing import Any
 
@@ -328,6 +329,22 @@ REGIONAL_ZONES: list[tuple[float, float, int, str]] = [
 # API helper: Text Search con paginación
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _circle_to_rectangle(lat: float, lng: float, radius_m: int) -> dict:
+    """
+    Convierte un círculo (lat, lng, radius_m) en un bounding-box rectangulo.
+
+    La Text Search API (New) acepta locationRestriction.rectangle pero NO
+    locationRestriction.circle (ese campo es exclusivo del Nearby Search).
+    Usar circle en Text Search devuelve error 400 silencioso → cero resultados.
+    """
+    d_lat = radius_m / 111_100.0
+    d_lon = radius_m / (111_100.0 * math.cos(math.radians(lat)))
+    return {
+        "low":  {"latitude": lat - d_lat, "longitude": lng - d_lon},
+        "high": {"latitude": lat + d_lat, "longitude": lng + d_lon},
+    }
+
+
 def _text_search_page(
     query: str,
     lat: float,
@@ -338,15 +355,14 @@ def _text_search_page(
     """
     Llama a Places Text Search para una marca + ubicación.
     Retorna (places, next_page_token).
+
+    Usa locationRestriction.rectangle (el único tipo soportado por Text Search).
     """
     body: dict[str, Any] = {
         "textQuery":      query,
         "maxResultCount": 20,
         "locationRestriction": {
-            "circle": {
-                "center": {"latitude": lat, "longitude": lng},
-                "radius": float(radius_m),
-            }
+            "rectangle": _circle_to_rectangle(lat, lng, radius_m),
         },
         "languageCode": "es",
     }
@@ -373,8 +389,15 @@ def _text_search_page(
         places = data.get("places", [])
         return places, data.get("nextPageToken")
 
+    except requests.HTTPError as exc:
+        log.error(
+            "  HTTP %s en Text Search '%s' (%s,%s): %s",
+            exc.response.status_code if exc.response is not None else "?",
+            query, lat, lng, exc,
+        )
+        return [], None
     except requests.RequestException as exc:
-        log.error("  Error Text Search '%s' (%s,%s): %s", query, lat, lng, exc)
+        log.error("  Error de red Text Search '%s' (%s,%s): %s", query, lat, lng, exc)
         return [], None
 
 
