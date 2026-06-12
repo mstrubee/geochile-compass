@@ -183,46 +183,35 @@ export function useComercialMarcas(
 
     (async () => {
       try {
-        // 1. Marcas registradas en el catálogo para esta categoría
-        const { data: catalogData } = await supabase
-          .from("brand_catalog")
-          .select("marca_estandar")
-          .eq("categoria", categoria)
-          .eq("activo", true);
-
-        // 2. Conteos reales desde comercio_poi
-        const { data: countData, error } = await supabase
-          .rpc("fn_participacion_marcas", { p_categoria: categoria });
+        // fn_marcas_categoria: devuelve catálogo + conteos en una sola query
+        // (catálogo como base → marcas con 0 POIs aparecen; POIs sin catálogo → también)
+        const { data, error } = await supabase
+          .rpc("fn_marcas_categoria", { p_categoria: categoria });
 
         if (cancelled) return;
-        if (error) { console.error(error); return; }
 
-        // 3. Mapa de conteos desde POIs
-        const countMap = new Map<string, number>();
-        for (const r of (countData as Array<{ marca_estandar: string; total_locales: number }> ?? [])) {
-          countMap.set(r.marca_estandar, r.total_locales);
+        if (error) {
+          // Fallback: solo POIs reales si la función nueva no existe aún
+          console.warn("fn_marcas_categoria no disponible, usando fallback:", error.message);
+          const { data: fallback, error: fbErr } = await supabase
+            .rpc("fn_participacion_marcas", { p_categoria: categoria });
+          if (cancelled) return;
+          if (fbErr) { console.error(fbErr); return; }
+          setMarcas(
+            (fallback as Array<{ marca_estandar: string; total_locales: number }> ?? [])
+              .map((r) => ({ marca_estandar: r.marca_estandar, n: r.total_locales })),
+          );
+          return;
         }
 
-        // 4. Base = todas las marcas del catálogo (distintas, sin duplicados)
-        const allBrands = new Set<string>();
-        for (const r of (catalogData ?? [])) {
-          if (r.marca_estandar) allBrands.add(r.marca_estandar);
-        }
-        // Agregar también marcas que vienen de POIs pero no están en el catálogo (ej. "Otros")
-        for (const [m] of countMap) {
-          allBrands.add(m);
-        }
+        // Resultado de fn_marcas_categoria: ya viene ordenado por total desc
+        // Solo mover "Otros" al final por convención visual
+        const rows = (data as Array<{ marca_estandar: string; total_locales: number }> ?? [])
+          .map((r) => ({ marca_estandar: r.marca_estandar, n: Number(r.total_locales) }));
 
-        // 5. Construir lista final: orden descendente por conteo, "Otros" siempre al final
-        const merged: MarcaCount[] = Array.from(allBrands)
-          .map((m) => ({ marca_estandar: m, n: countMap.get(m) ?? 0 }))
-          .sort((a, b) => {
-            if (a.marca_estandar === "Otros") return 1;
-            if (b.marca_estandar === "Otros") return -1;
-            return b.n - a.n;
-          });
-
-        setMarcas(merged);
+        const otros   = rows.filter((r) => r.marca_estandar === "Otros");
+        const normales = rows.filter((r) => r.marca_estandar !== "Otros");
+        setMarcas([...normales, ...otros]);
       } finally {
         if (!cancelled) setLoading(false);
       }
