@@ -4,14 +4,16 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
+import type { MapProvider } from "@/hooks/useMapProvider";
 
 interface HeaderProps {
   mode: "none" | "isochrone" | "microzone";
   onToggleIsochrone: () => void;
   onToggleMicrozone: () => void;
+  provider?: MapProvider;
 }
 
-export const Header = ({ mode, onToggleIsochrone, onToggleMicrozone }: HeaderProps) => {
+export const Header = ({ mode, onToggleIsochrone, onToggleMicrozone, provider = "osm" }: HeaderProps) => {
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
 
@@ -31,10 +33,17 @@ export const Header = ({ mode, onToggleIsochrone, onToggleMicrozone }: HeaderPro
         SIG v3.0
       </span>
 
-      <span className="flex items-center gap-1.5 rounded-full bg-brand-green/10 px-2 py-0.5 font-mono text-[10px] text-brand-green">
-        <span className="h-1.5 w-1.5 animate-blink rounded-full bg-brand-green" />
-        OSM Live
-      </span>
+      {provider === "google" ? (
+        <span className="flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary">
+          <span className="h-1.5 w-1.5 animate-blink rounded-full bg-primary" />
+          Google Maps
+        </span>
+      ) : (
+        <span className="flex items-center gap-1.5 rounded-full bg-brand-green/10 px-2 py-0.5 font-mono text-[10px] text-brand-green">
+          <span className="h-1.5 w-1.5 animate-blink rounded-full bg-brand-green" />
+          OSM Live
+        </span>
+      )}
 
       <span className="hidden whitespace-nowrap text-[12px] text-muted-foreground md:inline">
         Chile · Santiago RM

@@ -25,6 +25,8 @@ import { usePoiFolderSchemas } from "@/hooks/usePoiMetrics";
 import { Legend } from "@/components/ui-overlays/Legend";
 import { SearchBar, type SearchResult } from "@/components/ui-overlays/SearchBar";
 import { CoordsBar } from "@/components/ui-overlays/CoordsBar";
+import { ApiUsagePanel } from "@/components/ui-overlays/ApiUsagePanel";
+import { useMapProvider } from "@/hooks/useMapProvider";
 import { useManzanas } from "@/hooks/useManzanas";
 import { useGseManzanas } from "@/hooks/useGseManzanas";
 import { useComunasGeoIndex } from "@/hooks/useComunasGeoIndex";
@@ -65,6 +67,7 @@ import { useCustomLayers } from "@/hooks/useCustomLayers";
 type Mode = "none" | "isochrone" | "microzone";
 
 const Index = () => {
+  const mapProvider = useMapProvider();
   const [mode, setMode] = useState<Mode>("none");
   const [basemap, setBasemap] = useState<"dark" | "light" | "satellite" | "hybrid">(() => {
     try {
@@ -1213,6 +1216,7 @@ const Index = () => {
         mode={mode}
         onToggleIsochrone={() => setMode((m) => (m === "isochrone" ? "none" : "isochrone"))}
         onToggleMicrozone={() => setMode((m) => (m === "microzone" ? "none" : "microzone"))}
+        provider={mapProvider.provider}
       />
 
       <main className="flex flex-1 overflow-hidden">
@@ -1392,6 +1396,8 @@ const Index = () => {
           )}
           <MapView
             basemap={basemap}
+            provider={mapProvider.provider}
+            onGoogleTileLoad={() => mapProvider.trackUsage("tiles")}
             onMouseMove={setCoords}
             layers={layers}
             nseFilter={nseFilter}
@@ -1463,6 +1469,14 @@ const Index = () => {
             onSelect={(r: SearchResult) =>
               setFlyTarget({ id: Date.now(), lat: r.lat, lng: r.lng, bbox: r.bbox })
             }
+            provider={mapProvider.provider}
+          />
+          <ApiUsagePanel
+            provider={mapProvider.provider}
+            onProviderChange={mapProvider.setProvider}
+            usage={mapProvider.usage}
+            hasGoogleKey={mapProvider.hasGoogleKey}
+            isLimitReached={mapProvider.isLimitReached}
           />
           <Legend
             shifted={panelOpen}

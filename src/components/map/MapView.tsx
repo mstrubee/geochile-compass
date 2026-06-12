@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { GoogleTileLayer } from "./GoogleTileLayer";
+import type { MapProvider } from "@/hooks/useMapProvider";
 import L from "leaflet";
 import { CommuneLayer } from "./CommuneLayer";
 import { ChileCommunesLayer } from "./ChileCommunesLayer";
@@ -158,6 +160,8 @@ const FlyToTarget = ({
 
 interface MapViewProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
+  provider?: MapProvider;
+  onGoogleTileLoad?: () => void;
   onMouseMove: (c: { lat: number; lng: number }) => void;
   layers: import("@/types/layers").LayerState;
   nseFilter: import("@/data/communes").NSE | null;
@@ -233,6 +237,8 @@ interface MapViewProps {
 
 export const MapView = ({
   basemap,
+  provider = "osm",
+  onGoogleTileLoad,
   onMouseMove,
   layers,
   nseFilter,
@@ -300,19 +306,28 @@ export const MapView = ({
       className="h-full w-full"
       attributionControl
     >
-      <TileLayer
-        key={basemap}
-        url={tile.url}
-        attribution={tile.attribution}
-        maxZoom={19}
-      />
-      {tile.overlay && (
-        <TileLayer
-          key={`${basemap}-overlay`}
-          url={tile.overlay}
-          maxZoom={19}
-          zIndex={250}
+      {provider === "google" ? (
+        <GoogleTileLayer
+          basemap={basemap}
+          onTileLoad={onGoogleTileLoad}
         />
+      ) : (
+        <>
+          <TileLayer
+            key={basemap}
+            url={tile.url}
+            attribution={tile.attribution}
+            maxZoom={19}
+          />
+          {tile.overlay && (
+            <TileLayer
+              key={`${basemap}-overlay`}
+              url={tile.overlay}
+              maxZoom={19}
+              zIndex={250}
+            />
+          )}
+        </>
       )}
       <ZoomControlTopRight />
       <MouseTracker onMouseMove={onMouseMove} />

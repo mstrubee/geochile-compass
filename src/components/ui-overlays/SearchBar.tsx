@@ -1,5 +1,11 @@
 import { Search, Loader2, MapPin, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useId } from "react";
+import {
+  placesAutocomplete,
+  getPlaceCoords,
+  type PlacesPrediction,
+} from "@/services/googleMapsService";
+import type { MapProvider } from "@/hooks/useMapProvider";
 
 export interface SearchResult {
   id: string;
@@ -12,11 +18,13 @@ export interface SearchResult {
 
 interface Props {
   onSelect: (result: SearchResult) => void;
+  provider?: MapProvider;
 }
 
 const VIEWBOX = "-71.7,-33.0,-70.0,-34.2"; // Región Metropolitana aprox. (lon_min,lat_max,lon_max,lat_min)
+const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
 
-export const SearchBar = ({ onSelect }: Props) => {
+export const SearchBar = ({ onSelect, provider = "osm" }: Props) => {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -24,6 +32,8 @@ export const SearchBar = ({ onSelect }: Props) => {
   const [activeIdx, setActiveIdx] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Stable session token for Places Autocomplete (new token per search session)
+  const placesSessionToken = useId();
 
   // Cierre al hacer click fuera
   useEffect(() => {
@@ -36,7 +46,7 @@ export const SearchBar = ({ onSelect }: Props) => {
     return () => window.removeEventListener("mousedown", onClick);
   }, []);
 
-  // Búsqueda con debounce
+  // Búsqueda con debounce — Google Places o Nominatim según proveedor activo
   useEffect(() => {
     const term = q.trim();
     if (term.length < 3) {
@@ -45,45 +55,67 @@ export const SearchBar = ({ onSelect }: Props) => {
       return;
     }
     setLoading(true);
+    const useGoogle = provider === "google" && !!GOOGLE_KEY;
+
     const handle = setTimeout(async () => {
       abortRef.current?.abort();
       const ctrl = new AbortController();
       abortRef.current = ctrl;
       try {
-        const url =
-          `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8` +
-          `&countrycodes=cl&viewbox=${VIEWBOX}&bounded=0` +
-          `&q=${encodeURIComponent(term)}`;
-        const res = await fetch(url, {
-          signal: ctrl.signal,
-          headers: { "Accept-Language": "es" },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data: Array<{
-          place_id: number;
-          display_name: string;
-          lat: string;
-          lon: string;
-          boundingbox?: [string, string, string, string];
-          type: string;
-          class: string;
-        }> = await res.json();
-        const mapped: SearchResult[] = data.map((r) => ({
-          id: String(r.place_id),
-          label: r.display_name,
-          lat: parseFloat(r.lat),
-          lng: parseFloat(r.lon),
-          bbox: r.boundingbox
-            ? [
-                parseFloat(r.boundingbox[0]),
-                parseFloat(r.boundingbox[1]),
-                parseFloat(r.boundingbox[2]),
-                parseFloat(r.boundingbox[3]),
-              ]
-            : null,
-          type: r.type || r.class,
-        }));
-        setResults(mapped);
+        if (useGoogle) {
+          // Google Places Autocomplete
+          const predictions: PlacesPrediction[] = await placesAutocomplete(
+            term,
+            GOOGLE_KEY,
+            placesSessionToken,
+          );
+          if (ctrl.signal.aborted) return;
+          const mapped: SearchResult[] = predictions.map((p) => ({
+            id: p.placeId,
+            label: p.description,
+            lat: 0,
+            lng: 0,
+            bbox: null,
+            type: "place",
+          }));
+          setResults(mapped);
+        } else {
+          // Nominatim (OSM)
+          const url =
+            `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8` +
+            `&countrycodes=cl&viewbox=${VIEWBOX}&bounded=0` +
+            `&q=${encodeURIComponent(term)}`;
+          const res = await fetch(url, {
+            signal: ctrl.signal,
+            headers: { "Accept-Language": "es" },
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data: Array<{
+            place_id: number;
+            display_name: string;
+            lat: string;
+            lon: string;
+            boundingbox?: [string, string, string, string];
+            type: string;
+            class: string;
+          }> = await res.json();
+          const mapped: SearchResult[] = data.map((r) => ({
+            id: String(r.place_id),
+            label: r.display_name,
+            lat: parseFloat(r.lat),
+            lng: parseFloat(r.lon),
+            bbox: r.boundingbox
+              ? [
+                  parseFloat(r.boundingbox[0]),
+                  parseFloat(r.boundingbox[1]),
+                  parseFloat(r.boundingbox[2]),
+                  parseFloat(r.boundingbox[3]),
+                ]
+              : null,
+            type: r.type || r.class,
+          }));
+          setResults(mapped);
+        }
         setOpen(true);
         setActiveIdx(-1);
       } catch (err) {
@@ -96,9 +128,19 @@ export const SearchBar = ({ onSelect }: Props) => {
       }
     }, 350);
     return () => clearTimeout(handle);
-  }, [q]);
+  }, [q, provider, placesSessionToken]);
 
-  const choose = (r: SearchResult) => {
+  const choose = async (r: SearchResult) => {
+    // Google Places results need coord resolution via placeId
+    if (provider === "google" && GOOGLE_KEY && r.lat === 0 && r.lng === 0) {
+      const details = await getPlaceCoords(r.id, GOOGLE_KEY, placesSessionToken);
+      if (details) {
+        onSelect({ ...r, lat: details.lat, lng: details.lng, label: details.displayName });
+        setOpen(false);
+        setQ(details.displayName.split(",").slice(0, 2).join(","));
+        return;
+      }
+    }
     onSelect(r);
     setOpen(false);
     setQ(r.label.split(",").slice(0, 2).join(","));
@@ -115,7 +157,7 @@ export const SearchBar = ({ onSelect }: Props) => {
     } else if (e.key === "Enter") {
       e.preventDefault();
       const r = results[activeIdx >= 0 ? activeIdx : 0];
-      if (r) choose(r);
+      if (r) void choose(r);
     } else if (e.key === "Escape") {
       setOpen(false);
     }
@@ -163,7 +205,7 @@ export const SearchBar = ({ onSelect }: Props) => {
               <button
                 type="button"
                 onMouseEnter={() => setActiveIdx(i)}
-                onClick={() => choose(r)}
+                onClick={() => void choose(r)}
                 className={[
                   "flex w-full items-start gap-2 px-3 py-2 text-left text-[12px] transition-colors",
                   i === activeIdx
