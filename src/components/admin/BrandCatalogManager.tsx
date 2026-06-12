@@ -317,7 +317,7 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
       const { data, error } = await supabase.functions.invoke("trigger-sync");
       if (error) throw error;
       const msg = (data as { message?: string })?.message ?? "Sync disparado";
-      toast.success(msg, { description: "El workflow de GitHub Actions está en cola. Tarda ~10 min." });
+      toast.success(msg, { description: "Sync Google Places en cola. Tarda ~10 min. Los datos OSM se reemplazarán automáticamente." });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error("Error al disparar sync", { description: msg });
@@ -353,8 +353,8 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
     <AppDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Catálogo de Marcas OSM"
-      description="Reglas de normalización de nombres de marcas para la Red Comercial Nacional"
+      title="Catálogo de Marcas"
+      description="Reglas de normalización de nombres de marcas para la Red Comercial Nacional (fuente: Google Places)"
       icon={Package}
       size="5xl"
       contentClassName="p-0"
@@ -370,13 +370,13 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
               size="sm"
               onClick={handleTriggerSync}
               disabled={syncing}
-              title="Dispara el workflow de GitHub Actions para resincronizar POIs desde OpenStreetMap"
-              className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-400 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950"
+              title="Dispara el workflow de GitHub Actions para resincronizar POIs desde Google Places"
+              className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-400 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-950"
             >
               {syncing
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <RefreshCw className="h-3.5 w-3.5" />}
-              {syncing ? "Disparando…" : "Sincronizar OSM"}
+              {syncing ? "Disparando…" : "Sincronizar Google"}
             </Button>
           </div>
 

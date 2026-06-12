@@ -1,19 +1,19 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# sync_comercio_osm.yml
-# Sincronización automática semanal: OpenStreetMap → Supabase
+# sync_comercio_osm.yml  (ahora ejecuta el ETL de Google Places)
+#
+# Nombre de archivo conservado para compatibilidad con la Edge Function
+# "trigger-sync" que despacha este workflow por nombre.
 #
 # Ejecución: domingos a las 03:00 UTC (00:00 Chile hora de verano)
-# Manual:    Actions → "Sync Red Comercial OSM" → Run workflow
+# Manual:    Actions → "Sync Red Comercial Google" → Run workflow
 #
 # Secrets requeridos en GitHub → Settings → Secrets:
-#   SUPABASE_URL       → https://tcmyidycqdrrtwuaovbk.supabase.co
-#   SYNC_API_TOKEN     → token que generaste con: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-#
-# NO se necesita SUPABASE_SERVICE_ROLE_KEY ni SUPABASE_DB_URL.
-# Las escrituras van via Edge Function sync-comercio-osm (HTTP + SYNC_API_TOKEN).
+#   SUPABASE_URL         → https://tcmyidycqdrrtwuaovbk.supabase.co
+#   SYNC_API_TOKEN       → token compartido con la Edge Function
+#   VITE_GOOGLE_MAPS_KEY → clave de Google Maps Platform (Places API habilitada)
 # ═══════════════════════════════════════════════════════════════════════════
 
-name: Sync Red Comercial OSM
+name: Sync Red Comercial Google
 
 on:
   schedule:
@@ -21,16 +21,8 @@ on:
 
   workflow_dispatch:
     inputs:
-      categoria:
-        description: "Categoría específica (vacío = todas)"
-        required: false
-        default: ""
       dry_run:
-        description: "Solo extraer, no escribir en DB"
-        type: boolean
-        default: false
-      seed_catalog:
-        description: "Poblar brand_catalog y salir"
+        description: "Solo extraer y guardar CSV, sin escribir en DB"
         type: boolean
         default: false
 
@@ -39,7 +31,7 @@ env:
 
 jobs:
   sync:
-    name: "Sync POIs OSM → Supabase"
+    name: "Sync POIs Google Places → Supabase"
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -54,42 +46,31 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
-          cache-dependency-path: "etl/comercio_osm/requirements.txt"
+          cache-dependency-path: "etl/comercio_google/requirements.txt"
 
       - name: Install dependencies
-        run: pip install -r etl/comercio_osm/requirements.txt
-
-      # ── Seed catalog (solo si se solicita explícitamente) ─────────────────
-      - name: Seed brand_catalog
-        if: ${{ inputs.seed_catalog == true }}
-        env:
-          SUPABASE_URL:     ${{ secrets.SUPABASE_URL }}
-          SYNC_API_TOKEN:   ${{ secrets.SYNC_API_TOKEN }}
-        run: python -m etl.comercio_osm.run_sync --seed-catalog
+        run: pip install -r etl/comercio_google/requirements.txt
 
       # ── Sincronización principal ───────────────────────────────────────────
-      - name: Run sync
-        if: ${{ inputs.seed_catalog != true }}
+      - name: Run Google Places sync
         env:
-          SUPABASE_URL:     ${{ secrets.SUPABASE_URL }}
-          SYNC_API_TOKEN:   ${{ secrets.SYNC_API_TOKEN }}
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SYNC_API_TOKEN:       ${{ secrets.SYNC_API_TOKEN }}
+          VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
         run: |
-          ARGS=""
-          if [ -n "${{ inputs.categoria }}" ]; then
-            ARGS="$ARGS --categoria ${{ inputs.categoria }}"
-          fi
+          ARGS="--verbose"
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             ARGS="$ARGS --dry-run"
           fi
-          python -m etl.comercio_osm.run_sync $ARGS --verbose
+          python -m etl.comercio_google.run_sync $ARGS
 
       # ── Subir CSV de diagnóstico como artefacto ────────────────────────────
       - name: Upload diagnostic CSV
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: comercio-osm-extract-${{ github.run_number }}
-          path: etl/output/comercio_osm_extract.csv
+          name: comercio-google-extract-${{ github.run_number }}
+          path: etl/output/comercio_google_extract.csv
           retention-days: 14
           if-no-files-found: ignore
 
@@ -97,4 +78,4 @@ jobs:
       - name: Notify on failure
         if: failure()
         run: |
-          echo "::error::La sincronización de Red Comercial OSM falló. Revisa los logs del workflow."
+          echo "::error::La sincronización de Red Comercial Google falló. Revisa los logs del workflow."

@@ -1,0 +1,5 @@
+# Red Comercial Nacional — ETL Google Places (New)
+# Instalar: pip install -r etl/comercio_google/requirements.txt
+
+requests>=2.31.0
+python-dotenv>=1.0.0
