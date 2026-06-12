@@ -161,7 +161,6 @@ const FlyToTarget = ({
 interface MapViewProps {
   basemap: "dark" | "light" | "satellite" | "hybrid";
   provider?: MapProvider;
-  onGoogleTileLoad?: () => void;
   onMouseMove: (c: { lat: number; lng: number }) => void;
   layers: import("@/types/layers").LayerState;
   nseFilter: import("@/data/communes").NSE | null;
@@ -238,7 +237,6 @@ interface MapViewProps {
 export const MapView = ({
   basemap,
   provider = "osm",
-  onGoogleTileLoad,
   onMouseMove,
   layers,
   nseFilter,
@@ -309,7 +307,6 @@ export const MapView = ({
       {provider === "google" ? (
         <GoogleTileLayer
           basemap={basemap}
-          onTileLoad={onGoogleTileLoad}
         />
       ) : (
         <>

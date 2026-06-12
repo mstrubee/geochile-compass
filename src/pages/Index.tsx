@@ -1397,7 +1397,6 @@ const Index = () => {
           <MapView
             basemap={basemap}
             provider={mapProvider.provider}
-            onGoogleTileLoad={() => mapProvider.trackUsage("tiles")}
             onMouseMove={setCoords}
             layers={layers}
             nseFilter={nseFilter}

@@ -182,12 +182,10 @@ export const placesAutocomplete = async (
 ): Promise<PlacesPrediction[]> => {
   if (input.length < 3) return [];
   try {
-    const res = await fetch(`${PLACES_NEW_BASE}:autocomplete`, {
+    // API key va en la URL para evitar CORS preflight por header X-Goog-Api-Key
+    const res = await fetch(`${PLACES_NEW_BASE}:autocomplete?key=${apiKey}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": apiKey,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         input,
         sessionToken,
@@ -196,7 +194,8 @@ export const placesAutocomplete = async (
       }),
     });
     if (!res.ok) {
-      console.warn("[Places API New] autocomplete error:", res.status, await res.text());
+      const text = await res.text();
+      console.warn("[Places API New] autocomplete error:", res.status, text);
       return [];
     }
     const data = (await res.json()) as {
@@ -218,7 +217,8 @@ export const placesAutocomplete = async (
       mainText: s.placePrediction.structuredFormat.mainText.text,
       secondaryText: s.placePrediction.structuredFormat.secondaryText?.text ?? "",
     }));
-  } catch {
+  } catch (e) {
+    console.error("[Places] fetch threw:", e);
     return [];
   }
 };
@@ -233,31 +233,26 @@ export const getPlaceCoords = async (
   sessionToken: string,
 ): Promise<{ lat: number; lng: number; displayName: string } | null> => {
   try {
-    const res = await fetch(
-      `${PLACES_NEW_BASE}/${placeId}?sessionToken=${sessionToken}&languageCode=es`,
-      {
-        headers: {
-          "X-Goog-Api-Key": apiKey,
-          // Solo pedimos los campos necesarios para minimizar el SKU facturado
-          "X-Goog-FieldMask": "location,formattedAddress",
-        },
-      },
-    );
+    // $fields evita el header X-Goog-FieldMask (que dispara CORS preflight)
+    const url = `${PLACES_NEW_BASE}/${placeId}?key=${apiKey}&sessionToken=${sessionToken}&languageCode=es&$fields=location,formattedAddress,displayName`;
+    const res = await fetch(url);
     if (!res.ok) {
-      console.warn("[Places API New] place details error:", res.status);
+      console.warn("[Places API New] place details error:", res.status, await res.text());
       return null;
     }
     const data = (await res.json()) as {
       location?: { latitude: number; longitude: number };
       formattedAddress?: string;
+      displayName?: { text: string; languageCode?: string };
     };
     if (!data.location) return null;
     return {
       lat: data.location.latitude,
       lng: data.location.longitude,
-      displayName: data.formattedAddress ?? "",
+      displayName: data.formattedAddress ?? data.displayName?.text ?? "",
     };
-  } catch {
+  } catch (e) {
+    console.warn("[Places API New] place details fetch error:", e);
     return null;
   }
 };

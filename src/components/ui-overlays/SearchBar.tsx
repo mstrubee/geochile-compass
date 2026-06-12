@@ -1,5 +1,5 @@
 import { Search, Loader2, MapPin, X } from "lucide-react";
-import { useEffect, useRef, useState, useId } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   placesAutocomplete,
   getPlaceCoords,
@@ -24,6 +24,9 @@ interface Props {
 const VIEWBOX = "-71.7,-33.0,-70.0,-34.2"; // Región Metropolitana aprox. (lon_min,lat_max,lon_max,lat_min)
 const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
 
+/** UUID v4 como session token (≤36 chars, URL-safe) para Places API (New). */
+const newSessionToken = () => crypto.randomUUID();
+
 export const SearchBar = ({ onSelect, provider = "osm" }: Props) => {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -32,8 +35,8 @@ export const SearchBar = ({ onSelect, provider = "osm" }: Props) => {
   const [activeIdx, setActiveIdx] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // Stable session token for Places Autocomplete (new token per search session)
-  const placesSessionToken = useId();
+  // Session token base64url — se renueva tras cada selección (una sesión = autocomplete + place details)
+  const sessionTokenRef = useRef<string>(newSessionToken());
 
   // Cierre al hacer click fuera
   useEffect(() => {
@@ -67,7 +70,7 @@ export const SearchBar = ({ onSelect, provider = "osm" }: Props) => {
           const predictions: PlacesPrediction[] = await placesAutocomplete(
             term,
             GOOGLE_KEY,
-            placesSessionToken,
+            sessionTokenRef.current,
           );
           if (ctrl.signal.aborted) return;
           const mapped: SearchResult[] = predictions.map((p) => ({
@@ -128,12 +131,13 @@ export const SearchBar = ({ onSelect, provider = "osm" }: Props) => {
       }
     }, 350);
     return () => clearTimeout(handle);
-  }, [q, provider, placesSessionToken]);
+  }, [q, provider]);
 
-  const choose = async (r: SearchResult) => {
-    // Google Places results need coord resolution via placeId
+  const choose = useCallback(async (r: SearchResult) => {
+    // Google Places results necesitan resolver coordenadas via placeId
     if (provider === "google" && GOOGLE_KEY && r.lat === 0 && r.lng === 0) {
-      const details = await getPlaceCoords(r.id, GOOGLE_KEY, placesSessionToken);
+      const details = await getPlaceCoords(r.id, GOOGLE_KEY, sessionTokenRef.current);
+      sessionTokenRef.current = newSessionToken();
       if (details) {
         onSelect({ ...r, lat: details.lat, lng: details.lng, label: details.displayName });
         setOpen(false);
@@ -144,7 +148,7 @@ export const SearchBar = ({ onSelect, provider = "osm" }: Props) => {
     onSelect(r);
     setOpen(false);
     setQ(r.label.split(",").slice(0, 2).join(","));
-  };
+  }, [provider, onSelect]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!open || results.length === 0) return;

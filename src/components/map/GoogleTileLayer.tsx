@@ -8,6 +8,7 @@ import {
   createGoogleTileSession,
   basemapToGoogleMapType,
   buildGoogleTileUrl,
+  incrementUsage,
 } from "@/services/googleMapsService";
 
 const OSM_FALLBACK = {
@@ -18,33 +19,27 @@ const OSM_FALLBACK = {
 interface Props {
   basemap: "dark" | "light" | "satellite" | "hybrid";
   onSessionCreated?: () => void;
-  onTileLoad?: () => void;
 }
 
-export const GoogleTileLayer = ({ basemap, onSessionCreated, onTileLoad }: Props) => {
+export const GoogleTileLayer = ({ basemap, onSessionCreated }: Props) => {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
   const [tileUrl, setTileUrl] = useState<string | null>(null);
-  const [error, setError] = useState(false);
   const mapType = basemapToGoogleMapType(basemap);
-  const prevMapType = useRef<string | null>(null);
 
+  // Solo se re-ejecuta cuando cambia el tipo de mapa o la key — sin loops
   useEffect(() => {
-    if (prevMapType.current === mapType && tileUrl && !error) return;
-    prevMapType.current = mapType;
-    setError(false);
-
     let cancelled = false;
+    setTileUrl(null); // Muestra OSM mientras carga la sesión nueva
     createGoogleTileSession(apiKey, mapType).then((session) => {
       if (cancelled) return;
-      if (!session) { setError(true); return; }
+      if (!session) return; // Mantiene OSM como fallback
       setTileUrl(buildGoogleTileUrl(session.session, apiKey));
       onSessionCreated?.();
     });
     return () => { cancelled = true; };
-  }, [apiKey, mapType, error, tileUrl, onSessionCreated]);
+  }, [apiKey, mapType]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error || !tileUrl) {
-    // Show OSM while loading or on error
+  if (!tileUrl) {
     return (
       <TileLayer
         url={OSM_FALLBACK.url}
@@ -56,12 +51,13 @@ export const GoogleTileLayer = ({ basemap, onSessionCreated, onTileLoad }: Props
 
   return (
     <TileLayer
-      key={tileUrl}
+      key={mapType}
       url={tileUrl}
       attribution='© <a href="https://maps.google.com">Google</a>'
       maxZoom={20}
       eventHandlers={{
-        tileload: () => onTileLoad?.(),
+        // Contar tiles directo en localStorage — sin setState, sin re-renders
+        tileload: () => incrementUsage("tiles"),
       }}
     />
   );
