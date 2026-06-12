@@ -349,6 +349,7 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <>
     <AppDialog
       open={open}
       onOpenChange={onOpenChange}
