@@ -2,10 +2,11 @@
 config.py — Configuración ETL Red Comercial Nacional → Google Places (New).
 
 Estrategia: Nearby Search en grilla geográfica densa.
-  - Gran Santiago: grilla 5×5 con radio 5km → cubre toda el área sin superar
-    el límite de 20 resultados por tipo en ningún punto.
-  - Otras ciudades: radio 8-20km según densidad.
-  - Total: ~95 puntos × 9 categorías ≈ 855 requests (~$27/sync trimestral).
+  - Gran Santiago: grilla 7×7 = 49 puntos con radio 3km (espaciado 6km).
+    Radio 3km → max ~8 farmacias del mismo tipo por punto → NUNCA alcanza
+    el límite de 20 resultados de la API.
+  - Otras ciudades: radio 6-20km según densidad urbana.
+  - Total: ~117 puntos × 9 categorías ≈ 1053 requests (~$33/sync trimestral).
 """
 
 from __future__ import annotations
@@ -85,46 +86,81 @@ CATEGORY_TYPES: dict[str, list[str]] = {
 # Grilla geográfica Chile
 # Formato: (latitud, longitud, radio_metros, etiqueta)
 #
-# Gran Santiago: grilla 5×5 (25 puntos) con radio 5km.
-#   Cobertura: desde Pudahuel (-70.88) hasta La Florida (-70.48)
-#              desde Quilicura (-33.21) hasta Puente Alto (-33.57)
-#   Espaciado: ~9km → overlap suficiente para no dejar zonas sin cubrir.
-#
-# Radio 5km en Santiago → máx ~15 farmacias, ~10 bencineras por punto → OK.
+# Gran Santiago: grilla 7×7 = 49 puntos con radio 3km.
+#   Cobertura: Quilicura/Pudahuel (norte) → San Bernardo/Puente Alto (sur)
+#              Pudahuel Pte. (oeste) → La Florida/Peñalolén (este)
+#   Espaciado lat: 0.054° ≈ 6km  /  Espaciado lon: 0.066° ≈ 6km
+#   Radio 3km → círculos adyacentes se tocan (gap 0km en aristas,
+#   ~1.2km en esquinas — aceptable en ciudad donde tiendas están en calles).
+#   Farmacias esperadas por punto: ~4-8 → nunca satura el cap de 20.
 # ─────────────────────────────────────────────────────────────────────────────
 CHILE_GRID: list[tuple[float, float, int, str]] = [
 
-    # ── Gran Santiago — grilla 5×5, radio 5km ────────────────────────────────
-    # Fila norte
-    (-33.21, -70.88, 5_000, "SCL N-Poniente"),
-    (-33.21, -70.78, 5_000, "SCL N-Pudahuel"),
-    (-33.21, -70.68, 5_000, "SCL N-Renca/Conchali"),
-    (-33.21, -70.58, 5_000, "SCL N-Huechuraba"),
-    (-33.21, -70.48, 5_000, "SCL N-Vitacura/Las Condes N"),
-    # Fila centro-norte
-    (-33.30, -70.88, 5_000, "SCL CN-Maipú N"),
-    (-33.30, -70.78, 5_000, "SCL CN-Cerrillos/Maipú"),
-    (-33.30, -70.68, 5_000, "SCL CN-Quinta Normal/Estación C."),
-    (-33.30, -70.58, 5_000, "SCL CN-Providencia"),
-    (-33.30, -70.48, 5_000, "SCL CN-Las Condes"),
-    # Fila centro
-    (-33.39, -70.88, 5_000, "SCL C-Maipú Sur"),
-    (-33.39, -70.78, 5_000, "SCL C-Cerrillos Sur"),
-    (-33.39, -70.68, 5_000, "SCL C-Santiago Centro"),
-    (-33.39, -70.58, 5_000, "SCL C-Ñuñoa/La Reina"),
-    (-33.39, -70.48, 5_000, "SCL C-Peñalolén"),
-    # Fila centro-sur
-    (-33.48, -70.88, 5_000, "SCL CS-Buin/Paine N"),
-    (-33.48, -70.78, 5_000, "SCL CS-San Bernardo N"),
-    (-33.48, -70.68, 5_000, "SCL CS-San Miguel/La Cisterna"),
-    (-33.48, -70.58, 5_000, "SCL CS-La Florida N"),
-    (-33.48, -70.48, 5_000, "SCL CS-La Florida E"),
-    # Fila sur
-    (-33.57, -70.88, 5_000, "SCL S-Buin"),
-    (-33.57, -70.78, 5_000, "SCL S-San Bernardo"),
-    (-33.57, -70.68, 5_000, "SCL S-El Bosque/Pedro A.Cerda"),
-    (-33.57, -70.58, 5_000, "SCL S-Puente Alto N"),
-    (-33.57, -70.48, 5_000, "SCL S-Puente Alto"),
+    # ── Gran Santiago — grilla 7×7, radio 3km ────────────────────────────────
+    # Espaciado: 0.054°lat (~6km) × 0.066°lon (~6km).
+    # A radio 3km los círculos se tocan pero no se solapan → sin zonas muertas
+    # en calles. Sin solapamiento real en interiores (parques, cerros).
+    # Resultado esperado: ~4-8 farmacias/tipo por punto → nunca llega a 20.
+    #
+    # Cubre: Quilicura/Pudahuel (norte) → San Bernardo/Puente Alto (sur)
+    #        Pudahuel Pte. (oeste) → La Florida/Peñalolén (este)
+    #
+    # Fila 1 — norte (Quilicura, Pudahuel, Conchalí, Huechuraba, Las Condes N)
+    (-33.22, -70.88, 3_000, "SCL N1-Pudahuel Pte."),
+    (-33.22, -70.81, 3_000, "SCL N1-Renca"),
+    (-33.22, -70.75, 3_000, "SCL N1-Conchalí"),
+    (-33.22, -70.68, 3_000, "SCL N1-Huechuraba"),
+    (-33.22, -70.62, 3_000, "SCL N1-Vitacura N"),
+    (-33.22, -70.55, 3_000, "SCL N1-Las Condes N"),
+    (-33.22, -70.49, 3_000, "SCL N1-Lo Barnechea"),
+    # Fila 2 — (Maipú N, Quinta Normal, Independencia, Providencia, Las Condes)
+    (-33.28, -70.88, 3_000, "SCL N2-Pudahuel/Maipú N"),
+    (-33.28, -70.81, 3_000, "SCL N2-Quinta Normal"),
+    (-33.28, -70.75, 3_000, "SCL N2-Independencia/Recoleta"),
+    (-33.28, -70.68, 3_000, "SCL N2-Santiago Centro N"),
+    (-33.28, -70.62, 3_000, "SCL N2-Providencia"),
+    (-33.28, -70.55, 3_000, "SCL N2-Las Condes"),
+    (-33.28, -70.49, 3_000, "SCL N2-Las Condes E"),
+    # Fila 3 — (Maipú, Cerrillos, Centro, Ñuñoa, La Reina)
+    (-33.34, -70.88, 3_000, "SCL C1-Maipú Pte."),
+    (-33.34, -70.81, 3_000, "SCL C1-Cerrillos/Maipú"),
+    (-33.34, -70.75, 3_000, "SCL C1-Santiago Centro"),
+    (-33.34, -70.68, 3_000, "SCL C1-Centro Sur/San Borja"),
+    (-33.34, -70.62, 3_000, "SCL C1-Ñuñoa N"),
+    (-33.34, -70.55, 3_000, "SCL C1-La Reina"),
+    (-33.34, -70.49, 3_000, "SCL C1-Peñalolén N"),
+    # Fila 4 — (Maipú S, San Joaquín, San Miguel, Macul, La Florida N)
+    (-33.40, -70.88, 3_000, "SCL C2-Maipú Sur"),
+    (-33.40, -70.81, 3_000, "SCL C2-Cerrillos Sur"),
+    (-33.40, -70.75, 3_000, "SCL C2-San Joaquín"),
+    (-33.40, -70.68, 3_000, "SCL C2-San Miguel/PdeA"),
+    (-33.40, -70.62, 3_000, "SCL C2-Ñuñoa S/Macul"),
+    (-33.40, -70.55, 3_000, "SCL C2-La Florida N"),
+    (-33.40, -70.49, 3_000, "SCL C2-Peñalolén S"),
+    # Fila 5 — (Maipú S, La Cisterna, El Bosque, La Granja, La Florida C)
+    (-33.46, -70.88, 3_000, "SCL S1-Maipú SW"),
+    (-33.46, -70.81, 3_000, "SCL S1-Lo Espejo"),
+    (-33.46, -70.75, 3_000, "SCL S1-La Cisterna"),
+    (-33.46, -70.68, 3_000, "SCL S1-El Bosque N"),
+    (-33.46, -70.62, 3_000, "SCL S1-La Granja"),
+    (-33.46, -70.55, 3_000, "SCL S1-La Florida C"),
+    (-33.46, -70.49, 3_000, "SCL S1-La Florida E"),
+    # Fila 6 — (San Bernardo N, Pedro A. Cerda, La Pintana, Puente Alto N)
+    (-33.52, -70.88, 3_000, "SCL S2-Talagante E"),
+    (-33.52, -70.81, 3_000, "SCL S2-San Bernardo N"),
+    (-33.52, -70.75, 3_000, "SCL S2-San Ramón"),
+    (-33.52, -70.68, 3_000, "SCL S2-La Pintana N"),
+    (-33.52, -70.62, 3_000, "SCL S2-La Pintana S"),
+    (-33.52, -70.55, 3_000, "SCL S2-Puente Alto N"),
+    (-33.52, -70.49, 3_000, "SCL S2-Puente Alto E"),
+    # Fila 7 — sur (San Bernardo, El Bosque S, Puente Alto)
+    (-33.58, -70.88, 3_000, "SCL S3-Calera de Tango"),
+    (-33.58, -70.81, 3_000, "SCL S3-San Bernardo"),
+    (-33.58, -70.75, 3_000, "SCL S3-San Bernardo E"),
+    (-33.58, -70.68, 3_000, "SCL S3-El Bosque S"),
+    (-33.58, -70.62, 3_000, "SCL S3-La Pintana S"),
+    (-33.58, -70.55, 3_000, "SCL S3-Puente Alto C"),
+    (-33.58, -70.49, 3_000, "SCL S3-Puente Alto S"),
 
     # ── RM periférica ─────────────────────────────────────────────────────────
     (-33.10, -70.72, 15_000, "RM - Colina/Lampa"),
