@@ -5,7 +5,9 @@
 
 const TILES_BASE = "https://tile.googleapis.com/v1";
 const GEOCODE_BASE = "https://maps.googleapis.com/maps/api/geocode/json";
-const PLACES_BASE = "https://maps.googleapis.com/maps/api/place";
+// Places API (New) — reemplaza la API legacy deprecada en marzo 2025.
+// Soporta CORS nativo desde el browser, sin proxy.
+const PLACES_NEW_BASE = "https://places.googleapis.com/v1/places";
 
 export type GoogleMapType = "roadmap" | "satellite" | "hybrid";
 
@@ -162,7 +164,9 @@ export const geocodeWithGoogle = async (
   }
 };
 
-// ── Places Autocomplete API ───────────────────────────────────────────────────
+// ── Places API (New) — Autocomplete + Place Details ──────────────────────────
+// Documentación: https://developers.google.com/maps/documentation/places/web-service/place-autocomplete-new
+// El sessionToken agrupa Autocomplete + Place Details en una sola unidad de facturación.
 
 export interface PlacesPrediction {
   placeId: string;
@@ -178,65 +182,80 @@ export const placesAutocomplete = async (
 ): Promise<PlacesPrediction[]> => {
   if (input.length < 3) return [];
   try {
-    const params = new URLSearchParams({
-      input,
-      key: apiKey,
-      components: "country:cl",
-      language: "es",
-      sessiontoken: sessionToken,
+    const res = await fetch(`${PLACES_NEW_BASE}:autocomplete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+      },
+      body: JSON.stringify({
+        input,
+        sessionToken,
+        includedRegionCodes: ["cl"],
+        languageCode: "es",
+      }),
     });
-    const res = await fetch(`${PLACES_BASE}/autocomplete/json?${params}`);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.warn("[Places API New] autocomplete error:", res.status, await res.text());
+      return [];
+    }
     const data = (await res.json()) as {
-      status: string;
-      predictions: Array<{
-        place_id: string;
-        description: string;
-        structured_formatting: { main_text: string; secondary_text?: string };
+      suggestions?: Array<{
+        placePrediction: {
+          placeId: string;
+          text: { text: string };
+          structuredFormat: {
+            mainText: { text: string };
+            secondaryText?: { text: string };
+          };
+        };
       }>;
     };
     incrementUsage("places");
-    if (data.status !== "OK") return [];
-    return data.predictions.map((p) => ({
-      placeId: p.place_id,
-      description: p.description,
-      mainText: p.structured_formatting.main_text,
-      secondaryText: p.structured_formatting.secondary_text ?? "",
+    return (data.suggestions ?? []).map((s) => ({
+      placeId: s.placePrediction.placeId,
+      description: s.placePrediction.text.text,
+      mainText: s.placePrediction.structuredFormat.mainText.text,
+      secondaryText: s.placePrediction.structuredFormat.secondaryText?.text ?? "",
     }));
   } catch {
     return [];
   }
 };
 
-/** Resolves place details (coordinates) from a placeId. */
+/**
+ * Resuelve coordenadas a partir de un placeId (Places API New).
+ * Completar el sessionToken aquí cierra la sesión de facturación — no se cobra extra.
+ */
 export const getPlaceCoords = async (
   placeId: string,
   apiKey: string,
   sessionToken: string,
 ): Promise<{ lat: number; lng: number; displayName: string } | null> => {
   try {
-    const params = new URLSearchParams({
-      place_id: placeId,
-      key: apiKey,
-      fields: "geometry,formatted_address",
-      language: "es",
-      sessiontoken: sessionToken,
-    });
-    const res = await fetch(`${PLACES_BASE}/details/json?${params}`);
-    if (!res.ok) return null;
+    const res = await fetch(
+      `${PLACES_NEW_BASE}/${placeId}?sessionToken=${sessionToken}&languageCode=es`,
+      {
+        headers: {
+          "X-Goog-Api-Key": apiKey,
+          // Solo pedimos los campos necesarios para minimizar el SKU facturado
+          "X-Goog-FieldMask": "location,formattedAddress",
+        },
+      },
+    );
+    if (!res.ok) {
+      console.warn("[Places API New] place details error:", res.status);
+      return null;
+    }
     const data = (await res.json()) as {
-      status: string;
-      result: {
-        formatted_address: string;
-        geometry: { location: { lat: number; lng: number } };
-      };
+      location?: { latitude: number; longitude: number };
+      formattedAddress?: string;
     };
-    // Place details completes the session — no extra geocoding charge
-    if (data.status !== "OK") return null;
+    if (!data.location) return null;
     return {
-      lat: data.result.geometry.location.lat,
-      lng: data.result.geometry.location.lng,
-      displayName: data.result.formatted_address,
+      lat: data.location.latitude,
+      lng: data.location.longitude,
+      displayName: data.formattedAddress ?? "",
     };
   } catch {
     return null;
