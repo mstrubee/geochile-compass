@@ -29,6 +29,7 @@ from pathlib import Path
 
 from .config import setup_logging, validate_env
 from . import extractor
+from . import supplement
 
 # Reutiliza la capa de sync del módulo OSM (misma Edge Function, sin cambios).
 # El primer sync de Google elimina los registros OSM automáticamente porque
@@ -50,6 +51,10 @@ def main() -> int:
         "--verbose", "-v", action="store_true",
         help="Logging en nivel DEBUG",
     )
+    parser.add_argument(
+        "--skip-supplement", action="store_true",
+        help="Omite el suplemento Text Search (solo Nearby Search)",
+    )
     args = parser.parse_args()
 
     log = setup_logging(logging.DEBUG if args.verbose else logging.INFO)
@@ -67,16 +72,31 @@ def main() -> int:
         log.info("Cargando catálogo de marcas desde brand_catalog…")
         sync.load_db_catalog()
 
-    # ── Extracción Google Places ────────────────────────────────────────────
-    log.info("═══ Inicio extracción Google Places ═══")
+    # ── Extracción Nearby Search ────────────────────────────────────────────
+    log.info("═══ Fase 1: Nearby Search (grilla geográfica) ═══")
     t_start = time.time()
     records = extractor.extract_all()
     elapsed = time.time() - t_start
-    log.info("Extracción completada en %.1fs — %d registros únicos", elapsed, len(records))
+    log.info("Nearby Search completado en %.1fs — %d registros únicos", elapsed, len(records))
 
     if not records:
         log.warning("No se extrajeron registros. Verifica la API key y los permisos.")
         return 1
+
+    # ── Suplemento Text Search por marca ─────────────────────────────────────
+    if not args.skip_supplement:
+        log.info("═══ Fase 2: Text Search suplemento por marca ═══")
+        t_sup = time.time()
+        seen_ids = {r["osm_id"] for r in records}
+        sup_records = supplement.run_supplement(seen_ids)
+        log.info(
+            "Suplemento completado en %.1fs — %d registros adicionales",
+            time.time() - t_sup, len(sup_records),
+        )
+        records = records + sup_records
+        log.info("Total combinado: %d registros únicos", len(records))
+    else:
+        log.info("Suplemento omitido (--skip-supplement)")
 
     # ── Guardar CSV de diagnóstico ───────────────────────────────────────────
     OUTPUT_DIR.mkdir(exist_ok=True)

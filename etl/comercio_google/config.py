@@ -37,6 +37,7 @@ GOOGLE_API_KEY: str = (
 )
 
 PLACES_NEARBY_URL  = "https://places.googleapis.com/v1/places:searchNearby"
+PLACES_TEXT_URL    = "https://places.googleapis.com/v1/places:searchText"
 PLACES_MAX_RESULTS = 20
 FIELD_MASK = ",".join([
     "places.id",
