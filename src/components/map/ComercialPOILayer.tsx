@@ -39,21 +39,27 @@ const escHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 function buildMarkerIcon(
-  poi: ComercialPOI,
+  _poi: ComercialPOI,
   meta: (typeof COMERCIAL_LAYER_META)[ComercialCategoria],
   logoUrl?: string,
 ) {
+  if (logoUrl) {
+    // Logo importado: imagen directa, sin fondo ni borde, solo sombra para visibilidad
+    const size = 32;
+    return L.divIcon({
+      className: "",
+      html: `<img src="${logoUrl}" style="width:${size}px;height:${size}px;object-fit:contain;display:block;cursor:pointer;filter:drop-shadow(0 1px 3px rgba(0,0,0,.55))" />`,
+      iconSize:    [size, size],
+      iconAnchor:  [size / 2, size / 2],
+      popupAnchor: [0, -(size / 2 + 4)],
+    });
+  }
+
+  // Fallback: círculo de color con emoji
   const size = 28;
-  const inner = logoUrl
-    ? `<img src="${logoUrl}" style="width:${size - 6}px;height:${size - 6}px;object-fit:contain;border-radius:2px;display:block" />`
-    : `<span style="font-size:${Math.round(size * 0.55)}px;line-height:1">${meta.icon}</span>`;
-
-  const bg = logoUrl ? "#ffffff" : meta.color;
-  const border = logoUrl ? "2px solid rgba(0,0,0,0.12)" : "2px solid rgba(255,255,255,0.85)";
-
   return L.divIcon({
     className: "",
-    html: `<div style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:50%;background:${bg};border:${border};box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer;overflow:hidden">${inner}</div>`,
+    html: `<div style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:50%;background:${meta.color};border:2px solid rgba(255,255,255,0.85);box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer;overflow:hidden"><span style="font-size:${Math.round(size * 0.55)}px;line-height:1">${meta.icon}</span></div>`,
     iconSize:    [size, size],
     iconAnchor:  [size / 2, size / 2],
     popupAnchor: [0, -(size / 2 + 4)],
