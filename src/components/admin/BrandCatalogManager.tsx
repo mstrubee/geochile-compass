@@ -555,5 +555,6 @@ export const BrandCatalogManager = ({ open, onOpenChange }: Props) => {
       open={customLayerOpen}
       onOpenChange={setCustomLayerOpen}
     />
+    </>
   );
 };
