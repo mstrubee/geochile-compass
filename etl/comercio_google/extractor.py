@@ -173,7 +173,7 @@ def extract_all() -> list[dict[str, Any]]:
                 stats[cat] = stats.get(cat, 0) + 1
                 punto_nuevos += 1
 
-            time.sleep(0.1)  # cortesía entre requests
+            time.sleep(0.05)  # 50ms entre requests (5 949 total → ~40-50 min)
 
         log.info("  → %d nuevos únicos en %s", punto_nuevos, label)
 
