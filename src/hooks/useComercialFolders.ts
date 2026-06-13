@@ -225,5 +225,15 @@ export function useComercialFolders() {
     });
   }, [user]);
 
-  return { tree, loading, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo };
+  const resetTree = useCallback(async () => {
+    const empty: ComercialTree = { folders: [], catOverrides: [] };
+    if (user) {
+      await carpetasTable().delete().eq("user_id", user.id);
+      await overridesTable().delete().eq("user_id", user.id);
+    }
+    lsSave(empty);
+    setTree(empty);
+  }, [user]);
+
+  return { tree, loading, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo, resetTree };
 }

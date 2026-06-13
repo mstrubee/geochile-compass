@@ -7,11 +7,11 @@
  * - Estado persistido en localStorage (geochile_comercial_tree_v1)
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   ChevronDown, ChevronRight, Globe, FileDown, Map, X,
   FolderPlus, Scissors, ClipboardPaste, Trash2, Pencil,
-  FolderOpen, Folder as FolderIcon,
+  FolderOpen, Folder as FolderIcon, RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ComercialCategoria, ComercialLayerState } from "@/types/comercial";
@@ -36,6 +36,46 @@ export const CATEGORY_ORDER: ComercialCategoria[] = [
   "retail_departamental", "ferreteria", "restaurante",
   "automotriz", "bodega",
 ];
+
+// ── Saneamiento defensivo ──────────────────────────────────────────────────────
+// Garantiza que TODA categoría y carpeta sea visible: reparenta a la raíz cualquier
+// nodo cuyo padre no exista o forme un ciclo. Protege contra estados persistidos
+// corruptos (p.ej. carpetas/overrides que quedaron apuntando a padres inexistentes).
+function sanitizeTree(
+  folders: Carpeta[],
+  catOverrides: CatOverride[],
+): { folders: Carpeta[]; catOverrides: CatOverride[] } {
+  const isCat = (id: string | null): boolean =>
+    id !== null && (CATEGORY_ORDER as string[]).includes(id);
+  const folderById = new Map(folders.map((f) => [f.id, f]));
+
+  // ¿La cadena de padres termina en la raíz (null) o en una categoría existente?
+  const reachesRoot = (startParent: string | null): boolean => {
+    let cur = startParent;
+    const seen = new Set<string>();
+    while (cur !== null && !isCat(cur)) {
+      if (seen.has(cur)) return false;        // ciclo
+      seen.add(cur);
+      const f = folderById.get(cur);
+      if (!f) return false;                   // padre inexistente
+      cur = f.parentId;
+    }
+    return true;
+  };
+
+  const safeFolders = folders.map((f) =>
+    reachesRoot(f.parentId) ? f : { ...f, parentId: null },
+  );
+  const validFolderIds = new Set(safeFolders.map((f) => f.id));
+
+  // Conserva solo overrides cuyo destino existe (categoría o carpeta real);
+  // el resto vuelve a la raíz por defecto.
+  const safeOverrides = catOverrides.filter(
+    (o) => o.parentId !== null && (isCat(o.parentId) || validFolderIds.has(o.parentId)),
+  );
+
+  return { folders: safeFolders, catOverrides: safeOverrides };
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -603,8 +643,12 @@ export const ComercialPOISection = ({
   const [dragNode, setDragNode]   = useState<ClipNode | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
-  const { tree, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo } = useComercialFolders();
+  const { tree, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo, resetTree } = useComercialFolders();
   const activeCount = CATEGORY_ORDER.filter((c) => layers[c]).length;
+
+  // Vista saneada: blinda el render contra estados corruptos (categorías nunca desaparecen)
+  const safe = useMemo(() => sanitizeTree(tree.folders, tree.catOverrides), [tree]);
+  const isCustomized = tree.folders.length > 0 || tree.catOverrides.length > 0;
 
   // ── DnD ──────────────────────────────────────────────────────────────────────
 
@@ -753,8 +797,8 @@ export const ComercialPOISection = ({
         <div className="ml-3 mt-0.5 space-y-0">
           <TreeLevel
             parentId={null}
-            folders={tree.folders}
-            catOverrides={tree.catOverrides}
+            folders={safe.folders}
+            catOverrides={safe.catOverrides}
             dragOverId={dragOverId}
             onCtxMenu={openCtxMenu}
             onDragStart={handleDragStart}
@@ -779,9 +823,22 @@ export const ComercialPOISection = ({
             Soltar aquí para mover a raíz
           </div>
 
-          <p className="px-2 py-1 text-[10px] text-text-muted">
-            Fuente: OpenStreetMap · Click derecho para organizar
-          </p>
+          <div className="flex items-center justify-between gap-2 px-2 py-1">
+            <p className="text-[10px] text-text-muted">
+              Fuente: OpenStreetMap · Click derecho para organizar
+            </p>
+            {isCustomized && (
+              <button
+                type="button"
+                onClick={() => { resetTree(); toast.success("Orden restaurado"); }}
+                className="flex flex-shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:bg-surface-2/60 hover:text-foreground"
+                title="Quitar todas las carpetas y volver al orden original"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Restaurar orden
+              </button>
+            )}
+          </div>
         </div>
       )}
 
