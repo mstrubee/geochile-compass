@@ -538,7 +538,7 @@ const CtxMenu = ({
           {!folderTarget && (
             <>
               <CtxRow icon={<FileDown className="h-4 w-4 text-green-600" />} label="Exportar CSV" onClick={() => onExport("csv")} />
-              <CtxRow icon={<Map className="h-4 w-4 text-blue-500" />} label="Exportar KML" onClick={() => onExport("kml")} />
+              <CtxRow icon={<MapIcon className="h-4 w-4 text-blue-500" />} label="Exportar KML" onClick={() => onExport("kml")} />
             </>
           )}
         </>
