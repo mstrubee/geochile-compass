@@ -204,10 +204,14 @@ export function useComercialMarcas(
           return;
         }
 
-        // Resultado de fn_marcas_categoria: ya viene ordenado por total desc
-        // Solo mover "Otros" al final por convención visual
-        const rows = (data as Array<{ marca_estandar: string; total_locales: number }> ?? [])
-          .map((r) => ({ marca_estandar: r.marca_estandar, n: Number(r.total_locales) }));
+        // Deduplica por marca_estandar tomando la fila con mayor n (por si el JOIN del catálogo genera fan-out)
+        const seen = new Map<string, number>();
+        for (const r of (data as Array<{ marca_estandar: string; total_locales: number }> ?? [])) {
+          const n = Number(r.total_locales);
+          if (!seen.has(r.marca_estandar) || n > seen.get(r.marca_estandar)!) seen.set(r.marca_estandar, n);
+        }
+        const rows = Array.from(seen.entries()).map(([marca_estandar, n]) => ({ marca_estandar, n }))
+          .sort((a, b) => b.n - a.n);
 
         const otros   = rows.filter((r) => r.marca_estandar === "Otros");
         const normales = rows.filter((r) => r.marca_estandar !== "Otros");
