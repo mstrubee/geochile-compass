@@ -1093,18 +1093,8 @@ export const ComercialPOISection = ({
             <p className="text-[10px] text-text-muted">
               Fuente: OpenStreetMap · Click derecho para organizar
             </p>
-            {isCustomized && (
-              <button
-                type="button"
-                onClick={() => { resetTree(); toast.success("Orden restaurado"); }}
-                className="flex flex-shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:bg-surface-2/60 hover:text-foreground"
-                title="Quitar todas las carpetas y volver al orden original"
-              >
-                <RotateCcw className="h-3 w-3" />
-                Restaurar orden
-              </button>
-            )}
           </div>
+
         </div>
       )}
 
