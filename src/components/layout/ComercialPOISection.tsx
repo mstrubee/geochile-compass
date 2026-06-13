@@ -281,11 +281,13 @@ const CategoryRow = ({
 
 // ── Context Menu ──────────────────────────────────────────────────────────────
 
+type CtxMode = "default" | "create" | "rename" | "delete";
+
 interface CtxMenuProps {
   ctx: CtxMenuState;
   clipboard: ClipNode | null;
-  onCreateFolder: () => void;
-  onRename: () => void;
+  onCreateFolder: (nombre: string) => void;
+  onRename: (nombre: string) => void;
   onDelete: () => void;
   onCut: () => void;
   onPaste: () => void;
@@ -298,22 +300,29 @@ const CtxMenu = ({
   onCreateFolder, onRename, onDelete, onCut, onPaste,
   onExport, onClose,
 }: CtxMenuProps) => {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref      = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [mode, setMode]       = useState<CtxMode>("default");
+  const [inputVal, setInputVal] = useState("");
+
   const { target } = ctx;
   const isFolder   = target.kind === "folder";
   const isCategory = target.kind === "category";
   const isBrand    = target.kind === "brand";
-
-  const label = isFolder   ? target.nombre
-              : isCategory ? COMERCIAL_LAYER_META[target.cat].label
-              : target.marca;
+  const label = isFolder ? target.nombre : isCategory ? COMERCIAL_LAYER_META[target.cat].label : target.marca;
 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const menuW = 210;
-  const menuH = isBrand ? 80 : isFolder ? 210 : 200;
+  const menuW = 220;
   const x = Math.min(ctx.x, vw - menuW - 8);
-  const y = Math.min(ctx.y, vh - menuH - 8);
+  const y = Math.min(ctx.y, vh - 240);
+
+  // Auto-focus input when mode changes
+  useEffect(() => {
+    if (mode === "create" || mode === "rename") {
+      setTimeout(() => inputRef.current?.focus(), 30);
+    }
+  }, [mode]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -322,12 +331,26 @@ const CtxMenu = ({
   }, [onClose]);
 
   useEffect(() => {
-    const onOutside = (e: MouseEvent) => {
+    const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
-    const id = setTimeout(() => window.addEventListener("mousedown", onOutside), 50);
-    return () => { clearTimeout(id); window.removeEventListener("mousedown", onOutside); };
+    const id = setTimeout(() => window.addEventListener("mousedown", handler), 50);
+    return () => { clearTimeout(id); window.removeEventListener("mousedown", handler); };
   }, [onClose]);
+
+  const enterCreate = () => { setInputVal(""); setMode("create"); };
+  const enterRename = () => { setInputVal(isFolder ? target.nombre : ""); setMode("rename"); };
+
+  const confirmCreate = () => {
+    const n = inputVal.trim();
+    if (n) onCreateFolder(n);
+    else onClose();
+  };
+  const confirmRename = () => {
+    const n = inputVal.trim();
+    if (n) onRename(n);
+    else onClose();
+  };
 
   const Row = ({ icon, label: lbl, onClick, danger = false }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) => (
     <button
@@ -340,10 +363,68 @@ const CtxMenu = ({
     </button>
   );
 
+  // ── Inline input panel (create / rename) ─────────────────────────────────────
+  const InputPanel = ({ title, placeholder, onConfirm }: { title: string; placeholder: string; onConfirm: () => void }) => (
+    <div className="px-3 py-2.5 space-y-2">
+      <p className="text-[11px] font-medium text-muted-foreground">{title}</p>
+      <input
+        ref={inputRef}
+        type="text"
+        value={inputVal}
+        onChange={(e) => setInputVal(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") onConfirm(); if (e.key === "Escape") setMode("default"); }}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-border bg-surface-2/60 px-2 py-1.5 text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-blue-400/60"
+      />
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="flex-1 rounded-lg bg-blue-500 py-1 text-[12px] font-medium text-white hover:bg-blue-600 transition-colors"
+        >
+          Aceptar
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("default")}
+          className="flex-1 rounded-lg bg-surface-2/80 py-1 text-[12px] text-muted-foreground hover:bg-surface-2 transition-colors"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── Inline delete confirm ────────────────────────────────────────────────────
+  const DeletePanel = () => (
+    <div className="px-3 py-2.5 space-y-2">
+      <p className="text-[12px] text-foreground">
+        ¿Eliminar <span className="font-semibold">"{isFolder ? target.nombre : ""}"</span>?
+      </p>
+      <p className="text-[11px] text-muted-foreground">Las subcarpetas y categorías internas subirán al nivel padre.</p>
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={onDelete}
+          className="flex-1 rounded-lg bg-red-500 py-1 text-[12px] font-medium text-white hover:bg-red-600 transition-colors"
+        >
+          Eliminar
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("default")}
+          className="flex-1 rounded-lg bg-surface-2/80 py-1 text-[12px] text-muted-foreground hover:bg-surface-2 transition-colors"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div
       ref={ref}
-      className="fixed z-[9999] min-w-[210px] rounded-xl border border-border bg-background shadow-xl overflow-hidden"
+      className="fixed z-[9999] w-[220px] rounded-xl border border-border bg-background shadow-xl overflow-hidden"
       style={{ left: x, top: y }}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
@@ -356,32 +437,35 @@ const CtxMenu = ({
           </p>
           <p className="text-[13px] font-semibold text-foreground truncate max-w-[158px]">{label}</p>
         </div>
-        <button type="button" onClick={onClose} className="flex-shrink-0 mt-0.5 rounded p-0.5 text-muted-foreground hover:bg-surface-2 hover:text-foreground transition-colors">
+        <button type="button" onClick={onClose} className="flex-shrink-0 mt-0.5 rounded p-0.5 text-muted-foreground hover:bg-surface-2 hover:text-foreground">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      {/* Acciones de carpeta/categoría */}
-      {!isBrand && (
-        <>
-          <Row icon={<FolderPlus className="h-4 w-4 text-amber-500" />} label="Crear subcarpeta" onClick={onCreateFolder} />
-          {isFolder && <Row icon={<Pencil className="h-4 w-4 text-blue-500" />} label="Renombrar" onClick={onRename} />}
-          <Row icon={<Scissors className="h-4 w-4 text-muted-foreground" />} label="Cortar" onClick={onCut} />
-          {clipboard && (
-            <Row icon={<ClipboardPaste className="h-4 w-4 text-green-500" />} label="Pegar aquí" onClick={onPaste} />
-          )}
-          {isFolder && (
-            <Row icon={<Trash2 className="h-4 w-4" />} label="Eliminar carpeta" onClick={onDelete} danger />
-          )}
-          <div className="border-t border-border/30 my-0.5" />
-        </>
-      )}
+      {/* Modos inline */}
+      {mode === "create"  && <InputPanel title="Nombre de la nueva carpeta" placeholder="Ej: Zona Norte" onConfirm={confirmCreate} />}
+      {mode === "rename"  && <InputPanel title="Nuevo nombre" placeholder={isFolder ? target.nombre : ""} onConfirm={confirmRename} />}
+      {mode === "delete"  && <DeletePanel />}
 
-      {/* Exportar (no en carpetas personalizadas) */}
-      {!isFolder && (
+      {/* Menú principal */}
+      {mode === "default" && (
         <>
-          <Row icon={<FileDown className="h-4 w-4 text-green-600" />} label="Exportar CSV" onClick={() => onExport("csv")} />
-          <Row icon={<Map className="h-4 w-4 text-blue-500" />} label="Exportar KML" onClick={() => onExport("kml")} />
+          {!isBrand && (
+            <>
+              <Row icon={<FolderPlus className="h-4 w-4 text-amber-500" />} label="Crear subcarpeta" onClick={enterCreate} />
+              {isFolder && <Row icon={<Pencil className="h-4 w-4 text-blue-500" />} label="Renombrar" onClick={enterRename} />}
+              <Row icon={<Scissors className="h-4 w-4 text-muted-foreground" />} label="Cortar" onClick={onCut} />
+              {clipboard && <Row icon={<ClipboardPaste className="h-4 w-4 text-green-500" />} label="Pegar aquí" onClick={onPaste} />}
+              {isFolder && <Row icon={<Trash2 className="h-4 w-4" />} label="Eliminar carpeta" onClick={() => setMode("delete")} danger />}
+              <div className="border-t border-border/30 my-0.5" />
+            </>
+          )}
+          {!isFolder && (
+            <>
+              <Row icon={<FileDown className="h-4 w-4 text-green-600" />} label="Exportar CSV" onClick={() => onExport("csv")} />
+              <Row icon={<Map className="h-4 w-4 text-blue-500" />} label="Exportar KML" onClick={() => onExport("kml")} />
+            </>
+          )}
         </>
       )}
     </div>
@@ -527,33 +611,24 @@ export const ComercialPOISection = ({
     setCtxMenu({ x: e.clientX, y: e.clientY, target });
   }, []);
 
-  const doCreateFolder = useCallback(() => {
+  const doCreateFolder = useCallback((nombre: string) => {
     if (!ctxMenu) return;
-    const nombre = window.prompt("Nombre de la carpeta:");
-    if (!nombre?.trim()) { setCtxMenu(null); return; }
-    const parentId = ctxMenu.target.kind === "folder"    ? ctxMenu.target.id
-                   : ctxMenu.target.kind === "category"  ? ctxMenu.target.cat
+    const parentId = ctxMenu.target.kind === "folder"   ? ctxMenu.target.id
+                   : ctxMenu.target.kind === "category" ? ctxMenu.target.cat
                    : null;
     createFolder(nombre, parentId);
     setCtxMenu(null);
   }, [ctxMenu, createFolder]);
 
-  const doRename = useCallback(() => {
+  const doRename = useCallback((nombre: string) => {
     if (!ctxMenu || ctxMenu.target.kind !== "folder") return;
-    const nuevo = window.prompt("Nuevo nombre:", ctxMenu.target.nombre);
-    if (!nuevo?.trim()) { setCtxMenu(null); return; }
-    renameFolder(ctxMenu.target.id, nuevo.trim());
+    renameFolder(ctxMenu.target.id, nombre);
     setCtxMenu(null);
   }, [ctxMenu, renameFolder]);
 
   const doDelete = useCallback(() => {
     if (!ctxMenu || ctxMenu.target.kind !== "folder") return;
-    const { id, parentId, nombre } = ctxMenu.target;
-    if (!window.confirm(`¿Eliminar "${nombre}"?\nLas subcarpetas y categorías internas se moverán al nivel padre.`)) {
-      setCtxMenu(null);
-      return;
-    }
-    deleteFolder(id, parentId);
+    deleteFolder(ctxMenu.target.id, ctxMenu.target.parentId);
     setCtxMenu(null);
   }, [ctxMenu, deleteFolder]);
 
