@@ -119,10 +119,11 @@ export function useComercialFolders() {
       setTree((prev) => { const next = { ...prev, folders: [...prev.folders, { id, nombre: trimmed, parentId }] }; lsSave(next); return next; });
       return;
     }
-    setTree((prev) => ({
-      ...prev,
-      folders: [...prev.folders, { id: data.id, nombre: data.nombre, parentId: data.parent_id ?? null }],
-    }));
+    setTree((prev) => {
+      const next = { ...prev, folders: [...prev.folders, { id: data.id, nombre: data.nombre, parentId: data.parent_id ?? null }] };
+      lsSave(next); // respaldo local: sobrevive a un re-disparo del efecto de carga
+      return next;
+    });
   }, [user]);
 
   const renameFolder = useCallback(async (id: string, nombre: string) => {

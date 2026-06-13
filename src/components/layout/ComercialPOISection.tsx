@@ -138,12 +138,14 @@ interface CategoryRowProps {
   onDragOver:        (e: React.DragEvent) => void;
   onDragLeave:       (e: React.DragEvent) => void;
   onDrop:            (e: React.DragEvent) => void;
+  children?:         React.ReactNode;
 }
 
 const CategoryRow = ({
   cat, on, count, hidden, isDragOver,
   onToggle, onBrandToggle, onSetHiddenBrands,
   onCtxMenu, onDragStart, onDragOver, onDragLeave, onDrop,
+  children,
 }: CategoryRowProps) => {
   const [brandOpen, setBrandOpen] = useState(false);
   const meta = COMERCIAL_LAYER_META[cat];
@@ -274,6 +276,9 @@ const CategoryRow = ({
           )}
         </div>
       )}
+
+      {/* Subcarpetas anidadas bajo esta categoría (siempre visibles, sin depender del toggle) */}
+      {children && <div className="ml-5 mt-0.5 space-y-0">{children}</div>}
     </div>
   );
 };
@@ -578,7 +583,10 @@ const TreeLevel = ({
           onDragOver={(e) => { e.stopPropagation(); onDragOver(e, cat); }}
           onDragLeave={(e) => { e.stopPropagation(); onDragLeave(e); }}
           onDrop={(e) => { e.stopPropagation(); onDrop(e, cat); }}
-        />
+        >
+          {/* Carpetas hijas de esta categoría (TreeLevel devuelve null si no hay ninguna) */}
+          <TreeLevel parentId={cat} {...commonProps} />
+        </CategoryRow>
       ))}
     </>
   );
