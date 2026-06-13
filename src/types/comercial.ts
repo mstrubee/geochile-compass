@@ -4,14 +4,14 @@
 
 export type ComercialCategoria =
   | "supermercado"
-  | "conveniencia"
   | "farmacia"
   | "combustible"
-  | "mejoramiento_hogar"
+  | "ferreteria"
   | "retail_departamental"
   | "banco"
   | "restaurante"
-  | "centro_comercial";
+  | "automotriz"
+  | "bodega";
 
 export interface ComercialPOI {
   id: number;
@@ -33,14 +33,14 @@ export interface ComercialPOI {
 
 export interface ComercialLayerState {
   supermercado:         boolean;
-  conveniencia:         boolean;
   farmacia:             boolean;
   combustible:          boolean;
-  mejoramiento_hogar:   boolean;
+  ferreteria:           boolean;
   retail_departamental: boolean;
   banco:                boolean;
   restaurante:          boolean;
-  centro_comercial:     boolean;
+  automotriz:           boolean;
+  bodega:               boolean;
 }
 
 export const COMERCIAL_LAYER_META: Record<
@@ -48,14 +48,14 @@ export const COMERCIAL_LAYER_META: Record<
   { label: string; icon: string; color: string; shortLabel: string }
 > = {
   supermercado:         { label: "Supermercados",            icon: "🛒", color: "#0046AD", shortLabel: "Superm." },
-  conveniencia:         { label: "Tiendas de conveniencia",  icon: "🏪", color: "#F59E0B", shortLabel: "Conveniencia" },
   farmacia:             { label: "Farmacias",                icon: "💊", color: "#00A651", shortLabel: "Farmacias" },
   combustible:          { label: "Estaciones de servicio",   icon: "⛽", color: "#EF4444", shortLabel: "Combustible" },
-  mejoramiento_hogar:   { label: "Mejoramiento del hogar",   icon: "🔨", color: "#F5821F", shortLabel: "Hogar" },
+  ferreteria:           { label: "Ferreterías",              icon: "🔨", color: "#F5821F", shortLabel: "Ferreterías" },
   retail_departamental: { label: "Retail departamental",     icon: "🛍️", color: "#7C3AED", shortLabel: "Retail" },
   banco:                { label: "Bancos y ATMs",            icon: "🏦", color: "#1D4ED8", shortLabel: "Bancos" },
   restaurante:          { label: "Restaurantes",             icon: "🍽️", color: "#EA580C", shortLabel: "Restaurantes" },
-  centro_comercial:     { label: "Centros comerciales",      icon: "🏬", color: "#BE123C", shortLabel: "Malls" },
+  automotriz:           { label: "Automotriz",               icon: "🚗", color: "#374151", shortLabel: "Automotriz" },
+  bodega:               { label: "Bodegas",                  icon: "📦", color: "#92400E", shortLabel: "Bodegas" },
 };
 
 /** Resumen por marca dentro de una categoría (para el panel flotante) */

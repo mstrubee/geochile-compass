@@ -48,8 +48,8 @@ interface Props {
 
 const CATEGORY_ORDER: ComercialCategoria[] = [
   "supermercado", "farmacia", "combustible", "banco",
-  "retail_departamental", "mejoramiento_hogar", "restaurante",
-  "conveniencia", "centro_comercial",
+  "retail_departamental", "ferreteria", "restaurante",
+  "automotriz", "bodega",
 ];
 
 // ── Fila por categoría ────────────────────────────────────────────────────────

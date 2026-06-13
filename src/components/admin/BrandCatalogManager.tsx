@@ -39,14 +39,14 @@ const CATEGORIAS = Object.keys(COMERCIAL_LAYER_META) as ComercialCategoria[];
 
 const CAT_LABEL: Record<string, string> = {
   supermercado:         "🛒 Supermercados",
-  conveniencia:         "🏪 Conveniencia",
   farmacia:             "💊 Farmacias",
   combustible:          "⛽ Combustible",
-  mejoramiento_hogar:   "🔨 Mejoramiento hogar",
+  ferreteria:           "🔨 Ferreterías",
   retail_departamental: "🛍️ Retail departamental",
   banco:                "🏦 Bancos / ATM",
   restaurante:          "🍽️ Restaurantes",
-  centro_comercial:     "🏬 Centros comerciales",
+  automotriz:           "🚗 Automotriz",
+  bodega:               "📦 Bodegas",
 };
 
 const DEFAULT_FORM: BrandInsert = {

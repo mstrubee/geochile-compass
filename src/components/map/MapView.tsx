@@ -399,7 +399,7 @@ export const MapView = ({
       <AgroplanetComunasLayer visible={layers.agroplanet} scoreMode={agroplanetScoreMode} />
       <AgroplanetCompetitorsLayer visible={layers.agroplanet_competitors ?? false} />
       {/* ── Red Comercial Nacional (POIs OSM) ─────────────────────────────── */}
-      {(["supermercado","conveniencia","farmacia","combustible","mejoramiento_hogar","retail_departamental","banco","restaurante","centro_comercial"] as ComercialCategoria[]).map((cat) => (
+      {(["supermercado","farmacia","combustible","ferreteria","retail_departamental","banco","restaurante","automotriz","bodega"] as ComercialCategoria[]).map((cat) => (
         <ComercialPOILayer
           key={cat}
           categoria={cat}

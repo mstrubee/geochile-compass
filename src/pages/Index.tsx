@@ -134,14 +134,14 @@ const Index = () => {
   const { asUserLayers: customMapLayers, reload: reloadCustomLayers } = useCustomLayers();
   const [comercialLayers, setComercialLayers] = useState<ComercialLayerState>({
     supermercado:         false,
-    conveniencia:         false,
     farmacia:             false,
     combustible:          false,
-    mejoramiento_hogar:   false,
+    ferreteria:           false,
     retail_departamental: false,
     banco:                false,
     restaurante:          false,
-    centro_comercial:     false,
+    automotriz:           false,
+    bodega:               false,
   });
   const [comercialCounts, setComercialCounts] = useState<Partial<Record<ComercialCategoria, number>>>({});
   const [comercialHiddenBrands, setComercialHiddenBrands] = useState<Partial<Record<ComercialCategoria, Set<string>>>>({});
