@@ -61,32 +61,39 @@ def search_nearby(
         "X-Goog-FieldMask": FIELD_MASK,
     }
 
-    try:
-        resp = requests.post(
-            PLACES_NEARBY_URL,
-            json=body,
-            headers=headers,
-            timeout=30,
-        )
+    for attempt in range(5):
+        try:
+            resp = requests.post(
+                PLACES_NEARBY_URL,
+                json=body,
+                headers=headers,
+                timeout=30,
+            )
 
-        if resp.status_code == 429:
-            wait = int(resp.headers.get("Retry-After", "30"))
-            log.warning("Rate limit — esperando %ds antes de reintentar", wait)
-            time.sleep(wait)
-            return search_nearby(lat, lng, radius_m, included_types, label)
+            if resp.status_code == 429:
+                wait = int(resp.headers.get("Retry-After", "60"))
+                log.warning(
+                    "Rate limit (intento %d/5) — esperando %ds",
+                    attempt + 1, wait,
+                )
+                time.sleep(wait)
+                continue  # reintento no recursivo
 
-        resp.raise_for_status()
-        data = resp.json()
-        places = data.get("places", [])
-        log.debug(
-            "  Nearby %s r=%dm types=%s → %d resultados",
-            label, radius_m, included_types, len(places),
-        )
-        return places
+            resp.raise_for_status()
+            data = resp.json()
+            places = data.get("places", [])
+            log.debug(
+                "  Nearby %s r=%dm types=%s → %d resultados",
+                label, radius_m, included_types, len(places),
+            )
+            return places
 
-    except requests.HTTPError as exc:
-        log.error("  HTTP error Nearby %s types=%s: %s", label, included_types, exc)
-        return []
-    except requests.RequestException as exc:
-        log.error("  Red error Nearby %s: %s", label, exc)
-        return []
+        except requests.HTTPError as exc:
+            log.error("  HTTP error Nearby %s types=%s: %s", label, included_types, exc)
+            return []
+        except requests.RequestException as exc:
+            log.error("  Red error Nearby %s: %s", label, exc)
+            return []
+
+    log.error("  Máx reintentos alcanzado para %s types=%s — saltando", label, included_types)
+    return []
