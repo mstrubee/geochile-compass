@@ -25,7 +25,6 @@ import {
 } from "@/utils/exportPOI";
 import {
   useComercialFolders,
-  descendantFolderIds,
   type Carpeta,
   type CatOverride,
 } from "@/hooks/useComercialFolders";
@@ -279,9 +278,79 @@ const CategoryRow = ({
   );
 };
 
-// ── Context Menu ──────────────────────────────────────────────────────────────
+// ── Context Menu sub-components (nivel módulo para evitar remounts en re-renders) ──
 
 type CtxMode = "default" | "create" | "rename" | "delete";
+
+const CtxRow = ({
+  icon, label, onClick, danger = false,
+}: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={[
+      "flex w-full items-center gap-2.5 px-3 py-2 text-[13px] transition-colors hover:bg-surface-2/60",
+      danger ? "text-red-500 dark:text-red-400" : "text-foreground",
+    ].join(" ")}
+  >
+    <span className="flex-shrink-0 h-4 w-4">{icon}</span>
+    <span>{label}</span>
+  </button>
+);
+
+const CtxInputPanel = ({
+  title, placeholder, value, onChange, onConfirm, onCancel, inputRef,
+}: {
+  title: string;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  inputRef: React.RefObject<HTMLInputElement>;
+}) => (
+  <div className="px-3 py-2.5 space-y-2">
+    <p className="text-[11px] font-medium text-muted-foreground">{title}</p>
+    <input
+      ref={inputRef}
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => { if (e.key === "Enter") onConfirm(); if (e.key === "Escape") onCancel(); }}
+      placeholder={placeholder}
+      className="w-full rounded-lg border border-border bg-surface-2/60 px-2 py-1.5 text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-blue-400/60"
+    />
+    <div className="flex gap-1.5">
+      <button type="button" onClick={onConfirm} className="flex-1 rounded-lg bg-blue-500 py-1 text-[12px] font-medium text-white hover:bg-blue-600 transition-colors">
+        Aceptar
+      </button>
+      <button type="button" onClick={onCancel} className="flex-1 rounded-lg bg-surface-2/80 py-1 text-[12px] text-muted-foreground hover:bg-surface-2 transition-colors">
+        Cancelar
+      </button>
+    </div>
+  </div>
+);
+
+const CtxDeletePanel = ({
+  targetName, onDelete, onCancel,
+}: { targetName: string; onDelete: () => void; onCancel: () => void }) => (
+  <div className="px-3 py-2.5 space-y-2">
+    <p className="text-[12px] text-foreground">
+      ¿Eliminar <span className="font-semibold">"{targetName}"</span>?
+    </p>
+    <p className="text-[11px] text-muted-foreground">Las subcarpetas y categorías internas subirán al nivel padre.</p>
+    <div className="flex gap-1.5">
+      <button type="button" onClick={onDelete} className="flex-1 rounded-lg bg-red-500 py-1 text-[12px] font-medium text-white hover:bg-red-600 transition-colors">
+        Eliminar
+      </button>
+      <button type="button" onClick={onCancel} className="flex-1 rounded-lg bg-surface-2/80 py-1 text-[12px] text-muted-foreground hover:bg-surface-2 transition-colors">
+        Cancelar
+      </button>
+    </div>
+  </div>
+);
+
+// ── Context Menu ──────────────────────────────────────────────────────────────
 
 interface CtxMenuProps {
   ctx: CtxMenuState;
@@ -302,14 +371,18 @@ const CtxMenu = ({
 }: CtxMenuProps) => {
   const ref      = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [mode, setMode]       = useState<CtxMode>("default");
+  const [mode, setMode]         = useState<CtxMode>("default");
   const [inputVal, setInputVal] = useState("");
 
   const { target } = ctx;
-  const isFolder   = target.kind === "folder";
-  const isCategory = target.kind === "category";
-  const isBrand    = target.kind === "brand";
-  const label = isFolder ? target.nombre : isCategory ? COMERCIAL_LAYER_META[target.cat].label : target.marca;
+  // Narrowing explícito por kind para evitar accesos ambiguos al tipo union
+  const folderTarget   = target.kind === "folder"   ? target : null;
+  const categoryTarget = target.kind === "category" ? target : null;
+  const brandTarget    = target.kind === "brand"    ? target : null;
+
+  const label = target.kind === "folder"   ? target.nombre
+              : target.kind === "category" ? COMERCIAL_LAYER_META[target.cat].label
+              : target.marca;
 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -317,10 +390,10 @@ const CtxMenu = ({
   const x = Math.min(ctx.x, vw - menuW - 8);
   const y = Math.min(ctx.y, vh - 240);
 
-  // Auto-focus input when mode changes
   useEffect(() => {
     if (mode === "create" || mode === "rename") {
-      setTimeout(() => inputRef.current?.focus(), 30);
+      const t = setTimeout(() => inputRef.current?.focus(), 30);
+      return () => clearTimeout(t);
     }
   }, [mode]);
 
@@ -339,7 +412,7 @@ const CtxMenu = ({
   }, [onClose]);
 
   const enterCreate = () => { setInputVal(""); setMode("create"); };
-  const enterRename = () => { setInputVal(isFolder ? target.nombre : ""); setMode("rename"); };
+  const enterRename = () => { setInputVal(folderTarget?.nombre ?? ""); setMode("rename"); };
 
   const confirmCreate = () => {
     const n = inputVal.trim();
@@ -351,75 +424,6 @@ const CtxMenu = ({
     if (n) onRename(n);
     else onClose();
   };
-
-  const Row = ({ icon, label: lbl, onClick, danger = false }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      className={["flex w-full items-center gap-2.5 px-3 py-2 text-[13px] transition-colors hover:bg-surface-2/60", danger ? "text-red-500 dark:text-red-400" : "text-foreground"].join(" ")}
-    >
-      <span className="flex-shrink-0 h-4 w-4">{icon}</span>
-      <span>{lbl}</span>
-    </button>
-  );
-
-  // ── Inline input panel (create / rename) ─────────────────────────────────────
-  const InputPanel = ({ title, placeholder, onConfirm }: { title: string; placeholder: string; onConfirm: () => void }) => (
-    <div className="px-3 py-2.5 space-y-2">
-      <p className="text-[11px] font-medium text-muted-foreground">{title}</p>
-      <input
-        ref={inputRef}
-        type="text"
-        value={inputVal}
-        onChange={(e) => setInputVal(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") onConfirm(); if (e.key === "Escape") setMode("default"); }}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-border bg-surface-2/60 px-2 py-1.5 text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-blue-400/60"
-      />
-      <div className="flex gap-1.5">
-        <button
-          type="button"
-          onClick={onConfirm}
-          className="flex-1 rounded-lg bg-blue-500 py-1 text-[12px] font-medium text-white hover:bg-blue-600 transition-colors"
-        >
-          Aceptar
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("default")}
-          className="flex-1 rounded-lg bg-surface-2/80 py-1 text-[12px] text-muted-foreground hover:bg-surface-2 transition-colors"
-        >
-          Cancelar
-        </button>
-      </div>
-    </div>
-  );
-
-  // ── Inline delete confirm ────────────────────────────────────────────────────
-  const DeletePanel = () => (
-    <div className="px-3 py-2.5 space-y-2">
-      <p className="text-[12px] text-foreground">
-        ¿Eliminar <span className="font-semibold">"{isFolder ? target.nombre : ""}"</span>?
-      </p>
-      <p className="text-[11px] text-muted-foreground">Las subcarpetas y categorías internas subirán al nivel padre.</p>
-      <div className="flex gap-1.5">
-        <button
-          type="button"
-          onClick={onDelete}
-          className="flex-1 rounded-lg bg-red-500 py-1 text-[12px] font-medium text-white hover:bg-red-600 transition-colors"
-        >
-          Eliminar
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("default")}
-          className="flex-1 rounded-lg bg-surface-2/80 py-1 text-[12px] text-muted-foreground hover:bg-surface-2 transition-colors"
-        >
-          Cancelar
-        </button>
-      </div>
-    </div>
-  );
 
   return (
     <div
@@ -433,7 +437,7 @@ const CtxMenu = ({
       <div className="px-3 py-2 border-b border-border/50 bg-surface-2/40 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">
-            {isFolder ? "Carpeta" : isCategory ? "Categoría" : "Marca"}
+            {folderTarget ? "Carpeta" : categoryTarget ? "Categoría" : "Marca"}
           </p>
           <p className="text-[13px] font-semibold text-foreground truncate max-w-[158px]">{label}</p>
         </div>
@@ -443,27 +447,53 @@ const CtxMenu = ({
       </div>
 
       {/* Modos inline */}
-      {mode === "create"  && <InputPanel title="Nombre de la nueva carpeta" placeholder="Ej: Zona Norte" onConfirm={confirmCreate} />}
-      {mode === "rename"  && <InputPanel title="Nuevo nombre" placeholder={isFolder ? target.nombre : ""} onConfirm={confirmRename} />}
-      {mode === "delete"  && <DeletePanel />}
+      {mode === "create" && (
+        <CtxInputPanel
+          title="Nombre de la nueva carpeta"
+          placeholder="Ej: Zona Norte"
+          value={inputVal}
+          onChange={setInputVal}
+          onConfirm={confirmCreate}
+          onCancel={() => setMode("default")}
+          inputRef={inputRef}
+        />
+      )}
+      {mode === "rename" && (
+        <CtxInputPanel
+          title="Nuevo nombre"
+          placeholder={folderTarget?.nombre ?? ""}
+          value={inputVal}
+          onChange={setInputVal}
+          onConfirm={confirmRename}
+          onCancel={() => setMode("default")}
+          inputRef={inputRef}
+        />
+      )}
+      {mode === "delete" && folderTarget && (
+        <CtxDeletePanel
+          targetName={folderTarget.nombre}
+          onDelete={onDelete}
+          onCancel={() => setMode("default")}
+        />
+      )}
 
       {/* Menú principal */}
       {mode === "default" && (
         <>
-          {!isBrand && (
+          {!brandTarget && (
             <>
-              <Row icon={<FolderPlus className="h-4 w-4 text-amber-500" />} label="Crear subcarpeta" onClick={enterCreate} />
-              {isFolder && <Row icon={<Pencil className="h-4 w-4 text-blue-500" />} label="Renombrar" onClick={enterRename} />}
-              <Row icon={<Scissors className="h-4 w-4 text-muted-foreground" />} label="Cortar" onClick={onCut} />
-              {clipboard && <Row icon={<ClipboardPaste className="h-4 w-4 text-green-500" />} label="Pegar aquí" onClick={onPaste} />}
-              {isFolder && <Row icon={<Trash2 className="h-4 w-4" />} label="Eliminar carpeta" onClick={() => setMode("delete")} danger />}
+              <CtxRow icon={<FolderPlus className="h-4 w-4 text-amber-500" />} label="Crear subcarpeta" onClick={enterCreate} />
+              {folderTarget && <CtxRow icon={<Pencil className="h-4 w-4 text-blue-500" />} label="Renombrar" onClick={enterRename} />}
+              <CtxRow icon={<Scissors className="h-4 w-4 text-muted-foreground" />} label="Cortar" onClick={onCut} />
+              {clipboard && <CtxRow icon={<ClipboardPaste className="h-4 w-4 text-green-500" />} label="Pegar aquí" onClick={onPaste} />}
+              {folderTarget && <CtxRow icon={<Trash2 className="h-4 w-4" />} label="Eliminar carpeta" onClick={() => setMode("delete")} danger />}
               <div className="border-t border-border/30 my-0.5" />
             </>
           )}
-          {!isFolder && (
+          {!folderTarget && (
             <>
-              <Row icon={<FileDown className="h-4 w-4 text-green-600" />} label="Exportar CSV" onClick={() => onExport("csv")} />
-              <Row icon={<Map className="h-4 w-4 text-blue-500" />} label="Exportar KML" onClick={() => onExport("kml")} />
+              <CtxRow icon={<FileDown className="h-4 w-4 text-green-600" />} label="Exportar CSV" onClick={() => onExport("csv")} />
+              <CtxRow icon={<Map className="h-4 w-4 text-blue-500" />} label="Exportar KML" onClick={() => onExport("kml")} />
             </>
           )}
         </>
