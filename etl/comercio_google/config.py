@@ -13,10 +13,13 @@ Estrategia: Nearby Search en grilla geográfica uniforme con radio 1km.
     Gran Concepción     90 pts  3km spacing  radio 1km
     Ciudades resto      54 pts  radio 6-20km (nunca saturan el cap)
     ─────────────────────────────────────────────────────
-    TOTAL              661 pts  × 9 categ. = 5 949 requests
-    Costo/sync:        USD $190  (trimestral)
-    Costo/año:         USD $762  (dentro del crédito gratis $2 400/año)
-    Runtime estimado:  40-59 min (timeout workflow: 90 min)
+    TOTAL              661 pts  × 7 categ. = 4 627 requests
+    Costo/sync:        USD $0   (bajo el límite gratuito de 5 000/mes)
+    Runtime estimado:  35-50 min (timeout workflow: 90 min)
+
+  Nota: supermercado + conveniencia fusionados en 1 llamada (máx ~10-12
+  resultados combinados a radio 1km → nunca satura el cap de 20).
+  centro_comercial eliminado (malls capturados vía sus tiendas internas).
 """
 
 from __future__ import annotations
@@ -63,7 +66,7 @@ UPSERT_BATCH_SIZE = 500
 GOOGLE_TYPE_CATEGORY: dict[str, str] = {
     "supermarket":           "supermercado",
     "grocery_store":         "supermercado",
-    "convenience_store":     "conveniencia",
+    "convenience_store":     "supermercado",
     "pharmacy":              "farmacia",
     "drugstore":             "farmacia",
     "gas_station":           "combustible",
@@ -78,19 +81,16 @@ GOOGLE_TYPE_CATEGORY: dict[str, str] = {
     "restaurant":            "restaurante",
     "fast_food_restaurant":  "restaurante",
     "cafe":                  "restaurante",
-    "shopping_mall":         "centro_comercial",
 }
 
 CATEGORY_TYPES: dict[str, list[str]] = {
-    "supermercado":          ["supermarket", "grocery_store"],
-    "conveniencia":          ["convenience_store"],
+    "supermercado":          ["supermarket", "grocery_store", "convenience_store"],
     "farmacia":              ["pharmacy", "drugstore"],
     "combustible":           ["gas_station"],
     "mejoramiento_hogar":    ["home_goods_store", "hardware_store"],
     "retail_departamental":  ["department_store", "clothing_store", "shoe_store"],
     "banco":                 ["bank"],
     "restaurante":           ["restaurant", "fast_food_restaurant"],
-    "centro_comercial":      ["shopping_mall"],
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
