@@ -28,3 +28,8 @@ dist-ssr
 *.sw?
 __pycache__/
 *.pyc
+
+# Secrets locales — nunca al repo
+.env
+.env.local
+.env*.local
