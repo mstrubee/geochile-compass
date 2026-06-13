@@ -513,11 +513,11 @@ export const ComercialPOISection = ({
 
   const applyMove = useCallback((node: ClipNode, newParentId: string | null) => {
     if (node.kind === "folder") {
-      moveFolderTo(node.id, newParentId, tree.folders);
+      moveFolderTo(node.id, newParentId);
     } else {
       moveCatTo(node.cat, newParentId);
     }
-  }, [moveFolderTo, moveCatTo, tree.folders]);
+  }, [moveFolderTo, moveCatTo]);
 
   // ── Context menu ──────────────────────────────────────────────────────────────
 
