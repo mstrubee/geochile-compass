@@ -601,6 +601,27 @@ export type Database = {
         }
         Relationships: []
       }
+      comercial_marca_overrides: {
+        Row: {
+          cat: string
+          marca: string
+          parent_id: string | null
+          user_id: string
+        }
+        Insert: {
+          cat: string
+          marca: string
+          parent_id?: string | null
+          user_id: string
+        }
+        Update: {
+          cat?: string
+          marca?: string
+          parent_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       comercio_poi: {
         Row: {
           cadena: string | null
