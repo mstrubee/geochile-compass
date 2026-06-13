@@ -173,7 +173,7 @@ def extract_all() -> list[dict[str, Any]]:
                 stats[cat] = stats.get(cat, 0) + 1
                 punto_nuevos += 1
 
-            time.sleep(0.15)  # 150ms entre requests → ~6 req/s (evita rate limit 429)
+            time.sleep(0.20)  # 200ms entre requests → ~5 req/s, run completo en ~70 min
 
         log.info("  → %d nuevos únicos en %s", punto_nuevos, label)
 
