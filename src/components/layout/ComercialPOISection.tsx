@@ -852,7 +852,7 @@ export const ComercialPOISection = ({
   const [dragNode, setDragNode]   = useState<ClipNode | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
-  const { tree, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo, moveBrandTo, resetTree } = useComercialFolders();
+  const { tree, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo, moveBrandTo } = useComercialFolders();
   const activeCount = CATEGORY_ORDER.filter((c) => layers[c]).length;
 
   // Vista saneada: blinda el render contra estados corruptos (categorías nunca desaparecen)
