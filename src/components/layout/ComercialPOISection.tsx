@@ -11,7 +11,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   ChevronDown, ChevronRight, Globe, FileDown, Map as MapIcon, X,
   FolderPlus, Scissors, ClipboardPaste, Trash2, Pencil,
-  FolderOpen, Folder as FolderIcon, RotateCcw,
+  FolderOpen, Folder as FolderIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ComercialCategoria, ComercialLayerState } from "@/types/comercial";
@@ -852,12 +852,12 @@ export const ComercialPOISection = ({
   const [dragNode, setDragNode]   = useState<ClipNode | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
-  const { tree, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo, moveBrandTo, resetTree } = useComercialFolders();
+  const { tree, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo, moveBrandTo } = useComercialFolders();
   const activeCount = CATEGORY_ORDER.filter((c) => layers[c]).length;
 
   // Vista saneada: blinda el render contra estados corruptos (categorías nunca desaparecen)
   const safe = useMemo(() => sanitizeTree(tree.folders, tree.catOverrides, tree.brandOverrides), [tree]);
-  const isCustomized = tree.folders.length > 0 || tree.catOverrides.length > 0 || tree.brandOverrides.length > 0;
+  
 
   // Marcas reubicadas en carpetas, agrupadas por categoría → se notifica al mapa
   const managedBrands = useMemo(() => {
@@ -1093,18 +1093,8 @@ export const ComercialPOISection = ({
             <p className="text-[10px] text-text-muted">
               Fuente: OpenStreetMap · Click derecho para organizar
             </p>
-            {isCustomized && (
-              <button
-                type="button"
-                onClick={() => { resetTree(); toast.success("Orden restaurado"); }}
-                className="flex flex-shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:bg-surface-2/60 hover:text-foreground"
-                title="Quitar todas las carpetas y volver al orden original"
-              >
-                <RotateCcw className="h-3 w-3" />
-                Restaurar orden
-              </button>
-            )}
           </div>
+
         </div>
       )}
 
