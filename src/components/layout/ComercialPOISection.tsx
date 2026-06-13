@@ -314,7 +314,7 @@ const CategoryRow = ({
   // Aplica un nuevo set de marcas ocultas y, si NO queda ningún trigger activo
   // (todas las marcas del listado ocultas), apaga la capa automáticamente.
   const applyHidden = (next: Set<string>) => {
-    onSetHiddenBrands(cat, next);
+    onSetHiddenBrands(next);
     const activeListCount = marcas.filter((m) => !next.has(m.marca_estandar)).length;
     if (on && activeListCount === 0) onRawToggle?.(false); // último trigger desactivado → capa off
   };
