@@ -565,6 +565,68 @@ export type Database = {
         }
         Relationships: []
       }
+      comercial_carpetas: {
+        Row: {
+          created_at: string
+          id: string
+          nombre: string
+          parent_id: string | null
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nombre: string
+          parent_id?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nombre?: string
+          parent_id?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comercial_carpetas_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "comercial_carpetas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comercial_cat_overrides: {
+        Row: {
+          cat: string
+          parent_id: string | null
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cat: string
+          parent_id?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cat?: string
+          parent_id?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       comercial_categorias: {
         Row: {
           activo: boolean
@@ -606,18 +668,21 @@ export type Database = {
           cat: string
           marca: string
           parent_id: string | null
+          sort_order: number
           user_id: string
         }
         Insert: {
           cat: string
           marca: string
           parent_id?: string | null
+          sort_order?: number
           user_id: string
         }
         Update: {
           cat?: string
           marca?: string
           parent_id?: string | null
+          sort_order?: number
           user_id?: string
         }
         Relationships: []
