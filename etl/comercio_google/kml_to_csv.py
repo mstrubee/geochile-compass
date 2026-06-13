@@ -20,7 +20,7 @@ from pathlib import Path
 
 KML_NS = "http://www.opengis.net/kml/2.2"
 
-IGNORAR_CARPETAS = {"directorio mayo", "gpwn", "serviteca"}
+IGNORAR_CARPETAS = {"directorio mayo", "gpwn", "serviteca", "automotoras", "link&co"}
 
 MARCA_NORMALIZADA: dict[str, str] = {
     "good year":   "Goodyear",
@@ -28,6 +28,25 @@ MARCA_NORMALIZADA: dict[str, str] = {
     "goodyear":    "Goodyear",
     "lub - copec": "Lub Copec",
     "lub":         "Lub Copec",
+    "link & co":   "Link & Co",
+    "jlr":         "JLR (Jaguar/Land Rover)",
+    "fca":         "FCA (Fiat/Chrysler)",
+    "mmc":         "MMC (Mitsubishi)",
+    "olx":         "OLX Autos",
+    "chinos varios": "Varios (China)",
+    "mg":          "MG",
+    "bmw":         "BMW",
+    "ssy":         "SSY",
+    "jmc":         "JMC",
+    "gac":         "GAC",
+    "dfsk":        "DFSK",
+    "baic":        "BAIC",
+    "gwm":         "GWM",
+    "jac":         "JAC",
+    "ds":          "DS",
+    "sk":          "SK",
+    "seat":        "SEAT",
+    "derco maq":   "Derco Maq",
     "mtc":         "MTC",
     "mtc ":        "MTC",
     "shell helix": "Shell Helix",
