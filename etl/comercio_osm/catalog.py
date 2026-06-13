@@ -93,8 +93,6 @@ _BRAND_RULES: list[tuple[str, BrandEntry]] = [
     ("upa",                 _entry("Upa",            "conveniencia", "conveniencia", "",             "#F59E0B", "🏪")),
     ("spid",                _entry("Spid",           "conveniencia", "conveniencia", "",             "#3B82F6", "🏪")),
     ("pronto copec",        _entry("Pronto Copec",   "conveniencia", "conveniencia", "Copec",        "#E31837", "🏪")),
-    ("shell heliós",        _entry("Shell Heliós",   "conveniencia", "conveniencia", "Shell",        "#FFCC00", "🏪")),
-    ("shell helios",        _entry("Shell Heliós",   "conveniencia", "conveniencia", "Shell",        "#FFCC00", "🏪")),
 
     # ─── FARMACIAS ────────────────────────────────────────────────────────────
     ("farmacia cruz verde",  _entry("Cruz Verde",    "farmacia",     "farmacia",     "Cruz Verde",   "#00A651", "💊")),
