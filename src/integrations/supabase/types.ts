@@ -3025,6 +3025,13 @@ export type Database = {
         | { Args: { table_name: string }; Returns: string }
       enablelongtransactions: { Args: never; Returns: string }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      fn_marcas_categoria: {
+        Args: { p_categoria: string }
+        Returns: {
+          marca_estandar: string
+          total_locales: number
+        }[]
+      }
       fn_participacion_marcas: {
         Args: { p_categoria: string }
         Returns: {
