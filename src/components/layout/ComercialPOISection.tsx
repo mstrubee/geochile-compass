@@ -11,7 +11,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   ChevronDown, ChevronRight, Globe, FileDown, Map as MapIcon, X,
   FolderPlus, Scissors, ClipboardPaste, Trash2, Pencil,
-  FolderOpen, Folder as FolderIcon, RotateCcw,
+  FolderOpen, Folder as FolderIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ComercialCategoria, ComercialLayerState } from "@/types/comercial";
