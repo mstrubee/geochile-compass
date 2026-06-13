@@ -52,8 +52,8 @@ def main() -> int:
         help="Logging en nivel DEBUG",
     )
     parser.add_argument(
-        "--skip-supplement", action="store_true",
-        help="Omite el suplemento Text Search (solo Nearby Search)",
+        "--with-supplement", action="store_true",
+        help="Activa el suplemento Text Search por marca (experimental, añade ~$48/sync)",
     )
     args = parser.parse_args()
 
@@ -83,8 +83,12 @@ def main() -> int:
         log.warning("No se extrajeron registros. Verifica la API key y los permisos.")
         return 1
 
-    # ── Suplemento Text Search por marca ─────────────────────────────────────
-    if not args.skip_supplement:
+    # ── Suplemento Text Search por marca (desactivado por defecto) ───────────
+    # Análisis runs #19/#20: el Nearby Search a 1km ya captura todos los
+    # locales de cadenas establecidas → el suplemento añade 0 registros nuevos
+    # y gastaría ~$48/sync innecesariamente. Activar con --with-supplement
+    # si en el futuro se detectan marcas con baja cobertura.
+    if args.with_supplement:
         log.info("═══ Fase 2: Text Search suplemento por marca ═══")
         t_sup = time.time()
         seen_ids = {r["osm_id"] for r in records}
@@ -95,8 +99,6 @@ def main() -> int:
         )
         records = records + sup_records
         log.info("Total combinado: %d registros únicos", len(records))
-    else:
-        log.info("Suplemento omitido (--skip-supplement)")
 
     # ── Guardar CSV de diagnóstico ───────────────────────────────────────────
     OUTPUT_DIR.mkdir(exist_ok=True)
