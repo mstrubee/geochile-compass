@@ -49,40 +49,76 @@ function sanitizeTree(
 ): { folders: Carpeta[]; catOverrides: CatOverride[]; brandOverrides: BrandOverride[] } {
   const isCat = (id: string | null): boolean =>
     id !== null && (CATEGORY_ORDER as string[]).includes(id);
-  const folderById = new Map(folders.map((f) => [f.id, f]));
+  // Posición (parentId) de cada categoría según su override
+  const catParent = new Map(catOverrides.map((o) => [o.cat as string, o.parentId]));
 
-  // ¿La cadena de padres termina en la raíz (null) o en una categoría existente?
-  const reachesRoot = (startParent: string | null): boolean => {
+  // ¿La cadena de padres termina en la raíz (null), siguiendo el grafo COMPLETO
+  // (padres de carpetas Y overrides de categorías)? Detecta ciclos carpeta↔categoría
+  // y referencias a carpetas inexistentes.
+  const reachesRoot = (
+    startParent: string | null,
+    getFolderParent: (id: string) => string | null | undefined,
+  ): boolean => {
     let cur = startParent;
     const seen = new Set<string>();
-    while (cur !== null && !isCat(cur)) {
-      if (seen.has(cur)) return false;        // ciclo
+    while (cur !== null) {
+      if (seen.has(cur)) return false;                 // ciclo
       seen.add(cur);
-      const f = folderById.get(cur);
-      if (!f) return false;                   // padre inexistente
-      cur = f.parentId;
+      if (isCat(cur)) {
+        cur = catParent.get(cur) ?? null;              // seguir la posición de la categoría
+      } else {
+        const p = getFolderParent(cur);
+        if (p === undefined) return false;             // carpeta inexistente
+        cur = p;
+      }
     }
     return true;
   };
 
+  // Pass 1 — carpetas: usa los padres crudos. Reparenta a la raíz las que ciclan/cuelgan.
+  const rawFolderById = new Map(folders.map((f) => [f.id, f]));
+  const rawFolderParent = (id: string) => (rawFolderById.has(id) ? rawFolderById.get(id)!.parentId : undefined);
   const safeFolders = folders.map((f) =>
-    reachesRoot(f.parentId) ? f : { ...f, parentId: null },
+    reachesRoot(f.parentId, rawFolderParent) ? f : { ...f, parentId: null },
   );
+  const safeFolderById = new Map(safeFolders.map((f) => [f.id, f]));
+  const safeFolderParent = (id: string) => (safeFolderById.has(id) ? safeFolderById.get(id)!.parentId : undefined);
   const validFolderIds = new Set(safeFolders.map((f) => f.id));
 
-  // Conserva solo overrides cuyo destino existe (categoría o carpeta real);
-  // el resto vuelve a la raíz por defecto.
+  // Pass 2 — overrides de categoría: destino válido (categoría o carpeta real) y que alcance la raíz.
+  // El resto vuelve a la raíz por defecto (la categoría NUNCA desaparece).
   const safeOverrides = catOverrides.filter(
-    (o) => o.parentId !== null && (isCat(o.parentId) || validFolderIds.has(o.parentId)),
+    (o) =>
+      o.parentId !== null &&
+      (isCat(o.parentId) || validFolderIds.has(o.parentId)) &&
+      reachesRoot(o.parentId, safeFolderParent),
   );
 
-  // Marcas: parentId null (raíz), categoría o carpeta existente son válidos;
-  // si apunta a una carpeta inexistente, se descarta (la marca vuelve a su categoría).
+  // Pass 3 — marcas: null (raíz), categoría o carpeta existente, y que alcance la raíz.
   const safeBrandOverrides = brandOverrides.filter(
-    (o) => o.parentId === null || isCat(o.parentId) || validFolderIds.has(o.parentId),
+    (o) =>
+      o.parentId === null ||
+      ((isCat(o.parentId) || validFolderIds.has(o.parentId)) && reachesRoot(o.parentId, safeFolderParent)),
   );
 
   return { folders: safeFolders, catOverrides: safeOverrides, brandOverrides: safeBrandOverrides };
+}
+
+// ¿La carpeta `folderId` está (transitivamente) dentro de la categoría `cat`?
+// Se usa para impedir mover una categoría dentro de una de sus propias subcarpetas (ciclo).
+function isFolderUnderCategory(folderId: string, cat: ComercialCategoria, folders: Carpeta[]): boolean {
+  const byId = new Map(folders.map((f) => [f.id, f]));
+  let cur: string | null = folderId;
+  const seen = new Set<string>();
+  while (cur) {
+    if (cur === cat) return true;
+    if (seen.has(cur)) return false;
+    seen.add(cur);
+    const f = byId.get(cur);
+    if (!f) return false;
+    cur = f.parentId;
+  }
+  return false;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -797,11 +833,16 @@ export const ComercialPOISection = ({
     if (node.kind === "folder") {
       moveFolderTo(node.id, newParentId);
     } else if (node.kind === "category") {
+      // Evita el ciclo categoría→subcarpeta→categoría (que la haría desaparecer)
+      if (newParentId && isFolderUnderCategory(newParentId, node.cat, tree.folders)) {
+        toast.error("No puedes mover una categoría dentro de una de sus propias carpetas");
+        return;
+      }
       moveCatTo(node.cat, newParentId);
     } else {
       moveBrandTo(node.cat, node.marca, newParentId);
     }
-  }, [moveFolderTo, moveCatTo, moveBrandTo]);
+  }, [moveFolderTo, moveCatTo, moveBrandTo, tree.folders]);
 
   // ── Context menu ──────────────────────────────────────────────────────────────
 
