@@ -173,7 +173,7 @@ def extract_all() -> list[dict[str, Any]]:
                 stats[cat] = stats.get(cat, 0) + 1
                 punto_nuevos += 1
 
-            time.sleep(0.20)  # 200ms entre requests → ~5 req/s, run completo en ~70 min
+            # throttle gestionado en places._throttle() — no sleep aquí
 
         log.info("  → %d nuevos únicos en %s", punto_nuevos, label)
 

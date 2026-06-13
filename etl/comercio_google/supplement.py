@@ -36,13 +36,10 @@ from __future__ import annotations
 
 import logging
 import math
-import time
 from typing import Any
 
-import requests
-
 from etl.comercio_osm import catalog
-from .config import GOOGLE_API_KEY, FIELD_MASK, PLACES_TEXT_URL
+from . import places as _places
 from . import extractor as _extractor
 
 log = logging.getLogger("comercio_google.supplement")
@@ -329,14 +326,8 @@ REGIONAL_ZONES: list[tuple[float, float, int, str]] = [
 # API helper: Text Search con paginación
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _circle_to_rectangle(lat: float, lng: float, radius_m: int) -> dict:
-    """
-    Convierte un círculo (lat, lng, radius_m) en un bounding-box rectangulo.
-
-    La Text Search API (New) acepta locationRestriction.rectangle pero NO
-    locationRestriction.circle (ese campo es exclusivo del Nearby Search).
-    Usar circle en Text Search devuelve error 400 silencioso → cero resultados.
-    """
+def _bbox(lat: float, lng: float, radius_m: int) -> dict:
+    """Convierte (lat, lng, radius_m) en bounding box para Text Search."""
     d_lat = radius_m / 111_100.0
     d_lon = radius_m / (111_100.0 * math.cos(math.radians(lat)))
     return {
@@ -345,83 +336,19 @@ def _circle_to_rectangle(lat: float, lng: float, radius_m: int) -> dict:
     }
 
 
-def _text_search_page(
-    query: str,
-    lat: float,
-    lng: float,
-    radius_m: int,
-    page_token: str | None = None,
-) -> tuple[list[dict], str | None]:
-    """
-    Llama a Places Text Search para una marca + ubicación.
-    Retorna (places, next_page_token).
-
-    Usa locationRestriction.rectangle (el único tipo soportado por Text Search).
-    """
-    body: dict[str, Any] = {
-        "textQuery":      query,
-        "maxResultCount": 20,
-        "locationRestriction": {
-            "rectangle": _circle_to_rectangle(lat, lng, radius_m),
-        },
-        "languageCode": "es",
-    }
-    if page_token:
-        body["pageToken"] = page_token
-
-    headers = {
-        "Content-Type":     "application/json",
-        "X-Goog-Api-Key":   GOOGLE_API_KEY,
-        "X-Goog-FieldMask": FIELD_MASK,
-    }
-
-    try:
-        resp = requests.post(PLACES_TEXT_URL, json=body, headers=headers, timeout=30)
-
-        if resp.status_code == 429:
-            wait = int(resp.headers.get("Retry-After", "30"))
-            log.warning("Rate limit Text Search — esperando %ds", wait)
-            time.sleep(wait)
-            return _text_search_page(query, lat, lng, radius_m, page_token)
-
-        resp.raise_for_status()
-        data   = resp.json()
-        places = data.get("places", [])
-        return places, data.get("nextPageToken")
-
-    except requests.HTTPError as exc:
-        log.error(
-            "  HTTP %s en Text Search '%s' (%s,%s): %s",
-            exc.response.status_code if exc.response is not None else "?",
-            query, lat, lng, exc,
-        )
-        return [], None
-    except requests.RequestException as exc:
-        log.error("  Error de red Text Search '%s' (%s,%s): %s", query, lat, lng, exc)
-        return [], None
-
-
-def _search_all_pages(
-    query: str,
-    lat: float,
-    lng: float,
-    radius_m: int,
-    max_pages: int = 3,
-) -> list[dict]:
-    """Text Search con paginación (hasta max_pages × 20 = 60 resultados máx)."""
+def _search_all_pages(query: str, lat: float, lng: float, radius_m: int,
+                      max_pages: int = 3) -> list[dict]:
+    """Text Search con paginación usando places.search_text (throttle incluido)."""
     all_places: list[dict] = []
     page_token: str | None = None
+    rect = _bbox(lat, lng, radius_m)
 
     for _ in range(max_pages):
-        places, next_token = _text_search_page(query, lat, lng, radius_m, page_token)
+        places, next_token = _places.search_text(query, rect, page_token)
         all_places.extend(places)
-
-        # Si la página devuelve < 20 resultados, no hay página siguiente
         if not next_token or len(places) < 20:
             break
-
         page_token = next_token
-        time.sleep(0.05)  # pausa mínima entre páginas de la misma búsqueda
 
     return all_places
 
@@ -466,8 +393,6 @@ def run_supplement(seen_ids: set[str]) -> list[dict[str, Any]]:
         for lat, lng, radius, label in zones:
             places = _search_all_pages(brand["query"], lat, lng, radius)
             brand_api += 1  # mínimo 1 llamada (puede ser más con paginación)
-            time.sleep(0.05)
-
             for place in places:
                 rec = _record_if_valid(place, brand, seen_ids, local_seen)
                 if rec:
@@ -490,8 +415,6 @@ def run_supplement(seen_ids: set[str]) -> list[dict[str, Any]]:
         for lat, lng, radius, label in zones:
             places = _search_all_pages(brand["query"], lat, lng, radius)
             brand_api += 1
-            time.sleep(0.05)
-
             for place in places:
                 rec = _record_if_valid(place, brand, seen_ids, local_seen)
                 if rec:
