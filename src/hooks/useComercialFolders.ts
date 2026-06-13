@@ -74,6 +74,12 @@ export function useComercialFolders() {
       carpetasTable().select("id, nombre, parent_id").eq("user_id", user.id),
       overridesTable().select("cat, parent_id").eq("user_id", user.id),
     ]).then(([f, o]: [any, any]) => {
+      if (f.error || o.error) {
+        // Tablas aún no creadas (migración pendiente) → usar localStorage
+        console.warn("comercial_carpetas no disponible, usando localStorage:", f.error ?? o.error);
+        setTree(lsLoad());
+        return;
+      }
       setTree({
         folders: (f.data ?? []).map((r: any) => ({
           id: r.id,
@@ -85,6 +91,8 @@ export function useComercialFolders() {
           parentId: r.parent_id ?? null,
         })),
       });
+    }).catch(() => {
+      setTree(lsLoad());
     }).finally(() => setLoading(false));
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -105,7 +113,12 @@ export function useComercialFolders() {
       .insert({ nombre: trimmed, parent_id: parentId, user_id: user.id })
       .select("id, nombre, parent_id")
       .single();
-    if (error) { console.error("createFolder:", error); return; }
+    if (error) {
+      // Fallback: usar UUID local si la tabla aún no existe
+      const id = crypto.randomUUID();
+      setTree((prev) => { const next = { ...prev, folders: [...prev.folders, { id, nombre: trimmed, parentId }] }; lsSave(next); return next; });
+      return;
+    }
     setTree((prev) => ({
       ...prev,
       folders: [...prev.folders, { id: data.id, nombre: data.nombre, parentId: data.parent_id ?? null }],
@@ -124,8 +137,8 @@ export function useComercialFolders() {
     const { error } = await carpetasTable()
       .update({ nombre, updated_at: new Date().toISOString() })
       .eq("id", id).eq("user_id", user.id);
-    if (error) { console.error("renameFolder:", error); return; }
-    setTree((prev) => ({ ...prev, folders: prev.folders.map((f) => f.id === id ? { ...f, nombre } : f) }));
+    if (error) console.warn("renameFolder (DB):", error);
+    setTree((prev) => { const next = { ...prev, folders: prev.folders.map((f) => f.id === id ? { ...f, nombre } : f) }; if (error) lsSave(next); return next; });
   }, [user]);
 
   const deleteFolder = useCallback(async (id: string, parentId: string | null) => {
@@ -178,8 +191,8 @@ export function useComercialFolders() {
     const { error } = await carpetasTable()
       .update({ parent_id: newParentId, updated_at: new Date().toISOString() })
       .eq("id", id).eq("user_id", user.id);
-    if (error) { console.error("moveFolderTo:", error); return; }
-    setTree((prev) => ({ ...prev, folders: prev.folders.map((f) => f.id === id ? { ...f, parentId: newParentId } : f) }));
+    if (error) console.warn("moveFolderTo (DB):", error);
+    setTree((prev) => { const next = { ...prev, folders: prev.folders.map((f) => f.id === id ? { ...f, parentId: newParentId } : f) }; if (error) lsSave(next); return next; });
   }, [user, tree.folders]);
 
   const moveCatTo = useCallback(async (cat: ComercialCategoria, newParentId: string | null) => {
@@ -199,7 +212,7 @@ export function useComercialFolders() {
     }
     const { error } = await overridesTable()
       .upsert({ user_id: user.id, cat, parent_id: newParentId });
-    if (error) { console.error("moveCatTo:", error); return; }
+    if (error) console.warn("moveCatTo (DB):", error);
     setTree((prev) => {
       const exists = prev.catOverrides.find((o) => o.cat === cat);
       return {
