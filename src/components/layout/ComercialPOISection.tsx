@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
-  ChevronDown, ChevronRight, Globe, FileDown, Map, X,
+  ChevronDown, ChevronRight, Globe, FileDown, Map as MapIcon, X,
   FolderPlus, Scissors, ClipboardPaste, Trash2, Pencil,
   FolderOpen, Folder as FolderIcon, RotateCcw,
 } from "lucide-react";
