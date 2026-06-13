@@ -17,9 +17,10 @@ Estrategia: Nearby Search en grilla geográfica uniforme con radio 1km.
     Costo/sync:        USD $0   (bajo el límite gratuito de 5 000/mes)
     Runtime estimado:  35-50 min (timeout workflow: 90 min)
 
-  Nota: supermercado + conveniencia fusionados en 1 llamada (máx ~10-12
-  resultados combinados a radio 1km → nunca satura el cap de 20).
-  centro_comercial eliminado (malls capturados vía sus tiendas internas).
+  Nota: supermercado + conveniencia fusionados en 1 llamada.
+  mejoramiento_hogar renombrado a ferreteria (Sodimac, Easy, Construmart…).
+  shopping_mall incluido en retail_departamental → malls capturados sin llamada extra.
+  Gas (Abastible, Gasco, Lipigas) capturados vía ferreteria; catalog los etiqueta "gas".
 """
 
 from __future__ import annotations
@@ -70,9 +71,9 @@ GOOGLE_TYPE_CATEGORY: dict[str, str] = {
     "pharmacy":              "farmacia",
     "drugstore":             "farmacia",
     "gas_station":           "combustible",
-    "home_goods_store":      "mejoramiento_hogar",
-    "hardware_store":        "mejoramiento_hogar",
-    "furniture_store":       "mejoramiento_hogar",
+    "home_goods_store":      "ferreteria",
+    "hardware_store":        "ferreteria",
+    "furniture_store":       "ferreteria",
     "department_store":      "retail_departamental",
     "clothing_store":        "retail_departamental",
     "shoe_store":            "retail_departamental",
@@ -87,8 +88,8 @@ CATEGORY_TYPES: dict[str, list[str]] = {
     "supermercado":          ["supermarket", "grocery_store", "convenience_store"],
     "farmacia":              ["pharmacy", "drugstore"],
     "combustible":           ["gas_station"],
-    "mejoramiento_hogar":    ["home_goods_store", "hardware_store"],
-    "retail_departamental":  ["department_store", "clothing_store", "shoe_store"],
+    "ferreteria":            ["home_goods_store", "hardware_store"],
+    "retail_departamental":  ["department_store", "clothing_store", "shoe_store", "shopping_mall"],
     "banco":                 ["bank"],
     "restaurante":           ["restaurant", "fast_food_restaurant"],
 }
