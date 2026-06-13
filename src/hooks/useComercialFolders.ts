@@ -72,6 +72,30 @@ const overridesTable = () => (supabase as any).from("comercial_cat_overrides");
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const brandOverridesTable = () => (supabase as any).from("comercial_marca_overrides");
 
+// Re-siembra la DB con un árbol recuperado de localStorage (best-effort).
+// Preserva los ids de carpeta para no romper las referencias parentId.
+async function backfillTree(t: ComercialTree, userId: string) {
+  try {
+    if (t.folders.length > 0) {
+      await carpetasTable().upsert(
+        t.folders.map((f) => ({ id: f.id, user_id: userId, nombre: f.nombre, parent_id: f.parentId })),
+      );
+    }
+    if (t.catOverrides.length > 0) {
+      await overridesTable().upsert(
+        t.catOverrides.map((o) => ({ user_id: userId, cat: o.cat, parent_id: o.parentId })),
+      );
+    }
+    if (t.brandOverrides.length > 0) {
+      await brandOverridesTable().upsert(
+        t.brandOverrides.map((o) => ({ user_id: userId, cat: o.cat, marca: o.marca, parent_id: o.parentId })),
+      );
+    }
+  } catch (e) {
+    console.warn("backfill árbol comercial (re-siembra):", e);
+  }
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useComercialFolders() {
@@ -100,7 +124,7 @@ export function useComercialFolders() {
         setTree(lsLoad());
         return;
       }
-      setTree({
+      const dbTree: ComercialTree = {
         folders: (f.data ?? []).map((r: any) => ({
           id: r.id,
           nombre: r.nombre,
@@ -111,8 +135,7 @@ export function useComercialFolders() {
           parentId: r.parent_id ?? null,
         })),
         // tabla de marcas puede no existir aún (migración pendiente):
-        // en ese caso recuperamos desde localStorage (moveBrandTo guarda ahí como respaldo)
-        // para no perder las marcas movidas al recargar.
+        // en ese caso recuperamos desde localStorage para no perder las marcas movidas.
         brandOverrides: b.error
           ? (lsLoad().brandOverrides ?? [])
           : (b.data ?? []).map((r: any) => ({
@@ -120,11 +143,46 @@ export function useComercialFolders() {
               marca: r.marca,
               parentId: r.parent_id ?? null,
             })),
-      });
+      };
+
+      // ── FUSIÓN DEFENSIVA ANTI-PÉRDIDA ──────────────────────────────────────
+      // La DB es autoridad de contenido, pero NO descartamos items que solo existen
+      // en localStorage (p.ej. carpetas creadas antes de aplicar la migración, o por
+      // la carrera de autenticación). Se unen y se re-siembran en la DB los faltantes.
+      // El espejo en localStorage refleja los borrados, así que esto NUNCA resucita
+      // carpetas eliminadas (un borrado las quita de ambos lados).
+      const local = lsLoad();
+      const dbFolderIds = new Set(dbTree.folders.map((f) => f.id));
+      const localOnlyFolders = local.folders.filter((f) => !dbFolderIds.has(f.id));
+      const dbCats = new Set(dbTree.catOverrides.map((o) => o.cat));
+      const localOnlyCats = local.catOverrides.filter((o) => !dbCats.has(o.cat));
+      const dbBrandKeys = new Set(dbTree.brandOverrides.map((o) => `${o.cat}::${o.marca}`));
+      const localOnlyBrands = local.brandOverrides.filter((o) => !dbBrandKeys.has(`${o.cat}::${o.marca}`));
+
+      const merged: ComercialTree = {
+        folders: [...dbTree.folders, ...localOnlyFolders],
+        catOverrides: [...dbTree.catOverrides, ...localOnlyCats],
+        brandOverrides: [...dbTree.brandOverrides, ...localOnlyBrands],
+      };
+      setTree(merged);
+
+      // Re-sembrar en la DB lo que solo estaba en localStorage (para que persista)
+      if (localOnlyFolders.length || localOnlyCats.length || localOnlyBrands.length) {
+        console.warn(`Recuperando ${localOnlyFolders.length} carpetas / ${localOnlyCats.length} cat / ${localOnlyBrands.length} marcas desde localStorage hacia la DB`);
+        void backfillTree({ folders: localOnlyFolders, catOverrides: localOnlyCats, brandOverrides: localOnlyBrands }, user.id);
+      }
     }).catch(() => {
       setTree(lsLoad());
     }).finally(() => setLoading(false));
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Espejo en localStorage ──────────────────────────────────────────────────
+  // Cualquier estado mostrado se respalda en localStorage, de modo que la
+  // recuperación de arriba siempre tenga la última versión buena (también refleja
+  // borrados, evitando que "resuciten" carpetas eliminadas).
+  useEffect(() => {
+    if (!loading) lsSave(tree);
+  }, [tree, loading]);
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
