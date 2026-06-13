@@ -27,6 +27,7 @@ import {
   useComercialFolders,
   type Carpeta,
   type CatOverride,
+  type BrandOverride,
 } from "@/hooks/useComercialFolders";
 
 // ── Orden por defecto de categorías ──────────────────────────────────────────
@@ -44,7 +45,8 @@ export const CATEGORY_ORDER: ComercialCategoria[] = [
 function sanitizeTree(
   folders: Carpeta[],
   catOverrides: CatOverride[],
-): { folders: Carpeta[]; catOverrides: CatOverride[] } {
+  brandOverrides: BrandOverride[],
+): { folders: Carpeta[]; catOverrides: CatOverride[]; brandOverrides: BrandOverride[] } {
   const isCat = (id: string | null): boolean =>
     id !== null && (CATEGORY_ORDER as string[]).includes(id);
   const folderById = new Map(folders.map((f) => [f.id, f]));
@@ -74,7 +76,13 @@ function sanitizeTree(
     (o) => o.parentId !== null && (isCat(o.parentId) || validFolderIds.has(o.parentId)),
   );
 
-  return { folders: safeFolders, catOverrides: safeOverrides };
+  // Marcas: parentId null (raíz), categoría o carpeta existente son válidos;
+  // si apunta a una carpeta inexistente, se descarta (la marca vuelve a su categoría).
+  const safeBrandOverrides = brandOverrides.filter(
+    (o) => o.parentId === null || isCat(o.parentId) || validFolderIds.has(o.parentId),
+  );
+
+  return { folders: safeFolders, catOverrides: safeOverrides, brandOverrides: safeBrandOverrides };
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -88,7 +96,8 @@ interface CtxMenuState { x: number; y: number; target: CtxTarget }
 
 export type ClipNode =
   | { kind: "category"; cat: ComercialCategoria }
-  | { kind: "folder"; id: string };
+  | { kind: "folder"; id: string }
+  | { kind: "brand"; cat: ComercialCategoria; marca: string };
 
 interface Props {
   layers:             ComercialLayerState;
@@ -97,6 +106,8 @@ interface Props {
   onToggle:           (cat: ComercialCategoria) => void;
   onBrandToggle:      (cat: ComercialCategoria, brand: string) => void;
   onSetHiddenBrands:  (cat: ComercialCategoria, brands: Set<string>) => void;
+  /** Notifica al padre qué marcas fueron reubicadas en carpetas (para el render del mapa) */
+  onManagedBrandsChange?: (managed: Partial<Record<ComercialCategoria, Set<string>>>) => void;
 }
 
 // ── Switch iOS ────────────────────────────────────────────────────────────────
@@ -178,6 +189,8 @@ interface CategoryRowProps {
   onDragOver:        (e: React.DragEvent) => void;
   onDragLeave:       (e: React.DragEvent) => void;
   onDrop:            (e: React.DragEvent) => void;
+  onBrandDragStart?: (e: React.DragEvent, marca: string) => void;
+  movedBrands?:      Set<string>;
   children?:         React.ReactNode;
 }
 
@@ -185,11 +198,16 @@ const CategoryRow = ({
   cat, on, count, hidden, isDragOver,
   onToggle, onBrandToggle, onSetHiddenBrands,
   onCtxMenu, onDragStart, onDragOver, onDragLeave, onDrop,
-  children,
+  onBrandDragStart, movedBrands, children,
 }: CategoryRowProps) => {
   const [brandOpen, setBrandOpen] = useState(false);
   const meta = COMERCIAL_LAYER_META[cat];
-  const { marcas, loading } = useComercialMarcas(cat, on && brandOpen);
+  const { marcas: allMarcas, loading } = useComercialMarcas(cat, on && brandOpen);
+
+  // Excluye del listado las marcas reubicadas en carpetas (se muestran allí)
+  const marcas = movedBrands && movedBrands.size > 0
+    ? allMarcas.filter((m) => !movedBrands.has(m.marca_estandar))
+    : allMarcas;
 
   const allVisible   = hidden.size === 0;
   const visibleCount = marcas.filter((m) => !hidden.has(m.marca_estandar)).length;
@@ -269,11 +287,13 @@ const CategoryRow = ({
                   <button
                     key={m.marca_estandar}
                     type="button"
+                    draggable
+                    onDragStart={(e) => { e.stopPropagation(); onBrandDragStart?.(e, m.marca_estandar); }}
                     onClick={() => onBrandToggle(m.marca_estandar)}
                     onContextMenu={(e) => onCtxMenu(e, m.marca_estandar)}
                     className="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-all hover:bg-surface-2/60"
                     aria-pressed={brandOn}
-                    title={noPOIs ? "Sin locales sincronizados aún. Ejecuta una sincronización OSM." : undefined}
+                    title={noPOIs ? "Sin locales sincronizados aún. Ejecuta una sincronización OSM." : "Arrastra a una carpeta o usa click derecho → Cortar"}
                   >
                     <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: noPOIs ? "#9CA3AF" : meta.color, opacity: brandOn ? 1 : 0.25 }} />
                     <span className={["flex-1 text-[12px] leading-tight truncate text-left", brandOn && !noPOIs ? "text-foreground" : "text-muted-foreground"].join(" ")}>
@@ -296,6 +316,8 @@ const CategoryRow = ({
                     <button
                       key="Otros"
                       type="button"
+                      draggable
+                      onDragStart={(e) => { e.stopPropagation(); onBrandDragStart?.(e, "Otros"); }}
                       onClick={() => onBrandToggle("Otros")}
                       onContextMenu={(e) => onCtxMenu(e, "Otros")}
                       className="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-all hover:bg-surface-2/60"
@@ -319,6 +341,55 @@ const CategoryRow = ({
 
       {/* Subcarpetas anidadas bajo esta categoría (siempre visibles, sin depender del toggle) */}
       {children && <div className="ml-5 mt-0.5 space-y-0">{children}</div>}
+    </div>
+  );
+};
+
+// ── BrandLeafRow ───────────────────────────────────────────────────────────────
+// Una marca reubicada en una carpeta. Toggle = visibilidad en el mapa (independiente
+// del estado on/off de su categoría: se muestra mientras esté activada aquí).
+
+interface BrandLeafRowProps {
+  cat:         ComercialCategoria;
+  marca:       string;
+  on:          boolean;
+  isDragOver:  boolean;
+  onToggle:    () => void;
+  onCtxMenu:   (e: React.MouseEvent) => void;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragOver:  (e: React.DragEvent) => void;
+  onDragLeave: (e: React.DragEvent) => void;
+  onDrop:      (e: React.DragEvent) => void;
+}
+
+const BrandLeafRow = ({
+  cat, marca, on, isDragOver,
+  onToggle, onCtxMenu, onDragStart, onDragOver, onDragLeave, onDrop,
+}: BrandLeafRowProps) => {
+  const meta = COMERCIAL_LAYER_META[cat];
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onContextMenu={onCtxMenu}
+      className={["rounded-lg transition-all", isDragOver ? "bg-blue-500/10 ring-1 ring-blue-400/40" : ""].join(" ")}
+    >
+      <div className="flex items-center gap-1.5 rounded-lg px-2 py-1 transition-colors hover:bg-surface-2/60">
+        <span className="w-3 flex-shrink-0" />
+        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: meta.color, opacity: on ? 1 : 0.25 }} />
+        <span className="flex-shrink-0 text-[12px] leading-none">{meta.icon}</span>
+        <button type="button" onClick={onToggle} className="flex flex-1 items-center text-left" aria-pressed={on}>
+          <span className={["flex-1 text-[12px] leading-tight truncate", on ? "text-foreground" : "text-muted-foreground"].join(" ")}>
+            {marca}
+          </span>
+        </button>
+        <button type="button" onClick={onToggle} className="flex-shrink-0">
+          <IOSSwitch on={on} />
+        </button>
+      </div>
     </div>
   );
 };
@@ -535,6 +606,12 @@ const CtxMenu = ({
               <div className="border-t border-border/30 my-0.5" />
             </>
           )}
+          {brandTarget && (
+            <>
+              <CtxRow icon={<Scissors className="h-4 w-4 text-muted-foreground" />} label="Cortar marca" onClick={onCut} />
+              <div className="border-t border-border/30 my-0.5" />
+            </>
+          )}
           {!folderTarget && (
             <>
               <CtxRow icon={<FileDown className="h-4 w-4 text-green-600" />} label="Exportar CSV" onClick={() => onExport("csv")} />
@@ -553,6 +630,7 @@ interface TreeLevelProps {
   parentId:    string | null;
   folders:     Carpeta[];
   catOverrides: CatOverride[];
+  brandOverrides: BrandOverride[];
   dragOverId:  string | null;
   onCtxMenu:   (e: React.MouseEvent, target: CtxTarget) => void;
   onDragStart: (e: React.DragEvent, node: ClipNode) => void;
@@ -568,8 +646,10 @@ interface TreeLevelProps {
   onSetHiddenBrands:  (cat: ComercialCategoria, brands: Set<string>) => void;
 }
 
+const brandKey = (cat: ComercialCategoria, marca: string) => `brand:${cat}::${marca}`;
+
 const TreeLevel = ({
-  parentId, folders, catOverrides, dragOverId,
+  parentId, folders, catOverrides, brandOverrides, dragOverId,
   onCtxMenu, onDragStart, onDragOver, onDragLeave, onDrop,
   layers, counts, hiddenBrands, onToggle, onBrandToggle, onSetHiddenBrands,
 }: TreeLevelProps) => {
@@ -578,10 +658,11 @@ const TreeLevel = ({
     const override = catOverrides.find((o) => o.cat === cat);
     return (override?.parentId ?? null) === parentId;
   });
+  const brandsHere = brandOverrides.filter((b) => (b.parentId ?? null) === parentId);
 
-  if (foldersHere.length === 0 && catsHere.length === 0) return null;
+  if (foldersHere.length === 0 && catsHere.length === 0 && brandsHere.length === 0) return null;
 
-  const commonProps = { folders, catOverrides, dragOverId, onCtxMenu, onDragStart, onDragOver, onDragLeave, onDrop, layers, counts, hiddenBrands, onToggle, onBrandToggle, onSetHiddenBrands };
+  const commonProps = { folders, catOverrides, brandOverrides, dragOverId, onCtxMenu, onDragStart, onDragOver, onDragLeave, onDrop, layers, counts, hiddenBrands, onToggle, onBrandToggle, onSetHiddenBrands };
 
   return (
     <>
@@ -600,33 +681,54 @@ const TreeLevel = ({
         </FolderRow>
       ))}
 
-      {catsHere.map((cat) => (
-        <CategoryRow
-          key={cat}
-          cat={cat}
-          on={layers[cat]}
-          count={counts[cat]}
-          hidden={hiddenBrands[cat] ?? new Set()}
-          isDragOver={dragOverId === cat}
-          onToggle={() => onToggle(cat)}
-          onBrandToggle={(brand) => onBrandToggle(cat, brand)}
-          onSetHiddenBrands={(brands) => onSetHiddenBrands(cat, brands)}
-          onCtxMenu={(e, marca) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const target: CtxTarget = marca
-              ? { kind: "brand", cat, marca }
-              : { kind: "category", cat };
-            onCtxMenu(e, target);
-          }}
-          onDragStart={(e) => { e.stopPropagation(); onDragStart(e, { kind: "category", cat }); }}
-          onDragOver={(e) => { e.stopPropagation(); onDragOver(e, cat); }}
+      {catsHere.map((cat) => {
+        const movedBrands = new Set(brandOverrides.filter((b) => b.cat === cat).map((b) => b.marca));
+        return (
+          <CategoryRow
+            key={cat}
+            cat={cat}
+            on={layers[cat]}
+            count={counts[cat]}
+            hidden={hiddenBrands[cat] ?? new Set()}
+            isDragOver={dragOverId === cat}
+            movedBrands={movedBrands}
+            onToggle={() => onToggle(cat)}
+            onBrandToggle={(brand) => onBrandToggle(cat, brand)}
+            onSetHiddenBrands={(brands) => onSetHiddenBrands(cat, brands)}
+            onCtxMenu={(e, marca) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const target: CtxTarget = marca
+                ? { kind: "brand", cat, marca }
+                : { kind: "category", cat };
+              onCtxMenu(e, target);
+            }}
+            onDragStart={(e) => { e.stopPropagation(); onDragStart(e, { kind: "category", cat }); }}
+            onDragOver={(e) => { e.stopPropagation(); onDragOver(e, cat); }}
+            onDragLeave={(e) => { e.stopPropagation(); onDragLeave(e); }}
+            onDrop={(e) => { e.stopPropagation(); onDrop(e, cat); }}
+            onBrandDragStart={(e, marca) => onDragStart(e, { kind: "brand", cat, marca })}
+          >
+            {/* Carpetas hijas de esta categoría (TreeLevel devuelve null si no hay ninguna) */}
+            <TreeLevel parentId={cat} {...commonProps} />
+          </CategoryRow>
+        );
+      })}
+
+      {brandsHere.map((b) => (
+        <BrandLeafRow
+          key={brandKey(b.cat, b.marca)}
+          cat={b.cat}
+          marca={b.marca}
+          on={!(hiddenBrands[b.cat]?.has(b.marca))}
+          isDragOver={dragOverId === brandKey(b.cat, b.marca)}
+          onToggle={() => onBrandToggle(b.cat, b.marca)}
+          onCtxMenu={(e) => { e.preventDefault(); e.stopPropagation(); onCtxMenu(e, { kind: "brand", cat: b.cat, marca: b.marca }); }}
+          onDragStart={(e) => { e.stopPropagation(); onDragStart(e, { kind: "brand", cat: b.cat, marca: b.marca }); }}
+          onDragOver={(e) => { e.stopPropagation(); onDragOver(e, brandKey(b.cat, b.marca)); }}
           onDragLeave={(e) => { e.stopPropagation(); onDragLeave(e); }}
-          onDrop={(e) => { e.stopPropagation(); onDrop(e, cat); }}
-        >
-          {/* Carpetas hijas de esta categoría (TreeLevel devuelve null si no hay ninguna) */}
-          <TreeLevel parentId={cat} {...commonProps} />
-        </CategoryRow>
+          onDrop={(e) => { e.stopPropagation(); onDrop(e, parentId); }}
+        />
       ))}
     </>
   );
@@ -636,6 +738,7 @@ const TreeLevel = ({
 
 export const ComercialPOISection = ({
   layers, counts, hiddenBrands, onToggle, onBrandToggle, onSetHiddenBrands,
+  onManagedBrandsChange,
 }: Props) => {
   const [open, setOpen] = useState(false);
   const [ctxMenu, setCtxMenu]     = useState<CtxMenuState | null>(null);
@@ -643,12 +746,25 @@ export const ComercialPOISection = ({
   const [dragNode, setDragNode]   = useState<ClipNode | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
-  const { tree, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo, resetTree } = useComercialFolders();
+  const { tree, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo, moveBrandTo, resetTree } = useComercialFolders();
   const activeCount = CATEGORY_ORDER.filter((c) => layers[c]).length;
 
   // Vista saneada: blinda el render contra estados corruptos (categorías nunca desaparecen)
-  const safe = useMemo(() => sanitizeTree(tree.folders, tree.catOverrides), [tree]);
-  const isCustomized = tree.folders.length > 0 || tree.catOverrides.length > 0;
+  const safe = useMemo(() => sanitizeTree(tree.folders, tree.catOverrides, tree.brandOverrides), [tree]);
+  const isCustomized = tree.folders.length > 0 || tree.catOverrides.length > 0 || tree.brandOverrides.length > 0;
+
+  // Marcas reubicadas en carpetas, agrupadas por categoría → se notifica al mapa
+  const managedBrands = useMemo(() => {
+    const m: Partial<Record<ComercialCategoria, Set<string>>> = {};
+    for (const o of safe.brandOverrides) {
+      (m[o.cat] ??= new Set<string>()).add(o.marca);
+    }
+    return m;
+  }, [safe.brandOverrides]);
+
+  useEffect(() => {
+    onManagedBrandsChange?.(managedBrands);
+  }, [managedBrands, onManagedBrandsChange]);
 
   // ── DnD ──────────────────────────────────────────────────────────────────────
 
@@ -680,10 +796,12 @@ export const ComercialPOISection = ({
   const applyMove = useCallback((node: ClipNode, newParentId: string | null) => {
     if (node.kind === "folder") {
       moveFolderTo(node.id, newParentId);
-    } else {
+    } else if (node.kind === "category") {
       moveCatTo(node.cat, newParentId);
+    } else {
+      moveBrandTo(node.cat, node.marca, newParentId);
     }
-  }, [moveFolderTo, moveCatTo]);
+  }, [moveFolderTo, moveCatTo, moveBrandTo]);
 
   // ── Context menu ──────────────────────────────────────────────────────────────
 
@@ -719,6 +837,7 @@ export const ComercialPOISection = ({
     const node: ClipNode | null =
       ctxMenu.target.kind === "folder"   ? { kind: "folder",   id: ctxMenu.target.id }
     : ctxMenu.target.kind === "category" ? { kind: "category", cat: ctxMenu.target.cat }
+    : ctxMenu.target.kind === "brand"    ? { kind: "brand", cat: ctxMenu.target.cat, marca: ctxMenu.target.marca }
     : null;
     setClipboard(node);
     setCtxMenu(null);
@@ -799,6 +918,7 @@ export const ComercialPOISection = ({
             parentId={null}
             folders={safe.folders}
             catOverrides={safe.catOverrides}
+            brandOverrides={safe.brandOverrides}
             dragOverId={dragOverId}
             onCtxMenu={openCtxMenu}
             onDragStart={handleDragStart}

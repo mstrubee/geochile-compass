@@ -16,10 +16,20 @@ export interface CatOverride {
   parentId: string | null;
 }
 
+// Marca reubicada dentro de una carpeta/categoría/raíz (organización personalizada)
+export interface BrandOverride {
+  cat: ComercialCategoria;
+  marca: string;
+  parentId: string | null;
+}
+
 export interface ComercialTree {
   folders: Carpeta[];
   catOverrides: CatOverride[];
+  brandOverrides: BrandOverride[];
 }
+
+const EMPTY_TREE: ComercialTree = { folders: [], catOverrides: [], brandOverrides: [] };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,9 +37,16 @@ const LS_KEY = "geochile_comercial_tree_v1";
 
 function lsLoad(): ComercialTree {
   try {
-    return JSON.parse(localStorage.getItem(LS_KEY) ?? "null") ?? { folders: [], catOverrides: [] };
+    const raw = JSON.parse(localStorage.getItem(LS_KEY) ?? "null");
+    if (!raw) return { ...EMPTY_TREE };
+    // Normaliza estados antiguos que no tenían brandOverrides
+    return {
+      folders: raw.folders ?? [],
+      catOverrides: raw.catOverrides ?? [],
+      brandOverrides: raw.brandOverrides ?? [],
+    };
   } catch {
-    return { folders: [], catOverrides: [] };
+    return { ...EMPTY_TREE };
   }
 }
 function lsSave(s: ComercialTree) {
@@ -52,12 +69,14 @@ export function descendantFolderIds(rootId: string, folders: Carpeta[]): Set<str
 const carpetasTable  = () => (supabase as any).from("comercial_carpetas");
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const overridesTable = () => (supabase as any).from("comercial_cat_overrides");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const brandOverridesTable = () => (supabase as any).from("comercial_marca_overrides");
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useComercialFolders() {
   const { user } = useAuth();
-  const [tree, setTree]       = useState<ComercialTree>({ folders: [], catOverrides: [] });
+  const [tree, setTree]       = useState<ComercialTree>({ ...EMPTY_TREE });
   const [loading, setLoading] = useState(true);
 
   // ── Carga inicial ─────────────────────────────────────────────────────────
@@ -73,7 +92,8 @@ export function useComercialFolders() {
     Promise.all([
       carpetasTable().select("id, nombre, parent_id").eq("user_id", user.id),
       overridesTable().select("cat, parent_id").eq("user_id", user.id),
-    ]).then(([f, o]: [any, any]) => {
+      brandOverridesTable().select("cat, marca, parent_id").eq("user_id", user.id),
+    ]).then(([f, o, b]: [any, any, any]) => {
       if (f.error || o.error) {
         // Tablas aún no creadas (migración pendiente) → usar localStorage
         console.warn("comercial_carpetas no disponible, usando localStorage:", f.error ?? o.error);
@@ -90,6 +110,16 @@ export function useComercialFolders() {
           cat: r.cat as ComercialCategoria,
           parentId: r.parent_id ?? null,
         })),
+        // tabla de marcas puede no existir aún (migración pendiente):
+        // en ese caso recuperamos desde localStorage (moveBrandTo guarda ahí como respaldo)
+        // para no perder las marcas movidas al recargar.
+        brandOverrides: b.error
+          ? (lsLoad().brandOverrides ?? [])
+          : (b.data ?? []).map((r: any) => ({
+              cat: r.cat as ComercialCategoria,
+              marca: r.marca,
+              parentId: r.parent_id ?? null,
+            })),
       });
     }).catch(() => {
       setTree(lsLoad());
@@ -152,6 +182,9 @@ export function useComercialFolders() {
           catOverrides: prev.catOverrides.map((o) =>
             dead.has(o.parentId ?? "") ? { ...o, parentId } : o,
           ),
+          brandOverrides: prev.brandOverrides.map((o) =>
+            dead.has(o.parentId ?? "") ? { ...o, parentId } : o,
+          ),
         };
         lsSave(next);
         return next;
@@ -169,13 +202,31 @@ export function useComercialFolders() {
       );
     }
 
-    setTree((prev) => ({
-      folders: prev.folders.filter((f) => !dead.has(f.id)),
-      catOverrides: prev.catOverrides.map((o) =>
-        dead.has(o.parentId ?? "") ? { ...o, parentId } : o,
-      ),
-    }));
-  }, [user, tree.folders, tree.catOverrides]);
+    // Reparentar marcas huérfanas
+    let brandErr: unknown = null;
+    const brandOrphans = tree.brandOverrides.filter((o) => dead.has(o.parentId ?? ""));
+    if (brandOrphans.length > 0) {
+      const { error } = await brandOverridesTable().upsert(
+        brandOrphans.map((o) => ({ user_id: user.id, cat: o.cat, marca: o.marca, parent_id: parentId })),
+      );
+      brandErr = error;
+    }
+
+    setTree((prev) => {
+      const next = {
+        folders: prev.folders.filter((f) => !dead.has(f.id)),
+        catOverrides: prev.catOverrides.map((o) =>
+          dead.has(o.parentId ?? "") ? { ...o, parentId } : o,
+        ),
+        brandOverrides: prev.brandOverrides.map((o) =>
+          dead.has(o.parentId ?? "") ? { ...o, parentId } : o,
+        ),
+      };
+      // Si la tabla de marcas aún no existe, persistir en localStorage para sobrevivir al recargo
+      if (brandErr) lsSave(next);
+      return next;
+    });
+  }, [user, tree.folders, tree.catOverrides, tree.brandOverrides]);
 
   const moveFolderTo = useCallback(async (id: string, newParentId: string | null) => {
     const dead = descendantFolderIds(id, tree.folders);
@@ -225,15 +276,40 @@ export function useComercialFolders() {
     });
   }, [user]);
 
+  const moveBrandTo = useCallback(async (cat: ComercialCategoria, marca: string, newParentId: string | null) => {
+    // Mover una marca a su propia categoría = quitar el override (vuelve a la lista de la categoría)
+    const backHome = newParentId === cat;
+
+    const applyLocal = (prev: ComercialTree): ComercialTree => {
+      const without = prev.brandOverrides.filter((o) => !(o.cat === cat && o.marca === marca));
+      return {
+        ...prev,
+        brandOverrides: backHome ? without : [...without, { cat, marca, parentId: newParentId }],
+      };
+    };
+
+    if (!user) {
+      setTree((prev) => { const next = applyLocal(prev); lsSave(next); return next; });
+      return;
+    }
+
+    const { error } = backHome
+      ? await brandOverridesTable().delete().eq("user_id", user.id).eq("cat", cat).eq("marca", marca)
+      : await brandOverridesTable().upsert({ user_id: user.id, cat, marca, parent_id: newParentId });
+    if (error) console.warn("moveBrandTo (DB):", error);
+    setTree((prev) => { const next = applyLocal(prev); if (error) lsSave(next); return next; });
+  }, [user]);
+
   const resetTree = useCallback(async () => {
-    const empty: ComercialTree = { folders: [], catOverrides: [] };
+    const empty: ComercialTree = { ...EMPTY_TREE };
     if (user) {
       await carpetasTable().delete().eq("user_id", user.id);
       await overridesTable().delete().eq("user_id", user.id);
+      await brandOverridesTable().delete().eq("user_id", user.id);
     }
     lsSave(empty);
     setTree(empty);
   }, [user]);
 
-  return { tree, loading, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo, resetTree };
+  return { tree, loading, createFolder, renameFolder, deleteFolder, moveFolderTo, moveCatTo, moveBrandTo, resetTree };
 }

@@ -25,8 +25,12 @@ import Supercluster from "supercluster";
 interface Props {
   categoria:      ComercialCategoria;
   visible:        boolean;
+  /** ¿La capa de la categoría está activada? (las marcas no gestionadas dependen de esto) */
+  categoryOn?:    boolean;
   filtroMarca?:   string | null;
   hiddenBrands?:  Set<string>;
+  /** Marcas reubicadas en carpetas: se muestran si están activas, sin importar categoryOn */
+  managedBrands?: Set<string>;
   brandLogos?:    Map<string, string>;  // marca_estandar → logo_url
   onCountChange?: (n: number) => void;
 }
@@ -111,7 +115,7 @@ function buildPopupHtml(poi: ComercialPOI, logoUrl?: string): string {
 // Componente principal
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const ComercialPOILayer = ({ categoria, visible, filtroMarca, hiddenBrands, brandLogos, onCountChange }: Props) => {
+export const ComercialPOILayer = ({ categoria, visible, categoryOn, filtroMarca, hiddenBrands, managedBrands, brandLogos, onCountChange }: Props) => {
   const map  = useMap();
   const meta = COMERCIAL_LAYER_META[categoria] ?? { icon: "📍", color: "#6B7280", label: categoria, shortLabel: categoria };
 
@@ -127,20 +131,29 @@ export const ComercialPOILayer = ({ categoria, visible, filtroMarca, hiddenBrand
     onCountChange?.(data.length);
   }, [data.length, onCountChange]);
 
-  // Convertir POIs a GeoJSON features; aplicar filtro de marcas ocultas (client-side)
+  // Convertir POIs a GeoJSON features; aplicar filtros client-side
   const features = useMemo(() => {
     const base = data.map((poi) => ({
       type: "Feature" as const,
       geometry: { type: "Point" as const, coordinates: [poi.longitud, poi.latitud] },
       properties: { poi },
     }));
-    if (!hiddenBrands || hiddenBrands.size === 0) return base;
+
+    const noHidden  = !hiddenBrands || hiddenBrands.size === 0;
+    const noManaged = !managedBrands || managedBrands.size === 0;
+    // Caso común (sin marcas movidas ni ocultas): la categoría está on → mostrar todo
+    if (noHidden && noManaged) return base;
+
+    const catOn = categoryOn ?? true;
     return base.filter((f) => {
       // NULL en DB → "Otros" (datos anteriores al ETL fix)
       const brand = f.properties.poi.marca_estandar ?? "Otros";
-      return !hiddenBrands.has(brand);
+      // Marca reubicada en carpeta: visible si está activa (no oculta), sin importar la categoría
+      if (managedBrands?.has(brand)) return !hiddenBrands?.has(brand);
+      // Marca normal: visible solo si la categoría está on y no está oculta
+      return catOn && !hiddenBrands?.has(brand);
     });
-  }, [data, hiddenBrands]);
+  }, [data, hiddenBrands, managedBrands, categoryOn]);
 
   // ── Render de clusters según viewport ──────────────────────────────────
 

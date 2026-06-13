@@ -145,6 +145,11 @@ const Index = () => {
   });
   const [comercialCounts, setComercialCounts] = useState<Partial<Record<ComercialCategoria, number>>>({});
   const [comercialHiddenBrands, setComercialHiddenBrands] = useState<Partial<Record<ComercialCategoria, Set<string>>>>({});
+  // Marcas reubicadas en carpetas (se muestran en el mapa de forma independiente a su categoría)
+  const [comercialManagedBrands, setComercialManagedBrands] = useState<Partial<Record<ComercialCategoria, Set<string>>>>({});
+  const handleComercialManagedBrandsChange = useCallback((managed: Partial<Record<ComercialCategoria, Set<string>>>) => {
+    setComercialManagedBrands(managed);
+  }, []);
   const handleComercialToggle = useCallback((cat: ComercialCategoria) => {
     setComercialLayers((prev) => ({ ...prev, [cat]: !prev[cat] }));
   }, []);
@@ -1358,6 +1363,7 @@ const Index = () => {
           onComercialToggle={handleComercialToggle}
           onComercialBrandToggle={handleComercialBrandToggle}
           onSetComercialHiddenBrands={handleSetComercialHiddenBrands}
+          onComercialManagedBrandsChange={handleComercialManagedBrandsChange}
           onRecomputePerformance={async (folderId) => {
             try {
               const r = await performanceBatch.run(folderId);
@@ -1459,6 +1465,7 @@ const Index = () => {
             }}
             comercialLayers={comercialLayers}
             comercialHiddenBrands={comercialHiddenBrands}
+            comercialManagedBrands={comercialManagedBrands}
             comercialBrandLogos={brandLogos}
             onComercialCountChange={handleComercialCountChange}
             customLayers={customMapLayers}

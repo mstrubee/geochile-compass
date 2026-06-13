@@ -226,6 +226,8 @@ interface MapViewProps {
   comercialLayers?: ComercialLayerState;
   /** Marcas ocultas por categoría (filtro client-side). */
   comercialHiddenBrands?: Partial<Record<ComercialCategoria, Set<string>>>;
+  /** Marcas reubicadas en carpetas: se muestran aunque su categoría esté apagada. */
+  comercialManagedBrands?: Partial<Record<ComercialCategoria, Set<string>>>;
   /** Logos por marca: Map<marca_estandar, logo_url> */
   comercialBrandLogos?: Map<string, string>;
   /** Callback para actualizar el conteo de POIs cargados por categoría. */
@@ -291,6 +293,7 @@ export const MapView = ({
   agroplanetScoreMode = "combined",
   comercialLayers,
   comercialHiddenBrands,
+  comercialManagedBrands,
   comercialBrandLogos,
   onComercialCountChange,
   customLayers,
@@ -399,16 +402,25 @@ export const MapView = ({
       <AgroplanetComunasLayer visible={layers.agroplanet} scoreMode={agroplanetScoreMode} />
       <AgroplanetCompetitorsLayer visible={layers.agroplanet_competitors ?? false} />
       {/* ── Red Comercial Nacional (POIs OSM) ─────────────────────────────── */}
-      {(["supermercado","farmacia","combustible","ferreteria","retail_departamental","banco","restaurante","automotriz","bodega"] as ComercialCategoria[]).map((cat) => (
-        <ComercialPOILayer
-          key={cat}
-          categoria={cat}
-          visible={comercialLayers?.[cat] ?? false}
-          hiddenBrands={comercialHiddenBrands?.[cat]}
-          brandLogos={comercialBrandLogos}
-          onCountChange={(n) => onComercialCountChange?.(cat, n)}
-        />
-      ))}
+      {(["supermercado","farmacia","combustible","ferreteria","retail_departamental","banco","restaurante","automotriz","bodega"] as ComercialCategoria[]).map((cat) => {
+        const categoryOn = comercialLayers?.[cat] ?? false;
+        const hidden = comercialHiddenBrands?.[cat];
+        const managed = comercialManagedBrands?.[cat];
+        // Marcas reubicadas que están activas (no ocultas) → fuerzan render aunque la categoría esté off
+        const hasActiveManaged = !!managed && [...managed].some((b) => !hidden?.has(b));
+        return (
+          <ComercialPOILayer
+            key={cat}
+            categoria={cat}
+            visible={categoryOn || hasActiveManaged}
+            categoryOn={categoryOn}
+            hiddenBrands={hidden}
+            managedBrands={managed}
+            brandLogos={comercialBrandLogos}
+            onCountChange={(n) => onComercialCountChange?.(cat, n)}
+          />
+        );
+      })}
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
 

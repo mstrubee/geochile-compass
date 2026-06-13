@@ -213,6 +213,7 @@ interface SidebarProps {
   onComercialToggle?: (cat: ComercialCategoria) => void;
   onComercialBrandToggle?: (cat: ComercialCategoria, brand: string) => void;
   onSetComercialHiddenBrands?: (cat: ComercialCategoria, brands: Set<string>) => void;
+  onComercialManagedBrandsChange?: (managed: Partial<Record<ComercialCategoria, Set<string>>>) => void;
 }
 
 interface LayerRow {
@@ -735,6 +736,7 @@ export const Sidebar = ({
   onComercialToggle,
   onComercialBrandToggle,
   onSetComercialHiddenBrands,
+  onComercialManagedBrandsChange,
 }: SidebarProps) => {
   const [brandCatalogOpen, setBrandCatalogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1491,6 +1493,7 @@ export const Sidebar = ({
               onToggle={onComercialToggle}
               onBrandToggle={onComercialBrandToggle}
               onSetHiddenBrands={onSetComercialHiddenBrands}
+              onManagedBrandsChange={onComercialManagedBrandsChange}
             />
           )}
           {isAdmin && (
