@@ -147,12 +147,58 @@ interface Props {
 }
 
 // ── Switch iOS ────────────────────────────────────────────────────────────────
+// `partial` = estado intermedio (algunos descendientes activos): knob al centro, ámbar.
 
-const IOSSwitch = ({ on }: { on: boolean }) => (
-  <div className={["relative h-[22px] w-[36px] flex-shrink-0 rounded-full transition-colors", on ? "bg-brand-green" : "bg-surface-3"].join(" ")}>
-    <span className={["absolute top-[2px] h-[18px] w-[18px] rounded-full bg-white shadow-apple-sm transition-all", on ? "left-[16px]" : "left-[2px]"].join(" ")} />
+const IOSSwitch = ({ on, partial = false }: { on: boolean; partial?: boolean }) => (
+  <div className={["relative h-[22px] w-[36px] flex-shrink-0 rounded-full transition-colors", on ? "bg-brand-green" : partial ? "bg-amber-400/70" : "bg-surface-3"].join(" ")}>
+    <span className={["absolute top-[2px] h-[18px] w-[18px] rounded-full bg-white shadow-apple-sm transition-all", on ? "left-[16px]" : partial ? "left-[9px]" : "left-[2px]"].join(" ")} />
   </div>
 );
+
+// ── Activación jerárquica ───────────────────────────────────────────────────────
+// Hojas activables bajo un nodo (carpeta o categoría-contenedor): categorías (capas)
+// y marcas reubicadas. Recorre el subárbol siguiendo ids de carpeta y nombres de categoría.
+
+interface LeafSet { cats: ComercialCategoria[]; brands: { cat: ComercialCategoria; marca: string }[] }
+
+function descendantLeaves(
+  rootId: string,
+  folders: Carpeta[],
+  catOverrides: CatOverride[],
+  brandOverrides: BrandOverride[],
+): LeafSet {
+  const cats = new Set<ComercialCategoria>();
+  const brands: { cat: ComercialCategoria; marca: string }[] = [];
+  const seen = new Set<string>();
+  const queue: string[] = [rootId];
+  while (queue.length) {
+    const x = queue.shift()!;
+    if (seen.has(x)) continue;
+    seen.add(x);
+    folders.filter((f) => f.parentId === x).forEach((f) => queue.push(f.id));
+    catOverrides.filter((o) => o.parentId === x).forEach((o) => { cats.add(o.cat); queue.push(o.cat); });
+    brandOverrides.filter((b) => (b.parentId ?? null) === x).forEach((b) => brands.push({ cat: b.cat, marca: b.marca }));
+  }
+  return { cats: Array.from(cats), brands };
+}
+
+type Activation = "on" | "off" | "partial" | "empty";
+
+function folderActivation(
+  leaves: LeafSet,
+  layers: ComercialLayerState,
+  hiddenBrands: Partial<Record<ComercialCategoria, Set<string>>>,
+): Activation {
+  const states = [
+    ...leaves.cats.map((c) => layers[c]),
+    ...leaves.brands.map((b) => !(hiddenBrands[b.cat]?.has(b.marca))),
+  ];
+  if (states.length === 0) return "empty";
+  const onCount = states.filter(Boolean).length;
+  if (onCount === 0) return "off";
+  if (onCount === states.length) return "on";
+  return "partial";
+}
 
 // ── FolderRow ────────────────────────────────────────────────────────────────
 
@@ -164,15 +210,19 @@ interface FolderRowProps {
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
+  activation?: Activation;
+  onActivationToggle?: () => void;
   children?: React.ReactNode;
 }
 
 const FolderRow = ({
   folder, isDragOver, onCtxMenu,
   onDragStart, onDragOver, onDragLeave, onDrop,
+  activation = "empty", onActivationToggle,
   children,
 }: FolderRowProps) => {
   const [open, setOpen] = useState(true);
+  const active = activation === "on" || activation === "partial";
 
   return (
     <div
@@ -198,9 +248,19 @@ const FolderRow = ({
             : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
         </button>
         {open
-          ? <FolderOpen className="h-3.5 w-3.5 flex-shrink-0 text-amber-400" />
-          : <FolderIcon  className="h-3.5 w-3.5 flex-shrink-0 text-amber-400" />}
-        <span className="flex-1 text-[13px] text-foreground leading-tight truncate">{folder.nombre}</span>
+          ? <FolderOpen className={["h-3.5 w-3.5 flex-shrink-0", active ? "text-amber-400" : "text-amber-400/50"].join(" ")} />
+          : <FolderIcon  className={["h-3.5 w-3.5 flex-shrink-0", active ? "text-amber-400" : "text-amber-400/50"].join(" ")} />}
+        <span className={["flex-1 text-[13px] leading-tight truncate", active ? "text-foreground" : "text-muted-foreground"].join(" ")}>{folder.nombre}</span>
+        {activation !== "empty" && onActivationToggle && (
+          <button
+            type="button"
+            className="flex-shrink-0 ml-0.5"
+            onClick={(e) => { e.stopPropagation(); onActivationToggle(); }}
+            title="Activar/desactivar todo el contenido de la carpeta"
+          >
+            <IOSSwitch on={activation === "on"} partial={activation === "partial"} />
+          </button>
+        )}
       </div>
       {open && (
         <div className="ml-5 mt-0.5 space-y-0">{children}</div>
@@ -249,6 +309,10 @@ const CategoryRow = ({
   const visibleCount = marcas.filter((m) => !hidden.has(m.marca_estandar)).length;
   const someHidden   = hidden.size > 0 && marcas.length > 0 && visibleCount < marcas.length;
 
+  // Estado parcial: categoría apagada pero con alguna marca reubicada activa (jerarquía)
+  const hasActiveManaged = !!movedBrands && [...movedBrands].some((m) => !hidden.has(m));
+  const active = on || hasActiveManaged;
+
   return (
     <div
       draggable
@@ -275,7 +339,7 @@ const CategoryRow = ({
         <span className="flex-shrink-0 text-[13px] leading-none">{meta.icon}</span>
 
         <button type="button" onClick={onToggle} className="flex flex-1 items-center text-left" aria-pressed={on}>
-          <span className={["flex-1 text-[13px] leading-tight", on ? "text-foreground" : "text-muted-foreground"].join(" ")}>
+          <span className={["flex-1 text-[13px] leading-tight", active ? "text-foreground" : "text-muted-foreground"].join(" ")}>
             {meta.label}
           </span>
         </button>
@@ -293,7 +357,7 @@ const CategoryRow = ({
         )}
 
         <button type="button" onClick={onToggle} className="flex-shrink-0 ml-0.5">
-          <IOSSwitch on={on} />
+          <IOSSwitch on={on} partial={!on && hasActiveManaged} />
         </button>
       </div>
 
@@ -680,6 +744,9 @@ interface TreeLevelProps {
   onToggle:           (cat: ComercialCategoria) => void;
   onBrandToggle:      (cat: ComercialCategoria, brand: string) => void;
   onSetHiddenBrands:  (cat: ComercialCategoria, brands: Set<string>) => void;
+  // activación jerárquica
+  onFolderActivationToggle:   (folderId: string) => void;
+  onCategoryActivationToggle: (cat: ComercialCategoria) => void;
 }
 
 const brandKey = (cat: ComercialCategoria, marca: string) => `brand:${cat}::${marca}`;
@@ -688,6 +755,7 @@ const TreeLevel = ({
   parentId, folders, catOverrides, brandOverrides, dragOverId,
   onCtxMenu, onDragStart, onDragOver, onDragLeave, onDrop,
   layers, counts, hiddenBrands, onToggle, onBrandToggle, onSetHiddenBrands,
+  onFolderActivationToggle, onCategoryActivationToggle,
 }: TreeLevelProps) => {
   const foldersHere = folders.filter((f) => f.parentId === parentId);
   const catsHere = CATEGORY_ORDER.filter((cat) => {
@@ -698,7 +766,7 @@ const TreeLevel = ({
 
   if (foldersHere.length === 0 && catsHere.length === 0 && brandsHere.length === 0) return null;
 
-  const commonProps = { folders, catOverrides, brandOverrides, dragOverId, onCtxMenu, onDragStart, onDragOver, onDragLeave, onDrop, layers, counts, hiddenBrands, onToggle, onBrandToggle, onSetHiddenBrands };
+  const commonProps = { folders, catOverrides, brandOverrides, dragOverId, onCtxMenu, onDragStart, onDragOver, onDragLeave, onDrop, layers, counts, hiddenBrands, onToggle, onBrandToggle, onSetHiddenBrands, onFolderActivationToggle, onCategoryActivationToggle };
 
   return (
     <>
@@ -707,6 +775,8 @@ const TreeLevel = ({
           key={folder.id}
           folder={folder}
           isDragOver={dragOverId === folder.id}
+          activation={folderActivation(descendantLeaves(folder.id, folders, catOverrides, brandOverrides), layers, hiddenBrands)}
+          onActivationToggle={() => onFolderActivationToggle(folder.id)}
           onCtxMenu={(e) => { e.preventDefault(); e.stopPropagation(); onCtxMenu(e, { kind: "folder", id: folder.id, nombre: folder.nombre, parentId: folder.parentId }); }}
           onDragStart={(e) => { e.stopPropagation(); onDragStart(e, { kind: "folder", id: folder.id }); }}
           onDragOver={(e) => { e.stopPropagation(); onDragOver(e, folder.id); }}
@@ -728,7 +798,7 @@ const TreeLevel = ({
             hidden={hiddenBrands[cat] ?? new Set()}
             isDragOver={dragOverId === cat}
             movedBrands={movedBrands}
-            onToggle={() => onToggle(cat)}
+            onToggle={() => onCategoryActivationToggle(cat)}
             onBrandToggle={(brand) => onBrandToggle(cat, brand)}
             onSetHiddenBrands={(brands) => onSetHiddenBrands(cat, brands)}
             onCtxMenu={(e, marca) => {
@@ -843,6 +913,39 @@ export const ComercialPOISection = ({
       moveBrandTo(node.cat, node.marca, newParentId);
     }
   }, [moveFolderTo, moveCatTo, moveBrandTo, tree.folders]);
+
+  // ── Activación jerárquica ───────────────────────────────────────────────────────
+
+  // Aplica un estado on/off a un conjunto de hojas (categorías + marcas reubicadas)
+  const setLeavesActive = useCallback((leaves: LeafSet, target: boolean) => {
+    // Categorías (capas): encender/apagar layers[cat]
+    leaves.cats.forEach((c) => { if (layers[c] !== target) onToggle(c); });
+    // Marcas reubicadas: mostrar/ocultar (agrupadas por categoría para un solo setState)
+    const byCat = new Map<ComercialCategoria, Set<string>>();
+    leaves.brands.forEach((b) => { if (!byCat.has(b.cat)) byCat.set(b.cat, new Set(hiddenBrands[b.cat] ?? [])); });
+    leaves.brands.forEach((b) => { const s = byCat.get(b.cat)!; if (target) s.delete(b.marca); else s.add(b.marca); });
+    byCat.forEach((s, c) => onSetHiddenBrands(c, s));
+  }, [layers, hiddenBrands, onToggle, onSetHiddenBrands]);
+
+  // Carpeta: activar/desactivar TODO su contenido (subcarpetas, categorías y marcas)
+  const handleFolderActivationToggle = useCallback((folderId: string) => {
+    const leaves = descendantLeaves(folderId, safe.folders, safe.catOverrides, safe.brandOverrides);
+    const state = folderActivation(leaves, layers, hiddenBrands);
+    setLeavesActive(leaves, state !== "on"); // si está todo encendido → apagar; si no → encender todo
+  }, [safe, layers, hiddenBrands, setLeavesActive]);
+
+  // Categoría: activar/desactivar la capa + sus marcas reubicadas (sus hojas en el árbol)
+  const handleCategoryActivationToggle = useCallback((cat: ComercialCategoria) => {
+    const moved = managedBrands[cat] ?? new Set<string>();
+    const anyActive = layers[cat] || [...moved].some((m) => !(hiddenBrands[cat]?.has(m)));
+    const target = !anyActive;
+    if (layers[cat] !== target) onToggle(cat);
+    if (moved.size > 0) {
+      const h = new Set(hiddenBrands[cat] ?? []);
+      moved.forEach((m) => { if (target) h.delete(m); else h.add(m); });
+      onSetHiddenBrands(cat, h);
+    }
+  }, [managedBrands, layers, hiddenBrands, onToggle, onSetHiddenBrands]);
 
   // ── Context menu ──────────────────────────────────────────────────────────────
 
@@ -972,6 +1075,8 @@ export const ComercialPOISection = ({
             onToggle={onToggle}
             onBrandToggle={onBrandToggle}
             onSetHiddenBrands={onSetHiddenBrands}
+            onFolderActivationToggle={handleFolderActivationToggle}
+            onCategoryActivationToggle={handleCategoryActivationToggle}
           />
 
           {/* Zona de drop para mover a raíz */}
