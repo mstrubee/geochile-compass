@@ -857,7 +857,7 @@ export const ComercialPOISection = ({
 
   // Vista saneada: blinda el render contra estados corruptos (categorías nunca desaparecen)
   const safe = useMemo(() => sanitizeTree(tree.folders, tree.catOverrides, tree.brandOverrides), [tree]);
-  const isCustomized = tree.folders.length > 0 || tree.catOverrides.length > 0 || tree.brandOverrides.length > 0;
+  
 
   // Marcas reubicadas en carpetas, agrupadas por categoría → se notifica al mapa
   const managedBrands = useMemo(() => {
