@@ -286,6 +286,8 @@ interface CategoryRowProps {
   onDragLeave:       (e: React.DragEvent) => void;
   onDrop:            (e: React.DragEvent) => void;
   onBrandDragStart?: (e: React.DragEvent, marca: string) => void;
+  /** Apaga/enciende la capa (raw, sin cascada). Para el auto-apagado al desactivar el último trigger. */
+  onRawToggle?:      (active: boolean) => void;
   movedBrands?:      Set<string>;
   children?:         React.ReactNode;
 }
@@ -294,7 +296,7 @@ const CategoryRow = ({
   cat, on, count, hidden, isDragOver,
   onToggle, onBrandToggle, onSetHiddenBrands,
   onCtxMenu, onDragStart, onDragOver, onDragLeave, onDrop,
-  onBrandDragStart, movedBrands, children,
+  onBrandDragStart, onRawToggle, movedBrands, children,
 }: CategoryRowProps) => {
   const [brandOpen, setBrandOpen] = useState(false);
   const meta = COMERCIAL_LAYER_META[cat];
@@ -308,6 +310,19 @@ const CategoryRow = ({
   const allVisible   = hidden.size === 0;
   const visibleCount = marcas.filter((m) => !hidden.has(m.marca_estandar)).length;
   const someHidden   = hidden.size > 0 && marcas.length > 0 && visibleCount < marcas.length;
+
+  // Aplica un nuevo set de marcas ocultas y, si NO queda ningún trigger activo
+  // (todas las marcas del listado ocultas), apaga la capa automáticamente.
+  const applyHidden = (next: Set<string>) => {
+    onSetHiddenBrands(cat, next);
+    const activeListCount = marcas.filter((m) => !next.has(m.marca_estandar)).length;
+    if (on && activeListCount === 0) onRawToggle?.(false); // último trigger desactivado → capa off
+  };
+  const toggleBrand = (marca: string) => {
+    const next = new Set(hidden);
+    if (next.has(marca)) next.delete(marca); else next.add(marca);
+    applyHidden(next);
+  };
 
   // Estado parcial: categoría apagada pero con alguna marca reubicada activa (jerarquía)
   const hasActiveManaged = !!movedBrands && [...movedBrands].some((m) => !hidden.has(m));
@@ -370,7 +385,7 @@ const CategoryRow = ({
             <>
               <button
                 type="button"
-                onClick={() => onSetHiddenBrands(allVisible ? new Set(marcas.map((m) => m.marca_estandar)) : new Set())}
+                onClick={() => applyHidden(allVisible ? new Set(marcas.map((m) => m.marca_estandar)) : new Set())}
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 transition-all hover:bg-surface-2/60"
               >
                 <span className="flex-1 text-[12px] font-semibold text-foreground">Todas las marcas</span>
@@ -389,7 +404,7 @@ const CategoryRow = ({
                     type="button"
                     draggable
                     onDragStart={(e) => { e.stopPropagation(); onBrandDragStart?.(e, m.marca_estandar); }}
-                    onClick={() => onBrandToggle(m.marca_estandar)}
+                    onClick={() => toggleBrand(m.marca_estandar)}
                     onContextMenu={(e) => onCtxMenu(e, m.marca_estandar)}
                     className="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-all hover:bg-surface-2/60"
                     aria-pressed={brandOn}
@@ -418,7 +433,7 @@ const CategoryRow = ({
                       type="button"
                       draggable
                       onDragStart={(e) => { e.stopPropagation(); onBrandDragStart?.(e, "Otros"); }}
-                      onClick={() => onBrandToggle("Otros")}
+                      onClick={() => toggleBrand("Otros")}
                       onContextMenu={(e) => onCtxMenu(e, "Otros")}
                       className="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-all hover:bg-surface-2/60"
                       aria-pressed={brandOn}
@@ -799,6 +814,7 @@ const TreeLevel = ({
             isDragOver={dragOverId === cat}
             movedBrands={movedBrands}
             onToggle={() => onCategoryActivationToggle(cat)}
+            onRawToggle={(active) => { if (layers[cat] !== active) onToggle(cat); }}
             onBrandToggle={(brand) => onBrandToggle(cat, brand)}
             onSetHiddenBrands={(brands) => onSetHiddenBrands(cat, brands)}
             onCtxMenu={(e, marca) => {
@@ -934,15 +950,21 @@ export const ComercialPOISection = ({
     setLeavesActive(leaves, state !== "on"); // si está todo encendido → apagar; si no → encender todo
   }, [safe, layers, hiddenBrands, setLeavesActive]);
 
-  // Categoría: activar/desactivar la capa + sus marcas reubicadas (sus hojas en el árbol)
+  // Categoría: activar/desactivar la capa.
+  // Activar = capa on + mostrar TODAS sus marcas (limpia ocultas → "contenedor" muestra su contenido).
+  // Desactivar = capa off + ocultar sus marcas reubicadas (las del listado dependen de la capa).
   const handleCategoryActivationToggle = useCallback((cat: ComercialCategoria) => {
     const moved = managedBrands[cat] ?? new Set<string>();
     const anyActive = layers[cat] || [...moved].some((m) => !(hiddenBrands[cat]?.has(m)));
     const target = !anyActive;
     if (layers[cat] !== target) onToggle(cat);
-    if (moved.size > 0) {
+    if (target) {
+      // mostrar todo: sin marcas ocultas
+      if ((hiddenBrands[cat]?.size ?? 0) > 0) onSetHiddenBrands(cat, new Set());
+    } else if (moved.size > 0) {
+      // ocultar las marcas reubicadas (que se mostraban de forma independiente)
       const h = new Set(hiddenBrands[cat] ?? []);
-      moved.forEach((m) => { if (target) h.delete(m); else h.add(m); });
+      moved.forEach((m) => h.add(m));
       onSetHiddenBrands(cat, h);
     }
   }, [managedBrands, layers, hiddenBrands, onToggle, onSetHiddenBrands]);
