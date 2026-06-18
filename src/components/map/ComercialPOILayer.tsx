@@ -97,8 +97,6 @@ function buildPopupHtml(poi: ComercialPOI, logoUrl?: string): string {
   const dir    = poi.direccion ? `<div style="font-size:11px;color:#6B7280;margin-top:3px">📍 ${escHtml(poi.direccion)}</div>` : "";
   const comuna = poi.comuna    ? `<div style="font-size:11px;color:#6B7280">${escHtml(poi.comuna)}</div>` : "";
 
-  // Cuando hay logo: imagen de marca (32px) + nombre del local debajo
-  // Cuando no hay logo: nombre en negrita + marca en gris
   const header = logoUrl
     ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
          <img src="${logoUrl}" style="width:32px;height:32px;object-fit:contain;border-radius:4px;border:1px solid #e5e7eb;flex-shrink:0" />
@@ -106,8 +104,25 @@ function buildPopupHtml(poi: ComercialPOI, logoUrl?: string): string {
        </div>`
     : `<b>${nombre}</b>${poi.marca_estandar ? `<br><span style="color:#6B7280;font-size:11px">${escHtml(poi.marca_estandar)}</span>` : ""}`;
 
-  return `<div style="font-size:13px;font-family:system-ui,sans-serif;min-width:140px">
-    ${header}${dir}${comuna}
+  // Payload para el panel de afluencia (serializado como atributo data-)
+  const ftPayload = escHtml(JSON.stringify({
+    poi_id:        poi.id,
+    venue_name:    poi.nombre || poi.marca_estandar || "Local comercial",
+    venue_address: [poi.direccion, poi.comuna, "Chile"].filter(Boolean).join(", "),
+  }));
+
+  const ftBtn = `<div style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:6px">
+    <button
+      data-ft="${ftPayload}"
+      onclick="try{var d=JSON.parse(this.dataset.ft);window.__gp_foot&&window.__gp_foot(d)}catch(e){}"
+      style="width:100%;padding:5px 8px;font-size:11px;font-family:system-ui,sans-serif;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;cursor:pointer;color:#374151;display:flex;align-items:center;justify-content:center;gap:5px"
+    >
+      <span>📊</span> Ver afluencia de público
+    </button>
+  </div>`;
+
+  return `<div style="font-size:13px;font-family:system-ui,sans-serif;min-width:160px">
+    ${header}${dir}${comuna}${ftBtn}
   </div>`;
 }
 

@@ -63,6 +63,8 @@ import { TerritorialLayerFloatingPanel } from "@/components/map/TerritorialLayer
 import type { ComercialLayerState, ComercialCategoria } from "@/types/comercial";
 import { useBrandLogos } from "@/hooks/useComercialPOI";
 import { useCustomLayers } from "@/hooks/useCustomLayers";
+import { FootTrafficPanel } from "@/components/map/FootTrafficPanel";
+import type { FootTrafficTarget } from "@/hooks/useFootTraffic";
 
 type Mode = "none" | "isochrone" | "microzone";
 
@@ -132,6 +134,12 @@ const Index = () => {
   // ── Red Comercial Nacional (POIs OSM) ────────────────────────────────────
   const brandLogos = useBrandLogos();
   const { asUserLayers: customMapLayers, reload: reloadCustomLayers } = useCustomLayers();
+  // ── Panel de afluencia BestTime ──────────────────────────────────────────
+  const [footTrafficTarget, setFootTrafficTarget] = useState<FootTrafficTarget | null>(null);
+  useEffect(() => {
+    (window as any).__gp_foot = (target: FootTrafficTarget) => setFootTrafficTarget(target);
+    return () => { delete (window as any).__gp_foot; };
+  }, []);
   const [comercialLayers, setComercialLayers] = useState<ComercialLayerState>({
     supermercado:         false,
     farmacia:             false,
@@ -1832,6 +1840,12 @@ const Index = () => {
           allUserLayers={userLayers}
         />
       )}
+
+      {/* Panel de afluencia BestTime */}
+      <FootTrafficPanel
+        target={footTrafficTarget}
+        onClose={() => setFootTrafficTarget(null)}
+      />
 
     </div>
   );
