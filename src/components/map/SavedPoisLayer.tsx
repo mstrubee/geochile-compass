@@ -25,7 +25,11 @@ export const SavedPoisLayer = ({ pois, visible, onPoiClick, pickMode, onPickPoi 
     if (!map.getPane(SAVED_POI_PANE)) {
       const pane = map.createPane(SAVED_POI_PANE);
       pane.style.zIndex = "650"; // markerPane=600, popupPane=700
+      pane.style.pointerEvents = "auto";
     }
+
+    // Renderer SVG anclado al pane custom para que los circleMarker se dibujen ahí.
+    const svgRenderer = L.svg({ pane: SAVED_POI_PANE });
 
     const group = L.featureGroup().addTo(map);
 
@@ -45,6 +49,7 @@ export const SavedPoisLayer = ({ pois, visible, onPoiClick, pickMode, onPickPoi 
           })
         : L.circleMarker([p.lat, p.lng], {
             pane: SAVED_POI_PANE,
+            renderer: svgRenderer,
             radius: pickMode ? 9 : 6,
             color: pickMode ? "#3b82f6" : "#fff",
             weight: pickMode ? 2.5 : 1.5,
