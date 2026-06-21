@@ -476,26 +476,10 @@ const Index = () => {
     refresh: refreshFolders,
     loading: foldersLoading,
   } = usePoiFolders();
-  const [savedPoisVisible, setSavedPoisVisible] = useState(() => {
-    try {
-      // v2: limpia estado anterior que ocultaba todo por defecto
-      if (localStorage.getItem("gp_v") !== "2") {
-        localStorage.setItem("gp_v", "2");
-        localStorage.removeItem("gp_pv");
-        localStorage.removeItem("gp_hf");
-        localStorage.removeItem("gp_sf");
-        return true; // visible por defecto
-      }
-      const saved = localStorage.getItem("gp_pv");
-      return saved === null ? true : saved === "1";
-    } catch { return true; }
-  });
-  const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(() => {
-    try {
-      const s = localStorage.getItem("gp_hf");
-      return s ? new Set<string>(JSON.parse(s)) : new Set(); // sin carpetas ocultas por defecto
-    } catch { return new Set(); }
-  });
+  const [savedPoisVisible, setSavedPoisVisible] = useState(true);
+  const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
   const [loadedPoiFolderIds, setLoadedPoiFolderIds] = useState<Set<string | null>>(new Set());
 
   // Si cambia el user (login/logout/switch), olvidamos qué carpetas estaban
@@ -528,15 +512,10 @@ const Index = () => {
     (next: Set<string>) => {
       const activated = Array.from(hiddenPoiFolders).filter((id) => !next.has(id));
       setHiddenPoiFolders(next);
-      try { localStorage.setItem("gp_hf", JSON.stringify([...next])); } catch {}
       // Si el usuario enciende al menos una carpeta y el toggle global está apagado,
       // lo encendemos automáticamente para que los markers aparezcan en el mapa.
       if (activated.length > 0) {
-        setSavedPoisVisible((v) => {
-          const updated = v ? v : true;
-          try { localStorage.setItem("gp_pv", updated ? "1" : "0"); } catch {}
-          return updated;
-        });
+        setSavedPoisVisible((v) => (v ? v : true));
       }
       const childrenByParent = new Map<string | null, string[]>();
       folders.forEach((f) => {
@@ -1365,11 +1344,7 @@ const Index = () => {
             setFlyTarget({ id: Date.now(), lat: p.lat, lng: p.lng, bbox: null })
           }
           savedPoisVisible={savedPoisVisible}
-          onToggleSavedPoisVisible={() => setSavedPoisVisible((v) => {
-            const next = !v;
-            try { localStorage.setItem("gp_pv", next ? "1" : "0"); } catch {}
-            return next;
-          })}
+          onToggleSavedPoisVisible={() => setSavedPoisVisible((v) => !v)}
           onRemoveSavedPoi={removePoi}
           onClearSavedPois={clearAllPois}
           onOpenPoiManager={() => setManagerOpen(true)}
