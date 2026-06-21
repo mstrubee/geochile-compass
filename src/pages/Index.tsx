@@ -846,6 +846,38 @@ const Index = () => {
     "#A78BFA", "#FB7185", "#22D3EE", "#FB923C",
   ];
 
+  // ── Analizar zona desde un POI comercial (callback global para popup Leaflet) ──
+  const analyzeFromPoiRef = useRef<((c: { lat: number; lng: number }) => void) | null>(null);
+  const analyzeFromPoi = useCallback(async (c: { lat: number; lng: number }) => {
+    const minutes = [...isoMinutes].filter((n) => n > 0).sort((a, b) => a - b);
+    if (!minutes.length) { toast.error("Define al menos un valor de minutos en la barra lateral"); return; }
+    setIsoLoading(true);
+    const tId = toast.loading("Calculando zona de influencia…");
+    try {
+      const features = await fetchIsochrone({ mode: isoMode, lat: c.lat, lng: c.lng, minutes });
+      const id = `iso-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const color = isoColorPalette[isochrones.length % isoColorPalette.length];
+      const newIso: Isochrone = {
+        id, mode: isoMode, minutes, center: c, color, visible: true, createdAt: Date.now(), features,
+      };
+      setIsochrones((prev) => [...prev, newIso]);
+      setFitIsoId(id);
+      setSelectedIsoId(id);
+      userOpenPanel();
+      toast.success("Zona de influencia calculada", { id: tId });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error";
+      toast.error(`No se pudo calcular: ${msg}`, { id: tId });
+    } finally {
+      setIsoLoading(false);
+    }
+  }, [isoMode, isoMinutes, isochrones.length, userOpenPanel]);
+  useEffect(() => { analyzeFromPoiRef.current = analyzeFromPoi; }, [analyzeFromPoi]);
+  useEffect(() => {
+    (window as any).__gp_analyze = (c: { lat: number; lng: number }) => analyzeFromPoiRef.current?.(c);
+    return () => { delete (window as any).__gp_analyze; };
+  }, []);
+
   const addUserLayer = useCallback((layer: UserLayer) => {
     setUserLayers((prev) => [...prev, layer]);
     setFitId(layer.id);

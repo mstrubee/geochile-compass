@@ -111,18 +111,24 @@ function buildPopupHtml(poi: ComercialPOI, logoUrl?: string): string {
     venue_address: [poi.direccion, poi.comuna, "Chile"].filter(Boolean).join(", "),
   }));
 
-  const ftBtn = `<div style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:6px">
-    <button
-      data-ft="${ftPayload}"
-      onclick="try{var d=JSON.parse(this.dataset.ft);window.__gp_foot&&window.__gp_foot(d)}catch(e){}"
-      style="width:100%;padding:5px 8px;font-size:11px;font-family:system-ui,sans-serif;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;cursor:pointer;color:#374151;display:flex;align-items:center;justify-content:center;gap:5px"
-    >
-      <span>📊</span> Ver afluencia de público
-    </button>
-  </div>`;
+  const btnStyle = "width:100%;padding:5px 8px;font-size:11px;font-family:system-ui,sans-serif;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;cursor:pointer;color:#374151;display:flex;align-items:center;justify-content:center;gap:5px;margin-bottom:4px";
 
-  return `<div style="font-size:13px;font-family:system-ui,sans-serif;min-width:160px">
-    ${header}${dir}${comuna}${ftBtn}
+  const analyzeBtn = `<button
+    onclick="window.__gp_analyze&&window.__gp_analyze({lat:${poi.latitud},lng:${poi.longitud}})"
+    style="${btnStyle}background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8"
+  ><span>🔍</span> Analizar zona de influencia</button>`;
+
+  const ftBtn = `<button
+    data-ft="${ftPayload}"
+    onclick="try{var d=JSON.parse(this.dataset.ft);window.__gp_foot&&window.__gp_foot(d)}catch(e){}"
+    style="${btnStyle}"
+  ><span>📊</span> Ver afluencia de público</button>`;
+
+  return `<div style="font-size:13px;font-family:system-ui,sans-serif;min-width:170px">
+    ${header}${dir}${comuna}
+    <div style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:6px">
+      ${analyzeBtn}${ftBtn}
+    </div>
   </div>`;
 }
 
