@@ -1,16 +1,14 @@
-// Edge function: full-backup export of public schema tables.
-// - GET /export-backup            -> ZIP with one .json per table + _manifest.json
-// - GET /export-backup?list=1     -> JSON list of exportable tables with row counts
-// - GET /export-backup?table=NAME -> JSON file with all rows of that table (paged)
+// Edge function: paginated export of public schema tables.
+// - GET /export-backup?list=1                       -> JSON list of exportable tables with row counts
+// - GET /export-backup?table=NAME&offset=N&limit=M  -> plain JSON array with that range of rows
 //
 // Requires admin role. Uses SERVICE_ROLE to bypass RLS.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-// deno-lint-ignore no-explicit-any
-import JSZip from "npm:jszip@3.10.1";
 
-const PAGE_SIZE = 1000;
+const DEFAULT_LIMIT = 1000;
+const MAX_LIMIT = 5000;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -23,11 +21,6 @@ const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =
   });
 
 async function listTables(admin: ReturnType<typeof createClient>): Promise<string[]> {
-  // Lee tablas del esquema public desde information_schema vía PostgREST RPC alternativa:
-  // No tenemos una RPC dedicada; usamos pg_meta-style query via REST is not available,
-  // así que asumimos un set conocido a través de pg_catalog mediante una function ya existente.
-  // Fallback: usamos una consulta directa con .from('pg_tables') no disponible en PostgREST.
-  // Por eso definimos la lista solicitando información a una RPC; si no existe, devolvemos error claro.
   const { data, error } = await admin.rpc("list_public_tables");
   if (error) throw new Error(`list_public_tables RPC missing: ${error.message}`);
   return (data as Array<{ table_name: string }>)
@@ -42,24 +35,6 @@ async function countRows(admin: ReturnType<typeof createClient>, table: string):
     .select("*", { count: "exact", head: true });
   if (error) throw new Error(`count ${table}: ${error.message}`);
   return count ?? 0;
-}
-
-async function fetchAllRows(
-  admin: ReturnType<typeof createClient>,
-  table: string,
-): Promise<unknown[]> {
-  const out: unknown[] = [];
-  let from = 0;
-  while (true) {
-    const to = from + PAGE_SIZE - 1;
-    const { data, error } = await admin.from(table).select("*").range(from, to);
-    if (error) throw new Error(`fetch ${table} [${from}-${to}]: ${error.message}`);
-    const rows = data ?? [];
-    out.push(...rows);
-    if (rows.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-  return out;
 }
 
 Deno.serve(async (req) => {
@@ -81,7 +56,6 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Authorize: must be admin
     const { data: isAdmin, error: roleErr } = await admin.rpc("has_role", {
       _user_id: userId,
       _role: "admin",
@@ -107,43 +81,41 @@ Deno.serve(async (req) => {
       return json({ tables: counts });
     }
 
-    if (wantTable) {
-      if (!tables.includes(wantTable)) return json({ error: `Unknown table: ${wantTable}` }, 400);
-      const rows = await fetchAllRows(admin, wantTable);
-      return new Response(JSON.stringify({ table: wantTable, rows: rows.length, data: rows }), {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-          "Content-Disposition": `attachment; filename="${wantTable}.json"`,
+    if (!wantTable) {
+      return json(
+        {
+          error:
+            "Provide ?table=NAME&offset=N&limit=M to fetch a page, or ?list=1 to list tables. Full ZIP export was removed (resource limits).",
+          tables,
         },
-      });
+        400,
+      );
     }
 
-    // Full ZIP
-    const zip = new JSZip();
-    const manifest: Record<string, number> = {};
-    for (const t of tables) {
-      const rows = await fetchAllRows(admin, t);
-      manifest[t] = rows.length;
-      zip.file(`${t}.json`, JSON.stringify(rows));
-    }
-    zip.file(
-      "_manifest.json",
-      JSON.stringify(
-        { generated_at: new Date().toISOString(), tables: manifest },
-        null,
-        2,
-      ),
+    if (!tables.includes(wantTable)) return json({ error: `Unknown table: ${wantTable}` }, 400);
+
+    const offsetRaw = parseInt(url.searchParams.get("offset") ?? "0", 10);
+    const limitRaw = parseInt(url.searchParams.get("limit") ?? String(DEFAULT_LIMIT), 10);
+    const offset = Number.isFinite(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
+    const limit = Math.min(
+      Math.max(1, Number.isFinite(limitRaw) ? limitRaw : DEFAULT_LIMIT),
+      MAX_LIMIT,
     );
-    const blob = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
-    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    return new Response(blob, {
+    const to = offset + limit - 1;
+
+    const { data, error } = await admin.from(wantTable).select("*").range(offset, to);
+    if (error) return json({ error: `fetch ${wantTable} [${offset}-${to}]: ${error.message}` }, 500);
+
+    const rows = data ?? [];
+    return new Response(JSON.stringify(rows), {
       status: 200,
       headers: {
         ...corsHeaders,
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="backup_${stamp}.zip"`,
+        "Content-Type": "application/json",
+        "X-Table": wantTable,
+        "X-Offset": String(offset),
+        "X-Limit": String(limit),
+        "X-Returned": String(rows.length),
       },
     });
   } catch (e) {
