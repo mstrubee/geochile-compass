@@ -476,26 +476,26 @@ const Index = () => {
     refresh: refreshFolders,
     loading: foldersLoading,
   } = usePoiFolders();
-  const [savedPoisVisible, setSavedPoisVisible] = useState(
-    () => { try { return localStorage.getItem("gp_pv") === "1"; } catch { return false; } },
-  );
+  const [savedPoisVisible, setSavedPoisVisible] = useState(() => {
+    try {
+      // v2: limpia estado anterior que ocultaba todo por defecto
+      if (localStorage.getItem("gp_v") !== "2") {
+        localStorage.setItem("gp_v", "2");
+        localStorage.removeItem("gp_pv");
+        localStorage.removeItem("gp_hf");
+        localStorage.removeItem("gp_sf");
+        return true; // visible por defecto
+      }
+      const saved = localStorage.getItem("gp_pv");
+      return saved === null ? true : saved === "1";
+    } catch { return true; }
+  });
   const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(() => {
     try {
       const s = localStorage.getItem("gp_hf");
-      return s ? new Set<string>(JSON.parse(s)) : new Set(["__orphan__"]);
-    } catch { return new Set(["__orphan__"]); }
+      return s ? new Set<string>(JSON.parse(s)) : new Set(); // sin carpetas ocultas por defecto
+    } catch { return new Set(); }
   });
-  // Ref para detectar carpetas realmente nuevas vs. conocidas (evita re-ocultar carpetas habilitadas)
-  const seenFolderIdsRef = useRef<Set<string> | null>(null);
-  const getSeenFolderIds = () => {
-    if (!seenFolderIdsRef.current) {
-      try {
-        const s = localStorage.getItem("gp_sf");
-        seenFolderIdsRef.current = s ? new Set<string>(JSON.parse(s)) : new Set();
-      } catch { seenFolderIdsRef.current = new Set(); }
-    }
-    return seenFolderIdsRef.current;
-  };
   const [loadedPoiFolderIds, setLoadedPoiFolderIds] = useState<Set<string | null>>(new Set());
 
   // Si cambia el user (login/logout/switch), olvidamos qué carpetas estaban
@@ -509,21 +509,6 @@ const Index = () => {
     }
   }, [user]);
 
-  useEffect(() => {
-    if (folders.length === 0) return;
-    const seen = getSeenFolderIds();
-    const freshFolders = folders.filter((f) => !seen.has(f.id));
-    if (freshFolders.length === 0) return;
-    freshFolders.forEach((f) => seen.add(f.id));
-    try { localStorage.setItem("gp_sf", JSON.stringify([...seen])); } catch {}
-    setHiddenPoiFolders((prev) => {
-      const next = new Set(prev);
-      freshFolders.forEach((f) => next.add(f.id));
-      try { localStorage.setItem("gp_hf", JSON.stringify([...next])); } catch {}
-      return next;
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folders]);
 
   const loadPoiFoldersOnce = useCallback(
     async (ids: Array<string | null>) => {
