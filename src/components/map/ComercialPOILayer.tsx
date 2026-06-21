@@ -115,7 +115,7 @@ function buildPopupHtml(poi: ComercialPOI, logoUrl?: string): string {
 
   const analyzeBtn = `<button
     onclick="window.__gp_analyze&&window.__gp_analyze({lat:${poi.latitud},lng:${poi.longitud}})"
-    style="${btnStyle}background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8"
+    style="${btnStyle};background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8"
   ><span>🔍</span> Analizar zona de influencia</button>`;
 
   const ftBtn = `<button
