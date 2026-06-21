@@ -13,11 +13,20 @@ interface Props {
   onPickPoi?: (poi: SavedPoi) => void;
 }
 
+const SAVED_POI_PANE = "savedPoisPane";
+
 export const SavedPoisLayer = ({ pois, visible, onPoiClick, pickMode, onPickPoi }: Props) => {
   const map = useMap();
 
   useEffect(() => {
     if (!visible || !pois.length) return;
+
+    // Pane dedicado con z-index alto para quedar por encima de ComercialPOI y capturar clicks.
+    if (!map.getPane(SAVED_POI_PANE)) {
+      const pane = map.createPane(SAVED_POI_PANE);
+      pane.style.zIndex = "650"; // markerPane=600, popupPane=700
+    }
+
     const group = L.featureGroup().addTo(map);
 
     pois.forEach((p) => {
@@ -25,6 +34,7 @@ export const SavedPoisLayer = ({ pois, visible, onPoiClick, pickMode, onPickPoi 
       const iconUrl = isImageUrl(p.icon);
       const marker: L.Layer = iconUrl
         ? L.marker([p.lat, p.lng], {
+            pane: SAVED_POI_PANE,
             icon: L.icon({
               iconUrl,
               iconSize: pickMode ? [36, 36] : [28, 28],
@@ -34,6 +44,7 @@ export const SavedPoisLayer = ({ pois, visible, onPoiClick, pickMode, onPickPoi 
             }),
           })
         : L.circleMarker([p.lat, p.lng], {
+            pane: SAVED_POI_PANE,
             radius: pickMode ? 9 : 6,
             color: pickMode ? "#3b82f6" : "#fff",
             weight: pickMode ? 2.5 : 1.5,
