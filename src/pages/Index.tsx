@@ -462,6 +462,7 @@ const Index = () => {
     purgePermanently: purgePois,
     clearAll: clearAllPois,
     loadFolders: loadPoiFolders,
+    forceFullRefresh: forcePoiRefresh,
     loading: poisLoading,
   } = useSavedPois();
   const {
@@ -492,6 +493,13 @@ const Index = () => {
       setLoadedPoiFolderIds(new Set());
     }
   }, [user]);
+
+  // El hook useSavedPois no carga POIs al montar ("bootstrap ligero"): los
+  // traemos explícitamente cuando hay sesión para que se muestren por defecto.
+  useEffect(() => {
+    if (!user) return;
+    void forcePoiRefresh();
+  }, [user, forcePoiRefresh]);
 
 
   const loadPoiFoldersOnce = useCallback(
