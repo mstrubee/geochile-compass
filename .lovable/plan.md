@@ -1,57 +1,22 @@
 ## Problema
 
-El sidebar de "Red Comercial Nacional" arma un árbol de carpetas/categorías/marcas. El hook `useComercialFolders` apunta a tres tablas en Supabase, pero **dos no existen en la base de datos**:
+El cambio anterior creó un pane dedicado `savedPoisPane` con `zIndex: 650` para que los POIs guardados (incluido Autoplanet) quedaran sobre los POIs comerciales y capturaran el click. Tras ese cambio los markers dejaron de verse.
 
-- `comercial_carpetas` → no existe
-- `comercial_cat_overrides` → no existe
-- `comercial_marca_overrides` → ✅ existe
+Causas probables del pane custom de Leaflet:
+1. Los panes creados con `map.createPane()` heredan `pointer-events: none` de `.leaflet-pane`, por lo que el contenido no es visible/clickeable hasta que se fija explícitamente.
+2. Los `L.circleMarker` necesitan un renderer (SVG/Canvas) en ese mismo pane; al pasar solo `pane:` sin renderer dedicado, en algunos casos no se dibuja el círculo.
+3. Para `L.marker` con `iconUrl`, el icono se inserta en el pane indicado pero si el pane no tiene `pointer-events`/posicionamiento correctos no aparece encima del tile.
 
-Resultado: las carpetas y los movimientos de categorías hoy solo viven en `localStorage`. Si el usuario cambia de navegador, limpia caché o entra desde otro equipo, **pierde toda la organización y el orden**. Además, las consultas no usan `ORDER BY`, así que el orden de hermanos no es estable ni reproducible.
+## Cambios
 
-También hay que quitar el botón "Restaurar orden" del pie del panel.
+Archivo: `src/components/map/SavedPoisLayer.tsx`
 
-## Solución
+1. Al crear el pane `savedPoisPane`, además de `zIndex = 650` fijar `pointerEvents = "auto"`.
+2. Crear un renderer SVG anclado a ese pane y pasarlo explícitamente a los `L.circleMarker` (`renderer: svgRenderer`), manteniendo `pane: SAVED_POI_PANE` en `L.marker`.
+3. Mantener el `stopPropagation` en el click para que, una vez encima de los comerciales, el evento no se propague.
 
-### 1. Backend — crear tablas faltantes y agregar `sort_order`
+## Verificación
 
-Migración Supabase:
-
-- **`comercial_carpetas`** (nueva):
-  - `id uuid PK default gen_random_uuid()`
-  - `user_id uuid → auth.users ON DELETE CASCADE`
-  - `nombre text NOT NULL`
-  - `parent_id uuid NULL` (carpeta padre; null = raíz o categoría padre vía override)
-  - `sort_order int NOT NULL default 0`
-  - `created_at`, `updated_at` con trigger
-  - Índice `(user_id, parent_id, sort_order)`
-- **`comercial_cat_overrides`** (nueva):
-  - PK `(user_id, cat)`
-  - `parent_id text NULL`, `sort_order int NOT NULL default 0`
-- **`comercial_marca_overrides`** (existente):
-  - `ALTER TABLE ADD COLUMN sort_order int NOT NULL default 0`
-
-Cada tabla con: `GRANT` a `authenticated` + `service_role`, RLS habilitado y política única `"<tabla>_own"` con `auth.uid() = user_id` (USING y WITH CHECK).
-
-### 2. Hook `useComercialFolders.ts`
-
-- Fetch con `.order("sort_order", { ascending: true }).order("created_at")`.
-- En `createFolder` / `moveFolderTo` / `moveCatTo` / `moveBrandTo`: calcular `sort_order = max(sort_order del nuevo parent) + 1` y persistirlo.
-- El `backfillTree` actual ya re-siembra desde localStorage cuando faltan filas → extenderlo para incluir `sort_order` derivado del orden actual del array. Así la organización existente en localStorage queda guardada en DB en la primera carga post-migración (sin pérdida).
-- Quitar `resetTree` del retorno público (ya no se usa).
-
-### 3. UI — `ComercialPOISection.tsx`
-
-- Eliminar el bloque del botón "Restaurar orden" (líneas 1096-1106) y el import de `RotateCcw`.
-- Quitar uso de `resetTree` y de `isCustomized`.
-
-### 4. Verificación
-
-- Crear carpeta → recargar → sigue ahí, en la misma posición.
-- Mover categoría dentro de una carpeta → recargar → conserva posición.
-- Confirmar que el pie del panel ya no muestra el botón.
-
-## Notas técnicas
-
-- No se agrega UI nueva de "reordenar hermanos" (drag entre hermanos): el DnD actual sigue siendo solo reparentar. El `sort_order` garantiza que el orden de creación / movimiento se preserve de forma determinística.
-- La migración es idempotente (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `DO $$ ... CREATE POLICY IF NOT EXISTS` patrón).
-- `localStorage` se conserva como respaldo defensivo (ya existente) por si la DB falla.
+- Recargar el preview y confirmar que los POIs de Autoplanet/Agroplanet se ven en el mapa.
+- Click sobre un POI de Autoplanet abre `PoiDetailDialog` con ventas y atributos cargados.
+- Los POIs comerciales detrás siguen renderizándose y no roban el click cuando hay un POI guardado encima.
