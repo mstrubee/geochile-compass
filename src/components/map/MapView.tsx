@@ -416,7 +416,7 @@ export const MapView = ({
       })}
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
-      {/* SavedPoisLayer va aquí para quedar sobre los ComercialPOILayers en Z-order */}
+      {/* SavedPoisLayer aquí (post-ComercialPOILayers) para quedar encima en Z-order */}
       <SavedPoisLayer
         pois={savedPois}
         visible={savedPoisVisible}
