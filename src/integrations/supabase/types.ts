@@ -3252,6 +3252,12 @@ export type Database = {
         }
         Returns: boolean
       }
+      list_public_tables: {
+        Args: never
+        Returns: {
+          table_name: string
+        }[]
+      }
       longtransactionsenabled: { Args: never; Returns: boolean }
       poi_counts_by_folder: {
         Args: never
