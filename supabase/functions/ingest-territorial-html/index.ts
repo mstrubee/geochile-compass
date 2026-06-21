@@ -5,12 +5,13 @@ const corsHeaders = {
 };
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 import { parseSource } from "../_shared/territorial-parser.ts";
+import { getSecret } from "../_shared/get-secret.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-const GOOGLE_DRIVE_API_KEY = Deno.env.get("GOOGLE_DRIVE_API_KEY");
+const LOVABLE_API_KEY = await getSecret("LOVABLE_API_KEY");
+const GOOGLE_DRIVE_API_KEY = await getSecret("GOOGLE_DRIVE_API_KEY");
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {

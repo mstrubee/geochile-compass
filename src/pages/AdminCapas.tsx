@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound } from "lucide-react";
 import { GeminiKeysAdminSection } from "@/components/admin/GeminiKeysAdminSection";
+import { SecretsAdminSection } from "@/components/admin/SecretsAdminSection";
 import { htmlToGeoJson, downloadGeoJson } from "@/utils/htmlToGeoJson";
 import { parseFile, splitByFolderPath } from "@/utils/fileParsers";
 import { UsersAdminSection } from "@/components/admin/UsersAdminSection";
@@ -529,6 +530,15 @@ const AdminCapas = () => {
           description="Administrá las API Keys de Gemini con fallback automático y enlaces para obtener nuevas."
         >
           <GeminiKeysAdminSection />
+        </AdminCollapsible>
+
+        <AdminCollapsible
+          id="secrets"
+          title="API Keys y Secrets"
+          icon={<KeyRound className="h-4 w-4" />}
+          description="Claves de servicios externos (OpenRouteService, GitHub, Google Drive) que usan las funciones del sistema. Pega aquí los valores."
+        >
+          <SecretsAdminSection />
         </AdminCollapsible>
       </main>
 

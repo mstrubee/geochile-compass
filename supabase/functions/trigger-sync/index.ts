@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getSecret } from "../_shared/get-secret.ts";
 
 const GITHUB_OWNER = "mstrubee";
 const GITHUB_REPO  = "geochile-compass";
@@ -36,7 +37,7 @@ Deno.serve(async (req) => {
   }
 
   // Disparar el workflow de GitHub Actions
-  const githubToken = Deno.env.get("GITHUB_TOKEN");
+  const githubToken = await getSecret("GITHUB_TOKEN");
   if (!githubToken) {
     return new Response(JSON.stringify({ error: "GITHUB_TOKEN no configurado" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },

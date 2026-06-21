@@ -1,6 +1,8 @@
 // Edge function: proxy a OpenRouteService para calcular isócronas.
 // Mantiene la API key del lado del servidor.
 
+import { getSecret } from "../_shared/get-secret.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -27,7 +29,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const apiKey = Deno.env.get("OPENROUTESERVICE_API_KEY");
+    const apiKey = await getSecret("OPENROUTESERVICE_API_KEY");
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: "OPENROUTESERVICE_API_KEY not configured" }),
