@@ -162,7 +162,10 @@ const Index = () => {
     setComercialLayers((prev) => ({ ...prev, [cat]: !prev[cat] }));
   }, []);
   const handleComercialCountChange = useCallback((cat: ComercialCategoria, n: number) => {
-    setComercialCounts((prev) => ({ ...prev, [cat]: n }));
+    // Bail-out si el conteo no cambió: evita crear un objeto nuevo en cada
+    // render y romper el bucle infinito (ComercialPOILayer reporta el conteo
+    // en un effect cuyo callback es inline, por lo que se dispara cada render).
+    setComercialCounts((prev) => (prev[cat] === n ? prev : { ...prev, [cat]: n }));
   }, []);
   const handleComercialBrandToggle = useCallback((cat: ComercialCategoria, brand: string) => {
     setComercialHiddenBrands((prev) => {

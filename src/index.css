@@ -104,6 +104,11 @@
 
 /* Leaflet — glass overrides */
 .leaflet-container { background: hsl(0 0% 100%); }
+/* Los marcadores de POI guardados (logos) viven en un pane custom (savedPois),
+   por lo que NO reciben el `max-width:none` que Leaflet aplica al marker-pane.
+   Sin esto, el reset de Tailwind (img{max-width:100%}) resuelve el 100% contra
+   el pane —que tiene ancho 0— y colapsa el logo a ancho 0 (invisible). */
+img.saved-poi-icon { max-width: none; }
 .leaflet-popup-content-wrapper {
   background: hsl(var(--surface) / 0.92) !important;
   backdrop-filter: saturate(160%) blur(20px);
