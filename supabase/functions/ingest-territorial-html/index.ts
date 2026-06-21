@@ -5,13 +5,10 @@ const corsHeaders = {
 };
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 import { parseSource } from "../_shared/territorial-parser.ts";
-import { getSecret } from "../_shared/get-secret.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LOVABLE_API_KEY = await getSecret("LOVABLE_API_KEY");
-const GOOGLE_DRIVE_API_KEY = await getSecret("GOOGLE_DRIVE_API_KEY");
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -26,51 +23,14 @@ const MIME_BY_TYPE: Record<string, string> = {
   kmz: "application/vnd.google-earth.kmz",
 };
 
+// Archivado a Google Drive deshabilitado: dependía del conector de Lovable.
+// El archivo fuente se conserva en Supabase Storage (bucket territorial-sources),
+// que es la fuente que la ingesta descarga y procesa.
 const uploadToDrive = async (
-  filename: string,
-  bytes: Uint8Array,
-  mimeType: string,
-): Promise<string | null> => {
-  if (!LOVABLE_API_KEY || !GOOGLE_DRIVE_API_KEY) return null;
-  try {
-    const boundary = "----lvbnd" + crypto.randomUUID();
-    const metadata = { name: filename, description: "GeoPlanet territorial source" };
-    const enc = new TextEncoder();
-    const head = enc.encode(
-      `--${boundary}\r\n` +
-      `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
-      JSON.stringify(metadata) +
-      `\r\n--${boundary}\r\n` +
-      `Content-Type: ${mimeType}\r\n\r\n`,
-    );
-    const tail = enc.encode(`\r\n--${boundary}--`);
-    const body = new Uint8Array(head.length + bytes.length + tail.length);
-    body.set(head, 0);
-    body.set(bytes, head.length);
-    body.set(tail, head.length + bytes.length);
-    const resp = await fetch(
-      "https://connector-gateway.lovable.dev/google_drive/upload/drive/v3/files?uploadType=multipart",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "X-Connection-Api-Key": GOOGLE_DRIVE_API_KEY,
-          "Content-Type": `multipart/related; boundary=${boundary}`,
-        },
-        body,
-      },
-    );
-    if (!resp.ok) {
-      console.warn("Drive upload failed", resp.status, await resp.text());
-      return null;
-    }
-    const j = await resp.json();
-    return j.id ?? null;
-  } catch (e) {
-    console.warn("Drive upload error", e);
-    return null;
-  }
-};
+  _filename: string,
+  _bytes: Uint8Array,
+  _mimeType: string,
+): Promise<string | null> => null;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
