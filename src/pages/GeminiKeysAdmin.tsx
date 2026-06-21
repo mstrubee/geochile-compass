@@ -20,7 +20,7 @@ const GeminiKeysAdminPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="h-screen overflow-y-auto bg-background text-foreground">
       <div className="mx-auto max-w-5xl p-6">
         <button onClick={() => navigate("/admin/capas")} className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> Volver a Admin

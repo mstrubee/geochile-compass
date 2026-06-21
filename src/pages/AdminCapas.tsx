@@ -196,7 +196,7 @@ const AdminCapas = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen overflow-y-auto bg-background">
       <header className="sticky top-0 z-10 border-b border-border/40 bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
           <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
