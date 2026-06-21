@@ -624,6 +624,12 @@ const Index = () => {
     });
   }, []);
 
+  // Click en POI guardado → abrir PoiDetailDialog (memoizado para evitar re-mount de markers)
+  const handlePoiClick = useCallback((poi: SavedPoi) => {
+    if (poiPickContext) return;
+    setDetailPoi(poi);
+  }, [poiPickContext]);
+
   // ESC cancela el picker.
   useEffect(() => {
     if (!coordPicker) return;
@@ -1492,10 +1498,7 @@ const Index = () => {
             onMapContextMenu={handleMapContextMenu}
             coordPickerActive={!!coordPicker}
             onPickCoord={handlePickCoord}
-            onPoiClick={(poi) => {
-              if (poiPickContext) return; // Si está en pick mode, no abrimos detalle.
-              setDetailPoi(poi);
-            }}
+            onPoiClick={handlePoiClick}
             poiPickMode={!!poiPickContext}
             onPoiPickSelect={(poi) => {
               if (!poiPickContext) return;

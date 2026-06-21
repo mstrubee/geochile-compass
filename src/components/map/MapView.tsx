@@ -381,13 +381,6 @@ export const MapView = ({
         fitId={fitIsochroneId}
         onFitDone={onFitIsochroneDone}
       />
-      <SavedPoisLayer
-        pois={savedPois}
-        visible={savedPoisVisible}
-        onPoiClick={onPoiClick}
-        pickMode={poiPickMode}
-        onPickPoi={onPoiPickSelect}
-      />
       <CrimeHeatLayer
         visible={layers.crime && crimeView !== "manzana"}
         crimeType={crimeType}
@@ -423,6 +416,14 @@ export const MapView = ({
       })}
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
+      {/* SavedPoisLayer va aquí para quedar sobre los ComercialPOILayers en Z-order */}
+      <SavedPoisLayer
+        pois={savedPois}
+        visible={savedPoisVisible}
+        onPoiClick={onPoiClick}
+        pickMode={poiPickMode}
+        onPickPoi={onPoiPickSelect}
+      />
 
       <MicrozoneLayer
         microzones={microzones}
