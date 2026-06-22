@@ -45,6 +45,11 @@ export const UsersAdminSection = () => {
   const [newRoleName, setNewRoleName] = useState("");
   const [editingRole, setEditingRole] = useState<CustomRole | null>(null);
   const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
+  // Crear usuario
+  const [nuEmail, setNuEmail] = useState("");
+  const [nuPass, setNuPass] = useState("");
+  const [nuRole, setNuRole] = useState<string>("none"); // "none" | "admin" | <custom_role_id>
+  const [creating, setCreating] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -77,6 +82,31 @@ export const UsersAdminSection = () => {
     }
     return map;
   }, [assignments]);
+
+  const createUser = async () => {
+    const email = nuEmail.trim();
+    if (!email || nuPass.length < 6) {
+      toast.error("Email y contraseña (mínimo 6 caracteres) requeridos");
+      return;
+    }
+    setCreating(true);
+    const { error } = await (supabase as any).rpc("admin_create_user", {
+      p_email: email,
+      p_password: nuPass,
+      p_make_admin: nuRole === "admin",
+      p_custom_role_id: nuRole !== "none" && nuRole !== "admin" ? nuRole : null,
+    });
+    setCreating(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`Usuario ${email} creado`);
+    setNuEmail("");
+    setNuPass("");
+    setNuRole("none");
+    void refresh();
+  };
 
   const createRole = async () => {
     const name = newRoleName.trim();
@@ -168,6 +198,46 @@ export const UsersAdminSection = () => {
 
   return (
     <div className="space-y-8">
+      {/* Crear usuario */}
+      <div className="space-y-3 rounded-lg border border-border/60 bg-surface/40 p-4">
+        <h3 className="text-sm font-semibold text-muted-foreground">Crear usuario</h3>
+        <p className="text-xs text-muted-foreground">
+          Solo el administrador crea cuentas. El usuario entra con el email y la contraseña que definas aquí.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            type="email"
+            placeholder="email@ejemplo.com"
+            value={nuEmail}
+            onChange={(e) => setNuEmail(e.target.value)}
+            className="h-9 max-w-[240px]"
+          />
+          <Input
+            type="text"
+            placeholder="Contraseña (mín. 6)"
+            value={nuPass}
+            onChange={(e) => setNuPass(e.target.value)}
+            className="h-9 max-w-[200px] font-mono"
+          />
+          <Select value={nuRole} onValueChange={setNuRole}>
+            <SelectTrigger className="h-9 w-[200px]">
+              <SelectValue placeholder="Rol" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sin rol (usuario básico)</SelectItem>
+              <SelectItem value="admin">Administrador</SelectItem>
+              {roles.map((r) => (
+                <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={createUser} disabled={creating}>
+            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+            Crear usuario
+          </Button>
+        </div>
+      </div>
+
       {/* Roles */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground">Roles personalizados</h3>
