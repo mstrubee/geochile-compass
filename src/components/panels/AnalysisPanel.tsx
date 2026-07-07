@@ -1,4 +1,4 @@
-import { X, Download, FileJson, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight, ShoppingCart, TrendingUp, Store } from "lucide-react";
+import { X, Download, FileJson, FileText, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight, ShoppingCart, TrendingUp, Store } from "lucide-react";
 import { GastoEndogenoSection } from "./GastoEndogenoSection";
 import { useCommercialCount } from "@/hooks/useCommercialCount";
 import { computeSalesProjection, type ProjectionResult } from "@/services/salesProjectionService";
@@ -9,6 +9,9 @@ import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
 import { useIsochroneAnalysis } from "@/hooks/useIsochroneAnalysis";
 import { useIsochroneInsights } from "@/hooks/useIsochroneInsights";
 import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
+import { useIsochroneReport } from "@/hooks/useIsochroneReport";
+import { calcGastoEndogeno } from "@/utils/gastoEndogeno";
+import { exportReportToPdf } from "@/utils/reportExportPdf";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 
 interface AnalysisPanelProps {
@@ -185,6 +188,9 @@ export const AnalysisPanel = ({
 
   // Proyección de potencial de venta
   const { stats: parqueForProjection } = useParqueIsochroneStats(isoFeatureActive, open);
+
+  // Informe completo para exportar PDF (sin consultas de comercio — solo geodata)
+  const { report: fullReport } = useIsochroneReport({ isochrone, manzanas });
   const [projResult,  setProjResult]  = useState<ProjectionResult | null>(null);
   const [projLoading, setProjLoading] = useState(false);
   const [projError,   setProjError]   = useState<string | null>(null);
@@ -694,6 +700,20 @@ export const AnalysisPanel = ({
                   <FileJson className="mr-1 inline h-3 w-3" /> JSON
                 </button>
               </div>
+              <button
+                onClick={() => {
+                  if (!fullReport || !analysis) return;
+                  exportReportToPdf({
+                    ...fullReport,
+                    gastoEndogeno: calcGastoEndogeno(analysis),
+                    parqueStats: parqueForProjection ?? null,
+                  });
+                }}
+                disabled={!fullReport}
+                className="mt-1.5 w-full rounded-lg bg-blue-600/10 px-2 py-2 text-[11px] font-medium text-blue-400 transition-colors hover:bg-blue-600/20 disabled:opacity-40"
+              >
+                <FileText className="mr-1 inline h-3 w-3" /> Informe PDF oficial
+              </button>
             </Section>
           </>
         )}

@@ -23,6 +23,8 @@ import {
 } from "@/utils/isochroneAnalysis";
 import type { CommerceCategory, CommerceItem } from "@/services/commerceService";
 import type { NSE } from "@/data/communes";
+import type { GastoEndogenoResult } from "@/utils/gastoEndogeno";
+import type { ParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 
 const NSE_LABELS = ["ABC1", "C2", "C3", "D", "E"] as const;
 const NSE_NUM_TO_LABEL: Record<NSE, (typeof NSE_LABELS)[number]> = {
@@ -72,6 +74,10 @@ export interface IsochroneReport {
   outerBbox: { south: number; west: number; north: number; east: number };
   categoriesQueried: CommerceCategory[];
   commerceErrors: Record<string, string>;
+  /** Gasto potencial mensual endógeno por GSE (opcional, calculado en AnalysisPanel). */
+  gastoEndogeno?: GastoEndogenoResult | null;
+  /** Estadísticas del parque automotor en la isócrona (opcional). */
+  parqueStats?: ParqueIsochroneStats | null;
 }
 
 const computeNseDistribution = (analysis: IsochroneAnalysis): NseShare[] => {

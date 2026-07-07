@@ -374,6 +374,188 @@ const tableTheme = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SECCIÓN GASTO ENDÓGENO + PARQUE VEHICULAR (página opcional)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const addEconomicPage = (
+  doc: jsPDF,
+  report: IsochroneReport,
+  totalPages: number,
+): void => {
+  const { gastoEndogeno, parqueStats } = report;
+  if (!gastoEndogeno && !parqueStats) return;
+
+  doc.addPage();
+  addPageHeader(doc, report, report.iso.minutes[report.iso.minutes.length - 1]);
+
+  let y = BODY_TOP;
+
+  // ── GASTO ENDÓGENO ────────────────────────────────────────────────────────
+  if (gastoEndogeno && gastoEndogeno.totalHogaresObjetivo > 0) {
+    y = sectionTitle(doc, "Distribución del Gasto por GSE (Canasta Autoplanet)", y);
+
+    // KPI highlight
+    const fmtM = (n: number) => {
+      if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B/mes`;
+      if (n >= 1_000_000)     return `$${(n / 1_000_000).toFixed(1)}M/mes`;
+      return `$${Math.round(n).toLocaleString("es-CL")}/mes`;
+    };
+
+    // Mini KPIs fila superior
+    const kpis: [string, string, [number,number,number]][] = [
+      [fmtM(gastoEndogeno.gastoMensualObjetivo), "Gasto objetivo total/mes",     C.blue],
+      [fmt(gastoEndogeno.totalHogaresObjetivo),  "Hogares mercado objetivo",      C.navy],
+      [fmtCLP(gastoEndogeno.gastoPromPorHogar),  "Gasto promedio por hogar/mes",  C.emerald],
+    ];
+    const cw3 = (PW - ML * 2 - 10) / 3;
+    kpis.forEach(([val, label, accent], i) => {
+      const x = ML + i * (cw3 + 5);
+      doc.setFillColor(226, 232, 240);
+      doc.roundedRect(x + 0.5, y + 0.5, cw3, 18, 2, 2, "F");
+      doc.setFillColor(...C.white);
+      doc.roundedRect(x, y, cw3, 18, 2, 2, "F");
+      doc.setFillColor(...accent);
+      doc.roundedRect(x, y, 2, 18, 1, 1, "F");
+      doc.rect(x + 1, y, 1, 18, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(...C.navy);
+      doc.text(val, x + 5, y + 7);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(...C.slate600);
+      doc.text(label, x + 5, y + 14);
+    });
+    y += 24;
+
+    // Tabla GSE
+    const GSE_COLORS_PDF: Record<string, [number,number,number]> = {
+      ABC1: C.abc1, C1: C.c2, C2: C.c2, C3: C.c3, D: C.d, E: C.e,
+    };
+
+    autoTable(doc, {
+      ...tableTheme,
+      startY: y,
+      head: [["GSE", "Hogares", "Gasto (CLP/mes)", "% del Objetivo", "Objetivo"]],
+      body: gastoEndogeno.rows.map((r) => [
+        r.gse,
+        fmt(r.hogares),
+        fmtCLP(r.gastoMensual),
+        r.esObjetivo ? `${r.pctDelTotal.toFixed(1)}%` : "—",
+        r.esObjetivo ? "Sí" : "No",
+      ]),
+      columnStyles: {
+        0: { fontStyle: "bold" },
+        1: { halign: "right" },
+        2: { halign: "right" },
+        3: { halign: "right" },
+        4: { halign: "center" },
+      },
+      didParseCell: (data) => {
+        if (data.section === "body" && data.column.index === 0) {
+          const gse = gastoEndogeno.rows[data.row.index]?.gse;
+          if (gse) {
+            const c = GSE_COLORS_PDF[gse] ?? C.slate600;
+            data.cell.styles.textColor = c;
+          }
+        }
+      },
+      tableWidth: PW - ML * 2,
+      didDrawPage: (data) => {
+        addPageHeader(doc, report, report.iso.minutes[report.iso.minutes.length - 1]);
+        addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
+        if (data.cursor) data.cursor.y = Math.max(data.cursor.y, BODY_TOP);
+      },
+    });
+    y = (lastY(doc) || y) + 10;
+
+    // Nota metodológica
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...C.slate400);
+    const src = gastoEndogeno.source === "gse"
+      ? "Distribución GSE calculada desde manzanas censales (Censo 2017)."
+      : gastoEndogeno.source === "nse_fallback"
+        ? "Distribución GSE estimada por NSE comunal (fallback — sin datos de manzanas)."
+        : "Sin datos GSE disponibles.";
+    doc.text(`Fuente: Coeficientes EPF 2021-2022 actualizados (XBREIN/Autoplanet). ${src}`, ML, y);
+    y += 8;
+  }
+
+  // ── PARQUE VEHICULAR ──────────────────────────────────────────────────────
+  if (parqueStats && parqueStats.vehiculos > 0) {
+    if (y > PH - 80) {
+      doc.addPage();
+      addPageHeader(doc, report, report.iso.minutes[report.iso.minutes.length - 1]);
+      addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
+      y = BODY_TOP;
+    }
+    y = sectionTitle(doc, "Parque Vehicular y Ranking de Marcas", y);
+
+    // KPIs parque
+    const parqueKpis: [string, string, [number,number,number]][] = [
+      [fmt(Math.round(parqueStats.vehiculos)), "Vehículos estimados",   C.blue],
+      [`${parqueStats.edad_media.toFixed(1)} años`,  "Edad media del parque", C.navy],
+      [`${parqueStats.edad_p25.toFixed(0)}–${parqueStats.edad_p75.toFixed(0)} años`, "Rango intercuartil (P25–P75)", C.emerald],
+    ];
+    const cw3p = (PW - ML * 2 - 10) / 3;
+    parqueKpis.forEach(([val, label, accent], i) => {
+      const x = ML + i * (cw3p + 5);
+      doc.setFillColor(226, 232, 240);
+      doc.roundedRect(x + 0.5, y + 0.5, cw3p, 18, 2, 2, "F");
+      doc.setFillColor(...C.white);
+      doc.roundedRect(x, y, cw3p, 18, 2, 2, "F");
+      doc.setFillColor(...accent);
+      doc.roundedRect(x, y, 2, 18, 1, 1, "F");
+      doc.rect(x + 1, y, 1, 18, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(...C.navy);
+      doc.text(val, x + 5, y + 7);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(...C.slate600);
+      doc.text(label, x + 5, y + 14);
+    });
+    y += 24;
+
+    // Tabla ranking de marcas
+    if (parqueStats.ranking_marcas.length > 0) {
+      autoTable(doc, {
+        ...tableTheme,
+        startY: y,
+        head: [["#", "Marca", "Vehículos (est.)", "% del Parque"]],
+        body: parqueStats.ranking_marcas.map((m, i) => [
+          i + 1,
+          m.marca,
+          fmt(Math.round(m.count)),
+          `${m.pct.toFixed(1)}%`,
+        ]),
+        columnStyles: {
+          0: { halign: "right", cellWidth: 12 },
+          2: { halign: "right" },
+          3: { halign: "right" },
+        },
+        tableWidth: PW - ML * 2,
+        didDrawPage: (data) => {
+          addPageHeader(doc, report, report.iso.minutes[report.iso.minutes.length - 1]);
+          addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
+          if (data.cursor) data.cursor.y = Math.max(data.cursor.y, BODY_TOP);
+        },
+      });
+      y = (lastY(doc) || y) + 6;
+    }
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...C.slate400);
+    doc.text("Fuente: Parque automotor SII/Registros Civiles (datos H3 hex agregados). Estimación por intersección geoespacial.", ML, y);
+  }
+
+  addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // METODOLOGÍA
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -695,8 +877,9 @@ const addBandPage = (
 export const exportReportToPdf = (report: IsochroneReport): void => {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
 
-  // Estimación de páginas: portada + ~2 por banda + metodología
-  const estimatedPages = 1 + report.bands.length * 2 + 1;
+  // Estimación de páginas: portada + ~2 por banda + económica (si hay) + metodología
+  const hasEconomic = !!(report.gastoEndogeno?.totalHogaresObjetivo || report.parqueStats?.vehiculos);
+  const estimatedPages = 1 + report.bands.length * 2 + (hasEconomic ? 1 : 0) + 1;
 
   // Portada
   addCoverPage(doc, report);
@@ -706,6 +889,9 @@ export const exportReportToPdf = (report: IsochroneReport): void => {
     doc.addPage();
     addBandPage(doc, report, band, estimatedPages);
   }
+
+  // Análisis económico (gasto endógeno + parque vehicular)
+  addEconomicPage(doc, report, estimatedPages);
 
   // Metodología
   addMethodologyPage(doc, report, estimatedPages);

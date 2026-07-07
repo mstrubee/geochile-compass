@@ -1343,6 +1343,10 @@ const Index = () => {
             setProjectionIsoId(id);
             userOpenPanel();
           }}
+          onReportSavedIsochrone={(id) => {
+            const mapId = loadSavedIsoToMap(id) ?? `saved:${id}`;
+            setReportIsoDialogId(mapId);
+          }}
           onFocusSavedIsochrone={focusSavedIso}
           onRenameSavedIsochrone={(id, name) => updateSavedIso(id, { name })}
           onMoveSavedIsochrone={(id, folder_id) => updateSavedIso(id, { folder_id })}

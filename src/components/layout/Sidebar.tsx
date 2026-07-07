@@ -117,6 +117,7 @@ interface SidebarProps {
   onToggleSavedIsochrone?: (id: string) => void;
   onAnalyzeSavedIsochrone?: (id: string) => void;
   onProjectSavedIsochrone?: (id: string) => void;
+  onReportSavedIsochrone?: (id: string) => void;
   onFocusSavedIsochrone?: (id: string) => void;
   onRenameSavedIsochrone?: (id: string, name: string) => Promise<void> | void;
   onMoveSavedIsochrone?: (id: string, folderId: string | null) => Promise<void> | void;
@@ -306,6 +307,7 @@ interface SavedIsoSubProps {
   onToggle?: (id: string) => void;
   onAnalyze?: (id: string) => void;
   onProject?: (id: string) => void;
+  onReport?: (id: string) => void;
   onFocus?: (id: string) => void;
   onRename?: (id: string, name: string) => Promise<void> | void;
   onMove?: (id: string, folderId: string | null) => Promise<void> | void;
@@ -322,6 +324,7 @@ const SavedIsochronesSubsection = ({
   onToggle,
   onAnalyze,
   onProject,
+  onReport,
   onFocus,
   onRename,
   onMove,
@@ -436,6 +439,15 @@ const SavedIsochronesSubsection = ({
                 title="Análisis territorial"
               >
                 <BarChart3 className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {onReport && (
+              <button
+                onClick={() => onReport(s.id)}
+                className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted hover:bg-primary/15 hover:text-primary"
+                title="Generar informe (Excel/PDF)"
+              >
+                <FileText className="h-3.5 w-3.5" />
               </button>
             )}
             {onFocus && (
@@ -667,6 +679,7 @@ export const Sidebar = ({
   onToggleSavedIsochrone,
   onAnalyzeSavedIsochrone,
   onProjectSavedIsochrone,
+  onReportSavedIsochrone,
   onFocusSavedIsochrone,
   onRenameSavedIsochrone,
   onMoveSavedIsochrone,
@@ -1678,6 +1691,7 @@ export const Sidebar = ({
               onToggle={onToggleSavedIsochrone}
               onAnalyze={onAnalyzeSavedIsochrone}
               onProject={onProjectSavedIsochrone}
+              onReport={onReportSavedIsochrone}
               onFocus={onFocusSavedIsochrone}
               onRename={onRenameSavedIsochrone}
               onMove={onMoveSavedIsochrone}
