@@ -21,6 +21,7 @@ const MIME_BY_TYPE: Record<string, string> = {
   geojson: "application/geo+json",
   kml: "application/vnd.google-earth.kml+xml",
   kmz: "application/vnd.google-earth.kmz",
+  csv: "text/csv",
 };
 
 // Archivado a Google Drive deshabilitado: dependía del conector de Lovable.

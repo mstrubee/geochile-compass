@@ -46,5 +46,5 @@ export interface TerritorialSourceFile {
   dedup_strategy: DedupStrategy;
   layers_summary: Array<{ name: string; count: number }> | null;
   group_id: string | null;
-  file_type?: "html" | "geojson" | "kml" | "kmz" | null;
+  file_type?: "html" | "geojson" | "kml" | "kmz" | "csv" | null;
 }

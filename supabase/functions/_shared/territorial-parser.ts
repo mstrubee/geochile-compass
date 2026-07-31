@@ -581,6 +581,90 @@ export const parseGeoJson = (text: string): ScannedLayer[] => {
 };
 
 // ============================================================================
+// CSV
+// ============================================================================
+
+// Mismos alias que src/utils/parseGeoFile.ts (csvToGeoJSON) usado en el
+// preview client-side, para que "Procesar" nunca produzca 0 capas por una
+// lista de alias desalineada con lo que el usuario ya vio en pantalla.
+const CSV_LAT_ALIASES = ["lat", "latitude", "latitud", "y", "latitude_deg"];
+const CSV_LNG_ALIASES = ["lng", "lon", "long", "longitude", "longitud", "x", "longitude_deg"];
+
+/** Parsea una línea CSV respetando campos entre comillas. */
+const parseCsvLine = (line: string, sep: string): string[] => {
+  const result: string[] = [];
+  let cur = "";
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (c === sep && !inQ) {
+      result.push(cur.trim());
+      cur = "";
+    } else {
+      cur += c;
+    }
+  }
+  result.push(cur.trim());
+  return result;
+};
+
+// Agrupa por las mismas columnas que layerNameFrom() usa para GeoJSON
+// (category/folder/group/layer/layer_name), así el comportamiento es
+// idéntico sin importar si el origen fue CSV o GeoJSON/HTML.
+export const parseCsv = (text: string): ScannedLayer[] => {
+  const layers = new Map<string, ScannedLayer>();
+  const ensure = (name: string) => {
+    if (!layers.has(name)) layers.set(name, { name, count: 0, features: [] });
+    return layers.get(name)!;
+  };
+
+  const lines = text
+    .replace(/^﻿/, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return [];
+
+  const sep = lines[0].split(";").length > lines[0].split(",").length ? ";" : ",";
+  const rawHeaders = parseCsvLine(lines[0], sep);
+  const headers = rawHeaders.map((h) => h.toLowerCase().replace(/^["']|["']$/g, "").trim());
+  const latIdx = headers.findIndex((h) => CSV_LAT_ALIASES.includes(h));
+  const lngIdx = headers.findIndex((h) => CSV_LNG_ALIASES.includes(h));
+  if (latIdx === -1 || lngIdx === -1) return [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseCsvLine(lines[i], sep);
+    const lat = parseFloat(row[latIdx] ?? "");
+    const lng = parseFloat(row[lngIdx] ?? "");
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+
+    const props: Record<string, unknown> = {};
+    headers.forEach((h, idx) => {
+      if (idx !== latIdx && idx !== lngIdx && h) {
+        props[h] = (row[idx] ?? "").replace(/^["']|["']$/g, "");
+      }
+    });
+
+    const geometry = { type: "Point", coordinates: [lng, lat] };
+    const layer = ensure(layerNameFrom(props, geometry));
+    layer.features.push({
+      external_id: props.id != null ? String(props.id) : null,
+      name: (props.name ?? props.nombre ?? props.title ?? null) as string | null,
+      lat,
+      lng,
+      geometry,
+      properties: props,
+    });
+    layer.count++;
+  }
+  return Array.from(layers.values()).filter((l) => l.count > 0);
+};
+
+// ============================================================================
 // Public entrypoint
 // ============================================================================
 
@@ -611,6 +695,7 @@ export const parseSource = async (
   buffer: ArrayBuffer | null,
 ): Promise<ScannedLayer[]> => {
   if (fileType === "geojson") return parseGeoJson(text);
+  if (fileType === "csv") return parseCsv(text);
   if (fileType === "kmz") return buffer ? await parseKmz(buffer) : [];
   return parseHtml(text);
 };

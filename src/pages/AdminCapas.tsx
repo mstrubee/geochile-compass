@@ -7,6 +7,7 @@ import { SecretsAdminSection } from "@/components/admin/SecretsAdminSection";
 import { StorageAdminSection } from "@/components/admin/StorageAdminSection";
 import { htmlToGeoJson, downloadGeoJson } from "@/utils/htmlToGeoJson";
 import { parseFile, splitByFolderPath } from "@/utils/fileParsers";
+import { csvToGeoJSON } from "@/utils/parseGeoFile";
 import { UsersAdminSection } from "@/components/admin/UsersAdminSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ConvertHtmlDialog } from "@/components/admin/ConvertHtmlDialog";
+import { ConvertToGeoJsonDialog } from "@/components/admin/ConvertToGeoJsonDialog";
 import { ConfirmDeleteDialog } from "@/components/admin/ConfirmDeleteDialog";
 import {
   Select,
@@ -492,7 +493,7 @@ const AdminCapas = () => {
                 >
                   <RefreshCw className="h-4 w-4" />
                 </Button>
-                {(f.file_type === "html" || f.file_type === "kml" || !f.file_type) && (
+                {(f.file_type === "html" || f.file_type === "kml" || f.file_type === "csv" || !f.file_type) && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -562,7 +563,7 @@ const AdminCapas = () => {
         }}
       />
 
-      <ConvertHtmlDialog
+      <ConvertToGeoJsonDialog
         open={!!convertTarget}
         onOpenChange={(v) => !v && setConvertTarget(null)}
         file={convertTarget}
@@ -702,12 +703,20 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     onOpenChange(false);
   };
 
-  const detectFileType = (f: File): "html" | "geojson" | "kml" | "kmz" => {
+  const detectFileType = (f: File): "html" | "geojson" | "kml" | "kmz" | "csv" => {
     const n = f.name.toLowerCase();
+    if (n.endsWith(".csv")) return "csv";
     if (n.endsWith(".kmz")) return "kmz";
     if (n.endsWith(".kml")) return "kml";
     if (n.endsWith(".geojson") || n.endsWith(".json")) return "geojson";
     return "html";
+  };
+
+  // Agrupa por las mismas columnas que el edge function (layerNameFrom):
+  // category/folder/group/layer/layer_name, case-insensitive.
+  const csvLayerName = (props: Record<string, unknown>): string => {
+    const raw = props.layer ?? props.layer_name ?? props.folder ?? props.category ?? props.group;
+    return raw != null && String(raw).trim() ? String(raw).trim() : "Puntos";
   };
 
   /** Sube el archivo a Storage usando XHR para reportar progreso. Sin límite de tamaño impuesto por el cliente. */
@@ -764,6 +773,7 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
         fileType === "kmz" ? "application/vnd.google-earth.kmz"
         : fileType === "kml" ? "application/vnd.google-earth.kml+xml"
         : fileType === "geojson" ? "application/geo+json"
+        : fileType === "csv" ? "text/csv"
         : "text/html";
       const path = `${Date.now()}-${file.name.replace(/[^\w.-]+/g, "_")}`;
       await uploadWithProgress(path, mime);
@@ -796,6 +806,15 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
           for (const ft of fc.features) {
             const folder = (ft.properties as Record<string, unknown> | null)?.folder;
             const name = typeof folder === "string" && folder ? folder : "Capa";
+            counts.set(name, (counts.get(name) ?? 0) + 1);
+          }
+          layers = [...counts.entries()].map(([name, count]) => ({ name, count }));
+        } else if (fileType === "csv") {
+          const text = await file.text();
+          const fc = csvToGeoJSON(text);
+          const counts = new Map<string, number>();
+          for (const ft of fc.features) {
+            const name = csvLayerName((ft.properties ?? {}) as Record<string, unknown>);
             counts.set(name, (counts.get(name) ?? 0) + 1);
           }
           layers = [...counts.entries()].map(([name, count]) => ({ name, count }));
@@ -918,13 +937,16 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
                 ) : (
                   <>
                     <div className="text-sm font-medium">Hacé click para seleccionar un archivo</div>
-                    <div className="text-xs text-muted-foreground">GeoJSON · HTML · KML · KMZ (sin límite de tamaño)</div>
+                    <div className="text-xs text-muted-foreground">GeoJSON · HTML · KML · KMZ · CSV (sin límite de tamaño)</div>
+                    <div className="text-[11px] text-text-muted">
+                      CSV: columnas <span className="font-mono">lat</span>/<span className="font-mono">lng</span> (o variantes) requeridas; <span className="font-mono">category</span>/<span className="font-mono">folder</span>/<span className="font-mono">group</span> opcional para agrupar en capas
+                    </div>
                   </>
                 )}
                 <input
                   id="upload-file-input"
                   type="file"
-                  accept=".html,.htm,.geojson,.json,.kml,.kmz,text/html,application/json,application/geo+json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
+                  accept=".html,.htm,.geojson,.json,.kml,.kmz,.csv,text/html,application/json,application/geo+json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,text/csv"
                   className="hidden"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 />

@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
 import { htmlToGeoJson } from "@/utils/htmlToGeoJson";
+import { csvToGeoJSON } from "@/utils/parseGeoFile";
 import type { TerritorialSourceFile } from "@/types/territorial";
 
 type Phase = "confirm" | "conflict" | "processing" | "success";
@@ -30,7 +31,19 @@ interface Props {
 const formatSize = (b?: number | null) =>
   !b ? "—" : b < 1024 * 1024 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1024 / 1024).toFixed(2)} MB`;
 
-export const ConvertHtmlDialog = ({ open, onOpenChange, file, onDone }: Props) => {
+// Mismas columnas que layerNameFrom() del edge function (parseCsv/parseGeoJson),
+// para que el "grupo detectado" en el preview coincida con la ingesta real.
+const groupFromProps = (props: Record<string, unknown>): string | null => {
+  const raw =
+    (props.folder as unknown) ??
+    (props.layer as unknown) ??
+    (props.layer_name as unknown) ??
+    (props.category as unknown) ??
+    (props.group as unknown);
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+};
+
+export const ConvertToGeoJsonDialog = ({ open, onOpenChange, file, onDone }: Props) => {
   const [phase, setPhase] = useState<Phase>("confirm");
   const [progressMsg, setProgressMsg] = useState("");
   const [targetName, setTargetName] = useState("");
@@ -38,6 +51,8 @@ export const ConvertHtmlDialog = ({ open, onOpenChange, file, onDone }: Props) =
   const [newName, setNewName] = useState("");
   const [existing, setExisting] = useState<{ id: string; storage_path: string | null } | null>(null);
   const [parsed, setParsed] = useState<{ features: number; groups: string[]; size: number } | null>(null);
+
+  const isCsv = file?.file_type === "csv";
 
   useEffect(() => {
     if (!open || !file) return;
@@ -63,7 +78,7 @@ export const ConvertHtmlDialog = ({ open, onOpenChange, file, onDone }: Props) =
       return;
     }
     const finalMode = resolvedMode ?? mode;
-    let finalName = resolvedName ?? targetName;
+    const finalName = resolvedName ?? targetName;
 
     setPhase("processing");
     try {
@@ -72,8 +87,8 @@ export const ConvertHtmlDialog = ({ open, onOpenChange, file, onDone }: Props) =
       if (dl.error || !dl.data) throw dl.error ?? new Error("No se pudo descargar");
       const text = await dl.data.text();
 
-      setProgressMsg("Parseando HTML/KML…");
-      const fc = htmlToGeoJson(text);
+      setProgressMsg(isCsv ? "Parseando CSV…" : "Parseando HTML/KML…");
+      const fc = isCsv ? csvToGeoJSON(text) : htmlToGeoJson(text);
       if (!fc.features.length) throw new Error("No se detectaron features en el archivo");
 
       // Conflict detection (only on first run, before knowing existing)
@@ -132,8 +147,8 @@ export const ConvertHtmlDialog = ({ open, onOpenChange, file, onDone }: Props) =
 
       const groupSet = new Set<string>();
       for (const ft of fc.features) {
-        const g = (ft.properties as Record<string, unknown> | null)?.folder;
-        if (typeof g === "string") groupSet.add(g);
+        const g = groupFromProps((ft.properties ?? {}) as Record<string, unknown>);
+        if (g) groupSet.add(g);
       }
       setParsed({ features: fc.features.length, groups: [...groupSet], size: blob.size });
       setTargetName(finalName);
