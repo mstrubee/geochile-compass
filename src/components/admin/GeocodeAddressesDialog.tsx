@@ -29,8 +29,20 @@ interface Props {
   onOpenChange: (v: boolean) => void;
 }
 
-const BATCH_SIZE = 150;
+// Nominatim (OpenStreetMap) limita a 1 solicitud/seg y prohíbe concurrencia.
+// En la práctica responde en ~2-3s por dirección nueva (las que ya están en
+// caché de una corrida anterior se resuelven casi al instante).
+const BATCH_SIZE = 25;
 const NONE = "__none__";
+const SECONDS_PER_ADDRESS = 1.5; // medido en pruebas reales (~1.24s/dirección); varía según carga de Nominatim
+
+const estimateDuration = (n: number): string => {
+  if (n <= 0) return "0 min";
+  const totalSeconds = n * SECONDS_PER_ADDRESS;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.ceil((totalSeconds % 3600) / 60);
+  return hours === 0 ? `~${minutes} min` : `~${hours} h ${minutes} min`;
+};
 
 // Heurística de auto-detección de columnas por nombre de header.
 const guessColumn = (headers: string[], patterns: RegExp[]): string | null => {
@@ -286,9 +298,18 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange }: Props) => {
               </Select>
             </div>
 
-            <div className="rounded-lg bg-primary/5 px-3 py-2 text-xs text-foreground">
-              <strong>{uniqueAddresses.length.toLocaleString()}</strong> direcciones únicas de{" "}
-              <strong>{rows.length.toLocaleString()}</strong> filas totales se enviarán a geocodificar.
+            <div className="space-y-1 rounded-lg bg-primary/5 px-3 py-2 text-xs text-foreground">
+              <div>
+                <strong>{uniqueAddresses.length.toLocaleString()}</strong> direcciones únicas de{" "}
+                <strong>{rows.length.toLocaleString()}</strong> filas totales se enviarán a geocodificar.
+              </div>
+              <div className="text-muted-foreground">
+                Tiempo estimado: <strong className="text-foreground">{estimateDuration(uniqueAddresses.length)}</strong>{" "}
+                aproximado (varía según la carga del servidor de OpenStreetMap, que es gratuito y no
+                requiere cuenta). Si el proceso es largo, mantén esta pestaña abierta y la
+                computadora sin suspenderse; si se interrumpe, puedes retomarlo subiendo el mismo
+                archivo de nuevo.
+              </div>
             </div>
 
             <DialogFooter>
@@ -310,7 +331,9 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange }: Props) => {
             </div>
             <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} className="h-2" />
             <p className="text-center text-[11px] text-muted-foreground">
-              Puede tardar varios minutos según la cantidad de direcciones. No cierres esta ventana.
+              Estimado restante: {estimateDuration(progress.total - progress.done)}. Si cierras esta
+              ventana no pasa nada: lo ya geocodificado queda guardado, y puedes retomarlo subiendo el
+              mismo archivo de nuevo — no se vuelve a consultar lo que ya se resolvió.
             </p>
           </div>
         )}
