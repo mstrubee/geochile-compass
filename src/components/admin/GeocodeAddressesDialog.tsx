@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { MapPin, Upload, Download, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -20,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { parseCsvRows, toCsv } from "@/utils/csv";
-import { geocodeBatch, normalizeAddressKey, type GeocodeResult } from "@/services/geocodeService";
+import { checkCacheStatus, geocodeBatch, normalizeAddressKey, type GeocodeResult } from "@/services/geocodeService";
 
 type Phase = "upload" | "mapping" | "processing" | "done";
 
@@ -72,6 +73,9 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange }: Props) => {
   const [colCalle, setColCalle] = useState("");
   const [colNumero, setColNumero] = useState(NONE);
   const [colComuna, setColComuna] = useState("");
+  const [retryNotFound, setRetryNotFound] = useState(false);
+  const [checkingCache, setCheckingCache] = useState(false);
+  const [cachePreview, setCachePreview] = useState<{ cachedFound: number; cachedNotFound: number; toGeocode: number } | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [summary, setSummary] = useState<{
     totalRows: number;
@@ -93,6 +97,8 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange }: Props) => {
     setColCalle("");
     setColNumero(NONE);
     setColComuna("");
+    setRetryNotFound(false);
+    setCachePreview(null);
     setProgress({ done: 0, total: 0 });
     setSummary(null);
     setOutputRows([]);
@@ -145,6 +151,29 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange }: Props) => {
     return [...map.values()];
   }, [phase, headers, rows, colCalle, colNumero, colComuna]);
 
+  // Vista previa: cuántas de estas direcciones ya están geocodificadas de
+  // una corrida anterior (clave para corridas periódicas, donde la mayoría
+  // de las direcciones se repiten mes a mes) vs. cuántas son nuevas.
+  useEffect(() => {
+    if (phase !== "mapping" || uniqueAddresses.length === 0) {
+      setCachePreview(null);
+      return;
+    }
+    let cancelled = false;
+    setCheckingCache(true);
+    checkCacheStatus(uniqueAddresses.map((a) => a.key))
+      .then(({ cachedKeys, cachedFoundKeys }) => {
+        if (cancelled) return;
+        const cachedFound = cachedFoundKeys.size;
+        const cachedNotFound = cachedKeys.size - cachedFoundKeys.size;
+        const toGeocode = uniqueAddresses.length - cachedKeys.size + (retryNotFound ? cachedNotFound : 0);
+        setCachePreview({ cachedFound, cachedNotFound, toGeocode });
+      })
+      .catch(() => { if (!cancelled) setCachePreview(null); })
+      .finally(() => { if (!cancelled) setCheckingCache(false); });
+    return () => { cancelled = true; };
+  }, [phase, uniqueAddresses, retryNotFound]);
+
   const runGeocode = async () => {
     if (!colCalle || !colComuna) {
       toast.error("Selecciona al menos las columnas de calle y comuna");
@@ -162,7 +191,7 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange }: Props) => {
       if (cancelRef.current) return;
       const chunk = uniqueAddresses.slice(i, i + BATCH_SIZE);
       try {
-        const { results, from_cache } = await geocodeBatch(chunk);
+        const { results, from_cache } = await geocodeBatch(chunk, retryNotFound);
         for (const r of results) resultMap.set(r.key, r);
         fromCache += from_cache;
       } catch (e) {
@@ -298,23 +327,51 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange }: Props) => {
               </Select>
             </div>
 
-            <div className="space-y-1 rounded-lg bg-primary/5 px-3 py-2 text-xs text-foreground">
+            <div className="space-y-1.5 rounded-lg bg-primary/5 px-3 py-2 text-xs text-foreground">
               <div>
                 <strong>{uniqueAddresses.length.toLocaleString()}</strong> direcciones únicas de{" "}
-                <strong>{rows.length.toLocaleString()}</strong> filas totales se enviarán a geocodificar.
+                <strong>{rows.length.toLocaleString()}</strong> filas totales.
               </div>
-              <div className="text-muted-foreground">
-                Tiempo estimado: <strong className="text-foreground">{estimateDuration(uniqueAddresses.length)}</strong>{" "}
-                aproximado (varía según la carga del servidor de OpenStreetMap, que es gratuito y no
-                requiere cuenta). Si el proceso es largo, mantén esta pestaña abierta y la
-                computadora sin suspenderse; si se interrumpe, puedes retomarlo subiendo el mismo
-                archivo de nuevo.
-              </div>
+
+              {checkingCache && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Revisando cuáles ya están geocodificadas…
+                </div>
+              )}
+
+              {!checkingCache && cachePreview && (
+                <>
+                  <div className="text-muted-foreground">
+                    <strong className="text-emerald-600 dark:text-emerald-400">
+                      {(cachePreview.cachedFound + (retryNotFound ? 0 : cachePreview.cachedNotFound)).toLocaleString()}
+                    </strong>{" "}
+                    ya están geocodificadas de una corrida anterior (no se vuelven a consultar) ·{" "}
+                    <strong className="text-foreground">{cachePreview.toGeocode.toLocaleString()}</strong> son
+                    nuevas y se enviarán a OpenStreetMap.
+                  </div>
+                  <div className="text-muted-foreground">
+                    Tiempo estimado: <strong className="text-foreground">{estimateDuration(cachePreview.toGeocode)}</strong>{" "}
+                    aproximado. Si el proceso es largo, mantén esta pestaña abierta y la computadora
+                    sin suspenderse; si se interrumpe, puedes retomarlo subiendo el mismo archivo de
+                    nuevo.
+                  </div>
+                </>
+              )}
             </div>
+
+            {cachePreview && cachePreview.cachedNotFound > 0 && (
+              <label className="flex items-start gap-2 rounded-lg border border-border/60 p-2.5 text-xs">
+                <Checkbox checked={retryNotFound} onCheckedChange={(v) => setRetryNotFound(!!v)} className="mt-0.5" />
+                <span>
+                  Reintentar las <strong>{cachePreview.cachedNotFound.toLocaleString()}</strong> direcciones que
+                  en una corrida anterior no se encontraron (útil si corregiste errores de tipeo en el archivo).
+                </span>
+              </label>
+            )}
 
             <DialogFooter>
               <Button variant="outline" onClick={close}>Cancelar</Button>
-              <Button onClick={runGeocode}>
+              <Button onClick={runGeocode} disabled={checkingCache}>
                 <MapPin className="h-4 w-4" /> Geocodificar
               </Button>
             </DialogFooter>
