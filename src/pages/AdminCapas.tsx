@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound } from "lucide-react";
+import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound, MapPin } from "lucide-react";
 import { GeminiKeysAdminSection } from "@/components/admin/GeminiKeysAdminSection";
 import { SecretsAdminSection } from "@/components/admin/SecretsAdminSection";
 import { StorageAdminSection } from "@/components/admin/StorageAdminSection";
@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ConvertToGeoJsonDialog } from "@/components/admin/ConvertToGeoJsonDialog";
+import { GeocodeAddressesDialog } from "@/components/admin/GeocodeAddressesDialog";
 import { ConfirmDeleteDialog } from "@/components/admin/ConfirmDeleteDialog";
 import {
   Select,
@@ -55,6 +56,7 @@ const AdminCapas = () => {
   const { groups, layers, refresh } = useTerritorialLayers();
   const [files, setFiles] = useState<TerritorialSourceFile[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [geocodeOpen, setGeocodeOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [convertTarget, setConvertTarget] = useState<TerritorialSourceFile | null>(null);
   const [deleteLayerTarget, setDeleteLayerTarget] = useState<{ id: string; name: string } | null>(null);
@@ -283,6 +285,9 @@ const AdminCapas = () => {
           >
             <FileDown className="h-4 w-4" /> Convertir a GeoJSON
           </Button>
+          <Button variant="outline" onClick={() => setGeocodeOpen(true)}>
+            <MapPin className="h-4 w-4" /> Georreferenciar direcciones
+          </Button>
         </div>
 
         <div className="space-y-2.5 rounded-lg border border-border/40 bg-muted/30 p-3.5 text-xs">
@@ -309,6 +314,16 @@ const AdminCapas = () => {
             </p>
           </div>
 
+          <div className="flex gap-2.5">
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <p className="text-muted-foreground">
+              <strong className="text-foreground">Georreferenciar direcciones</strong> — si tu CSV
+              tiene direcciones de texto (calle, número, comuna) mas no coordenadas, esta herramienta
+              las convierte a <span className="font-mono">lat</span>/<span className="font-mono">lng</span>{" "}
+              y descarga un CSV listo para <strong className="text-foreground">Cargar capa</strong>.
+            </p>
+          </div>
+
           <div className="border-t border-border/40 pt-2.5 text-[11px] text-muted-foreground">
             <strong className="text-foreground">CSV:</strong> requiere columnas de coordenadas{" "}
             <span className="font-mono">lat</span> y <span className="font-mono">lng</span> (también
@@ -320,6 +335,8 @@ const AdminCapas = () => {
             datos del punto.
           </div>
         </div>
+
+        <GeocodeAddressesDialog open={geocodeOpen} onOpenChange={setGeocodeOpen} />
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground">Grupos</h2>
           <div className="flex gap-2">

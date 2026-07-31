@@ -6,6 +6,7 @@
  */
 
 import type { FeatureCollection, Feature, Point, Geometry } from "geojson";
+import { parseCsvRows } from "./csv";
 
 export type GeoFileFormat = "csv" | "geojson" | "kml";
 
@@ -23,37 +24,11 @@ export function detectGeoFormat(filename: string): GeoFileFormat | null {
 const LAT_ALIASES = ["lat", "latitude", "latitud", "y", "latitude_deg"];
 const LNG_ALIASES = ["lng", "lon", "long", "longitude", "longitud", "x", "longitude_deg"];
 
-/** Parsea una línea CSV respetando campos entre comillas. */
-function parseCsvLine(line: string, sep: string): string[] {
-  const result: string[] = [];
-  let cur = "";
-  let inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') {
-      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
-      else inQ = !inQ;
-    } else if (c === sep && !inQ) {
-      result.push(cur.trim());
-      cur = "";
-    } else {
-      cur += c;
-    }
-  }
-  result.push(cur.trim());
-  return result;
-}
-
 export function csvToGeoJSON(text: string): FeatureCollection {
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(Boolean);
-  if (lines.length < 2) throw new Error("CSV vacío o sin datos");
+  const { headers: rawHeaders, rows } = parseCsvRows(text);
+  if (rows.length === 0) throw new Error("CSV vacío o sin datos");
 
-  // Detectar separador: ; vs ,
-  const sep = (lines[0].split(";").length > lines[0].split(",").length) ? ";" : ",";
-
-  const rawHeaders = parseCsvLine(lines[0], sep);
-  const headers = rawHeaders.map((h) => h.toLowerCase().replace(/^["']|["']$/g, "").trim());
-
+  const headers = rawHeaders.map((h) => h.toLowerCase().trim());
   const latIdx = headers.findIndex((h) => LAT_ALIASES.includes(h));
   const lngIdx = headers.findIndex((h) => LNG_ALIASES.includes(h));
 
@@ -69,8 +44,7 @@ export function csvToGeoJSON(text: string): FeatureCollection {
   const features: Feature<Point>[] = [];
   let skipped = 0;
 
-  for (let i = 1; i < lines.length; i++) {
-    const row = parseCsvLine(lines[i], sep);
+  for (const row of rows) {
     const lat = parseFloat(row[latIdx] ?? "");
     const lng = parseFloat(row[lngIdx] ?? "");
     if (isNaN(lat) || isNaN(lng)) { skipped++; continue; }
@@ -78,7 +52,7 @@ export function csvToGeoJSON(text: string): FeatureCollection {
     const props: Record<string, string> = {};
     headers.forEach((h, idx) => {
       if (idx !== latIdx && idx !== lngIdx && h) {
-        props[h] = (row[idx] ?? "").replace(/^["']|["']$/g, "");
+        props[h] = row[idx] ?? "";
       }
     });
 
