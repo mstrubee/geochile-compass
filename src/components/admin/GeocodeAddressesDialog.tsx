@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { MapPin, Upload, Download, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import {
@@ -22,12 +22,18 @@ import {
 } from "@/components/ui/select";
 import { parseCsvRows, toCsv } from "@/utils/csv";
 import { checkCacheStatus, geocodeBatch, normalizeAddressKey, type GeocodeResult } from "@/services/geocodeService";
+import { supabase } from "@/integrations/supabase/client";
+import type { TerritorialSourceFile } from "@/types/territorial";
 
-type Phase = "upload" | "mapping" | "processing" | "done";
+type Phase = "upload" | "loading-preset" | "mapping" | "processing" | "done";
 
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  /** Si se pasa, el diálogo carga este archivo del Historial en vez de pedir uno local. */
+  presetFile?: TerritorialSourceFile | null;
+  /** Se llama tras subir un archivo local al Historial, para refrescar la lista. */
+  onSaved?: () => void;
 }
 
 // Nominatim (OpenStreetMap) limita a 1 solicitud/seg y prohíbe concurrencia.
@@ -65,7 +71,7 @@ const downloadCsv = (filename: string, headers: string[], rows: Array<Record<str
   URL.revokeObjectURL(url);
 };
 
-export const GeocodeAddressesDialog = ({ open, onOpenChange }: Props) => {
+export const GeocodeAddressesDialog = ({ open, onOpenChange, presetFile, onSaved }: Props) => {
   const [phase, setPhase] = useState<Phase>("upload");
   const [fileName, setFileName] = useState("");
   const [headers, setHeaders] = useState<string[]>([]);
@@ -112,27 +118,78 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange }: Props) => {
     onOpenChange(false);
   };
 
+  const applyParsedCsv = (name: string, hs: string[], rs: string[][]) => {
+    if (!hs.length || !rs.length) {
+      toast.error("El CSV está vacío o no se pudo leer");
+      return;
+    }
+    setFileName(name);
+    setHeaders(hs);
+    setRows(rs);
+    const lower = hs.map((h) => h.toLowerCase());
+    const idx = (h: string | null) => (h ? hs[lower.indexOf(h.toLowerCase())] : "");
+    setColCalle(idx(guessColumn(lower, [/calle/, /direcci/, /street/, /address/])) || hs[0]);
+    setColNumero(idx(guessColumn(lower, [/numeraci/, /n[uú]mero/, /\bnum\b/, /number/])) || NONE);
+    setColComuna(idx(guessColumn(lower, [/comuna/, /ciudad/, /city/, /commune/])) || hs[hs.length - 1]);
+    setPhase("mapping");
+  };
+
+  /** Sube el archivo local al Historial (territorial-sources) en segundo plano, sin bloquear la UI. */
+  const saveToHistory = async (file: File) => {
+    try {
+      const path = `${Date.now()}-${file.name.replace(/[^\w.-]+/g, "_")}`;
+      const up = await supabase.storage.from("territorial-sources").upload(path, file, {
+        contentType: "text/csv",
+        upsert: false,
+      });
+      if (up.error) throw up.error;
+      const { error: insErr } = await supabase.from("territorial_source_files").insert({
+        original_filename: file.name,
+        size_bytes: file.size,
+        storage_path: path,
+        status: "pending",
+        file_type: "csv",
+      } as never);
+      if (insErr) throw insErr;
+      toast.success("Guardado en Historial de archivos");
+      onSaved?.();
+    } catch (e) {
+      toast.error(`No se pudo guardar en el Historial: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   const handleFile = async (file: File) => {
     try {
       const text = await file.text();
       const { headers: hs, rows: rs } = parseCsvRows(text);
-      if (!hs.length || !rs.length) {
-        toast.error("El CSV está vacío o no se pudo leer");
-        return;
-      }
-      setFileName(file.name);
-      setHeaders(hs);
-      setRows(rs);
-      const lower = hs.map((h) => h.toLowerCase());
-      const idx = (h: string | null) => (h ? hs[lower.indexOf(h.toLowerCase())] : "");
-      setColCalle(idx(guessColumn(lower, [/calle/, /direcci/, /street/, /address/])) || hs[0]);
-      setColNumero(idx(guessColumn(lower, [/numeraci/, /n[uú]mero/, /\bnum\b/, /number/])) || NONE);
-      setColComuna(idx(guessColumn(lower, [/comuna/, /ciudad/, /city/, /commune/])) || hs[hs.length - 1]);
-      setPhase("mapping");
+      applyParsedCsv(file.name, hs, rs);
+      void saveToHistory(file);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     }
   };
+
+  // Si se abrió desde el Historial (icono en una fila), descargar y parsear
+  // ese archivo directamente — no hace falta volver a subirlo. useLayoutEffect
+  // (no useEffect) para evitar que se vea un parpadeo de la pantalla "subir
+  // archivo" antes de pasar a "cargando".
+  useLayoutEffect(() => {
+    if (!open || !presetFile) return;
+    setPhase("loading-preset");
+    (async () => {
+      try {
+        const dl = await supabase.storage.from("territorial-sources").download(presetFile.storage_path);
+        if (dl.error || !dl.data) throw dl.error ?? new Error("No se pudo descargar el archivo");
+        const text = await dl.data.text();
+        const { headers: hs, rows: rs } = parseCsvRows(text);
+        applyParsedCsv(presetFile.original_filename, hs, rs);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+        onOpenChange(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, presetFile]);
 
   const uniqueAddresses = useMemo(() => {
     if (phase !== "mapping" && phase !== "processing") return [];
@@ -258,6 +315,13 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange }: Props) => {
           </div>
         </DialogHeader>
 
+        {phase === "loading-preset" && (
+          <div className="flex flex-col items-center gap-3 py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="text-sm text-muted-foreground">Cargando archivo del Historial…</div>
+          </div>
+        )}
+
         {phase === "upload" && (
           <div className="space-y-4">
             <label
@@ -282,6 +346,10 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange }: Props) => {
                 }}
               />
             </label>
+            <p className="text-center text-[11px] text-muted-foreground">
+              Se guarda automáticamente en el Historial de archivos, así puedes volver a
+              geocodificarlo (o reintentar lo que faltó) sin subirlo de nuevo.
+            </p>
             <DialogFooter>
               <Button variant="outline" onClick={close}>Cancelar</Button>
             </DialogFooter>

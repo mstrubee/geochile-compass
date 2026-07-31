@@ -57,6 +57,7 @@ const AdminCapas = () => {
   const [files, setFiles] = useState<TerritorialSourceFile[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [geocodeOpen, setGeocodeOpen] = useState(false);
+  const [geocodeTarget, setGeocodeTarget] = useState<TerritorialSourceFile | null>(null);
   const [newGroupName, setNewGroupName] = useState("");
   const [convertTarget, setConvertTarget] = useState<TerritorialSourceFile | null>(null);
   const [deleteLayerTarget, setDeleteLayerTarget] = useState<{ id: string; name: string } | null>(null);
@@ -336,7 +337,15 @@ const AdminCapas = () => {
           </div>
         </div>
 
-        <GeocodeAddressesDialog open={geocodeOpen} onOpenChange={setGeocodeOpen} />
+        <GeocodeAddressesDialog
+          open={geocodeOpen || !!geocodeTarget}
+          onOpenChange={(v) => {
+            if (!v) { setGeocodeOpen(false); setGeocodeTarget(null); }
+            else setGeocodeOpen(true);
+          }}
+          presetFile={geocodeTarget}
+          onSaved={() => void refreshFiles()}
+        />
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground">Grupos</h2>
           <div className="flex gap-2">
@@ -568,6 +577,16 @@ const AdminCapas = () => {
                     onClick={() => setConvertTarget(f)}
                   >
                     <FileJson className="h-4 w-4" />
+                  </Button>
+                )}
+                {f.file_type === "csv" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="Georreferenciar direcciones de este CSV"
+                    onClick={() => setGeocodeTarget(f)}
+                  >
+                    <MapPin className="h-4 w-4" />
                   </Button>
                 )}
                 <Button
