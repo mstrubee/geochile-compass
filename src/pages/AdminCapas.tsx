@@ -38,6 +38,16 @@ import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import type { DedupStrategy, TerritorialSourceFile } from "@/types/territorial";
 import { injectParqueFeatures } from "@/scripts/inject-parque-features";
 
+/**
+ * Nombre de capa para una fila de CSV. Replica layerNameFrom() del edge
+ * function (_shared/territorial-parser.ts) para que las capas del preview
+ * coincidan exactamente con las que produce la ingesta en el servidor.
+ */
+const csvLayerName = (props: Record<string, unknown>): string => {
+  const raw = props.layer ?? props.layer_name ?? props.folder ?? props.category ?? props.group;
+  return raw != null && String(raw).trim() ? String(raw).trim() : "Puntos";
+};
+
 const AdminCapas = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -222,54 +232,94 @@ const AdminCapas = () => {
           id="capas"
           title="Capas territoriales"
           icon={<MapIcon className="h-4 w-4" />}
-          description="Cargá y administrá capas geográficas agrupadas."
+          description="Carga y administra capas geográficas agrupadas."
         >
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="file"
-            accept=".html,.htm,.kml"
+            accept=".html,.htm,.kml,.csv"
             id="html-to-geojson-input"
             className="hidden"
             onChange={async (e) => {
               const f = e.target.files?.[0];
               e.target.value = "";
               if (!f) return;
+              const isCsv = f.name.toLowerCase().endsWith(".csv");
               try {
                 const text = await f.text();
-                const fc = htmlToGeoJson(text);
+                const fc = isCsv ? csvToGeoJSON(text) : htmlToGeoJson(text);
                 if (!fc.features.length) {
-                  toast.error("Formato HTML no reconocido. Probá exportarlo como GeoJSON o KML desde la herramienta de origen.");
+                  toast.error(
+                    isCsv
+                      ? "No se encontraron coordenadas válidas en el CSV. Revisa que tenga columnas lat y lng."
+                      : "Formato no reconocido. Prueba exportarlo como GeoJSON o KML desde la herramienta de origen.",
+                  );
                   return;
                 }
                 const byFolder = new Map<string, number>();
-                for (const f of fc.features) {
-                  const k = String((f.properties as Record<string, unknown>)?.folder ?? "default");
+                for (const feat of fc.features) {
+                  const props = (feat.properties ?? {}) as Record<string, unknown>;
+                  const k = isCsv
+                    ? csvLayerName(props)
+                    : String(props.folder ?? "default");
                   byFolder.set(k, (byFolder.get(k) ?? 0) + 1);
                 }
                 const summary = [...byFolder.entries()]
                   .map(([k, v]) => `${k}: ${v}`).join(" · ");
                 const out = f.name.replace(/\.[^.]+$/, "") + ".geojson";
                 downloadGeoJson(fc, out);
-                toast.success(`${fc.features.length} features (${summary}) → ${out}`);
+                toast.success(`${fc.features.length} puntos (${summary}) → ${out}`);
               } catch (err) {
                 toast.error(err instanceof Error ? err.message : String(err));
               }
             }}
           />
+          <Button onClick={() => setUploadOpen(true)}>
+            <Upload className="h-4 w-4" /> Cargar capa
+          </Button>
           <Button
             variant="outline"
             onClick={() => document.getElementById("html-to-geojson-input")?.click()}
           >
-            <FileDown className="h-4 w-4" /> HTML → GeoJSON
-          </Button>
-          <Button onClick={() => setUploadOpen(true)}>
-            <Upload className="h-4 w-4" /> Cargar capa
+            <FileDown className="h-4 w-4" /> Convertir a GeoJSON
           </Button>
         </div>
-        <p className="rounded-md border border-border/40 bg-muted/30 p-3 text-xs text-muted-foreground">
-          ¿Tu HTML se subió pero no muestra capas ni puntos? Usá <strong>HTML → GeoJSON</strong> para
-          convertirlo en el navegador y luego cargá el .geojson resultante.
-        </p>
+
+        <div className="space-y-2.5 rounded-lg border border-border/40 bg-muted/30 p-3.5 text-xs">
+          <div className="flex gap-2.5">
+            <Upload className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+            <p className="text-muted-foreground">
+              <strong className="text-foreground">Cargar capa</strong> — sube el archivo, detecta las
+              capas que contiene y las importa al mapa. Acepta{" "}
+              <span className="font-mono">.geojson</span> · <span className="font-mono">.kml</span> ·{" "}
+              <span className="font-mono">.kmz</span> · <span className="font-mono">.html</span> ·{" "}
+              <span className="font-mono">.csv</span>
+            </p>
+          </div>
+
+          <div className="flex gap-2.5">
+            <FileDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <p className="text-muted-foreground">
+              <strong className="text-foreground">Convertir a GeoJSON</strong> — transforma un{" "}
+              <span className="font-mono">.html</span>, <span className="font-mono">.kml</span> o{" "}
+              <span className="font-mono">.csv</span> y descarga el{" "}
+              <span className="font-mono">.geojson</span> a tu equipo,{" "}
+              <em>sin</em> importarlo. Útil para revisar los datos antes de cargarlos, o si un HTML
+              se subió pero no muestra capas ni puntos.
+            </p>
+          </div>
+
+          <div className="border-t border-border/40 pt-2.5 text-[11px] text-muted-foreground">
+            <strong className="text-foreground">CSV:</strong> requiere columnas de coordenadas{" "}
+            <span className="font-mono">lat</span> y <span className="font-mono">lng</span> (también
+            sirven <span className="font-mono">latitud</span>/<span className="font-mono">longitud</span>,{" "}
+            <span className="font-mono">x</span>/<span className="font-mono">y</span>). Si incluyes una
+            columna <span className="font-mono">category</span>, <span className="font-mono">folder</span>,{" "}
+            <span className="font-mono">group</span> o <span className="font-mono">layer</span>, cada
+            valor distinto se convierte en una capa separada. El resto de las columnas se guardan como
+            datos del punto.
+          </div>
+        </div>
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground">Grupos</h2>
           <div className="flex gap-2">
@@ -464,7 +514,7 @@ const AdminCapas = () => {
                   disabled={!f.group_id}
                   onClick={async () => {
                     if (!f.group_id) {
-                      toast.error("Asigná un grupo antes de reprocesar");
+                      toast.error("Asigna un grupo antes de reprocesar");
                       return;
                     }
                     const t = toast.loading("Reprocesando…");
@@ -529,7 +579,7 @@ const AdminCapas = () => {
           id="gemini-keys"
           title="Gemini API Keys"
           icon={<KeyRound className="h-4 w-4" />}
-          description="Administrá las API Keys de Gemini con fallback automático y enlaces para obtener nuevas."
+          description="Administra las API Keys de Gemini con fallback automático y enlaces para obtener nuevas."
         >
           <GeminiKeysAdminSection />
         </AdminCollapsible>
@@ -712,13 +762,6 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
     return "html";
   };
 
-  // Agrupa por las mismas columnas que el edge function (layerNameFrom):
-  // category/folder/group/layer/layer_name, case-insensitive.
-  const csvLayerName = (props: Record<string, unknown>): string => {
-    const raw = props.layer ?? props.layer_name ?? props.folder ?? props.category ?? props.group;
-    return raw != null && String(raw).trim() ? String(raw).trim() : "Puntos";
-  };
-
   /** Sube el archivo a Storage usando XHR para reportar progreso. Sin límite de tamaño impuesto por el cliente. */
   const uploadWithProgress = (path: string, mime: string): Promise<void> =>
     new Promise(async (resolve, reject) => {
@@ -891,7 +934,7 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
             <div>
               <DialogTitle>Cargar capa territorial</DialogTitle>
               <DialogDescription>
-                Subí un archivo, revisá las capas detectadas y procesalas en el grupo destino.
+                Sube un archivo, revisa las capas detectadas e impórtalas al grupo destino.
               </DialogDescription>
             </div>
           </div>
@@ -910,7 +953,7 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
               <Label className="text-xs">Grupo destino</Label>
               <Select value={groupId} onValueChange={setGroupId}>
                 <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Elegí un grupo" />
+                  <SelectValue placeholder="Elige un grupo" />
                 </SelectTrigger>
                 <SelectContent>
                   {groups.map((g) => (
@@ -931,12 +974,12 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
                   <div className="space-y-0.5">
                     <div className="text-sm font-medium">{file.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB · click para cambiar
+                      {(file.size / 1024 / 1024).toFixed(2)} MB · clic para cambiar
                     </div>
                   </div>
                 ) : (
                   <>
-                    <div className="text-sm font-medium">Hacé click para seleccionar un archivo</div>
+                    <div className="text-sm font-medium">Haz clic para seleccionar un archivo</div>
                     <div className="text-xs text-muted-foreground">GeoJSON · HTML · KML · KMZ · CSV (sin límite de tamaño)</div>
                     <div className="text-[11px] text-text-muted">
                       CSV: columnas <span className="font-mono">lat</span>/<span className="font-mono">lng</span> (o variantes) requeridas; <span className="font-mono">category</span>/<span className="font-mono">folder</span>/<span className="font-mono">group</span> opcional para agrupar en capas
@@ -986,7 +1029,7 @@ const UploadDialog = ({ open, onOpenChange, groups, onDone }: UploadDialogProps)
             <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
               <LayersIcon className="h-4 w-4 text-primary" />
               <span>
-                Se detectaron <strong>{scanned.length}</strong> capas. Marcá las que quieras excluir.
+                Se detectaron <strong>{scanned.length}</strong> capas. Marca las que quieras excluir.
               </span>
             </div>
 

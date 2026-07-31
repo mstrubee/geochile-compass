@@ -163,7 +163,7 @@ export const ConvertToGeoJsonDialog = ({ open, onOpenChange, file, onDone }: Pro
   const handleConflictContinue = () => {
     const finalName = mode === "replace" ? targetName : (newName.endsWith(".geojson") ? newName : `${newName}.geojson`);
     if (mode === "new" && !newName.trim()) {
-      toast.error("Ingresá un nombre para el nuevo archivo");
+      toast.error("Ingresa un nombre para el nuevo archivo");
       return;
     }
     void run(mode, finalName);
@@ -222,7 +222,7 @@ export const ConvertToGeoJsonDialog = ({ open, onOpenChange, file, onDone }: Pro
               <div className="text-sm">
                 <div className="font-medium">Ya existe un archivo con ese nombre</div>
                 <div className="mt-0.5 text-xs text-muted-foreground">
-                  Elegí cómo querés guardarlo en el historial.
+                  Elige cómo quieres guardarlo en el historial.
                 </div>
               </div>
             </div>
