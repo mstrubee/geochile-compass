@@ -56,5 +56,5 @@ export function toCsv(headers: string[], rows: Array<Record<string, unknown>>): 
   };
   const lines = [headers.map(esc).join(",")];
   for (const row of rows) lines.push(headers.map((h) => esc(row[h])).join(","));
-  return lines.join("\n");
+  return lines.join("\n") + "\n"; // salto de línea final (convención POSIX)
 }

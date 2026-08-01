@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound, MapPin } from "lucide-react";
+import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound, MapPin, Download } from "lucide-react";
 import { GeminiKeysAdminSection } from "@/components/admin/GeminiKeysAdminSection";
 import { SecretsAdminSection } from "@/components/admin/SecretsAdminSection";
 import { StorageAdminSection } from "@/components/admin/StorageAdminSection";
 import { htmlToGeoJson, downloadGeoJson } from "@/utils/htmlToGeoJson";
 import { parseFile, splitByFolderPath } from "@/utils/fileParsers";
 import { csvToGeoJSON } from "@/utils/parseGeoFile";
+import { toCsv } from "@/utils/csv";
+import { exportGroupFeaturesCsv } from "@/services/territorialLayerAdmin";
 import { UsersAdminSection } from "@/components/admin/UsersAdminSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +68,7 @@ const AdminCapas = () => {
   const [bulkDeleteGroup, setBulkDeleteGroup] = useState<{ id: string; name: string; ids: string[] } | null>(null);
   const [renameGroupTarget, setRenameGroupTarget] = useState<{ id: string; name: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [exportingGroupId, setExportingGroupId] = useState<string | null>(null);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingLayerName, setEditingLayerName] = useState("");
 
@@ -130,6 +133,41 @@ const AdminCapas = () => {
     toast.success("Grupo renombrado");
     setRenameGroupTarget(null);
     void refresh();
+  };
+
+  const handleExportGroup = async (groupId: string, groupName: string) => {
+    const groupLayers = layers.filter((l) => l.group_id === groupId);
+    if (!groupLayers.length) {
+      toast.error("El grupo no tiene capas para exportar");
+      return;
+    }
+    setExportingGroupId(groupId);
+    try {
+      const { headers, rows } = await exportGroupFeaturesCsv(
+        groupLayers.map((l) => ({ id: l.id, name: l.name })),
+      );
+      if (!rows.length) {
+        toast.error("No hay puntos para exportar en este grupo");
+        return;
+      }
+      const csv = toCsv(headers, rows);
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const safeName = groupName.toLowerCase().replace(/[^\w-]+/g, "_");
+      const a = Object.assign(document.createElement("a"), {
+        href: url,
+        download: `${safeName}-consolidado.csv`,
+      });
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`${rows.length.toLocaleString()} puntos exportados`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExportingGroupId(null);
+    }
   };
 
   const refreshFiles = useCallback(async () => {
@@ -392,6 +430,19 @@ const AdminCapas = () => {
                           <Trash2 className="h-4 w-4" /> Eliminar ({selected.size})
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Descargar CSV consolidado de todos los puntos de este grupo"
+                        disabled={exportingGroupId === g.id || groupLayers.length === 0}
+                        onClick={() => void handleExportGroup(g.id, g.name)}
+                      >
+                        {exportingGroupId === g.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"

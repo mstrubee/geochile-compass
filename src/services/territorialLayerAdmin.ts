@@ -227,3 +227,75 @@ export const deleteGroup = async (groupId: string): Promise<void> => {
     .eq("id", groupId);
   if (error) throw new Error(`deleteGroup: ${error.message}`);
 };
+
+// ── Exportación CSV consolidada ────────────────────────────────────────────
+
+interface ExportRow {
+  layer_name: string;
+  name: string | null;
+  lat: number | null;
+  lng: number | null;
+  properties: Record<string, unknown> | null;
+}
+
+const EXPORT_PAGE = 1000;
+
+/** Trae TODAS las features de una capa, paginando (sin límite de 1000 de PostgREST). */
+const fetchAllFeaturesForLayer = async (
+  layerId: string,
+  layerName: string,
+): Promise<ExportRow[]> => {
+  const all: ExportRow[] = [];
+  let from = 0;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await supabase
+      .from("territorial_features")
+      .select("name,lat,lng,properties")
+      .eq("layer_id", layerId)
+      .range(from, from + EXPORT_PAGE - 1);
+    if (error) throw new Error(`exportGroupFeaturesCsv (${layerName}): ${error.message}`);
+    const page = (data ?? []) as Array<{ name: string | null; lat: number | null; lng: number | null; properties: Record<string, unknown> | null }>;
+    all.push(...page.map((p) => ({ ...p, layer_name: layerName })));
+    if (page.length < EXPORT_PAGE) break;
+    from += EXPORT_PAGE;
+  }
+  return all;
+};
+
+/**
+ * Exporta TODAS las features de TODAS las capas de un grupo en un solo CSV
+ * (columnas: layer_name, name, lat, lng + una columna por cada propiedad
+ * distinta que aparezca en cualquier feature). Pagina para no toparse con
+ * el límite de 1000 filas por request de PostgREST.
+ */
+export const exportGroupFeaturesCsv = async (
+  layers: Array<{ id: string; name: string }>,
+): Promise<{ headers: string[]; rows: Array<Record<string, unknown>> }> => {
+  const perLayer = await Promise.all(
+    layers.map((l) => fetchAllFeaturesForLayer(l.id, l.name)),
+  );
+  const flat = perLayer.flat();
+
+  // Unión de todas las claves de properties, para que el CSV tenga columnas
+  // consistentes aunque las capas vengan de fuentes distintas.
+  const propKeys = new Set<string>();
+  for (const r of flat) {
+    for (const k of Object.keys(r.properties ?? {})) propKeys.add(k);
+  }
+  const propHeaders = [...propKeys].sort();
+  const headers = ["layer_name", "name", "lat", "lng", ...propHeaders];
+
+  const rows = flat.map((r) => {
+    const row: Record<string, unknown> = {
+      layer_name: r.layer_name,
+      name: r.name ?? "",
+      lat: r.lat ?? "",
+      lng: r.lng ?? "",
+    };
+    for (const k of propHeaders) row[k] = (r.properties ?? {})[k] ?? "";
+    return row;
+  });
+
+  return { headers, rows };
+};
