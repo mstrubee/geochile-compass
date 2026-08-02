@@ -40,12 +40,15 @@ interface Props {
 // El edge function normaliza cada dirección (../../../supabase/functions/
 // _shared/address-normalizer) y prueba, en orden, hasta 8 candidatos
 // estructurados (original, normalizada, variantes, sinónimos, sin tildes,
-// sin número) + 1 búsqueda libre final antes de darla por no encontrada.
-// BATCH_SIZE debe coincidir con MAX_BATCH del edge function (supabase/
-// functions/geocode-addresses/index.ts) o la llamada falla con 400.
-const BATCH_SIZE = 4;
+// sin número) + 1 búsqueda libre. Si todo eso falla, como último recurso
+// consulta ../../../supabase/functions/_shared/address-resolver (alias +
+// fuzzy matching contra el callejero real de la comuna vía Overpass) antes
+// de darla por no encontrada. BATCH_SIZE debe coincidir con MAX_BATCH del
+// edge function (supabase/functions/geocode-addresses/index.ts) o la
+// llamada falla con 400.
+const BATCH_SIZE = 3;
 const NONE = "__none__";
-const SECONDS_PER_ADDRESS = 8; // estimado conservador (peor caso: ~9 intentos); varía según carga de Nominatim
+const SECONDS_PER_ADDRESS = 10; // estimado conservador (peor caso: ~10 intentos + Overpass en comunas nuevas); varía según carga de Nominatim/Overpass
 
 const estimateDuration = (n: number): string => {
   if (n <= 0) return "0 min";

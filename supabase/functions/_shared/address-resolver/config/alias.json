@@ -1,0 +1,10 @@
+{
+  "_comentario": "Correcciones conocidas de antemano, consultadas ANTES del fuzzy matching (más rápido y más confiable que comparar similitud cuando ya sabemos la respuesta). Clave = como puede venir escrito el dato fuente; valor = nombre oficial. Distinto de sinonimos.json del address-normalizer: ese corre siempre como variantes adicionales; este solo se consulta cuando address-normalizer + Nominatim ya fallaron con todos sus candidatos.",
+  "alias": {
+    "Alameda": "Avenida Libertador Bernardo O'Higgins",
+    "Gran Avenida": "Gran Avenida José Miguel Carrera",
+    "Baquedano": "General Manuel Baquedano",
+    "Stgo": "Santiago",
+    "Santiago Centro": "Santiago"
+  }
+}

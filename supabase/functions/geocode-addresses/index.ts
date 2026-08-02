@@ -20,9 +20,16 @@
 // calle correcta en la ciudad equivocada cuando el nombre es común (ver
 // memoria del proyecto: "Colón", "Santa Rita", etc. existen en decenas de
 // comunas). Ningún candidato amplía la búsqueda fuera de la comuna indicada.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+//
+// Si TODO lo anterior falla, como último recurso se consulta
+// ../_shared/address-resolver: alias conocidos + fuzzy matching (Levenshtein/
+// Jaro-Winkler/Trigram) contra el callejero real de la comuna (cacheado vía
+// Overpass API). No reemplaza nada de lo anterior, solo se prueba después.
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { addressNormalizer, type NormalizedCandidate } from "../_shared/address-normalizer/index.ts";
 import { validateGeocodeResult, type NominatimAddressDetails } from "../_shared/geocode-validation.ts";
+import { addressResolver } from "../_shared/address-resolver/index.ts";
+import type { ResolveResult } from "../_shared/address-resolver/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,10 +41,13 @@ const corsHeaders = {
 // realmente se prueba para mantener acotado el peor caso por dirección.
 const MAX_CANDIDATES_PER_ADDRESS = 8;
 
-// Peor caso: MAX_CANDIDATES_PER_ADDRESS + 1 (búsqueda libre final) por
-// dirección. Con lote de 4 y ~2-3s reales por solicitud, un lote puede
-// tardar hasta ~90s -- cómodo bajo el límite de ejecución de la función.
-const MAX_BATCH = 4;
+// Peor caso: MAX_CANDIDATES_PER_ADDRESS + 1 (búsqueda libre) + 1 (intento
+// final con la calle corregida por address-resolver) por dirección. Con
+// lote de 4 y ~2-3s reales por solicitud a Nominatim, un lote puede tardar
+// hasta ~100s -- cómodo bajo el límite de ejecución de la función. El
+// address-resolver puede sumar 1-2 llamadas más (Nominatim + Overpass) la
+// PRIMERA vez que se ve una comuna nueva; ya cacheada, no vuelve a llamarlas.
+const MAX_BATCH = 3;
 const DELAY_MS = 1100; // piso mínimo entre solicitudes (límite Nominatim: 1/seg)
 
 const USER_AGENT = "GeoPlanet-Geocoder/1.0 (contacto: matiasstrube@gplanet.cl)";
@@ -70,6 +80,15 @@ interface GeocodeLog {
   extra_information?: string | null;
   elapsed_ms?: number;
   error?: string;
+  /** Presente solo cuando address-normalizer + Nominatim fallaron y
+   * address-resolver encontró una corrección (alias o fuzzy matching). */
+  resolver?: {
+    original_calle: string;
+    resolved_calle: string;
+    algorithm: ResolveResult["method"];
+    score: number;
+    catalog_size: number;
+  };
 }
 
 interface CacheRow {
@@ -141,6 +160,7 @@ interface GeocodeOutcome {
   hit: NominatimHit | null;
   method: string | null;
   usedAddress: string | null;
+  resolver?: ResolveResult;
 }
 
 /**
@@ -164,6 +184,7 @@ const geocodeCandidate = async (
 };
 
 const geocodeAddress = async (
+  admin: SupabaseClient,
   calle: string,
   numero: string,
   comuna: string,
@@ -176,44 +197,41 @@ const geocodeAddress = async (
 }> => {
   const normalized = addressNormalizer.normalize({ calle, numero, comuna });
   const candidates = normalized.normalizedAddresses.slice(0, MAX_CANDIDATES_PER_ADDRESS);
-
-  for (const candidate of candidates) {
-    const outcome = await geocodeCandidate(candidate, comuna);
-    if (outcome) {
-      return {
-        outcome,
-        changes: normalized.changes,
-        warnings: normalized.warnings,
-        removedTokens: normalized.removedTokens,
-        extraInformation: normalized.extraInformation,
-      };
-    }
-  }
-
-  // Último recurso: búsqueda libre (no estructurada) — encuentra
-  // villas/poblaciones que en OSM están cargadas como "lugar", no calle.
-  const freeText = `${calle} ${numero}, ${comuna}, Chile`;
-  const hit = await nominatimCall({ q: freeText });
-  if (hit) {
-    const validation = validateGeocodeResult(hit.address, comuna);
-    if (validation.valid) {
-      return {
-        outcome: { hit, method: "unstructured", usedAddress: freeText },
-        changes: normalized.changes,
-        warnings: normalized.warnings,
-        removedTokens: normalized.removedTokens,
-        extraInformation: normalized.extraInformation,
-      };
-    }
-  }
-
-  return {
-    outcome: { hit: null, method: null, usedAddress: null },
+  const base = {
     changes: normalized.changes,
     warnings: normalized.warnings,
     removedTokens: normalized.removedTokens,
     extraInformation: normalized.extraInformation,
   };
+
+  for (const candidate of candidates) {
+    const outcome = await geocodeCandidate(candidate, comuna);
+    if (outcome) return { outcome, ...base };
+  }
+
+  // Último recurso: búsqueda libre (no estructurada) — encuentra
+  // villas/poblaciones que en OSM están cargadas como "lugar", no calle.
+  const freeText = `${calle} ${numero}, ${comuna}, Chile`;
+  const freeHit = await nominatimCall({ q: freeText });
+  if (freeHit) {
+    const validation = validateGeocodeResult(freeHit.address, comuna);
+    if (validation.valid) {
+      return { outcome: { hit: freeHit, method: "unstructured", usedAddress: freeText }, ...base };
+    }
+  }
+
+  // address-resolver: alias conocidos + fuzzy matching contra el callejero
+  // real de la comuna. Solo se consulta cuando TODO lo anterior falló.
+  const resolved = await addressResolver.resolve(admin, { calle, numero, comuna });
+  if (resolved) {
+    const resolvedOutcome = await geocodeCandidate(
+      { label: `resolved:${resolved.method}`, calle: resolved.resolvedCalle, numero },
+      comuna,
+    );
+    if (resolvedOutcome) return { outcome: { ...resolvedOutcome, resolver: resolved }, ...base };
+  }
+
+  return { outcome: { hit: null, method: null, usedAddress: null, resolver: resolved ?? undefined }, ...base };
 };
 
 Deno.serve(async (req) => {
@@ -246,7 +264,7 @@ Deno.serve(async (req) => {
     if (!rawAddrs.length) return json(400, { error: "addresses (array) required" });
     if (rawAddrs.length > MAX_BATCH) {
       return json(400, {
-        error: `máximo ${MAX_BATCH} direcciones por llamada (límite de Nominatim: 1 req/seg, hasta ${MAX_CANDIDATES_PER_ADDRESS + 1} intentos por dirección)`,
+        error: `máximo ${MAX_BATCH} direcciones por llamada (límite de Nominatim: 1 req/seg, hasta ${MAX_CANDIDATES_PER_ADDRESS + 2} intentos por dirección)`,
       });
     }
 
@@ -303,7 +321,7 @@ Deno.serve(async (req) => {
 
       try {
         const { outcome, changes, warnings, removedTokens, extraInformation } =
-          await geocodeAddress(a.calle, a.numero, a.comuna);
+          await geocodeAddress(admin, a.calle, a.numero, a.comuna);
         method = outcome.method;
         if (outcome.hit) {
           lat = outcome.hit.lat;
@@ -326,6 +344,15 @@ Deno.serve(async (req) => {
             removed_tokens: removedTokens,
             extra_information: extraInformation,
             elapsed_ms: Date.now() - t0,
+            ...(outcome.resolver && {
+              resolver: {
+                original_calle: outcome.resolver.originalCalle,
+                resolved_calle: outcome.resolver.resolvedCalle,
+                algorithm: outcome.resolver.method,
+                score: outcome.resolver.score,
+                catalog_size: outcome.resolver.catalogSize,
+              },
+            }),
           },
         };
       } catch (e) {
