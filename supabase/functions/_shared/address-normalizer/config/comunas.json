@@ -1,0 +1,1732 @@
+[
+  {
+    "comuna": "Arica",
+    "region_code": "15",
+    "region": "Región de Arica y Parinacota"
+  },
+  {
+    "comuna": "Camarones",
+    "region_code": "15",
+    "region": "Región de Arica y Parinacota"
+  },
+  {
+    "comuna": "Putre",
+    "region_code": "15",
+    "region": "Región de Arica y Parinacota"
+  },
+  {
+    "comuna": "General Lagos",
+    "region_code": "15",
+    "region": "Región de Arica y Parinacota"
+  },
+  {
+    "comuna": "Iquique",
+    "region_code": "01",
+    "region": "Región de Tarapacá"
+  },
+  {
+    "comuna": "Alto Hospicio",
+    "region_code": "01",
+    "region": "Región de Tarapacá"
+  },
+  {
+    "comuna": "Pozo Almonte",
+    "region_code": "01",
+    "region": "Región de Tarapacá"
+  },
+  {
+    "comuna": "Camiña",
+    "region_code": "01",
+    "region": "Región de Tarapacá"
+  },
+  {
+    "comuna": "Colchane",
+    "region_code": "01",
+    "region": "Región de Tarapacá"
+  },
+  {
+    "comuna": "Huara",
+    "region_code": "01",
+    "region": "Región de Tarapacá"
+  },
+  {
+    "comuna": "Pica",
+    "region_code": "01",
+    "region": "Región de Tarapacá"
+  },
+  {
+    "comuna": "Antofagasta",
+    "region_code": "02",
+    "region": "Región de Antofagasta"
+  },
+  {
+    "comuna": "Mejillones",
+    "region_code": "02",
+    "region": "Región de Antofagasta"
+  },
+  {
+    "comuna": "Sierra Gorda",
+    "region_code": "02",
+    "region": "Región de Antofagasta"
+  },
+  {
+    "comuna": "Taltal",
+    "region_code": "02",
+    "region": "Región de Antofagasta"
+  },
+  {
+    "comuna": "Calama",
+    "region_code": "02",
+    "region": "Región de Antofagasta"
+  },
+  {
+    "comuna": "Ollagüe",
+    "region_code": "02",
+    "region": "Región de Antofagasta"
+  },
+  {
+    "comuna": "San Pedro de Atacama",
+    "region_code": "02",
+    "region": "Región de Antofagasta"
+  },
+  {
+    "comuna": "Tocopilla",
+    "region_code": "02",
+    "region": "Región de Antofagasta"
+  },
+  {
+    "comuna": "María Elena",
+    "region_code": "02",
+    "region": "Región de Antofagasta"
+  },
+  {
+    "comuna": "Copiapó",
+    "region_code": "03",
+    "region": "Región de Atacama"
+  },
+  {
+    "comuna": "Caldera",
+    "region_code": "03",
+    "region": "Región de Atacama"
+  },
+  {
+    "comuna": "Tierra Amarilla",
+    "region_code": "03",
+    "region": "Región de Atacama"
+  },
+  {
+    "comuna": "Chañaral",
+    "region_code": "03",
+    "region": "Región de Atacama"
+  },
+  {
+    "comuna": "Diego de Almagro",
+    "region_code": "03",
+    "region": "Región de Atacama"
+  },
+  {
+    "comuna": "Vallenar",
+    "region_code": "03",
+    "region": "Región de Atacama"
+  },
+  {
+    "comuna": "Alto del Carmen",
+    "region_code": "03",
+    "region": "Región de Atacama"
+  },
+  {
+    "comuna": "Freirina",
+    "region_code": "03",
+    "region": "Región de Atacama"
+  },
+  {
+    "comuna": "Huasco",
+    "region_code": "03",
+    "region": "Región de Atacama"
+  },
+  {
+    "comuna": "La Serena",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Coquimbo",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Andacollo",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "La Higuera",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Paihuano",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Vicuña",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Illapel",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Canela",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Los Vilos",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Salamanca",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Ovalle",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Combarbalá",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Monte Patria",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Punitaqui",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Río Hurtado",
+    "region_code": "04",
+    "region": "Región de Coquimbo"
+  },
+  {
+    "comuna": "Valparaíso",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Casablanca",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Concón",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Juan Fernández",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Puchuncaví",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Quintero",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Viña del Mar",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Isla de Pascua",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Los Andes",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Calle Larga",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Rinconada",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "San Esteban",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "La Ligua",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Cabildo",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Papudo",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Petorca",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Zapallar",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Quillota",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "La Calera",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Hijuelas",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "La Cruz",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Nogales",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "San Antonio",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Algarrobo",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Cartagena",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "El Quisco",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "El Tabo",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Santo Domingo",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "San Felipe",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Catemu",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Llay-Llay",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Panquehue",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Putaendo",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Santa María",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Quilpué",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Limache",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Olmué",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Villa Alemana",
+    "region_code": "05",
+    "region": "Región de Valparaíso"
+  },
+  {
+    "comuna": "Rancagua",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Codegua",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Coinco",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Coltauco",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Doñihue",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Graneros",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Las Cabras",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Machalí",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Malloa",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Mostazal",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Olivar",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Peumo",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Pichidegua",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Quinta de Tilcoco",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Rengo",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Requínoa",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "San Vicente",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Pichilemu",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "La Estrella",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Litueche",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Marchigüe",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Navidad",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Paredones",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "San Fernando",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Chépica",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Chimbarongo",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Lolol",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Nancagua",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Palmilla",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Peralillo",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Placilla",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Pumanque",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Santa Cruz",
+    "region_code": "06",
+    "region": "Región del Libertador General Bernardo O'Higgins"
+  },
+  {
+    "comuna": "Talca",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Constitución",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Curepto",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Empedrado",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Maule",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Pelarco",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Pencahue",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Río Claro",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "San Clemente",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "San Rafael",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Cauquenes",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Chanco",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Pelluhue",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Curicó",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Hualañé",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Licantén",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Molina",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Rauco",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Romeral",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Sagrada Familia",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Teno",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Vichuquén",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Linares",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Colbún",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Longaví",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Parral",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Retiro",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "San Javier",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Villa Alegre",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Yerbas Buenas",
+    "region_code": "07",
+    "region": "Región del Maule"
+  },
+  {
+    "comuna": "Chillán",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Bulnes",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Chillán Viejo",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "El Carmen",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Pemuco",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Pinto",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Quillón",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "San Ignacio",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Yungay",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Quirihue",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Cobquecura",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Coelemu",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Ninhue",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Portezuelo",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Ránquil",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Treguaco",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "San Carlos",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Coihueco",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Ñiquén",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "San Fabián",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "San Nicolás",
+    "region_code": "16",
+    "region": "Región de Ñuble"
+  },
+  {
+    "comuna": "Concepción",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Coronel",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Chiguayante",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Florida",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Hualqui",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Lota",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Penco",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "San Pedro de La Paz",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Santa Juana",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Talcahuano",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Tomé",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Hualpén",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Lebu",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Arauco",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Cañete",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Contulmo",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Curanilahue",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Los Álamos",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Tirúa",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Los Ángeles",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Antuco",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Cabrero",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Laja",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Mulchén",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Nacimiento",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Negrete",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Quilaco",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Quilleco",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "San Rosendo",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Santa Bárbara",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Tucapel",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Yumbel",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Alto Biobío",
+    "region_code": "08",
+    "region": "Región del Biobío"
+  },
+  {
+    "comuna": "Temuco",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Carahue",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Cunco",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Curarrehue",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Freire",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Galvarino",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Gorbea",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Lautaro",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Loncoche",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Melipeuco",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Nueva Imperial",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Padre Las Casas",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Perquenco",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Pitrufquén",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Pucón",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Saavedra",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Teodoro Schmidt",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Toltén",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Vilcún",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Villarrica",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Cholchol",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Angol",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Collipulli",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Curacautín",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Ercilla",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Lonquimay",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Los Sauces",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Lumaco",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Purén",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Renaico",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Traiguén",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Victoria",
+    "region_code": "09",
+    "region": "Región de la Araucanía"
+  },
+  {
+    "comuna": "Valdivia",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "Corral",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "Lanco",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "Los Lagos",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "Máfil",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "Mariquina",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "Paillaco",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "Panguipulli",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "La Unión",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "Futrono",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "Lago Ranco",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "Río Bueno",
+    "region_code": "14",
+    "region": "Región de Los Ríos"
+  },
+  {
+    "comuna": "Puerto Montt",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Calbuco",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Cochamó",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Fresia",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Frutillar",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Los Muermos",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Llanquihue",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Maullín",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Puerto Varas",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Castro",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Ancud",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Chonchi",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Curaco de Vélez",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Dalcahue",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Puqueldón",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Queilén",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Quellón",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Quemchi",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Quinchao",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Osorno",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Puerto Octay",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Purranque",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Puyehue",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Río Negro",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "San Juan de la Costa",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "San Pablo",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Chaitén",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Futaleufú",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Hualaihué",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Palena",
+    "region_code": "10",
+    "region": "Región de Los Lagos"
+  },
+  {
+    "comuna": "Coyhaique",
+    "region_code": "11",
+    "region": "Región de Aysén del General Carlos Ibáñez del Campo"
+  },
+  {
+    "comuna": "Lago Verde",
+    "region_code": "11",
+    "region": "Región de Aysén del General Carlos Ibáñez del Campo"
+  },
+  {
+    "comuna": "Aysén",
+    "region_code": "11",
+    "region": "Región de Aysén del General Carlos Ibáñez del Campo"
+  },
+  {
+    "comuna": "Cisnes",
+    "region_code": "11",
+    "region": "Región de Aysén del General Carlos Ibáñez del Campo"
+  },
+  {
+    "comuna": "Guaitecas",
+    "region_code": "11",
+    "region": "Región de Aysén del General Carlos Ibáñez del Campo"
+  },
+  {
+    "comuna": "Cochrane",
+    "region_code": "11",
+    "region": "Región de Aysén del General Carlos Ibáñez del Campo"
+  },
+  {
+    "comuna": "O'Higgins",
+    "region_code": "11",
+    "region": "Región de Aysén del General Carlos Ibáñez del Campo"
+  },
+  {
+    "comuna": "Tortel",
+    "region_code": "11",
+    "region": "Región de Aysén del General Carlos Ibáñez del Campo"
+  },
+  {
+    "comuna": "Chile Chico",
+    "region_code": "11",
+    "region": "Región de Aysén del General Carlos Ibáñez del Campo"
+  },
+  {
+    "comuna": "Río Ibáñez",
+    "region_code": "11",
+    "region": "Región de Aysén del General Carlos Ibáñez del Campo"
+  },
+  {
+    "comuna": "Punta Arenas",
+    "region_code": "12",
+    "region": "Región de Magallanes y de la Antártica Chilena"
+  },
+  {
+    "comuna": "Laguna Blanca",
+    "region_code": "12",
+    "region": "Región de Magallanes y de la Antártica Chilena"
+  },
+  {
+    "comuna": "Río Verde",
+    "region_code": "12",
+    "region": "Región de Magallanes y de la Antártica Chilena"
+  },
+  {
+    "comuna": "San Gregorio",
+    "region_code": "12",
+    "region": "Región de Magallanes y de la Antártica Chilena"
+  },
+  {
+    "comuna": "Cabo de Hornos",
+    "region_code": "12",
+    "region": "Región de Magallanes y de la Antártica Chilena"
+  },
+  {
+    "comuna": "Antártica",
+    "region_code": "12",
+    "region": "Región de Magallanes y de la Antártica Chilena"
+  },
+  {
+    "comuna": "Porvenir",
+    "region_code": "12",
+    "region": "Región de Magallanes y de la Antártica Chilena"
+  },
+  {
+    "comuna": "Primavera",
+    "region_code": "12",
+    "region": "Región de Magallanes y de la Antártica Chilena"
+  },
+  {
+    "comuna": "Timaukel",
+    "region_code": "12",
+    "region": "Región de Magallanes y de la Antártica Chilena"
+  },
+  {
+    "comuna": "Natales",
+    "region_code": "12",
+    "region": "Región de Magallanes y de la Antártica Chilena"
+  },
+  {
+    "comuna": "Torres del Paine",
+    "region_code": "12",
+    "region": "Región de Magallanes y de la Antártica Chilena"
+  },
+  {
+    "comuna": "Santiago",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Cerrillos",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Cerro Navia",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Conchalí",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "El Bosque",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Estación Central",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Huechuraba",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Independencia",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "La Cisterna",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "La Florida",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "La Granja",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "La Pintana",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "La Reina",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Las Condes",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Lo Barnechea",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Lo Espejo",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Lo Prado",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Macul",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Maipú",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Ñuñoa",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Pedro Aguirre Cerda",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Peñalolén",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Providencia",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Pudahuel",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Quilicura",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Quinta Normal",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Recoleta",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Renca",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "San Joaquín",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "San Miguel",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "San Ramón",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Vitacura",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Puente Alto",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Pirque",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "San José de Maipo",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Colina",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Lampa",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Til Til",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "San Bernardo",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Buin",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Calera de Tango",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Paine",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Melipilla",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Alhué",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Curacaví",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "María Pinto",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "San Pedro",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Talagante",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "El Monte",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Isla de Maipo",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Padre Hurtado",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  },
+  {
+    "comuna": "Peñaflor",
+    "region_code": "13",
+    "region": "Región Metropolitana de Santiago"
+  }
+]

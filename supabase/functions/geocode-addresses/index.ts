@@ -11,64 +11,36 @@
 //    la librería HTTP).
 //  - Cachear los resultados es obligatorio.
 //
-// Estrategia de búsqueda en cascada (cada intento respeta el límite de 1/seg
-// antes de pasar al siguiente; se detiene en el primero que encuentre algo).
-// Antes de intentar nada, se aplican 2 normalizaciones de texto universales
-// (nunca rompen un caso que ya funcionaba, solo corrigen errores de tipeo
-// del dato fuente):
-//   - "Ohiggins"/"O Higgins" → "O'Higgins" (el apóstrofo se pierde seguido
-//     en exports de Excel/CSV; sin él, Nominatim no matchea NINGUNA calle
-//     "O'Higgins" del país — es el nombre de calle más común de Chile).
-//   - Prefijo "Avenida." con punto pegado a la palabra completa (typo de
-//     tipeo, no una abreviatura) — antes rompía el strip de prefijo.
-// Niveles de la cascada:
-//   1) Estructurada tal cual (street=calle+numero, city=comuna).
-//   2) Estructurada sin el prefijo genérico de la calle (Avenida/Av./Calle/
-//      Pasaje) — en OSM muchas calles están cargadas SIN el prefijo (ej. la
-//      calle "Lazo" existe, pero "Avenida Lazo" no matchea nada).
-//   3) Estructurada quitando un número final de la calle que NO coincide
-//      con la columna número — ej. calle="San Nicolas 1331", numero="94":
-//      el 1331 es ruido (parcela/lote/código interno del dato fuente), y
-//      mandarlo pegado al número real ("San Nicolas 1331 94") no matchea
-//      nada. Se confía en la columna número y se descarta el número final
-//      de la calle cuando no coincide.
-//   4) Estructurada usando solo el primer segmento antes de la primera
-//      coma — cuando la calle trae varios campos concatenados con comas
-//      (ej. "Manuel Rodríguez, 62, Tinguiririca"), el primer segmento
-//      suele ser el nombre real de la calle.
-//   5) Búsqueda libre (no estructurada) con calle+numero+comuna — encuentra
-//      villas/poblaciones que en OSM están cargadas como "lugar", no calle.
-// Ninguno de los niveles amplía la búsqueda fuera de la comuna indicada
-// (evita el riesgo de matchear la calle correcta en la ciudad equivocada).
+// La limpieza/normalización de la dirección (mayúsculas, abreviaturas,
+// ruido de villa/depto, variantes por sinónimos, etc.) vive en el módulo
+// independiente ../_shared/address-normalizer — este archivo solo lo llama
+// ANTES de geocodificar y prueba, en orden, los candidatos que devuelve.
+// Cada candidato se valida contra la comuna/región esperada
+// (../_shared/geocode-validation) antes de aceptarlo: evita quedarse con la
+// calle correcta en la ciudad equivocada cuando el nombre es común (ver
+// memoria del proyecto: "Colón", "Santa Rita", etc. existen en decenas de
+// comunas). Ningún candidato amplía la búsqueda fuera de la comuna indicada.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { addressNormalizer, type NormalizedCandidate } from "../_shared/address-normalizer/index.ts";
+import { validateGeocodeResult, type NominatimAddressDetails } from "../_shared/geocode-validation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Peor caso: 5 solicitudes por dirección (si las 4 primeras fallan). Con
-// lote de 6 y ~2-3s reales por solicitud, un lote puede tardar hasta ~90s
-// -- cómodo bajo el límite de ejecución de la función.
-const MAX_BATCH = 6;
+// El normalizador puede generar bastantes candidatos para calles largas
+// (variantes + sinónimos + sin tildes + sin número); se acota el número que
+// realmente se prueba para mantener acotado el peor caso por dirección.
+const MAX_CANDIDATES_PER_ADDRESS = 8;
+
+// Peor caso: MAX_CANDIDATES_PER_ADDRESS + 1 (búsqueda libre final) por
+// dirección. Con lote de 4 y ~2-3s reales por solicitud, un lote puede
+// tardar hasta ~90s -- cómodo bajo el límite de ejecución de la función.
+const MAX_BATCH = 4;
 const DELAY_MS = 1100; // piso mínimo entre solicitudes (límite Nominatim: 1/seg)
 
 const USER_AGENT = "GeoPlanet-Geocoder/1.0 (contacto: matiasstrube@gplanet.cl)";
-
-const PREFIXES_RE = /^(avenida|av|avda|calle|pasaje|psje)\.?\s+/i;
-const OHIGGINS_RE = /\bo\.?\s*higgins\b/gi;
-const TRAILING_NUMBER_RE = /\s(\d+)\s*$/;
-
-/** Corrige el apóstrofo de "O'Higgins", perdido seguido en exports CSV. */
-const fixOhiggins = (calle: string): string => calle.replace(OHIGGINS_RE, "O'Higgins");
-
-/** Si la calle termina en un número que NO coincide con la columna número,
- * lo descarta (es ruido: parcela/lote/código interno del dato fuente). */
-const stripMismatchedTrailingNumber = (calle: string, numero: string): string | null => {
-  const m = calle.match(TRAILING_NUMBER_RE);
-  if (!m || m[1] === numero) return null;
-  return calle.slice(0, m.index).trim();
-};
 
 interface InAddr {
   key: string;
@@ -88,6 +60,18 @@ interface OutResult {
   cached: boolean;
 }
 
+interface GeocodeLog {
+  display_name?: string | null;
+  method?: string | null;
+  used_address?: string | null;
+  changes?: Array<{ stage: string; before: string; after: string }>;
+  warnings?: Array<{ stage: string; message: string }>;
+  removed_tokens?: string[];
+  extra_information?: string | null;
+  elapsed_ms?: number;
+  error?: string;
+}
+
 interface CacheRow {
   address_key: string;
   query_text: string;
@@ -96,7 +80,7 @@ interface CacheRow {
   found: boolean;
   confidence: string | null;
   provider: string;
-  raw_response: { display_name?: string | null; method?: string | null; error?: string } | null;
+  raw_response: GeocodeLog | null;
 }
 
 const normalizeKey = (calle: string, numero: string, comuna: string): string =>
@@ -115,6 +99,7 @@ interface NominatimHit {
   lng: number;
   confidence: string | null;
   displayName: string | null;
+  address?: NominatimAddressDetails;
 }
 
 /** Una sola llamada a Nominatim, respetando el piso de 1 req/seg (dinámico). */
@@ -124,7 +109,7 @@ const nominatimCall = async (params: Record<string, string>): Promise<NominatimH
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set("format", "json");
   url.searchParams.set("limit", "1");
-  url.searchParams.set("addressdetails", "0");
+  url.searchParams.set("addressdetails", "1"); // necesario para validar comuna/región
 
   let hit: NominatimHit | null = null;
   try {
@@ -139,6 +124,7 @@ const nominatimCall = async (params: Record<string, string>): Promise<NominatimH
           lat, lng,
           confidence: feat.importance != null ? String(feat.importance) : null,
           displayName: feat.display_name ?? null,
+          address: feat.address ?? undefined,
         };
       }
     }
@@ -151,60 +137,83 @@ const nominatimCall = async (params: Record<string, string>): Promise<NominatimH
   return hit;
 };
 
-/** Prueba las 5 estrategias en cascada; se detiene en la primera que encuentre algo. */
-const geocodeCascade = async (
-  calleOriginal: string,
+interface GeocodeOutcome {
+  hit: NominatimHit | null;
+  method: string | null;
+  usedAddress: string | null;
+}
+
+/**
+ * Prueba, en orden, los candidatos que arma el address-normalizer (dirección
+ * original, normalizada, variantes, sinónimos, sin tildes, sin número), y
+ * como último recurso una búsqueda libre. Cada candidato encontrado se
+ * valida contra la comuna esperada antes de aceptarlo; si no coincide, se
+ * sigue con el próximo candidato en vez de darlo por bueno.
+ */
+const geocodeCandidate = async (
+  candidate: NormalizedCandidate,
+  comuna: string,
+): Promise<GeocodeOutcome | null> => {
+  const street = `${candidate.calle} ${candidate.numero}`.trim();
+  if (!street) return null;
+  const hit = await nominatimCall({ street, city: comuna, country: "Chile" });
+  if (!hit) return null;
+  const validation = validateGeocodeResult(hit.address, comuna);
+  if (!validation.valid) return null;
+  return { hit, method: candidate.label, usedAddress: street };
+};
+
+const geocodeAddress = async (
+  calle: string,
   numero: string,
   comuna: string,
-): Promise<{ hit: NominatimHit | null; method: string | null }> => {
-  const calle = fixOhiggins(calleOriginal);
+): Promise<{
+  outcome: GeocodeOutcome;
+  changes: Array<{ stage: string; before: string; after: string }>;
+  warnings: Array<{ stage: string; message: string }>;
+  removedTokens: string[];
+  extraInformation: string | null;
+}> => {
+  const normalized = addressNormalizer.normalize({ calle, numero, comuna });
+  const candidates = normalized.normalizedAddresses.slice(0, MAX_CANDIDATES_PER_ADDRESS);
 
-  // 1) Estructurada tal cual.
-  const r1 = await nominatimCall({ street: `${calle} ${numero}`.trim(), city: comuna, country: "Chile" });
-  if (r1) return { hit: r1, method: "structured" };
-
-  // 2) Estructurada sin prefijo genérico (si la calle tenía uno).
-  const calleSinPrefijo = calle.replace(PREFIXES_RE, "").trim();
-  const tienePrefijo = calleSinPrefijo && calleSinPrefijo.toLowerCase() !== calle.toLowerCase();
-  if (tienePrefijo) {
-    const r2 = await nominatimCall({
-      street: `${calleSinPrefijo} ${numero}`.trim(),
-      city: comuna,
-      country: "Chile",
-    });
-    if (r2) return { hit: r2, method: "structured_no_prefix" };
-  }
-
-  // 3) Quitar un número final de la calle que no coincide con la columna número.
-  const base3 = tienePrefijo ? calleSinPrefijo : calle;
-  const calleSinNumeroFinal = stripMismatchedTrailingNumber(base3, numero);
-  if (calleSinNumeroFinal) {
-    const r3 = await nominatimCall({
-      street: `${calleSinNumeroFinal} ${numero}`.trim(),
-      city: comuna,
-      country: "Chile",
-    });
-    if (r3) return { hit: r3, method: "structured_fixed_number" };
-  }
-
-  // 4) Solo el primer segmento antes de la primera coma.
-  if (calle.includes(",")) {
-    const primerSegmento = (tienePrefijo ? calleSinPrefijo : calle).split(",")[0].trim();
-    if (primerSegmento) {
-      const r4 = await nominatimCall({
-        street: `${primerSegmento} ${numero}`.trim(),
-        city: comuna,
-        country: "Chile",
-      });
-      if (r4) return { hit: r4, method: "structured_first_segment" };
+  for (const candidate of candidates) {
+    const outcome = await geocodeCandidate(candidate, comuna);
+    if (outcome) {
+      return {
+        outcome,
+        changes: normalized.changes,
+        warnings: normalized.warnings,
+        removedTokens: normalized.removedTokens,
+        extraInformation: normalized.extraInformation,
+      };
     }
   }
 
-  // 5) Búsqueda libre (encuentra villas/poblaciones cargadas como "lugar").
-  const r5 = await nominatimCall({ q: `${calle} ${numero}, ${comuna}, Chile` });
-  if (r5) return { hit: r5, method: "unstructured" };
+  // Último recurso: búsqueda libre (no estructurada) — encuentra
+  // villas/poblaciones que en OSM están cargadas como "lugar", no calle.
+  const freeText = `${calle} ${numero}, ${comuna}, Chile`;
+  const hit = await nominatimCall({ q: freeText });
+  if (hit) {
+    const validation = validateGeocodeResult(hit.address, comuna);
+    if (validation.valid) {
+      return {
+        outcome: { hit, method: "unstructured", usedAddress: freeText },
+        changes: normalized.changes,
+        warnings: normalized.warnings,
+        removedTokens: normalized.removedTokens,
+        extraInformation: normalized.extraInformation,
+      };
+    }
+  }
 
-  return { hit: null, method: null };
+  return {
+    outcome: { hit: null, method: null, usedAddress: null },
+    changes: normalized.changes,
+    warnings: normalized.warnings,
+    removedTokens: normalized.removedTokens,
+    extraInformation: normalized.extraInformation,
+  };
 };
 
 Deno.serve(async (req) => {
@@ -236,7 +245,9 @@ Deno.serve(async (req) => {
     const rawAddrs: InAddr[] = Array.isArray(body.addresses) ? body.addresses : [];
     if (!rawAddrs.length) return json(400, { error: "addresses (array) required" });
     if (rawAddrs.length > MAX_BATCH) {
-      return json(400, { error: `máximo ${MAX_BATCH} direcciones por llamada (límite de Nominatim: 1 req/seg, hasta 5 intentos por dirección)` });
+      return json(400, {
+        error: `máximo ${MAX_BATCH} direcciones por llamada (límite de Nominatim: 1 req/seg, hasta ${MAX_CANDIDATES_PER_ADDRESS + 1} intentos por dirección)`,
+      });
     }
 
     const addrs = rawAddrs.map((a) => ({
@@ -275,11 +286,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2) Geocodificar las que faltan: SECUENCIAL, cascada de hasta 3 intentos
-    // por dirección, cada uno respetando el piso de 1 req/seg de Nominatim.
-    // Cada resultado se guarda en el acto (no al final del lote): si la
-    // función se corta a mitad de camino, lo ya geocodificado no se pierde.
+    // 2) Geocodificar las que faltan: SECUENCIAL, respetando el piso de
+    // 1 req/seg de Nominatim. Cada resultado se guarda en el acto (no al
+    // final del lote): si la función se corta a mitad de camino, lo ya
+    // geocodificado no se pierde.
     for (const a of toGeocode) {
+      const t0 = Date.now();
       const streetLine = `${a.calle} ${a.numero}`.trim();
       let row: CacheRow;
       let lat: number | null = null;
@@ -290,10 +302,14 @@ Deno.serve(async (req) => {
       let found = false;
 
       try {
-        const { hit, method: m } = await geocodeCascade(a.calle, a.numero, a.comuna);
-        method = m;
-        if (hit) {
-          lat = hit.lat; lng = hit.lng; confidence = hit.confidence; displayName = hit.displayName;
+        const { outcome, changes, warnings, removedTokens, extraInformation } =
+          await geocodeAddress(a.calle, a.numero, a.comuna);
+        method = outcome.method;
+        if (outcome.hit) {
+          lat = outcome.hit.lat;
+          lng = outcome.hit.lng;
+          confidence = outcome.hit.confidence;
+          displayName = outcome.hit.displayName;
           found = true;
         }
         row = {
@@ -301,7 +317,16 @@ Deno.serve(async (req) => {
           query_text: streetLine + ", " + a.comuna,
           lat, lng, found, confidence,
           provider: "nominatim",
-          raw_response: { display_name: displayName, method },
+          raw_response: {
+            display_name: displayName,
+            method,
+            used_address: outcome.usedAddress,
+            changes,
+            warnings,
+            removed_tokens: removedTokens,
+            extra_information: extraInformation,
+            elapsed_ms: Date.now() - t0,
+          },
         };
       } catch (e) {
         row = {
@@ -309,7 +334,7 @@ Deno.serve(async (req) => {
           query_text: streetLine + ", " + a.comuna,
           lat: null, lng: null, found: false, confidence: null,
           provider: "nominatim",
-          raw_response: { error: String(e) },
+          raw_response: { error: String(e), elapsed_ms: Date.now() - t0 },
         };
       }
 

@@ -1,0 +1,29 @@
+{
+  "_comentario": "Palabras que preceden ruido de subdivisión/ubicación dentro de la calle (depto, villa, población, etc). Cuando aparecen, todo lo que sigue se corta de la calle y se guarda en removedTokens/extraInformation en vez de perderse. Case-insensitive, sin tildes.",
+  "palabras": [
+    "Villa",
+    "Poblacion",
+    "Sector",
+    "Condominio",
+    "Interior",
+    "Departamento",
+    "Depto",
+    "Dpto",
+    "Casa",
+    "Sitio",
+    "Block",
+    "Bloque",
+    "Etapa",
+    "Parcela",
+    "Hijuela",
+    "Lote",
+    "Km",
+    "Kilometro",
+    "Ruta",
+    "Torre",
+    "Modulo",
+    "Conjunto",
+    "Loteo",
+    "Fundo"
+  ]
+}

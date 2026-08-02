@@ -1,0 +1,24 @@
+{
+  "_comentario": "Grupos de nombres equivalentes para la misma calle/lugar. Cada grupo es un array de formas intercambiables (todas se probarán como variantes). Comparación case-insensitive y sin tildes. Ampliar libremente sin tocar código.",
+  "grupos": [
+    ["O'Higgins", "Ohiggins", "O Higgins", "OHiggins"],
+    ["Avenida Bernardo O'Higgins", "Alameda Bernardo O'Higgins", "Alameda", "Avenida Libertador Bernardo O'Higgins"],
+    ["General Manuel Baquedano", "Baquedano", "Manuel Baquedano"],
+    ["Presidente Ibáñez", "Carlos Ibáñez del Campo", "Presidente Carlos Ibáñez del Campo"],
+    ["Presidente Balmaceda", "José Manuel Balmaceda", "Avenida Balmaceda"],
+    ["Presidente Errázuriz", "Federico Errázuriz"],
+    ["Los Carrera", "Carrera"],
+    ["Avenida Providencia", "Providencia"],
+    ["Avenida Vitacura", "Vitacura"],
+    ["Avenida Apoquindo", "Apoquindo"],
+    ["Avenida Las Condes", "Las Condes"],
+    ["Avenida Kennedy", "Presidente Kennedy", "Avenida Presidente Kennedy"],
+    ["Avenida Pedro de Valdivia", "Pedro de Valdivia"],
+    ["Avenida Grecia", "Grecia"],
+    ["Avenida Departamental", "Departamental"],
+    ["Avenida Matta", "Manuel Antonio Matta", "Matta"],
+    ["Avenida Portugal", "Portugal"],
+    ["Avenida Recoleta", "Recoleta"],
+    ["Avenida Independencia", "Independencia"]
+  ]
+}
