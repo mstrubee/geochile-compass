@@ -85,6 +85,7 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange, presetFile, onSaved
   const [checkingCache, setCheckingCache] = useState(false);
   const [cachePreview, setCachePreview] = useState<{ cachedFound: number; cachedNotFound: number; toGeocode: number } | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [liveStats, setLiveStats] = useState({ found: 0, notFound: 0, newlyFound: 0, newlyNotFound: 0 });
   const [summary, setSummary] = useState<{
     totalRows: number;
     unique: number;
@@ -108,6 +109,7 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange, presetFile, onSaved
     setRetryNotFound(false);
     setCachePreview(null);
     setProgress({ done: 0, total: 0 });
+    setLiveStats({ found: 0, notFound: 0, newlyFound: 0, newlyNotFound: 0 });
     setSummary(null);
     setOutputRows([]);
     setNotFoundRows([]);
@@ -245,21 +247,29 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange, presetFile, onSaved
 
     const resultMap = new Map<string, GeocodeResult>();
     let fromCache = 0;
+    const stats = { found: 0, notFound: 0, newlyFound: 0, newlyNotFound: 0 };
 
     for (let i = 0; i < uniqueAddresses.length; i += BATCH_SIZE) {
       if (cancelRef.current) return;
       const chunk = uniqueAddresses.slice(i, i + BATCH_SIZE);
       try {
         const { results, from_cache } = await geocodeBatch(chunk, retryNotFound);
-        for (const r of results) resultMap.set(r.key, r);
+        for (const r of results) {
+          resultMap.set(r.key, r);
+          if (r.found) { stats.found++; if (!r.cached) stats.newlyFound++; }
+          else { stats.notFound++; if (!r.cached) stats.newlyNotFound++; }
+        }
         fromCache += from_cache;
       } catch (e) {
         toast.error(`Lote falló (dirección ${i + 1}–${i + chunk.length}): ${e instanceof Error ? e.message : String(e)}`);
         for (const a of chunk) {
           resultMap.set(a.key, { key: a.key, lat: null, lng: null, found: false, confidence: null, full_address: null, cached: false });
+          stats.notFound++;
+          stats.newlyNotFound++;
         }
       }
       setProgress({ done: Math.min(i + BATCH_SIZE, total), total });
+      setLiveStats({ ...stats });
     }
 
     // Reconstruir TODAS las filas originales (no solo las únicas) agregando lat/lng.
@@ -448,22 +458,48 @@ export const GeocodeAddressesDialog = ({ open, onOpenChange, presetFile, onSaved
           </div>
         )}
 
-        {phase === "processing" && (
-          <div className="space-y-4 py-4">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <div className="text-sm text-muted-foreground">
-                Geocodificando {progress.done.toLocaleString()} / {progress.total.toLocaleString()}…
+        {phase === "processing" && (() => {
+          const processed = liveStats.found + liveStats.notFound;
+          const successRate = processed ? Math.round((100 * liveStats.found) / processed) : null;
+          return (
+            <div className="space-y-4 py-2">
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <div className="text-sm text-muted-foreground">
+                  Geocodificando {progress.done.toLocaleString()} / {progress.total.toLocaleString()}…
+                </div>
               </div>
+              <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} className="h-2" />
+
+              <div className="grid grid-cols-2 gap-2 text-center">
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
+                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                    {liveStats.found.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Encontradas</div>
+                </div>
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                    {liveStats.notFound.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Sin encontrar</div>
+                </div>
+              </div>
+              {successRate !== null && (
+                <p className="text-center text-xs text-muted-foreground">
+                  <strong className="text-foreground">{successRate}%</strong> de éxito hasta ahora
+                  ({processed.toLocaleString()} procesadas)
+                </p>
+              )}
+
+              <p className="text-center text-[11px] text-muted-foreground">
+                Estimado restante: {estimateDuration(progress.total - progress.done)}. Si cierras esta
+                ventana no pasa nada: lo ya geocodificado queda guardado, y puedes retomarlo subiendo el
+                mismo archivo de nuevo — no se vuelve a consultar lo que ya se resolvió.
+              </p>
             </div>
-            <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} className="h-2" />
-            <p className="text-center text-[11px] text-muted-foreground">
-              Estimado restante: {estimateDuration(progress.total - progress.done)}. Si cierras esta
-              ventana no pasa nada: lo ya geocodificado queda guardado, y puedes retomarlo subiendo el
-              mismo archivo de nuevo — no se vuelve a consultar lo que ya se resolvió.
-            </p>
-          </div>
-        )}
+          );
+        })()}
 
         {phase === "done" && summary && (
           <div className="space-y-4">
