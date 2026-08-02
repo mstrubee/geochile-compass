@@ -204,6 +204,23 @@ const geocodeAddress = async (
     extraInformation: normalized.extraInformation,
   };
 
+  // Sin nombre de calle no hay nada que buscar: ni Nominatim ni el fuzzy
+  // matching del resolver pueden inventar una calle a partir de la nada. Se
+  // corta de inmediato en vez de gastar ~10 solicitudes por dirección — en la
+  // sábana real del usuario el 22% de las direcciones aún sin resolver tienen
+  // la columna de calle vacía, así que este atajo es lo que evita que una
+  // corrida de reintento se pase horas consultando por direcciones imposibles.
+  if (!calle.trim()) {
+    return {
+      outcome: { hit: null, method: null, usedAddress: null },
+      ...base,
+      warnings: [
+        ...normalized.warnings,
+        { stage: "input", message: "La columna de calle viene vacía: no hay nada que geocodificar." },
+      ],
+    };
+  }
+
   for (const candidate of candidates) {
     const outcome = await geocodeCandidate(candidate, comuna);
     if (outcome) return { outcome, ...base };

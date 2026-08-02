@@ -22,6 +22,8 @@ export { createAddressResolver } from "./resolver.ts";
 /** Instancia lista para usar, cargada con el alias.json del repo. */
 export const addressResolver = createAddressResolver({
   alias: alias.alias,
-  threshold: 0.9,
+  threshold: 0.85,
   minMarginOverRunnerUp: 0.03,
+  minPrefixCoverage: 0.65,
+  minPrefixTokens: 2,
 });

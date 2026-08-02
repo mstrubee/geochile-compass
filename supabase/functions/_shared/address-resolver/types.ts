@@ -4,7 +4,7 @@ export interface ResolveInput {
   comuna: string;
 }
 
-export type ResolveMethod = "alias" | "levenshtein" | "jaroWinkler" | "trigram";
+export type ResolveMethod = "alias" | "levenshtein" | "jaroWinkler" | "trigram" | "prefix";
 
 export interface ResolveResult {
   /** Calle original que se intento resolver. */
