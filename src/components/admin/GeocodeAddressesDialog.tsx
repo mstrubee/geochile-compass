@@ -37,13 +37,16 @@ interface Props {
 }
 
 // Nominatim (OpenStreetMap) limita a 1 solicitud/seg y prohíbe concurrencia.
-// El edge function prueba hasta 3 estrategias por dirección (estructurada,
-// sin prefijo genérico, libre) antes de darla por no encontrada, así que el
-// peor caso es ~3 solicitudes por dirección nueva (las que ya están en
-// caché de una corrida anterior se resuelven casi al instante).
-const BATCH_SIZE = 10;
+// El edge function prueba hasta 5 estrategias por dirección (estructurada,
+// sin prefijo genérico, sin número final que no coincide, primer segmento
+// antes de una coma, libre) antes de darla por no encontrada, así que el
+// peor caso es ~5 solicitudes por dirección nueva (las que ya están en
+// caché de una corrida anterior se resuelven casi al instante). BATCH_SIZE
+// debe coincidir con MAX_BATCH del edge function (supabase/functions/
+// geocode-addresses/index.ts) o la llamada falla con 400.
+const BATCH_SIZE = 6;
 const NONE = "__none__";
-const SECONDS_PER_ADDRESS = 3; // estimado conservador (peor caso: 3 intentos); varía según carga de Nominatim
+const SECONDS_PER_ADDRESS = 5; // estimado conservador (peor caso: 5 intentos); varía según carga de Nominatim
 
 const estimateDuration = (n: number): string => {
   if (n <= 0) return "0 min";

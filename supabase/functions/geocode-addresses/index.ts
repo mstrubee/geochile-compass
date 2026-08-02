@@ -12,15 +12,34 @@
 //  - Cachear los resultados es obligatorio.
 //
 // Estrategia de búsqueda en cascada (cada intento respeta el límite de 1/seg
-// antes de pasar al siguiente; se detiene en el primero que encuentre algo):
+// antes de pasar al siguiente; se detiene en el primero que encuentre algo).
+// Antes de intentar nada, se aplican 2 normalizaciones de texto universales
+// (nunca rompen un caso que ya funcionaba, solo corrigen errores de tipeo
+// del dato fuente):
+//   - "Ohiggins"/"O Higgins" → "O'Higgins" (el apóstrofo se pierde seguido
+//     en exports de Excel/CSV; sin él, Nominatim no matchea NINGUNA calle
+//     "O'Higgins" del país — es el nombre de calle más común de Chile).
+//   - Prefijo "Avenida." con punto pegado a la palabra completa (typo de
+//     tipeo, no una abreviatura) — antes rompía el strip de prefijo.
+// Niveles de la cascada:
 //   1) Estructurada tal cual (street=calle+numero, city=comuna).
 //   2) Estructurada sin el prefijo genérico de la calle (Avenida/Av./Calle/
 //      Pasaje) — en OSM muchas calles están cargadas SIN el prefijo (ej. la
 //      calle "Lazo" existe, pero "Avenida Lazo" no matchea nada).
-//   3) Búsqueda libre (no estructurada) con calle+numero+comuna — encuentra
+//   3) Estructurada quitando un número final de la calle que NO coincide
+//      con la columna número — ej. calle="San Nicolas 1331", numero="94":
+//      el 1331 es ruido (parcela/lote/código interno del dato fuente), y
+//      mandarlo pegado al número real ("San Nicolas 1331 94") no matchea
+//      nada. Se confía en la columna número y se descarta el número final
+//      de la calle cuando no coincide.
+//   4) Estructurada usando solo el primer segmento antes de la primera
+//      coma — cuando la calle trae varios campos concatenados con comas
+//      (ej. "Manuel Rodríguez, 62, Tinguiririca"), el primer segmento
+//      suele ser el nombre real de la calle.
+//   5) Búsqueda libre (no estructurada) con calle+numero+comuna — encuentra
 //      villas/poblaciones que en OSM están cargadas como "lugar", no calle.
-// Ninguna de las 3 amplía la búsqueda fuera de la comuna indicada (evita el
-// riesgo de matchear la calle correcta en la ciudad equivocada).
+// Ninguno de los niveles amplía la búsqueda fuera de la comuna indicada
+// (evita el riesgo de matchear la calle correcta en la ciudad equivocada).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -28,15 +47,28 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Peor caso: 3 solicitudes por dirección (si las 2 primeras fallan). Con
-// lote de 10 y ~2-3s reales por solicitud, un lote puede tardar hasta
-// ~90s -- cómodo bajo el límite de ejecución de la función.
-const MAX_BATCH = 10;
+// Peor caso: 5 solicitudes por dirección (si las 4 primeras fallan). Con
+// lote de 6 y ~2-3s reales por solicitud, un lote puede tardar hasta ~90s
+// -- cómodo bajo el límite de ejecución de la función.
+const MAX_BATCH = 6;
 const DELAY_MS = 1100; // piso mínimo entre solicitudes (límite Nominatim: 1/seg)
 
 const USER_AGENT = "GeoPlanet-Geocoder/1.0 (contacto: matiasstrube@gplanet.cl)";
 
-const PREFIXES_RE = /^(avenida|av\.?|avda\.?|calle|pasaje|psje\.?)\s+/i;
+const PREFIXES_RE = /^(avenida|av|avda|calle|pasaje|psje)\.?\s+/i;
+const OHIGGINS_RE = /\bo\.?\s*higgins\b/gi;
+const TRAILING_NUMBER_RE = /\s(\d+)\s*$/;
+
+/** Corrige el apóstrofo de "O'Higgins", perdido seguido en exports CSV. */
+const fixOhiggins = (calle: string): string => calle.replace(OHIGGINS_RE, "O'Higgins");
+
+/** Si la calle termina en un número que NO coincide con la columna número,
+ * lo descarta (es ruido: parcela/lote/código interno del dato fuente). */
+const stripMismatchedTrailingNumber = (calle: string, numero: string): string | null => {
+  const m = calle.match(TRAILING_NUMBER_RE);
+  if (!m || m[1] === numero) return null;
+  return calle.slice(0, m.index).trim();
+};
 
 interface InAddr {
   key: string;
@@ -119,21 +151,22 @@ const nominatimCall = async (params: Record<string, string>): Promise<NominatimH
   return hit;
 };
 
-/** Prueba las 3 estrategias en cascada; se detiene en la primera que encuentre algo. */
+/** Prueba las 5 estrategias en cascada; se detiene en la primera que encuentre algo. */
 const geocodeCascade = async (
-  calle: string,
+  calleOriginal: string,
   numero: string,
   comuna: string,
 ): Promise<{ hit: NominatimHit | null; method: string | null }> => {
-  const streetLine = `${calle} ${numero}`.trim();
+  const calle = fixOhiggins(calleOriginal);
 
   // 1) Estructurada tal cual.
-  const r1 = await nominatimCall({ street: streetLine, city: comuna, country: "Chile" });
+  const r1 = await nominatimCall({ street: `${calle} ${numero}`.trim(), city: comuna, country: "Chile" });
   if (r1) return { hit: r1, method: "structured" };
 
   // 2) Estructurada sin prefijo genérico (si la calle tenía uno).
   const calleSinPrefijo = calle.replace(PREFIXES_RE, "").trim();
-  if (calleSinPrefijo && calleSinPrefijo.toLowerCase() !== calle.toLowerCase()) {
+  const tienePrefijo = calleSinPrefijo && calleSinPrefijo.toLowerCase() !== calle.toLowerCase();
+  if (tienePrefijo) {
     const r2 = await nominatimCall({
       street: `${calleSinPrefijo} ${numero}`.trim(),
       city: comuna,
@@ -142,9 +175,34 @@ const geocodeCascade = async (
     if (r2) return { hit: r2, method: "structured_no_prefix" };
   }
 
-  // 3) Búsqueda libre (encuentra villas/poblaciones cargadas como "lugar").
-  const r3 = await nominatimCall({ q: `${calle} ${numero}, ${comuna}, Chile` });
-  if (r3) return { hit: r3, method: "unstructured" };
+  // 3) Quitar un número final de la calle que no coincide con la columna número.
+  const base3 = tienePrefijo ? calleSinPrefijo : calle;
+  const calleSinNumeroFinal = stripMismatchedTrailingNumber(base3, numero);
+  if (calleSinNumeroFinal) {
+    const r3 = await nominatimCall({
+      street: `${calleSinNumeroFinal} ${numero}`.trim(),
+      city: comuna,
+      country: "Chile",
+    });
+    if (r3) return { hit: r3, method: "structured_fixed_number" };
+  }
+
+  // 4) Solo el primer segmento antes de la primera coma.
+  if (calle.includes(",")) {
+    const primerSegmento = (tienePrefijo ? calleSinPrefijo : calle).split(",")[0].trim();
+    if (primerSegmento) {
+      const r4 = await nominatimCall({
+        street: `${primerSegmento} ${numero}`.trim(),
+        city: comuna,
+        country: "Chile",
+      });
+      if (r4) return { hit: r4, method: "structured_first_segment" };
+    }
+  }
+
+  // 5) Búsqueda libre (encuentra villas/poblaciones cargadas como "lugar").
+  const r5 = await nominatimCall({ q: `${calle} ${numero}, ${comuna}, Chile` });
+  if (r5) return { hit: r5, method: "unstructured" };
 
   return { hit: null, method: null };
 };
@@ -178,7 +236,7 @@ Deno.serve(async (req) => {
     const rawAddrs: InAddr[] = Array.isArray(body.addresses) ? body.addresses : [];
     if (!rawAddrs.length) return json(400, { error: "addresses (array) required" });
     if (rawAddrs.length > MAX_BATCH) {
-      return json(400, { error: `máximo ${MAX_BATCH} direcciones por llamada (límite de Nominatim: 1 req/seg, hasta 3 intentos por dirección)` });
+      return json(400, { error: `máximo ${MAX_BATCH} direcciones por llamada (límite de Nominatim: 1 req/seg, hasta 5 intentos por dirección)` });
     }
 
     const addrs = rawAddrs.map((a) => ({
