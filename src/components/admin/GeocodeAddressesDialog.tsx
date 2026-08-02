@@ -37,11 +37,13 @@ interface Props {
 }
 
 // Nominatim (OpenStreetMap) limita a 1 solicitud/seg y prohíbe concurrencia.
-// En la práctica responde en ~2-3s por dirección nueva (las que ya están en
+// El edge function prueba hasta 3 estrategias por dirección (estructurada,
+// sin prefijo genérico, libre) antes de darla por no encontrada, así que el
+// peor caso es ~3 solicitudes por dirección nueva (las que ya están en
 // caché de una corrida anterior se resuelven casi al instante).
-const BATCH_SIZE = 25;
+const BATCH_SIZE = 10;
 const NONE = "__none__";
-const SECONDS_PER_ADDRESS = 1.5; // medido en pruebas reales (~1.24s/dirección); varía según carga de Nominatim
+const SECONDS_PER_ADDRESS = 3; // estimado conservador (peor caso: 3 intentos); varía según carga de Nominatim
 
 const estimateDuration = (n: number): string => {
   if (n <= 0) return "0 min";
