@@ -37,6 +37,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   isochrone: Isochrone | null;
+  savedName?: string | null;
   manzanas?: ManzanaFeatureCollection | null;
   gse?: GseFeatureCollection | null;
 }
@@ -55,6 +56,7 @@ export const IsochroneReportDialog = ({
   open,
   onClose,
   isochrone,
+  savedName = null,
   manzanas = null,
   gse = null,
 }: Props) => {
@@ -63,7 +65,7 @@ export const IsochroneReportDialog = ({
     commerceLoading,
     fetchCommerce,
     commerceErrors,
-  } = useIsochroneReport({ isochrone, manzanas, gse });
+  } = useIsochroneReport({ isochrone, isoName: savedName, manzanas, gse });
 
   const [tab, setTab] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(

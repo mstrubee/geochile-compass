@@ -60,6 +60,7 @@ export interface IsochroneBandReport {
 export interface IsochroneReport {
   iso: {
     id: string;
+    name: string | null;
     mode: IsoMode;
     modeLabel: string;
     minutes: number[];
@@ -126,6 +127,7 @@ const filterCommerceByPolygon = (
 
 interface BuildReportParams {
   iso: Isochrone;
+  isoName?: string | null;
   territorialFeatures: TerritorialFeature[];
   territorialLayers: TerritorialLayer[];
   territorialGroups: TerritorialGroup[];
@@ -147,6 +149,7 @@ interface BuildReportParams {
 export const buildIsochroneReport = (params: BuildReportParams): IsochroneReport => {
   const {
     iso,
+    isoName = null,
     territorialFeatures,
     territorialLayers,
     territorialGroups,
@@ -223,6 +226,7 @@ export const buildIsochroneReport = (params: BuildReportParams): IsochroneReport
   return {
     iso: {
       id: iso.id,
+      name: isoName,
       mode: iso.mode,
       modeLabel: ISO_MODE_LABEL[iso.mode],
       minutes: iso.minutes,

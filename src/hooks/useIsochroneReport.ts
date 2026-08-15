@@ -23,6 +23,7 @@ import type { IneCommuneStats } from "@/utils/ineScales";
 
 interface Params {
   isochrone: Isochrone | null;
+  isoName?: string | null;
   manzanas?: ManzanaFeatureCollection | null;
   gse?: GseFeatureCollection | null;
 }
@@ -35,6 +36,7 @@ interface Params {
  */
 export const useIsochroneReport = ({
   isochrone,
+  isoName = null,
   manzanas = null,
   gse = null,
 }: Params) => {
@@ -123,6 +125,7 @@ export const useIsochroneReport = ({
     if (!isochrone) return null;
     return buildIsochroneReport({
       iso: isochrone,
+      isoName,
       territorialFeatures: features,
       territorialLayers: layers,
       territorialGroups: groups,
@@ -137,6 +140,7 @@ export const useIsochroneReport = ({
     });
   }, [
     isochrone,
+    isoName,
     features,
     layers,
     groups,

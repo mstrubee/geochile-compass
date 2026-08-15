@@ -1670,6 +1670,11 @@ const Index = () => {
         open={!!reportIsoDialogId}
         onClose={() => setReportIsoDialogId(null)}
         isochrone={isochrones.find((i) => i.id === reportIsoDialogId) ?? null}
+        savedName={
+          reportIsoDialogId
+            ? savedIsos.find((s) => `saved:${s.id}` === reportIsoDialogId)?.name ?? null
+            : null
+        }
         manzanas={manzanaData ?? densityData ?? null}
         gse={gseData ?? null}
       />

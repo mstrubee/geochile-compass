@@ -95,6 +95,14 @@ const addCoverPage = (doc: jsPDF, report: IsochroneReport): void => {
     ML, 86
   );
 
+  // Nombre de la isócrona guardada
+  if (report.iso.name) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(...C.white);
+    doc.text(report.iso.name, ML, 94);
+  }
+
   // Bloque de datos del análisis (cuerpo página, fondo blanco)
   doc.setFillColor(...C.white);
   doc.setFont("helvetica", "normal");
@@ -556,91 +564,6 @@ const addEconomicPage = (
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// METODOLOGÍA
-// ─────────────────────────────────────────────────────────────────────────────
-
-const addMethodologyPage = (doc: jsPDF, report: IsochroneReport, totalPages: number): void => {
-  doc.addPage();
-  addPageHeader(doc, report, report.iso.minutes[report.iso.minutes.length - 1]);
-
-  let y = BODY_TOP;
-  y = sectionTitle(doc, "Metodología y fuentes de datos", y);
-
-  const sections: [string, string][] = [
-    [
-      "Polígono de isócrona",
-      "Generado mediante el servicio de routing GeoChile Compass usando el perfil de transporte seleccionado. El polígono representa el área alcanzable en el tiempo indicado desde el punto central.",
-    ],
-    [
-      "Población y hogares",
-      "Fuente primaria: manzanas censales (INE, Censo 2017) intersectadas geoespacialmente con el polígono. Si no hay cobertura de manzanas, se aplica estimación proporcional a nivel comunal basada en la fracción del área de la comuna contenida en la isócrona.",
-    ],
-    [
-      "Ingreso por hogar (NSE)",
-      "Basado en la clasificación NSE comunal (INE / AIM). El ingreso promedio por hogar se estima como promedio ponderado de los ingresos típicos de cada estrato NSE según distribución comunal.",
-    ],
-    [
-      "Distribución NSE",
-      "Se calcula a partir de la distribución NSE de las manzanas dentro de la isócrona (Censo 2017). Si no hay datos de manzanas, se usa la distribución NSE comunal ponderada por hogares.",
-    ],
-    [
-      "Comercios y servicios (OSM)",
-      "Datos obtenidos en tiempo real de OpenStreetMap vía Overpass API. La cobertura depende del nivel de contribución comunitaria en la zona analizada. Los datos son referenciales.",
-    ],
-    [
-      "Comparación vs. Región Metropolitana",
-      "Los indicadores de referencia RM corresponden a promedios de las comunas del Gran Santiago ponderados por población. Se usan como benchmark de mercado.",
-    ],
-    [
-      "Capas territoriales",
-      "Puntos de interés cargados por el usuario o provenientes de fuentes internas de Grupo Planet (locales, sucursales, competidores). Solo se incluyen los activos visibles al generar el informe.",
-    ],
-  ];
-
-  sections.forEach(([title, text]) => {
-    if (y > PH - 40) {
-      doc.addPage();
-      addPageHeader(doc, report, report.iso.minutes[report.iso.minutes.length - 1]);
-      addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-      y = BODY_TOP;
-    }
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(...C.navy);
-    doc.text(title, ML, y);
-    y += 4;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(...C.slate600);
-    const lines = doc.splitTextToSize(text, PW - ML * 2) as string[];
-    doc.text(lines, ML, y);
-    y += lines.length * 4.5 + 5;
-  });
-
-  // Aviso legal
-  doc.setFillColor(254, 243, 199);
-  doc.roundedRect(ML, y, PW - ML * 2, 22, 1.5, 1.5, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(...C.amber);
-  doc.text("AVISO LEGAL", ML + 3, y + 6);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(120, 80, 0);
-  const legalText =
-    "Este informe es de carácter referencial y fue elaborado con datos públicos y datos propios de Grupo Planet SpA. " +
-    "Los análisis demográficos y comerciales no constituyen asesoría legal ni técnica certificada. " +
-    "Grupo Planet SpA no se hace responsable de decisiones tomadas en base a este documento.";
-  const legalLines = doc.splitTextToSize(legalText, PW - ML * 2 - 6) as string[];
-  doc.text(legalLines, ML + 3, y + 11);
-  y += 28;
-
-  addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
 // PÁGINA DE BANDA
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -718,154 +641,6 @@ const addBandPage = (
     y = drawNseChart(doc, band.nseDistribution, y) + 4;
   }
 
-  // Comparaciones vs RM
-  if (band.comparisons.length > 0) {
-    if (y > PH - 60) {
-      doc.addPage();
-      addPageHeader(doc, report, band.bandMinutes);
-      addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-      y = BODY_TOP;
-    }
-    y = sectionTitle(doc, "Comparación vs. Región Metropolitana", y);
-    autoTable(doc, {
-      ...tableTheme,
-      startY: y,
-      head: [["Indicador", "Área analizada", "Δ vs RM"]],
-      body: band.comparisons.map((c) => {
-        const fmtVal = (v: number) => {
-          if (c.format === "clp")     return fmtCLP(v);
-          if (c.format === "pct")     return `${v.toFixed(1)}%`;
-          if (c.format === "decimal") return v.toFixed(2);
-          return fmt(v);
-        };
-        const delta = c.vsRmPct == null
-          ? "—"
-          : `${c.vsRmPct > 0 ? "▲ +" : "▼ "}${Math.abs(c.vsRmPct).toFixed(1)}%`;
-        return [c.label, fmtVal(c.value), delta];
-      }),
-      columnStyles: {
-        1: { halign: "right" }, 2: { halign: "right" },
-      },
-      tableWidth: PW - ML * 2,
-      didDrawPage: (data) => {
-        addPageHeader(doc, report, band.bandMinutes);
-        addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-        if (data.cursor) data.cursor.y = Math.max(data.cursor.y, BODY_TOP);
-      },
-    });
-    y = (lastY(doc) || y) + 8;
-  }
-
-  // Capas territoriales — resumen
-  if (y > PH - 60) {
-    doc.addPage();
-    addPageHeader(doc, report, band.bandMinutes);
-    addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-    y = BODY_TOP;
-  }
-  y = sectionTitle(doc, `Capas territoriales · ${band.pointsTotal} puntos`, y);
-
-  if (band.pointsByGroup.length === 0) {
-    doc.setFontSize(8.5);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...C.slate400);
-    doc.text("Sin puntos territoriales activos en el área.", ML, y + 2);
-    y += 8;
-  } else {
-    const groupRows: (string | number)[][] = [];
-    for (const g of band.pointsByGroup)
-      for (const l of g.layers) groupRows.push([g.groupName, l.layerName, l.count]);
-
-    autoTable(doc, {
-      ...tableTheme,
-      startY: y,
-      head: [["Grupo", "Capa", "Cantidad"]],
-      body: groupRows,
-      columnStyles: { 2: { halign: "right" } },
-      tableWidth: PW - ML * 2,
-      didDrawPage: (data) => {
-        addPageHeader(doc, report, band.bandMinutes);
-        addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-        if (data.cursor) data.cursor.y = Math.max(data.cursor.y, BODY_TOP);
-      },
-    });
-    y = (lastY(doc) || y) + 4;
-
-    if (band.pointsDetail.length > 0) {
-      autoTable(doc, {
-        ...tableTheme,
-        startY: y,
-        head: [["Grupo", "Capa", "Nombre", "Lat", "Lng"]],
-        body: band.pointsDetail.map((p) => [
-          p.groupName, p.layerName, p.name ?? "(sin nombre)",
-          p.lat.toFixed(5), p.lng.toFixed(5),
-        ]),
-        styles: { ...tableTheme.styles, fontSize: 7 },
-        didDrawPage: (data) => {
-          addPageHeader(doc, report, band.bandMinutes);
-          addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-          if (data.cursor) data.cursor.y = Math.max(data.cursor.y, BODY_TOP);
-        },
-      });
-      y = (lastY(doc) || y) + 8;
-    }
-  }
-
-  // Comercios
-  if (band.commerceCountsByCategory.length > 0) {
-    if (y > PH - 60) {
-      doc.addPage();
-      addPageHeader(doc, report, band.bandMinutes);
-      addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-      y = BODY_TOP;
-    }
-    y = sectionTitle(doc, "Comercios y servicios", y);
-
-    autoTable(doc, {
-      ...tableTheme,
-      startY: y,
-      head: [["Categoría", "Cantidad"]],
-      body: band.commerceCountsByCategory.map((c) => [c.label, c.count]),
-      columnStyles: { 1: { halign: "right" } },
-      tableWidth: 110,
-      didDrawPage: (data) => {
-        addPageHeader(doc, report, band.bandMinutes);
-        addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-        if (data.cursor) data.cursor.y = Math.max(data.cursor.y, BODY_TOP);
-      },
-    });
-    y = (lastY(doc) || y) + 4;
-
-    if (band.commerceItemsInBand.length > 0) {
-      autoTable(doc, {
-        ...tableTheme,
-        startY: y,
-        head: [["Categoría", "Nombre", "Marca", "Dirección", "Teléfono"]],
-        body: band.commerceItemsInBand.map((c) => [
-          c.categoryLabel, c.name, c.brand ?? "", c.address ?? "", c.phone ?? "",
-        ]),
-        styles: { ...tableTheme.styles, fontSize: 7 },
-        didDrawPage: (data) => {
-          addPageHeader(doc, report, band.bandMinutes);
-          addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-          if (data.cursor) data.cursor.y = Math.max(data.cursor.y, BODY_TOP);
-        },
-      });
-    }
-  } else {
-    if (y > PH - 40) {
-      doc.addPage();
-      addPageHeader(doc, report, band.bandMinutes);
-      addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-      y = BODY_TOP;
-    }
-    y = sectionTitle(doc, "Comercios y servicios", y);
-    doc.setFontSize(8.5);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...C.slate400);
-    doc.text("No se consultaron categorías de comercios en este análisis.", ML, y + 2);
-  }
-
   addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
 };
 
@@ -877,9 +652,9 @@ const addBandPage = (
 export const exportReportToPdf = (report: IsochroneReport): void => {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
 
-  // Estimación de páginas: portada + ~2 por banda + económica (si hay) + metodología
+  // Estimación de páginas: portada + ~1 por banda + económica (si hay)
   const hasEconomic = !!(report.gastoEndogeno?.totalHogaresObjetivo || report.parqueStats?.vehiculos);
-  const estimatedPages = 1 + report.bands.length * 2 + (hasEconomic ? 1 : 0) + 1;
+  const estimatedPages = 1 + report.bands.length + (hasEconomic ? 1 : 0);
 
   // Portada
   addCoverPage(doc, report);
@@ -890,11 +665,8 @@ export const exportReportToPdf = (report: IsochroneReport): void => {
     addBandPage(doc, report, band, estimatedPages);
   }
 
-  // Análisis económico (gasto endógeno + parque vehicular)
+  // Análisis económico (gasto endógeno + parque vehicular) — última página
   addEconomicPage(doc, report, estimatedPages);
-
-  // Metodología
-  addMethodologyPage(doc, report, estimatedPages);
 
   // Actualizar pie con total real de páginas
   const totalReal = doc.internal.pages.length - 1;
