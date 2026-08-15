@@ -32,6 +32,7 @@ import {
 } from "@/services/commerceService";
 import { exportReportToXlsx } from "@/utils/reportExportXlsx";
 import { exportReportToPdf } from "@/utils/reportExportPdf";
+import type { MapCaptureImages } from "@/utils/mapCapture";
 
 interface Props {
   open: boolean;
@@ -40,6 +41,8 @@ interface Props {
   savedName?: string | null;
   manzanas?: ManzanaFeatureCollection | null;
   gse?: GseFeatureCollection | null;
+  /** Genera las fotos de mapa (isócrona sola, GSE, gasto endógeno) para embeber en el PDF. */
+  onCaptureMapImages?: (iso: Isochrone) => Promise<MapCaptureImages | null>;
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
@@ -59,6 +62,7 @@ export const IsochroneReportDialog = ({
   savedName = null,
   manzanas = null,
   gse = null,
+  onCaptureMapImages,
 }: Props) => {
   const {
     report,
@@ -67,6 +71,7 @@ export const IsochroneReportDialog = ({
     commerceErrors,
   } = useIsochroneReport({ isochrone, isoName: savedName, manzanas, gse });
 
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [tab, setTab] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(DEFAULT_COMMERCE_CATEGORIES.map((c) => c.id)),
@@ -112,6 +117,18 @@ export const IsochroneReportDialog = ({
     setCustomCategories((prev) => [...prev, cat]);
     setSelected((prev) => new Set(prev).add(cat.id));
     setFreeTextDraft("");
+  };
+
+  const handleExportPdf = async () => {
+    if (!report) return;
+    setExportingPdf(true);
+    try {
+      const mapImages =
+        isochrone && onCaptureMapImages ? await onCaptureMapImages(isochrone) : null;
+      exportReportToPdf(report, mapImages);
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const handleSearchCommerce = () => {
@@ -493,9 +510,13 @@ export const IsochroneReportDialog = ({
                   <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
                   Excel
                 </Button>
-                <Button size="sm" onClick={() => exportReportToPdf(report)}>
-                  <FileText className="mr-1.5 h-3.5 w-3.5" />
-                  PDF
+                <Button size="sm" onClick={handleExportPdf} disabled={exportingPdf}>
+                  {exportingPdf ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileText className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {exportingPdf ? "Generando…" : "PDF"}
                 </Button>
               </div>
             </div>

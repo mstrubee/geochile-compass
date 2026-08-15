@@ -134,6 +134,14 @@ const InvalidateOnResize = () => {
   return null;
 };
 
+const MapRefBridge = ({ onReady }: { onReady?: (map: L.Map) => void }) => {
+  const map = useMap();
+  useEffect(() => {
+    onReady?.(map);
+  }, [map, onReady]);
+  return null;
+};
+
 const FlyToTarget = ({
   target,
 }: {
@@ -234,6 +242,8 @@ interface MapViewProps {
   onComercialCountChange?: (cat: ComercialCategoria, n: number) => void;
   /** Capas personalizadas subidas por el admin (se renderizan junto a userLayers). */
   customLayers?: import("@/types/userLayers").UserLayer[];
+  /** Expone la instancia de Leaflet (para captura de imágenes, fit programático, etc.). */
+  onMapReady?: (map: L.Map) => void;
 }
 
 export const MapView = ({
@@ -297,6 +307,7 @@ export const MapView = ({
   comercialBrandLogos,
   onComercialCountChange,
   customLayers,
+  onMapReady,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -307,6 +318,7 @@ export const MapView = ({
       className="h-full w-full"
       attributionControl
     >
+      {onMapReady && <MapRefBridge onReady={onMapReady} />}
       {provider === "google" ? (
         <GoogleTileLayer
           basemap={basemap}
@@ -318,6 +330,7 @@ export const MapView = ({
             url={tile.url}
             attribution={tile.attribution}
             maxZoom={19}
+            crossOrigin="anonymous"
           />
           {tile.overlay && (
             <TileLayer
@@ -325,6 +338,7 @@ export const MapView = ({
               url={tile.overlay}
               maxZoom={19}
               zIndex={250}
+              crossOrigin="anonymous"
             />
           )}
         </>

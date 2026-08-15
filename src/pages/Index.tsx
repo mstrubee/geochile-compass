@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import type L from "leaflet";
+import bbox from "@turf/bbox";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/layout/Header";
@@ -35,6 +38,8 @@ import { usePoiFolders } from "@/hooks/usePoiFolders";
 import { useSavedIsochrones } from "@/hooks/useSavedIsochrones";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
+import { pickBandFeature } from "@/utils/isochroneAnalysis";
+import { fitMapToBounds, captureAfterSettle, type MapCaptureImages } from "@/utils/mapCapture";
 import { findHexAt, loadParqueGeoJson, type ParqueHexProps } from "@/services/parqueData";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import { MapContextMenu, type MapContextMenuItem } from "@/components/ui-overlays/MapContextMenu";
@@ -118,6 +123,8 @@ const Index = () => {
     setPanelOpen(false);
   }, []);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const handleMapReady = useCallback((m: L.Map) => { mapRef.current = m; }, []);
   const [layers, setLayers] = useState<LayerState>({
     communes: false,
     communesGeo: false,
@@ -239,6 +246,73 @@ const Index = () => {
   const [gseViewport, setGseViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
   const [userLayers, setUserLayers] = useState<UserLayer[]>([]);
   const [fitId, setFitId] = useState<string | null>(null);
+
+  // ── Capturas de mapa para el informe de isócrona (portada/GSE/gasto endógeno) ──
+  const ALL_LAYERS_OFF: LayerState = {
+    communes: false, communesGeo: false, nse: false, traffic: false, density: false,
+    manzanas: false, crime: false, commercial: false, gasto: false,
+    agroplanet: false, agroplanet_competitors: false,
+  };
+  const ALL_COMERCIAL_OFF: ComercialLayerState = {
+    supermercado: false, farmacia: false, combustible: false, ferreteria: false,
+    retail_departamental: false, banco: false, restaurante: false, automotriz: false, bodega: false,
+  };
+  const captureIsochroneMapImages = useCallback(
+    async (iso: Isochrone): Promise<MapCaptureImages | null> => {
+      const map = mapRef.current;
+      if (!map) return null;
+
+      const largest = pickBandFeature(iso.features);
+      const boundsBox = largest
+        ? (() => {
+            const [w, s, e, n] = bbox(largest as never) as [number, number, number, number];
+            const dx = (e - w) * 0.15 || 0.01;
+            const dy = (n - s) * 0.15 || 0.01;
+            return { south: s - dy, west: w - dx, north: n + dy, east: e + dx };
+          })()
+        : {
+            south: iso.center.lat - 0.05, west: iso.center.lng - 0.05,
+            north: iso.center.lat + 0.05, east: iso.center.lng + 0.05,
+          };
+
+      const prevLayers = layers;
+      const prevComercial = comercialLayers;
+      const prevGastoView = gastoView;
+      const prevCenter = map.getCenter();
+      const prevZoom = map.getZoom();
+
+      try {
+        flushSync(() => {
+          setLayers(ALL_LAYERS_OFF);
+          setComercialLayers(ALL_COMERCIAL_OFF);
+        });
+        await fitMapToBounds(map, boundsBox);
+        const isoOnly = await captureAfterSettle(map);
+
+        flushSync(() => setLayers({ ...ALL_LAYERS_OFF, nse: true }));
+        const gse = await captureAfterSettle(map);
+
+        flushSync(() => {
+          setLayers({ ...ALL_LAYERS_OFF, gasto: true });
+          setGastoView("manzana");
+        });
+        const gasto = await captureAfterSettle(map);
+
+        flushSync(() => setLayers({ ...ALL_LAYERS_OFF, commercial: true }));
+        const atractores = await captureAfterSettle(map);
+
+        return { isoOnly, gse, gasto, atractores };
+      } finally {
+        flushSync(() => {
+          setLayers(prevLayers);
+          setComercialLayers(prevComercial);
+          setGastoView(prevGastoView);
+        });
+        map.setView(prevCenter, prevZoom, { animate: false });
+      }
+    },
+    [layers, comercialLayers, gastoView],
+  );
 
   // Isócronas
   const [isoMode, setIsoMode] = useState<IsoMode>("driving-car");
@@ -1456,6 +1530,7 @@ const Index = () => {
           <MapView
             basemap={basemap}
             provider={mapProvider.provider}
+            onMapReady={handleMapReady}
             onMouseMove={setCoords}
             layers={layers}
             nseFilter={nseFilter}
@@ -1677,6 +1752,7 @@ const Index = () => {
         }
         manzanas={manzanaData ?? densityData ?? null}
         gse={gseData ?? null}
+        onCaptureMapImages={captureIsochroneMapImages}
       />
 
       <PoiManagerDialog

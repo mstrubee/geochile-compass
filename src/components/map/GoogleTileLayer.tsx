@@ -45,6 +45,7 @@ export const GoogleTileLayer = ({ basemap, onSessionCreated }: Props) => {
         url={OSM_FALLBACK.url}
         attribution={OSM_FALLBACK.attribution}
         maxZoom={19}
+        crossOrigin="anonymous"
       />
     );
   }
@@ -55,6 +56,7 @@ export const GoogleTileLayer = ({ basemap, onSessionCreated }: Props) => {
       url={tileUrl}
       attribution='© <a href="https://maps.google.com">Google</a>'
       maxZoom={20}
+      crossOrigin="anonymous"
       eventHandlers={{
         // Contar tiles directo en localStorage — sin setState, sin re-renders
         tileload: () => incrementUsage("tiles"),

@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { IsochroneReport, IsochroneBandReport } from "./reportData";
+import type { MapCaptureImages } from "./mapCapture";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PALETA Y TIPOGRAFÍA
@@ -645,16 +646,77 @@ const addBandPage = (
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// VISTA TERRITORIAL (fotos del mapa: isócrona sola, GSE, gasto endógeno)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const addMapPhotosPage = (
+  doc: jsPDF,
+  report: IsochroneReport,
+  images: MapCaptureImages,
+  totalPages: number,
+): void => {
+  const shots = (
+    [
+      ["Isócrona (sin capas)", images.isoOnly],
+      ["GSE por manzana", images.gse],
+      ["Gasto endógeno por manzana", images.gasto],
+      ["Atractores comerciales", images.atractores],
+    ] as [string, string | null][]
+  ).filter((s): s is [string, string] => !!s[1]);
+
+  if (shots.length === 0) return;
+
+  doc.addPage();
+  addPageHeader(doc, report, report.iso.minutes[report.iso.minutes.length - 1]);
+
+  let y = BODY_TOP;
+  y = sectionTitle(doc, "Vista territorial", y);
+
+  const availableH = PH - 20 - y;
+  const slotH = availableH / shots.length;
+  const imgW = PW - ML * 2;
+
+  shots.forEach(([label, src]) => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...C.navy);
+    doc.text(label, ML, y + 4);
+
+    const props = doc.getImageProperties(src);
+    const maxImgH = slotH - 8;
+    let w = imgW;
+    let h = (props.height / props.width) * w;
+    if (h > maxImgH) {
+      h = maxImgH;
+      w = (props.width / props.height) * h;
+    }
+    const x = ML + (imgW - w) / 2;
+    doc.addImage(src, "PNG", x, y + 6, w, h);
+    y += slotH;
+  });
+
+  addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ENTRADA PÚBLICA
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Genera y descarga el PDF oficial del informe de isócrona. */
-export const exportReportToPdf = (report: IsochroneReport): void => {
+export const exportReportToPdf = (
+  report: IsochroneReport,
+  mapImages?: MapCaptureImages | null,
+): void => {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
 
-  // Estimación de páginas: portada + ~1 por banda + económica (si hay)
+  // Estimación de páginas: portada + ~1 por banda + vista territorial (si hay fotos) + económica (si hay)
   const hasEconomic = !!(report.gastoEndogeno?.totalHogaresObjetivo || report.parqueStats?.vehiculos);
-  const estimatedPages = 1 + report.bands.length + (hasEconomic ? 1 : 0);
+  const hasMapPhotos = !!(
+    mapImages &&
+    (mapImages.isoOnly || mapImages.gse || mapImages.gasto || mapImages.atractores)
+  );
+  const estimatedPages =
+    1 + report.bands.length + (hasMapPhotos ? 1 : 0) + (hasEconomic ? 1 : 0);
 
   // Portada
   addCoverPage(doc, report);
@@ -664,6 +726,9 @@ export const exportReportToPdf = (report: IsochroneReport): void => {
     doc.addPage();
     addBandPage(doc, report, band, estimatedPages);
   }
+
+  // Vista territorial (fotos del mapa)
+  if (hasMapPhotos) addMapPhotosPage(doc, report, mapImages!, estimatedPages);
 
   // Análisis económico (gasto endógeno + parque vehicular) — última página
   addEconomicPage(doc, report, estimatedPages);
