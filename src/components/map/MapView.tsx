@@ -194,6 +194,8 @@ interface MapViewProps {
   isochrones: Isochrone[];
   fitIsochroneId: string | null;
   onFitIsochroneDone: () => void;
+  /** Fuerza el contorno rojo grueso sin relleno de la isócrona, por encima de todo (para las fotos del informe). */
+  isoOutlineOnly?: boolean;
   isoMode: boolean;
   onMapClick: (c: { lat: number; lng: number }) => void;
   savedPois: SavedPoi[];
@@ -308,6 +310,7 @@ export const MapView = ({
   onComercialCountChange,
   customLayers,
   onMapReady,
+  isoOutlineOnly,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -394,6 +397,7 @@ export const MapView = ({
         isochrones={isochrones}
         fitId={fitIsochroneId}
         onFitDone={onFitIsochroneDone}
+        outlineOnly={isoOutlineOnly}
       />
       <CrimeHeatLayer
         visible={layers.crime && crimeView !== "manzana"}

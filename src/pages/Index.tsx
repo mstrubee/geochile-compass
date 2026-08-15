@@ -257,6 +257,9 @@ const Index = () => {
     supermercado: false, farmacia: false, combustible: false, ferreteria: false,
     retail_departamental: false, banco: false, restaurante: false, automotriz: false, bodega: false,
   };
+  // Fuerza el contorno rojo grueso sin relleno de la isócrona, siempre por
+  // encima de cualquier capa, mientras dura la captura de fotos del informe.
+  const [isoOutlineCapture, setIsoOutlineCapture] = useState(false);
   const captureIsochroneMapImages = useCallback(
     async (iso: Isochrone): Promise<MapCaptureImages | null> => {
       const map = mapRef.current;
@@ -285,6 +288,7 @@ const Index = () => {
         flushSync(() => {
           setLayers(ALL_LAYERS_OFF);
           setComercialLayers(ALL_COMERCIAL_OFF);
+          setIsoOutlineCapture(true);
         });
         await fitMapToBounds(map, boundsBox);
         const isoOnly = await captureAfterSettle(map);
@@ -307,6 +311,7 @@ const Index = () => {
           setLayers(prevLayers);
           setComercialLayers(prevComercial);
           setGastoView(prevGastoView);
+          setIsoOutlineCapture(false);
         });
         map.setView(prevCenter, prevZoom, { animate: false });
       }
@@ -1557,6 +1562,7 @@ const Index = () => {
             isochrones={isochrones}
             fitIsochroneId={fitIsoId}
             onFitIsochroneDone={handleFitIsoDone}
+            isoOutlineOnly={isoOutlineCapture}
             isoMode={mode === "isochrone"}
             onMapClick={handleMapClick}
             savedPois={visiblePois}

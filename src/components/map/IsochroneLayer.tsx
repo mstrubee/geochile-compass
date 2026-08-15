@@ -8,7 +8,17 @@ interface Props {
   isochrones?: Isochrone[];
   fitId?: string | null;
   onFitDone?: () => void;
+  /**
+   * Fuerza un contorno rojo grueso sin relleno, renderizado en un pane por
+   * encima de cualquier otra capa (GSE, calor, etc.). Se usa al capturar las
+   * fotos del informe de isócrona, para que el límite sea siempre visible
+   * sobre cualquier capa activa.
+   */
+  outlineOnly?: boolean;
 }
+
+const OUTLINE_PANE = "isoOutlinePane";
+const OUTLINE_STYLE = { color: "#DC2626", weight: 4, opacity: 1, fillOpacity: 0 };
 
 type IsoFeature = Feature<Polygon | MultiPolygon, { value: number }>;
 
@@ -42,8 +52,17 @@ export const IsochroneLayer = ({
   isochrones = [],
   fitId = null,
   onFitDone = () => undefined,
+  outlineOnly = false,
 }: Props) => {
   const map = useMap();
+
+  useEffect(() => {
+    if (!map.getPane(OUTLINE_PANE)) {
+      const pane = map.createPane(OUTLINE_PANE);
+      // Por encima de overlayPane (400, choropleths/heatmaps) y de markerPane (600).
+      pane.style.zIndex = "650";
+    }
+  }, [map]);
 
   const visibleLayers = useMemo(() => {
     if (!Array.isArray(isochrones)) return [] as Isochrone[];
@@ -82,19 +101,19 @@ export const IsochroneLayer = ({
         // banda más interna (menos minutos) es la última. Invertimos el índice
         // para que el verde caiga en la banda corta y el rojo en la larga.
         const bandIdx = orderedFeatures.length - 1 - idx;
-        const { color, fillColor, fillOpacity } = styleForBand(
-          bandIdx,
-          orderedFeatures.length,
-          iso.color,
-        );
+        const style = outlineOnly
+          ? OUTLINE_STYLE
+          : (() => {
+              const { color, fillColor, fillOpacity } = styleForBand(
+                bandIdx,
+                orderedFeatures.length,
+                iso.color,
+              );
+              return { color, weight: 1.8, opacity: 0.95, fillColor, fillOpacity };
+            })();
         const layer = L.geoJSON(feature as never, {
-          style: {
-            color,
-            weight: 1.8,
-            opacity: 0.95,
-            fillColor,
-            fillOpacity,
-          },
+          pane: outlineOnly ? OUTLINE_PANE : undefined,
+          style,
           onEachFeature: (_feat, childLayer) => {
             childLayer.bindPopup(
               `<div style="font-size:12px"><b>${minutes} min</b><br/>${modeLabel(iso.mode)}</div>`,
@@ -104,19 +123,21 @@ export const IsochroneLayer = ({
         layer.addTo(group);
       });
 
-      L.circleMarker([iso.center.lat, iso.center.lng], {
-        radius: 5,
-        color: iso.color,
-        weight: 2,
-        fillColor: "#ffffff",
-        fillOpacity: 1,
-      }).addTo(group);
+      if (!outlineOnly) {
+        L.circleMarker([iso.center.lat, iso.center.lng], {
+          radius: 5,
+          color: iso.color,
+          weight: 2,
+          fillColor: "#ffffff",
+          fillOpacity: 1,
+        }).addTo(group);
+      }
     });
 
     return () => {
       group.remove();
     };
-  }, [map, visibleLayers]);
+  }, [map, visibleLayers, outlineOnly]);
 
   return null;
 };
