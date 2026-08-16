@@ -112,7 +112,7 @@ const addTableBand = (
   });
 };
 
-const ROW_H = 0.163;
+const ROW_H = 0.155;
 
 /** Alto disponible desde `y` hasta el pie de la lámina, en filas. */
 const rowsThatFit = (y: number) => Math.max(0, Math.floor((BODY_BOTTOM - y) / ROW_H));
@@ -124,17 +124,12 @@ const addTerritorySlide = (
   pptx: PptxGenJS,
   report: IsochroneReport,
   images?: MapCaptureImages | null,
-  express = false,
 ) => {
   const slide = pptx.addSlide();
   const band = report.bands[report.bands.length - 1];
   const name = report.iso.name ?? "Isócrona";
 
-  addHeader(
-    slide,
-    "Análisis territorial",
-    `${name}${express ? " (Express)" : ""} → ${report.iso.modeLabel} ${report.iso.minutes.join("/")} min`,
-  );
+  addHeader(slide, "Análisis territorial", `${name} – Isócrona ${report.iso.minutes.join("/")}min`);
 
   // Columna izquierda angosta para los datos; el resto, la grilla de mapas.
   const DATA_W = 3.1;
@@ -245,7 +240,7 @@ const addProjectionSlide = (
   addHeader(
     slide,
     "Potencial económico y proyección",
-    `${name}${proj.isExpress ? " (Express)" : ""} → ${proj.folderName}`,
+    `${name} – Iso.${report.iso.minutes.join("/")}min → ${proj.folderName}${proj.isExpress ? " EXPRESS" : ""}`,
   );
 
   // ── Columna izquierda: economía del área ───────────────────────────────────
@@ -326,19 +321,21 @@ const addProjectionSlide = (
 
   // ── Columna derecha: proyección ────────────────────────────────────────────
   let ry = BODY_TOP;
-  addColTitle(slide, "Potencial estimado", COL_R_X, ry);
-  ry += 0.32;
-
-  slide.addText(`${fmt(proj.estimatedUf)} UF/mes`, {
-    x: COL_R_X, y: ry, w: COL_W, h: 0.42,
-    fontFace: FONT, fontSize: 24, bold: true, color: C.crimson, margin: 0,
+  slide.addText("Potencial estimado", {
+    x: COL_R_X, y: ry, w: COL_W, h: 0.2,
+    fontFace: FONT, fontSize: 11, bold: true, color: C.ink, margin: 0,
   });
-  ry += 0.42;
+  ry += 0.2;
+  slide.addText(`${fmt(proj.estimatedUf)} UF/mes`, {
+    x: COL_R_X, y: ry, w: COL_W, h: 0.34,
+    fontFace: FONT, fontSize: 22, bold: true, color: C.crimson, margin: 0,
+  });
+  ry += 0.34;
   slide.addText(
     `${fmtCLP(proj.estimatedClp)}/mes · en régimen · rango ${fmt(proj.lowUf)}–${fmt(proj.highUf)} UF`,
-    { x: COL_R_X, y: ry, w: COL_W, h: 0.18, fontFace: FONT, fontSize: 7.5, color: C.muted, margin: 0 },
+    { x: COL_R_X, y: ry, w: COL_W, h: 0.16, fontFace: FONT, fontSize: 7, color: C.muted, margin: 0 },
   );
-  ry += 0.26;
+  ry += 0.2;
 
   const apertura = proj.years.find((r) => r.isBase);
   const supuestos: Array<[string, string]> = [
@@ -359,15 +356,34 @@ const addProjectionSlide = (
     { x: COL_R_X, y: ry, w: COL_W, colW: [COL_W * 0.42, COL_W * 0.58], rowH: ROW_H,
       border: { type: "solid", color: C.grid, pt: 0.5 } },
   );
-  ry += supuestos.length * ROW_H + 0.2;
+  ry += supuestos.length * ROW_H + 0.1;
+
+  // Van TODOS: que la tabla muestre menos de los declarados arriba es
+  // exactamente la contradicción que hay que evitar.
+  if (proj.comparables.length > 0) {
+    addTableBand(slide, "LOCALES COMPARABLES", COL_R_X, ry);
+    ry += 0.2;
+    slide.addTable(
+      [
+        headerRow(["Local", "UF/mes", "Fuente"]),
+        ...proj.comparables.map((c, i) =>
+          row([c.name, fmt(c.ufPerMonth), c.isActual ? "Venta real" : "Predicción"], {
+            fill: i % 2 ? C.rowAlt : undefined,
+          }),
+        ),
+      ],
+      { x: COL_R_X, y: ry, w: COL_W, colW: [COL_W * 0.54, COL_W * 0.22, COL_W * 0.24],
+        rowH: ROW_H, border: { type: "solid", color: C.grid, pt: 0.5 } },
+    );
+    ry += (proj.comparables.length + 1) * ROW_H + 0.1;
+  }
 
   addTableBand(slide, "PROYECCIÓN AÑO A AÑO", COL_R_X, ry);
   ry += 0.2;
-  const years = proj.years.slice(0, Math.max(0, rowsThatFit(ry) - 1));
   slide.addTable(
     [
       headerRow(["Año", "Crecimiento", "% régimen", "UF/mes", "CLP/mes"]),
-      ...years.map((r, i) =>
+      ...proj.years.map((r, i) =>
         row(
           [
             r.label,
@@ -376,7 +392,6 @@ const addProjectionSlide = (
             fmt(r.uf),
             fmtCLP(r.clp),
           ],
-          // La primera fila es la apertura y el cierre es el régimen: se marcan.
           r.isBase ? { fill: C.hilite, bold: true } : { fill: i % 2 ? C.rowAlt : undefined },
         ),
       ),
@@ -385,30 +400,25 @@ const addProjectionSlide = (
       colW: [COL_W * 0.2, COL_W * 0.22, COL_W * 0.18, COL_W * 0.18, COL_W * 0.22],
       rowH: ROW_H, border: { type: "solid", color: C.grid, pt: 0.5 } },
   );
-  ry += (years.length + 1) * ROW_H + 0.22;
 
-  const comparablesTxt = proj.comparables.map((c) => c.name).join(", ");
+  // Notas al pie a lo ancho de la lámina: en una sola columna se comían el
+  // espacio que necesita la tabla de comparables.
   const notas = [
-    comparablesTxt
-      ? `Comparables usados (${proj.comparables.length}): ${comparablesTxt}.`
-      : null,
     proj.rampEnabled
       ? "El potencial estimado corresponde al nivel en régimen. Un local recién abierto no rinde eso desde el primer día: la curva parte en la fracción medida en la red y sube hasta el 100%."
       : "Se asume la ubicación ya en régimen desde el primer año.",
-    proj.adjustPct !== 0
-      ? proj.isExpress
-        ? `Incluye el ajuste EXPRESS de ${proj.adjustPct}%: el formato vende menos que un local estándar y la superficie aún no es una variable del modelo.`
-        : `Incluye un ajuste manual de ${proj.adjustPct > 0 ? "+" : ""}${proj.adjustPct}% aplicado por el analista, no derivado del modelo.`
-      : null,
-    "Estimación referencial construida por comparación con locales de la red; no reemplaza un estudio de terreno.",
-  ].filter(Boolean) as string[];
-
-  if (BODY_BOTTOM - ry > 0.4) {
-    slide.addText(notas.map((t) => ({ text: t, options: { breakLine: true } })), {
-      x: COL_R_X, y: ry, w: COL_W, h: BODY_BOTTOM - ry,
-      fontFace: FONT, fontSize: 6.5, color: C.muted, valign: "top", margin: 0, lineSpacingMultiple: 1.15,
-    });
-  }
+    proj.adjustPct !== 0 && proj.isExpress
+      ? `Incluye el ajuste EXPRESS de ${proj.adjustPct}%: el formato vende menos que un local estándar y la superficie aún no es una variable del modelo.`
+      : proj.adjustPct !== 0
+        ? `Incluye un ajuste manual de ${proj.adjustPct > 0 ? "+" : ""}${proj.adjustPct}% aplicado por el analista, no derivado del modelo.`
+        : "Estimación referencial construida por comparación con locales de la red; no reemplaza un estudio de terreno.",
+  ];
+  slide.addText(notas.map((n) => ({ text: n, options: { breakLine: true } })), {
+    // Bajo el pie de las tablas: la de años llega hasta BODY_BOTTOM.
+    x: ML, y: BODY_BOTTOM + 0.02, w: W - ML * 2, h: 0.28,
+    fontFace: FONT, fontSize: 6.5, color: C.muted, valign: "top", margin: 0,
+    lineSpacingMultiple: 1.15,
+  });
 };
 
 /** Genera y descarga el informe en 2 láminas. */
@@ -426,7 +436,7 @@ export const exportReportToPptx = async (
     background: { color: C.white },
   });
 
-  addTerritorySlide(pptx, report, images, !!projection?.isExpress);
+  addTerritorySlide(pptx, report, images);
   if (projection) addProjectionSlide(pptx, report, projection);
 
   const fecha = new Date(report.generatedAt).toISOString().slice(0, 10).replace(/-/g, "");
