@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { SavedPoi } from "@/types/pois";
 import type { PoiAttribute } from "@/types/poiMetrics";
 import type { MetricAggregate } from "@/utils/poiMetricsAggregate";
+import type { PoiClosureStats } from "@/services/poiClosureService";
 
 const MESES_ES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -25,6 +26,7 @@ export const fetchPoiInsights = async ({
   attrs,
   aggregates,
   folderContext,
+  closure,
 }: {
   poi: SavedPoi;
   attrs: PoiAttribute[];
@@ -34,6 +36,8 @@ export const fetchPoiInsights = async ({
     poiCount: number;
     medianTrailing12?: number;
   };
+  /** Meses sin operación del local, para que el resumen no lea un cierre como mal desempeño. */
+  closure?: PoiClosureStats | null;
 }): Promise<{ summary: string }> => {
   const attrMap: Record<string, string> = {};
   for (const a of attrs) if (a.attr_value) attrMap[a.attr_key] = a.attr_value;
@@ -90,6 +94,21 @@ export const fetchPoiInsights = async ({
     }),
     salesContext,
     folderContext,
+    // Contexto operativo: sin esto, un cierre y su posterior re-maduración se
+    // leen como caída de desempeño del local, que es una conclusión errada.
+    operationalContext: {
+      estado: poi.operational_status ?? "operativo",
+      motivoCierre: poi.closure_reason ?? null,
+      mesesSinVentasTrasApertura: closure?.closedMonths ?? 0,
+      rachaMaximaSinVentas: closure?.longestClosedRun ?? 0,
+      primeraVenta: closure?.firstSale ?? null,
+      mesesPreviosAApertura: closure?.preOpeningMonths ?? 0,
+      nota:
+        "Los meses previos a la primera venta son anteriores a la apertura del " +
+        "local, no un cierre. Tras una reapertura el local atraviesa una " +
+        "re-maduración: vuelve a construir clientela, así que sus primeros " +
+        "meses son bajos por esa razón y no por el potencial del emplazamiento.",
+    },
   };
 
   const { data, error } = await supabase.functions.invoke("poi-insights", {

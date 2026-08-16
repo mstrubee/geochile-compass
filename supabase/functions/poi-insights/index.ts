@@ -246,6 +246,14 @@ Reglas CRÍTICAS, sin excepción:
 - Usa cifras EXACTAS del JSON. No inventes números ni proyecciones.
 - Formato CLP con separador de miles (ej: $108.469.704).
 - Si un campo es null, omítelo. Sin H1.
+- CONTEXTO OPERATIVO (campo operationalContext), obligatorio si el local tuvo meses sin ventas:
+  · Meses previos a la primera venta = el local aún no existía. NUNCA los llames cierre ni caída.
+  · Meses en cero posteriores a la apertura = local sin operar. NO son ventas malas: exclúyelos
+    al juzgar el desempeño y dilo explícitamente.
+  · Tras una reapertura el local está en RE-MADURACIÓN: vuelve a construir clientela, así que sus
+    primeros meses son estructuralmente bajos. Al comparar contra su propio histórico o contra la
+    red, adviértelo y NO lo atribuyas al potencial del emplazamiento ni a mala gestión.
+  · Si el estado es cerrado_definitivo o cerrado_temporal, decláralo en el Perfil del local.
 - El informe debe tener al menos 150 palabras y desarrollar TODAS las secciones aplicables (Perfil, Desempeño, Tendencia histórica, Recomendación).
 - Si una sección no tiene datos, omitila completa, pero NUNCA dejes el texto cortado a mitad de frase.`;
 

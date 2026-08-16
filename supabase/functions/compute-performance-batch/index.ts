@@ -133,6 +133,8 @@ interface PoiCalc {
   ufTargetMean: number | null;
   hasValidTarget: boolean;
   managementScore: number | null;
+  /** Meses del año objetivo con ventas: <12 indica interrupción y re-maduración. */
+  monthsInYear: number;
 }
 interface ModelResult {
   r2: number;
@@ -398,8 +400,26 @@ const computeInterpretation = (
   resB: number | null,
   resBPct: number | null,
   score: number | null,
+  /** Meses del año objetivo con ventas. Menos de 12 = el local no operó todo el año. */
+  monthsInYear?: number,
 ): string => {
   if (resAPct == null) return "Sin datos suficientes para evaluar.";
+
+  // Un local que no operó el año completo viene saliendo de un cierre y está
+  // en re-maduración: vuelve a construir clientela, así que sus primeros meses
+  // son bajos por esa razón. Sin esta salvedad el diagnóstico decía
+  // "Subrendimiento crítico — Intervenir", que es la conclusión opuesta a la
+  // correcta: no hay nada que intervenir en el emplazamiento ni en la gestión.
+  const enRemaduracion = monthsInYear != null && monthsInYear < 12;
+  if (enRemaduracion && resAPct < 0) {
+    const faltantes = 12 - (monthsInYear ?? 12);
+    return (
+      `Operó ${monthsInYear} de 12 meses (${faltantes} sin ventas): el local está en ` +
+      `re-maduración tras la interrupción y sus cifras aún no reflejan el potencial del ` +
+      `emplazamiento. El residuo de ${resAPct.toFixed(1)}% NO debe leerse como subrendimiento.`
+    );
+  }
+
   if (score == null) return "POI sin nota de gestión: solo Modelo A disponible.";
   if (resBPct == null) return "Modelo B no disponible para este POI.";
   const absA = Math.abs(resAPct);
@@ -582,6 +602,7 @@ serve(async (req) => {
         ufTargetMean,
         hasValidTarget: validTarget,
         managementScore: score ?? null,
+        monthsInYear: inYear.length,
       });
     }
 
@@ -649,7 +670,9 @@ serve(async (req) => {
       const residBPct = (residB != null && predB != null && predB > 0)
         ? (residB / predB) * 100 : null;
 
-      const interp = computeInterpretation(residA, residAPct, residB, residBPct, calc.managementScore);
+      const interp = computeInterpretation(
+        residA, residAPct, residB, residBPct, calc.managementScore, calc.monthsInYear,
+      );
 
       upsertRows.push({
         poi_id: calc.poi_id,

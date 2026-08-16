@@ -234,6 +234,7 @@ export const PoiDetailDialog = ({
         poi,
         attrs,
         aggregates,
+        closure: closureStats,
       });
       setInsights(r.summary);
     } catch (e) {
