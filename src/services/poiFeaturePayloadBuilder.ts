@@ -375,13 +375,6 @@ const loadComunasIndex = async (): Promise<{
 };
 
 /**
- * Población comunal mínima para medir con manzanas GSE fuera de la RM.
- * Bajo este umbral la isócrona suele cubrir buena parte de la comuna, así que
- * la celda comunal es una aproximación aceptable.
- */
-export const REGION_GSE_MIN_COMMUNE_POP = 100_000;
-
-/**
  * Celdas construidas desde manzanas GSE (Censo 2024), disponibles para las 334
  * comunas del país. Se usa fuera de la RM, donde no hay manzanas INE.
  *
@@ -742,20 +735,15 @@ export const buildFeaturePayload = async (
 
   // 3) Celdas, de mayor a menor granularidad:
   //    RM       → manzanas INE + overlay GSE.
-  //    Regiones → manzanas GSE si la comuna supera el umbral de población.
-  //    Fallback → una celda con la comuna entera (último recurso: vuelve
-  //               binario el nse_high_pct y sobrestima la población).
+  //    Regiones → manzanas GSE (existen para las 334 comunas del país).
+  //    Fallback → una celda con la comuna entera. Último recurso: vuelve
+  //               binario el nse_high_pct y sobrestima la población, así que
+  //               solo se usa cuando no hay manzanas utilizables.
   let cells: ManzanaCell[] = [];
   if (isRm) {
     cells = await buildRmCells(bbox);
   } else {
-    const ine = await loadIneIndex();
-    const communePop = comuna
-      ? ine.byName.get(normalizeCommuneName(comuna))?.poblacion ?? 0
-      : 0;
-    if (communePop > REGION_GSE_MIN_COMMUNE_POP) {
-      cells = await buildGseCells(iso, bbox);
-    }
+    cells = await buildGseCells(iso, bbox);
   }
   // Sin celdas, o con celdas que no suman ni una persona (una isócrona que solo
   // toca parques o zona industrial), los agregados quedarían en cero: es
