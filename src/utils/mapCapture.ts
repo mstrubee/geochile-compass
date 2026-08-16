@@ -76,22 +76,130 @@ const settleForCapture = async (): Promise<void> => {
   await wait(450);
 };
 
-/** Toma una foto PNG (dataURL) del contenedor del mapa. Devuelve null si falla (p.ej. CORS). */
-const captureMapSnapshot = async (map: L.Map): Promise<string | null> => {
+/** Espera a que todas las tiles visibles hayan terminado de cargar. */
+const waitForTiles = async (container: HTMLElement, timeoutMs = 5000): Promise<void> => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const tiles = Array.from(container.querySelectorAll<HTMLImageElement>("img.leaflet-tile"));
+    if (tiles.length > 0 && tiles.every((t) => t.complete && t.naturalWidth > 0)) return;
+    await wait(150);
+  }
+};
+
+/**
+ * Opacidad acumulada del elemento y sus ancestros hasta `stopAt` (excluido).
+ *
+ * Un tile ya cargado se considera opaco aunque su opacidad propia sea 0: la
+ * animación de fade-in de Leaflet depende de requestAnimationFrame y puede
+ * quedar a medias (pestaña en segundo plano, rAF limitado), lo que dejaría
+ * el mapa base fuera de la foto pese a estar cargado.
+ */
+const cumulativeOpacity = (el: HTMLElement, stopAt: HTMLElement): number => {
+  const isLoadedTile =
+    el instanceof HTMLImageElement && el.classList.contains("leaflet-tile-loaded");
+  let opacity = 1;
+  let node: HTMLElement | null = el;
+  while (node && node !== stopAt) {
+    const style = getComputedStyle(node);
+    if (style.display === "none" || style.visibility === "hidden") return 0;
+    if (!(node === el && isLoadedTile)) {
+      const o = parseFloat(style.opacity);
+      if (!Number.isNaN(o)) opacity *= o;
+    }
+    node = node.parentElement;
+  }
+  return opacity;
+};
+
+/**
+ * Elementos rasterizables del mapa (tiles `<img>` y canvas de capas vectoriales
+ * / heatmaps), en orden de pintado: paneles ordenados por z-index, y dentro de
+ * cada panel en orden del DOM.
+ */
+const collectDrawables = (container: HTMLElement): HTMLElement[] => {
+  const mapPane = container.querySelector<HTMLElement>(".leaflet-map-pane");
+  if (!mapPane) return [];
+
+  const panes = Array.from(mapPane.children).filter(
+    (el): el is HTMLElement =>
+      el instanceof HTMLElement &&
+      el.classList.contains("leaflet-pane") &&
+      // Los popups no forman parte del informe.
+      !el.classList.contains("leaflet-popup-pane"),
+  );
+
+  const withZ = panes.map((pane, domIndex) => {
+    const z = parseInt(getComputedStyle(pane).zIndex, 10);
+    return { pane, domIndex, z: Number.isNaN(z) ? 0 : z };
+  });
+  withZ.sort((a, b) => (a.z !== b.z ? a.z - b.z : a.domIndex - b.domIndex));
+
+  const out: HTMLElement[] = [];
+  for (const { pane } of withZ) {
+    out.push(
+      ...Array.from(pane.querySelectorAll<HTMLElement>("img, canvas")),
+    );
+  }
+  return out;
+};
+
+/**
+ * Compone una foto del mapa dibujando cada tile/canvas en la posición real que
+ * ocupa en pantalla (`getBoundingClientRect`, que ya incluye los transforms CSS
+ * de Leaflet). Se hace a mano en vez de usar html2canvas porque este último no
+ * reproduce de forma fiable los `translate3d` de los paneles de Leaflet, lo que
+ * desalineaba las capas vectoriales respecto al mapa base.
+ */
+const composeMapSnapshot = (map: L.Map): string | null => {
+  const container = map.getContainer();
+  const cRect = container.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(cRect.width * dpr);
+  canvas.height = Math.round(cRect.height * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.scale(dpr, dpr);
+
+  const bg = getComputedStyle(container).backgroundColor;
+  ctx.fillStyle = bg && bg !== "rgba(0, 0, 0, 0)" ? bg : "#0b1120";
+  ctx.fillRect(0, 0, cRect.width, cRect.height);
+
+  for (const el of collectDrawables(container)) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    // Descarta lo que quedó completamente fuera del viewport del mapa.
+    if (
+      rect.right < cRect.left || rect.left > cRect.right ||
+      rect.bottom < cRect.top || rect.top > cRect.bottom
+    ) continue;
+
+    const alpha = cumulativeOpacity(el, container);
+    if (alpha <= 0) continue;
+
+    if (el instanceof HTMLImageElement && (!el.complete || el.naturalWidth === 0)) continue;
+
+    ctx.globalAlpha = alpha;
+    try {
+      ctx.drawImage(
+        el as CanvasImageSource,
+        rect.left - cRect.left,
+        rect.top - cRect.top,
+        rect.width,
+        rect.height,
+      );
+    } catch {
+      // Un elemento aislado que no se pueda dibujar no debe abortar la foto.
+    }
+  }
+  ctx.globalAlpha = 1;
+
   try {
-    const { default: html2canvas } = await import("html2canvas");
-    const canvas = await html2canvas(map.getContainer(), {
-      useCORS: true,
-      allowTaint: false,
-      logging: false,
-      backgroundColor: null,
-      ignoreElements: (el) =>
-        el.classList?.contains("leaflet-control-container") ||
-        el.classList?.contains("leaflet-popup-pane"),
-    });
     return canvas.toDataURL("image/png");
   } catch (err) {
-    console.warn("[mapCapture] No se pudo capturar el mapa (posible bloqueo CORS):", err);
+    // Canvas "tainted": alguna tile se sirvió sin cabeceras CORS.
+    console.warn("[mapCapture] Canvas bloqueado por CORS al exportar:", err);
     return null;
   }
 };
@@ -99,5 +207,7 @@ const captureMapSnapshot = async (map: L.Map): Promise<string | null> => {
 /** Espera a que la vista actual se asiente y toma la foto. */
 export const captureAfterSettle = async (map: L.Map): Promise<string | null> => {
   await settleForCapture();
-  return captureMapSnapshot(map);
+  await waitForTiles(map.getContainer());
+  await nextFrame();
+  return composeMapSnapshot(map);
 };

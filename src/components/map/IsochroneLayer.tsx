@@ -89,6 +89,10 @@ export const IsochroneLayer = ({
 
   useEffect(() => {
     const group = L.featureGroup().addTo(map);
+    // Renderer canvas (no SVG): la exportación del informe compone la foto a
+    // partir de los <canvas>/<img> del mapa, así que los vectores deben
+    // rasterizarse para aparecer en ella.
+    const renderer = L.canvas(outlineOnly ? { pane: OUTLINE_PANE, padding: 0.5 } : { padding: 0.5 });
 
     visibleLayers.forEach((iso) => {
       const orderedFeatures = [...iso.features].sort(
@@ -113,6 +117,7 @@ export const IsochroneLayer = ({
             })();
         const layer = L.geoJSON(feature as never, {
           pane: outlineOnly ? OUTLINE_PANE : undefined,
+          renderer,
           style,
           onEachFeature: (_feat, childLayer) => {
             childLayer.bindPopup(
@@ -125,6 +130,7 @@ export const IsochroneLayer = ({
 
       if (!outlineOnly) {
         L.circleMarker([iso.center.lat, iso.center.lng], {
+          renderer,
           radius: 5,
           color: iso.color,
           weight: 2,

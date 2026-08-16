@@ -51,9 +51,9 @@ export const GseLayer = ({
 }: GseLayerProps) => {
   const map = useMap();
   const [coveredCommuneNames, setCoveredCommuneNames] = useState<Set<string>>(new Set());
-  // Renderer canvas (no SVG): con miles de polígonos, html2canvas (usado para
-  // las fotos del informe) no captura de forma confiable el renderer SVG por
-  // defecto de Leaflet. Canvas se rasteriza directo y sí se captura bien.
+  // Renderer canvas (no SVG): la exportación del informe compone la foto a
+  // partir de los <canvas>/<img> del mapa, así que los polígonos deben
+  // rasterizarse para aparecer en ella.
   const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
 
   // Notificar el viewport inicial y en cada movimiento.
