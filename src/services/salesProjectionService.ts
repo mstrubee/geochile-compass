@@ -15,6 +15,9 @@
  * Extensible: el folderId permite usar cualquier cadena, no solo Autoplanet.
  */
 
+import type { Feature, MultiPolygon, Polygon } from "geojson";
+import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
+import { point } from "@turf/helpers";
 import { supabase } from "@/integrations/supabase/client";
 import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
 import type { ParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
@@ -74,6 +77,12 @@ export interface ProjectionResult {
 export interface ProjectionInput {
   folderId:    string;
   isoAnalysis: IsochroneAnalysis;
+  /**
+   * Polígono de la banda analizada. Necesario para contar la competencia
+   * interna (locales de la misma carpeta dentro del área); sin él ese feature
+   * queda en 0 y el modelo compara contra comparables que sí lo traen medido.
+   */
+  isoFeature?: Feature<Polygon | MultiPolygon> | null;
   parque?:     ParqueIsochroneStats | null;
   /** Tasa de crecimiento anual para la proyección (default 0.04 = 4%) */
   growthRate?: number;
@@ -108,6 +117,7 @@ const FEATURE_LABELS: Record<string, string> = {
 function extractFeatures(
   iso: IsochroneAnalysis,
   parque: ParqueIsochroneStats | null | undefined,
+  nCompetitionInt: number,
 ): Record<string, number> {
   return {
     pop_total:          iso.totals.pop,
@@ -116,18 +126,49 @@ function extractFeatures(
     nse_mid_pct:        extractNseMidPct(iso),
     income_avg:         iso.totals.incomeAvgPerHh,
     complement_score:   iso.territorialPoints.total,
-    n_competition_int:  0,
+    n_competition_int:  nCompetitionInt,
     parque_n_vehiculos: parque?.vehiculos ?? 0,
   };
 }
 
+/**
+ * Locales de la propia carpeta que caen dentro de la isócrona (canibalización).
+ * Los comparables del caché traen este valor medido, así que dejarlo en 0
+ * hacía que toda ubicación nueva pareciera libre de competencia propia.
+ */
+async function countInternalCompetition(
+  folderId: string,
+  isoFeature: Feature<Polygon | MultiPolygon> | null | undefined,
+): Promise<number> {
+  if (!isoFeature) return 0;
+  const { data, error } = await supabase
+    .from("pois")
+    .select("lat, lng")
+    .eq("folder_id", folderId);
+  if (error || !data) return 0;
+  let n = 0;
+  for (const p of data) {
+    if (p.lat == null || p.lng == null) continue;
+    try {
+      if (booleanPointInPolygon(point([p.lng, p.lat]), isoFeature as never)) n += 1;
+    } catch {
+      // Un punto con geometría inválida no debe tumbar la proyección.
+    }
+  }
+  return n;
+}
+
+// Los comparables del caché ponderan por POBLACIÓN (ver compute-poi-features:
+// `popWeightedNseHigh / popTotal`). Acá se usa la misma ponderación: con la
+// distribución por hogares, ambos lados medían cosas distintas y el vecino más
+// cercano se elegía sobre un espacio deformado.
 function extractNseHighPct(iso: IsochroneAnalysis): number {
-  const dist = iso.gse?.classDistribution ?? {};
+  const dist = iso.gse?.classDistributionByPop ?? {};
   return ((dist["ABC1"] ?? 0) + (dist["C1"] ?? 0) + (dist["C2"] ?? 0)) / 100;
 }
 
 function extractNseMidPct(iso: IsochroneAnalysis): number {
-  const dist = iso.gse?.classDistribution ?? {};
+  const dist = iso.gse?.classDistributionByPop ?? {};
   return (dist["C3"] ?? 0) / 100;
 }
 
@@ -165,7 +206,7 @@ export async function computeSalesProjection(
   input: ProjectionInput,
 ): Promise<ProjectionResult> {
   const {
-    folderId, isoAnalysis, parque,
+    folderId, isoAnalysis, isoFeature, parque,
     growthRate    = 0.04,   // 4% anual por defecto (mercado automotriz Chile)
     horizonYears  = 5,
   } = input;
@@ -266,7 +307,8 @@ export async function computeSalesProjection(
   const usedPredictions = nWithSales === 0;
 
   // ── 4. Vector de features de la nueva ubicación ────────────────────────────
-  const newFeatures = extractFeatures(isoAnalysis, parque);
+  const nCompetitionInt = await countInternalCompetition(folderId, isoFeature);
+  const newFeatures = extractFeatures(isoAnalysis, parque, nCompetitionInt);
 
   // ── 5. Normalizar y calcular distancias ────────────────────────────────────
   const { normRows, normNew } = normalizeFeatures(comparable, newFeatures, SIMILARITY_FEATURES);

@@ -3,6 +3,7 @@ import bbox from "@turf/bbox";
 import type { Isochrone } from "@/types/isochrones";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 import type { GseFeatureCollection } from "@/types/gse";
+import type { ParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import {
   useTerritorialLayers,
   useTerritorialFeatures,
@@ -27,6 +28,7 @@ interface Params {
   isoName?: string | null;
   manzanas?: ManzanaFeatureCollection | null;
   gse?: GseFeatureCollection | null;
+  parqueStats?: ParqueIsochroneStats | null;
 }
 
 /**
@@ -40,6 +42,7 @@ export const useIsochroneReport = ({
   isoName = null,
   manzanas = null,
   gse = null,
+  parqueStats = null,
 }: Params) => {
   const { groups, layers } = useTerritorialLayers();
   const layerIds = useMemo(() => layers.map((l) => l.id), [layers]);
@@ -162,6 +165,7 @@ export const useIsochroneReport = ({
       // Las del área de la isócrona tienen prioridad; las del mapa solo sirven
       // como respaldo mientras la carga por bbox está en vuelo.
       gse: gseForIso ?? gse,
+      parqueStats,
       commerceByCategory,
       categoriesQueried,
       commerceErrors,
@@ -177,6 +181,7 @@ export const useIsochroneReport = ({
     manzanas,
     gse,
     gseForIso,
+    parqueStats,
     commerceByCategory,
     categoriesQueried,
     commerceErrors,

@@ -11,6 +11,7 @@ import type { IneCommuneStats } from "@/utils/ineScales";
 import type { NSE } from "@/data/communes";
 import { normalizeCommuneName } from "@/services/communeDataService";
 import type { GseFeatureCollection, GseClass } from "@/types/gse";
+import { incomeFromGseDistribution } from "@/data/gseIncome";
 import { RM_AVERAGES } from "@/data/rmAverages";
 
 export type NseLabel = "ABC1" | "C2" | "C3" | "D" | "E";
@@ -18,6 +19,14 @@ export type NseLabel = "ABC1" | "C2" | "C3" | "D" | "E";
 export interface GseBreakdown {
   manzanaCount: number;
   classDistribution: Partial<Record<GseClass, number>>; // % ponderado por HOGARES (n_hog × share), no por área
+  /**
+   * % ponderado por POBLACIÓN (n_per × share). Existe además del ponderado por
+   * hogares porque el caché de features de los comparables se construye
+   * ponderando por población: el modelo de proyección debe comparar la misma
+   * magnitud en ambos lados. Para lectura humana ("% de hogares ABC1") usar
+   * `classDistribution`.
+   */
+  classDistributionByPop: Partial<Record<GseClass, number>>;
   quintilDistribution: Partial<Record<"Q1" | "Q2" | "Q3" | "Q4" | "Q5", number>>;
   nseScoreAvg: number | null; // 0-1000
   educYearsAvg: number | null;
@@ -358,6 +367,7 @@ export const gseBreakdown = (
   let count = 0;
   const classArea: Partial<Record<GseClass, number>> = {};
   const classHh:   Partial<Record<GseClass, number>> = {};  // hogares reales por GSE
+  const classPop:  Partial<Record<GseClass, number>> = {};  // personas reales por GSE
   const quintilArea: Partial<Record<"Q1" | "Q2" | "Q3" | "Q4" | "Q5", number>> = {};
   let nseScoreNum = 0, nseScoreDen = 0;
   let educNum = 0, educDen = 0;
@@ -409,6 +419,9 @@ export const gseBreakdown = (
       if (mHh > 0) {
         classHh[p.gse] = (classHh[p.gse] ?? 0) + mHh;
       }
+      if (mPop > 0) {
+        classPop[p.gse] = (classPop[p.gse] ?? 0) + mPop;
+      }
     }
     if (p.quintil) quintilArea[p.quintil] = (quintilArea[p.quintil] ?? 0) + interArea;
     if (p.nse_score != null) { nseScoreNum += p.nse_score * interArea; nseScoreDen += interArea; }
@@ -428,6 +441,17 @@ export const gseBreakdown = (
     const v = usePop ? (classHh[k] ?? 0) : (classArea[k] ?? 0);
     if (v > 0) classDistribution[k] = Math.round((v / denom) * 1000) / 10;
   }
+  // Distribución por población: misma ponderación que usa el caché de features
+  // de los comparables, para que el modelo compare lo mismo en ambos lados.
+  const totalPopGse = Object.values(classPop).reduce((s, v) => s + (v ?? 0), 0);
+  const classDistributionByPop: Partial<Record<GseClass, number>> = {};
+  if (totalPopGse > 0) {
+    for (const k of GSE_CLASSES) {
+      const v = classPop[k] ?? 0;
+      if (v > 0) classDistributionByPop[k] = Math.round((v / totalPopGse) * 1000) / 10;
+    }
+  }
+
   const quintilDistribution: Partial<Record<"Q1" | "Q2" | "Q3" | "Q4" | "Q5", number>> = {};
   for (const k of QUINTILES) {
     const a = quintilArea[k];
@@ -436,6 +460,7 @@ export const gseBreakdown = (
   return {
     manzanaCount: count,
     classDistribution,
+    classDistributionByPop,
     quintilDistribution,
     nseScoreAvg:  nseScoreDen > 0 ? Math.round((nseScoreNum / nseScoreDen) * 10) / 10 : null,
     educYearsAvg: educDen > 0     ? Math.round((educNum / educDen) * 10) / 10         : null,
@@ -566,15 +591,31 @@ export const computeIsochroneAnalysis = (params: {
     source = "comuna";
   }
 
-  // Ingresos vienen siempre del ingreso comunal aplicado a hogares dentro de la iso.
+  // ── Ingreso por hogar ───────────────────────────────────────────────────
+  //
+  // Preferimos derivarlo de la mezcla GSE real del área (ponderada por
+  // hogares). El promedio comunal asigna un único ingreso a toda la comuna,
+  // así que en zonas mixtas aplana justamente la diferencia que importa: una
+  // isócrona con 19% ABC1 y 20% D quedaba reportada con el ingreso medio de
+  // la comuna, como si fuera homogénea.
+  //
+  // Sin datos GSE se mantiene el promedio comunal como respaldo.
   let incomeTotal = 0;
-  const totalHhCommune = communes.reduce((s, c) => s + c.hhInIso, 0);
-  const scale = source === "manzanas" && totalHhCommune > 0 ? hh / totalHhCommune : 1;
-  for (const c of communes) {
-    if (c.ingreso == null) continue;
-    incomeTotal += c.hhInIso * scale * c.ingreso;
+  let incomeAvgPerHh = 0;
+  const gseIncome = gseBD ? incomeFromGseDistribution(gseBD.classDistribution) : null;
+
+  if (gseIncome != null && hh > 0) {
+    incomeAvgPerHh = gseIncome;
+    incomeTotal = gseIncome * hh;
+  } else {
+    const totalHhCommune = communes.reduce((s, c) => s + c.hhInIso, 0);
+    const scale = source === "manzanas" && totalHhCommune > 0 ? hh / totalHhCommune : 1;
+    for (const c of communes) {
+      if (c.ingreso == null) continue;
+      incomeTotal += c.hhInIso * scale * c.ingreso;
+    }
+    incomeAvgPerHh = hh > 0 ? incomeTotal / hh : 0;
   }
-  const incomeAvgPerHh = hh > 0 ? incomeTotal / hh : 0;
 
   const density = computeDensity(area_km2, pop, hh, territorialPoints);
   const comparisons = buildComparisons(

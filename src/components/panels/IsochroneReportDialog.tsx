@@ -25,6 +25,7 @@ import type { ManzanaFeatureCollection } from "@/types/manzanas";
 import type { GseFeatureCollection } from "@/types/gse";
 import { useIsochroneReport } from "@/hooks/useIsochroneReport";
 import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
+import { pickBandFeature } from "@/utils/isochroneAnalysis";
 import {
   DEFAULT_COMMERCE_CATEGORIES,
   buildFreeTextCategory,
@@ -72,12 +73,19 @@ export const IsochroneReportDialog = ({
   gse = null,
   onCaptureMapImages,
 }: Props) => {
+  // Parque de la banda mayor: es la que rotula la página económica del informe.
+  const largestBand = useMemo(
+    () => (isochrone ? pickBandFeature(isochrone.features) : null),
+    [isochrone],
+  );
+  const { stats: parqueStats } = useParqueIsochroneStats(largestBand, open);
+
   const {
     report,
     commerceLoading,
     fetchCommerce,
     commerceErrors,
-  } = useIsochroneReport({ isochrone, isoName: savedName, manzanas, gse });
+  } = useIsochroneReport({ isochrone, isoName: savedName, manzanas, gse, parqueStats });
 
   const [exportingPdf, setExportingPdf] = useState(false);
   const [tab, setTab] = useState(0);

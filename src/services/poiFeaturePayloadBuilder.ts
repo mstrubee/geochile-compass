@@ -12,6 +12,7 @@ import {
 } from "@/services/analysisSettingsService";
 import type { AnalysisSettings, ComplementWeightRule } from "@/types/analysis";
 import type { GseClass, GseFeature } from "@/types/gse";
+import { GSE_INCOME } from "@/data/gseIncome";
 import { resolveCommuneAndRegion } from "@/utils/communeReverseGeocode";
 import { supabase } from "@/integrations/supabase/client";
 import area from "@turf/area";
@@ -301,7 +302,13 @@ const buildRmCells = async (
       pop: finalPop,
       hh:  finalHh,
       nse,
-      income: gseMatched ? NSE_INCOME[nse] : (f.properties.income ?? NSE_INCOME[nse]),
+      // Con clase GSE conocida se usa la tabla canónica de 6 clases: NSE_INCOME
+      // solo tiene 5 niveles y colapsaba C1 en ABC1, cobrándole a un hogar C1
+      // el ingreso de uno ABC1. El análisis de isócronas usa esta misma tabla,
+      // así que ambos lados del modelo quedan en la misma escala.
+      income: gseMatched && gseClass
+        ? GSE_INCOME[gseClass]
+        : (f.properties.income ?? NSE_INCOME[nse]),
       density: f.properties.density,
       traffic: f.properties.traffic ?? 50,
       centroid,

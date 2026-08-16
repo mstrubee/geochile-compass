@@ -24,7 +24,7 @@ import {
 } from "@/utils/isochroneAnalysis";
 import type { CommerceCategory, CommerceItem } from "@/services/commerceService";
 import type { NSE } from "@/data/communes";
-import type { GastoEndogenoResult } from "@/utils/gastoEndogeno";
+import { calcGastoEndogeno, type GastoEndogenoResult } from "@/utils/gastoEndogeno";
 import type { ParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 
 const NSE_NUM_TO_LABEL: Record<NSE, GseClass> = {
@@ -169,6 +169,7 @@ interface BuildReportParams {
   nombresPorCodigo: Record<string, string>;
   manzanas: ManzanaFeatureCollection | null;
   gse?: GseFeatureCollection | null;
+  parqueStats?: ParqueIsochroneStats | null;
   /** Mapa categoryId -> items (todos los items en bbox externo, sin filtrar por banda). */
   commerceByCategory: Record<string, CommerceItem[]>;
   categoriesQueried: CommerceCategory[];
@@ -191,6 +192,7 @@ export const buildIsochroneReport = (params: BuildReportParams): IsochroneReport
     nombresPorCodigo,
     manzanas,
     gse = null,
+    parqueStats = null,
     commerceByCategory,
     categoriesQueried,
     commerceErrors,
@@ -206,6 +208,10 @@ export const buildIsochroneReport = (params: BuildReportParams): IsochroneReport
   const ordered = [...iso.features].sort(
     (a, b) => (a.properties?.value ?? 0) - (b.properties?.value ?? 0),
   );
+
+  // El análisis de la banda mayor alimenta la página económica del informe,
+  // que se rotula con esa misma banda.
+  let largestBandAnalysis: IsochroneAnalysis | null = null;
 
   const bands: IsochroneBandReport[] = ordered.map((feat) => {
     const bandSeconds = feat.properties?.value ?? 0;
@@ -239,6 +245,7 @@ export const buildIsochroneReport = (params: BuildReportParams): IsochroneReport
     }
 
     const nse = computeNseDistribution(analysis);
+    largestBandAnalysis = analysis; // `ordered` va de menor a mayor: gana la última
 
     return {
       bandSeconds,
@@ -276,5 +283,10 @@ export const buildIsochroneReport = (params: BuildReportParams): IsochroneReport
     outerBbox: { south, west, north, east },
     categoriesQueried,
     commerceErrors,
+    // Se calculan acá para que cualquier camino de exportación produzca el
+    // mismo informe: antes solo el botón del panel de análisis los adjuntaba,
+    // así que el PDF del diálogo salía sin la página económica.
+    gastoEndogeno: largestBandAnalysis ? calcGastoEndogeno(largestBandAnalysis) : null,
+    parqueStats: parqueStats ?? null,
   };
 };
