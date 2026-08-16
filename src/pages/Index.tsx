@@ -134,6 +134,10 @@ const Index = () => {
   // fuera del ciclo de render (captura de fotos del informe de isócrona).
   const gseDataRef = useRef<GseFeatureCollection | null>(null);
   const gseViewportRef = useRef<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
+  // Referencia siempre-actualizada de isochrones (declarado más abajo): evita
+  // que la captura de fotos lea un arreglo "isochrones" obsoleto por culpa
+  // del closure de useCallback (que no depende de él).
+  const isochronesRef = useRef<Isochrone[]>([]);
   const [layers, setLayers] = useState<LayerState>({
     communes: false,
     communesGeo: false,
@@ -292,6 +296,10 @@ const Index = () => {
       const prevGastoView = gastoView;
       const prevCenter = map.getCenter();
       const prevZoom = map.getZoom();
+      // La isócrona reportada puede no estar marcada "visible" en el arreglo
+      // global (p.ej. si el usuario la ocultó antes) — guardamos el estado
+      // real para restaurarlo, y forzamos que SOLO ella se vea durante la captura.
+      const prevVisibility = new Map(isochronesRef.current.map((i) => [i.id, i.visible]));
 
       const log = (msg: string, extra?: unknown) =>
         // eslint-disable-next-line no-console
@@ -300,14 +308,15 @@ const Index = () => {
       try {
         log("isócrona objetivo", { id: iso.id, color: iso.color, bandas: iso.minutes });
         log(
-          "isócronas visibles en el mapa",
-          isochrones.filter((i) => i.visible).map((i) => ({ id: i.id, color: i.color })),
+          "isócronas visibles en el mapa (antes de forzar)",
+          isochronesRef.current.filter((i) => i.visible).map((i) => ({ id: i.id, color: i.color })),
         );
         log("bounds calculados", boundsBox);
         flushSync(() => {
           setLayers(ALL_LAYERS_OFF);
           setComercialLayers(ALL_COMERCIAL_OFF);
           setIsoOutlineCapture(true);
+          setIsochrones((prev) => prev.map((i) => ({ ...i, visible: i.id === iso.id })));
         });
         await fitMapToBounds(map, boundsBox);
         log("vista encuadrada", { center: map.getCenter(), zoom: map.getZoom() });
@@ -346,11 +355,17 @@ const Index = () => {
           setComercialLayers(prevComercial);
           setGastoView(prevGastoView);
           setIsoOutlineCapture(false);
+          setIsochrones((prev) =>
+            prev.map((i) => {
+              const orig = prevVisibility.get(i.id);
+              return orig === undefined || orig === i.visible ? i : { ...i, visible: orig };
+            }),
+          );
         });
         map.setView(prevCenter, prevZoom, { animate: false });
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `isochrones` se lee dentro (diagnóstico), declarado más abajo en el componente
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `isochronesRef`/`setIsochrones` se leen vía ref/setState estable, no necesitan estar en deps
     [layers, comercialLayers, gastoView],
   );
 
@@ -358,6 +373,7 @@ const Index = () => {
   const [isoMode, setIsoMode] = useState<IsoMode>("driving-car");
   const [isoMinutes, setIsoMinutes] = useState<number[]>([5, 7, 10]);
   const [isochrones, setIsochrones] = useState<Isochrone[]>([]);
+  useEffect(() => { isochronesRef.current = isochrones; }, [isochrones]);
   const [fitIsoId, setFitIsoId] = useState<string | null>(null);
   const [isoLoading, setIsoLoading] = useState(false);
   const [selectedIsoId, setSelectedIsoId] = useState<string | null>(null);

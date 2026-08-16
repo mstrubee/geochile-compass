@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { GeoJSON, CircleMarker, Popup, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
 import type { Layer } from "leaflet";
 import type { Feature } from "geojson";
 import type { GseFeatureCollection, GseProperties, GseVariable } from "@/types/gse";
@@ -50,6 +51,10 @@ export const GseLayer = ({
 }: GseLayerProps) => {
   const map = useMap();
   const [coveredCommuneNames, setCoveredCommuneNames] = useState<Set<string>>(new Set());
+  // Renderer canvas (no SVG): con miles de polígonos, html2canvas (usado para
+  // las fotos del informe) no captura de forma confiable el renderer SVG por
+  // defecto de Leaflet. Canvas se rasteriza directo y sí se captura bien.
+  const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
 
   // Notificar el viewport inicial y en cada movimiento.
   useEffect(() => {
@@ -141,7 +146,13 @@ export const GseLayer = ({
   return (
     <>
       {data && data.features.length > 0 && (
-        <GeoJSON key={key} data={data} style={styleFn} onEachFeature={onEachFeature} />
+        <GeoJSON
+          key={key}
+          data={data}
+          style={styleFn}
+          onEachFeature={onEachFeature}
+          renderer={canvasRenderer}
+        />
       )}
       {fallbackCommunes.map((c) => {
         const color = `hsl(${NSE_COLOR_HSL[c.nse]})`;
