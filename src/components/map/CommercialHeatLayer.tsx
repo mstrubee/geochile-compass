@@ -107,30 +107,29 @@ export const CommercialHeatLayer = ({
 
   const shouldShow = visible && zoom >= settings.min_zoom;
 
-  // Reconstruir la capa cuando cambian parámetros o categorías
+  // Se recrea la capa en cada cambio en vez de usar setOptions: el redraw() de
+  // leaflet.heat se salta el redibujo si ya hay uno agendado (`this._frame`),
+  // así que un cambio de radio podía no llegar a pintarse — y en la captura del
+  // informe eso significa una foto con los parámetros viejos. Recrear es
+  // determinista, y de paso el cleanup vuelve a registrarse siempre (antes el
+  // camino de reutilización hacía `return` y se lo saltaba).
   useEffect(() => {
-    if (!shouldShow) {
-      if (heatRef.current) { map.removeLayer(heatRef.current); heatRef.current = null; }
-      return;
-    }
-
-    const pts = getFilteredPoints(activeCategories);
-    const opts = makeOpts(settings.radius, settings.blur, settings.opacity);
-
-    const heatPts = pts as unknown as L.HeatLatLngTuple[];
     if (heatRef.current) {
-      (heatRef.current as L.HeatLayer & { setLatLngs: (d: L.HeatLatLngTuple[]) => void }).setLatLngs(heatPts);
-      heatRef.current.setOptions(opts);
-      (heatRef.current as L.HeatLayer & { redraw: () => void }).redraw();
-      return;
+      map.removeLayer(heatRef.current);
+      heatRef.current = null;
     }
+    if (!shouldShow) return;
 
-    const layer = L.heatLayer(heatPts, opts);
+    const pts = getFilteredPoints(activeCategories) as unknown as L.HeatLatLngTuple[];
+    const layer = L.heatLayer(pts, makeOpts(settings.radius, settings.blur, settings.opacity));
     layer.addTo(map);
     heatRef.current = layer;
 
     return () => {
-      if (heatRef.current) { map.removeLayer(heatRef.current); heatRef.current = null; }
+      if (heatRef.current) {
+        map.removeLayer(heatRef.current);
+        heatRef.current = null;
+      }
     };
   }, [shouldShow, map, activeCategories, settings]);
 

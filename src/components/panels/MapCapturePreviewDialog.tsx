@@ -16,6 +16,8 @@ interface Props {
   onClose: () => void;
   /** Toma las 4 fotos aplicando estos ajustes al heatmap de atractores. */
   onCapture: (heat: Partial<HeatmapSettings>) => Promise<MapCaptureImages | null>;
+  /** Recaptura solo atractores: las otras tres no cambian al afinar el heatmap. */
+  onCaptureAtractores?: (heat: Partial<HeatmapSettings>) => Promise<string | null>;
   /** Confirma y genera el informe con las fotos revisadas. */
   onConfirm: (images: MapCaptureImages | null) => Promise<void> | void;
 }
@@ -34,7 +36,9 @@ const TITULOS: Array<[keyof MapCaptureImages, string]> = [
  * capa, así que conviene revisarlo antes de que quede impreso en una lámina de
  * directorio en vez de descubrirlo después.
  */
-export const MapCapturePreviewDialog = ({ open, onClose, onCapture, onConfirm }: Props) => {
+export const MapCapturePreviewDialog = ({
+  open, onClose, onCapture, onCaptureAtractores, onConfirm,
+}: Props) => {
   // El radio del heatmap está en píxeles: lo que se ve bien en pantalla puede
   // convertirse en una mancha que tapa la isócrona a la escala de la foto.
   const [heat, setHeat] = useState<HeatmapSettings>(DEFAULT_SETTINGS.commercial);
@@ -44,6 +48,7 @@ export const MapCapturePreviewDialog = ({ open, onClose, onCapture, onConfirm }:
   heatRef.current = heat;
   const [images, setImages] = useState<MapCaptureImages | null>(null);
   const [capturing, setCapturing] = useState(false);
+  const [heatBusy, setHeatBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   const capture = useCallback(
@@ -58,6 +63,21 @@ export const MapCapturePreviewDialog = ({ open, onClose, onCapture, onConfirm }:
     [onCapture],
   );
 
+  /** Al mover un control solo cambia atractores: rehacer las cuatro es lento. */
+  const recaptureHeat = useCallback(
+    async (h: HeatmapSettings) => {
+      if (!onCaptureAtractores) return capture(h);
+      setHeatBusy(true);
+      try {
+        const img = await onCaptureAtractores(h);
+        setImages((prev) => (prev ? { ...prev, atractores: img } : prev));
+      } finally {
+        setHeatBusy(false);
+      }
+    },
+    [onCaptureAtractores, capture],
+  );
+
   // Primera captura al abrir, con los valores por defecto.
   useEffect(() => {
     if (!open) return;
@@ -67,7 +87,7 @@ export const MapCapturePreviewDialog = ({ open, onClose, onCapture, onConfirm }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const busy = capturing || generating;
+  const busy = capturing || heatBusy || generating;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !busy && onClose()}>
@@ -90,7 +110,7 @@ export const MapCapturePreviewDialog = ({ open, onClose, onCapture, onConfirm }:
                 <div key={key}>
                   <div className="mb-1 text-[11px] font-medium text-brand-red">{titulo}</div>
                   <div className="relative aspect-[4/3] overflow-hidden rounded-md border border-border/40 bg-surface-2/50">
-                    {capturing ? (
+                    {capturing || (heatBusy && key === "atractores") ? (
                       <div className="flex h-full items-center justify-center">
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                       </div>
@@ -129,8 +149,8 @@ export const MapCapturePreviewDialog = ({ open, onClose, onCapture, onConfirm }:
                       setHeat((h) => ({ ...h, [key]: parseFloat(e.target.value) }))
                     }
                     // Solo al soltar: cada captura mueve el mapa y toma 4 fotos.
-                    onMouseUp={() => void capture(heatRef.current)}
-                    onTouchEnd={() => void capture(heatRef.current)}
+                    onMouseUp={() => void recaptureHeat(heatRef.current)}
+                    onTouchEnd={() => void recaptureHeat(heatRef.current)}
                     className="w-24 accent-brand-red"
                   />
                   <span className="w-8 text-[11px] font-mono text-foreground">
@@ -144,7 +164,7 @@ export const MapCapturePreviewDialog = ({ open, onClose, onCapture, onConfirm }:
               variant="outline"
               className="h-7 text-[11px]"
               disabled={busy}
-              onClick={() => void capture(heatRef.current)}
+              onClick={() => void recaptureHeat(heatRef.current)}
             >
               <RefreshCw className="mr-1.5 h-3 w-3" /> Recapturar
             </Button>

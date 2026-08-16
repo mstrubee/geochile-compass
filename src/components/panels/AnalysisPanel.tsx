@@ -43,6 +43,11 @@ interface AnalysisPanelProps {
     iso: Isochrone,
     heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
   ) => Promise<MapCaptureImages | null>;
+  /** Recaptura solo la foto de atractores, al afinar su heatmap. */
+  onCaptureAtractores?: (
+    iso: Isochrone,
+    heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
+  ) => Promise<string | null>;
 }
 
 /** Castigo del formato Express: vende menos que un local estándar. */
@@ -162,6 +167,7 @@ export const AnalysisPanel = ({
   projectionSettings = null,
   onProjectionSettingsChange,
   onCaptureMapImages,
+  onCaptureAtractores,
 }: AnalysisPanelProps) => {
   // Folder seleccionado para proyección — default al primero de la lista
   const [selectedFolderId, setSelectedFolderId] = useState<string>(
@@ -851,6 +857,9 @@ export const AnalysisPanel = ({
         onClose={() => setPreviewOpen(false)}
         onCapture={async (h) =>
           isochrone && onCaptureMapImages ? onCaptureMapImages(isochrone, h) : null
+        }
+        onCaptureAtractores={async (h) =>
+          isochrone && onCaptureAtractores ? onCaptureAtractores(isochrone, h) : null
         }
         onConfirm={async (imgs) => {
           if (!fullReport) return;

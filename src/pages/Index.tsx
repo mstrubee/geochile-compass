@@ -277,6 +277,58 @@ const Index = () => {
   // captura. No se guardan.
   const [heatOverride, setHeatOverride] =
     useState<Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null>(null);
+  /**
+   * Solo la foto de atractores, para afinar el heatmap sin rehacer las otras
+   * tres: son idénticas entre intentos y cada tanda completa toma varios
+   * segundos.
+   */
+  const captureAtractoresOnly = useCallback(
+    async (
+      iso: Isochrone,
+      heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
+    ): Promise<string | null> => {
+      const map = mapRef.current;
+      if (!map) return null;
+
+      const largest = pickBandFeature(iso.features);
+      const boundsBox = largest
+        ? (() => {
+            const [w, s, e, n] = bbox(largest as never) as [number, number, number, number];
+            const dx = (e - w) * 0.15 || 0.01;
+            const dy = (n - s) * 0.15 || 0.01;
+            return { south: s - dy, west: w - dx, north: n + dy, east: e + dx };
+          })()
+        : {
+            south: iso.center.lat - 0.05, west: iso.center.lng - 0.05,
+            north: iso.center.lat + 0.05, east: iso.center.lng + 0.05,
+          };
+
+      const prevLayers = layers;
+      const prevComercial = comercialLayers;
+      const prevCenter = map.getCenter();
+      const prevZoom = map.getZoom();
+      try {
+        flushSync(() => {
+          setLayers({ ...ALL_LAYERS_OFF, commercial: true });
+          setComercialLayers(ALL_COMERCIAL_OFF);
+          setIsoOutlineCapture(true);
+          setHeatOverride(heat ?? null);
+        });
+        await fitMapToBounds(map, boundsBox);
+        return await captureAfterSettle(map);
+      } finally {
+        flushSync(() => {
+          setLayers(prevLayers);
+          setComercialLayers(prevComercial);
+          setIsoOutlineCapture(false);
+          setHeatOverride(null);
+        });
+        map.setView(prevCenter, prevZoom, { animate: false });
+      }
+    },
+    [layers, comercialLayers],
+  );
+
   const captureIsochroneMapImages = useCallback(
     async (
       iso: Isochrone,
@@ -1798,6 +1850,7 @@ const Index = () => {
             projectionSettings={analysisSavedIso?.projection_settings ?? null}
             onProjectionSettingsChange={handleProjectionSettingsChange}
             onCaptureMapImages={captureIsochroneMapImages}
+            onCaptureAtractores={captureAtractoresOnly}
           />
         </div>
       </main>
