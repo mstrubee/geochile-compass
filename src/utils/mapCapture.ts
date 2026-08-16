@@ -56,16 +56,30 @@ const waitForMoveEnd = (map: L.Map, timeoutMs = 2000): Promise<void> =>
     });
   });
 
-/** Encuadra el mapa en los bounds dados y espera a que se estabilice. */
-export const fitMapToBounds = (map: L.Map, bounds: CaptureBounds): Promise<void> => {
+/**
+ * Encuadra el mapa en los bounds dados y espera a que se estabilice.
+ *
+ * `zoomOffset` corre el zoom resultante: negativo aleja, positivo acerca. El
+ * encuadre debe rehacerse ANTES DE CADA foto, no una sola vez al principio:
+ * el contenedor del mapa cambia de tamaño al aparecer leyendas de algunas
+ * capas, y a igual zoom un contenedor distinto abarca otra superficie — por
+ * eso la foto de atractores salía a otra escala que las demás.
+ */
+export const fitMapToBounds = (
+  map: L.Map,
+  bounds: CaptureBounds,
+  zoomOffset = 0,
+): Promise<void> => {
   const p = waitForMoveEnd(map);
-  map.fitBounds(
-    [
-      [bounds.south, bounds.west],
-      [bounds.north, bounds.east],
-    ],
-    { animate: false, padding: [24, 24] },
-  );
+  map.invalidateSize({ animate: false });
+  const latLng: [[number, number], [number, number]] = [
+    [bounds.south, bounds.west],
+    [bounds.north, bounds.east],
+  ];
+  map.fitBounds(latLng, { animate: false, padding: [24, 24] });
+  if (zoomOffset !== 0) {
+    map.setZoom(map.getZoom() + zoomOffset, { animate: false });
+  }
   return p;
 };
 

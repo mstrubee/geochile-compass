@@ -273,7 +273,7 @@ const Index = () => {
   // encima de cualquier capa, mientras dura la captura de fotos del informe.
   const [isoOutlineCapture, setIsoOutlineCapture] = useState(false);
   const captureIsochroneMapImages = useCallback(
-    async (iso: Isochrone): Promise<MapCaptureImages | null> => {
+    async (iso: Isochrone, zoomOffset = 0): Promise<MapCaptureImages | null> => {
       const map = mapRef.current;
       if (!map) return null;
 

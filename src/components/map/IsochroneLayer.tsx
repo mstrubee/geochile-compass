@@ -20,6 +20,30 @@ interface Props {
 const OUTLINE_PANE = "isoOutlinePane";
 const OUTLINE_STYLE = { color: "#DC2626", weight: 4, opacity: 1, fillOpacity: 0 };
 
+/** Velo sobre todo lo que queda FUERA de la isócrona, para que resalte. */
+const MASK_STYLE = {
+  color: "transparent", weight: 0, fillColor: "#0B1220", fillOpacity: 0.45,
+};
+
+/**
+ * Polígono del mundo con un hueco por cada anillo de la isócrona: al pintarlo
+ * con `evenodd` queda oscurecido todo menos el área analizada.
+ */
+const buildMask = (features: IsoFeature[]): GeoJSON.Feature<MultiPolygon> => {
+  const world = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
+  const holes: number[][][] = [];
+  for (const f of features) {
+    const g = f.geometry;
+    if (g.type === "Polygon") holes.push(...g.coordinates);
+    else for (const poly of g.coordinates) holes.push(...poly);
+  }
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: { type: "MultiPolygon", coordinates: [[world, ...holes]] },
+  };
+};
+
 type IsoFeature = Feature<Polygon | MultiPolygon, { value: number }>;
 
 // Paleta tipo "semáforo" para diferenciar las bandas de tiempo:

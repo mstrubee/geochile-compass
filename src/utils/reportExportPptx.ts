@@ -124,6 +124,7 @@ const addTerritorySlide = (
   pptx: PptxGenJS,
   report: IsochroneReport,
   images?: MapCaptureImages | null,
+  express = false,
 ) => {
   const slide = pptx.addSlide();
   const band = report.bands[report.bands.length - 1];
@@ -132,7 +133,7 @@ const addTerritorySlide = (
   addHeader(
     slide,
     "Análisis territorial",
-    `${name} → ${report.iso.modeLabel} ${report.iso.minutes.join("/")} min`,
+    `${name}${express ? " (Express)" : ""} → ${report.iso.modeLabel} ${report.iso.minutes.join("/")} min`,
   );
 
   // Columna izquierda angosta para los datos; el resto, la grilla de mapas.
@@ -241,7 +242,11 @@ const addProjectionSlide = (
 ) => {
   const slide = pptx.addSlide();
   const name = report.iso.name ?? "Isócrona";
-  addHeader(slide, "Potencial económico y proyección", `${name} → ${proj.folderName}`);
+  addHeader(
+    slide,
+    "Potencial económico y proyección",
+    `${name}${proj.isExpress ? " (Express)" : ""} → ${proj.folderName}`,
+  );
 
   // ── Columna izquierda: economía del área ───────────────────────────────────
   let y = BODY_TOP;
@@ -296,34 +301,26 @@ const addProjectionSlide = (
       { x: ML, y, w: COL_W, colW: [COL_W * 0.58, COL_W * 0.42], rowH: ROW_H,
         border: { type: "solid", color: C.grid, pt: 0.5 } },
     );
-    y += pqRows.length * ROW_H + 0.16;
-  }
+    y += pqRows.length * ROW_H + 0.12;
 
-  // Los comparables sostienen la cifra: si alguno no cabe hay que decirlo, si
-  // no los supuestos declaran 5 y la tabla muestra 4 sin explicación.
-  const compTotal = proj.comparables.length;
-  const compFit = Math.min(compTotal, rowsThatFit(y + 0.2) - 1);
-  if (compFit > 0) {
-    addTableBand(slide, "LOCALES COMPARABLES", ML, y);
-    y += 0.2;
-    slide.addTable(
-      [
-        headerRow(["Local", "UF/mes", "Fuente"]),
-        ...proj.comparables.slice(0, compFit).map((c, i) =>
-          row([c.name, fmt(c.ufPerMonth), c.isActual ? "Venta real" : "Predicción"], {
-            fill: i % 2 ? C.rowAlt : undefined,
-          }),
-        ),
-      ],
-      { x: ML, y, w: COL_W, colW: [COL_W * 0.5, COL_W * 0.22, COL_W * 0.28], rowH: ROW_H,
-        border: { type: "solid", color: C.grid, pt: 0.5 } },
-    );
-    y += (compFit + 1) * ROW_H;
-    if (compFit < compTotal) {
-      slide.addText(`+${compTotal - compFit} comparable(s) no listado(s) por espacio`, {
-        x: ML, y: y + 0.02, w: COL_W, h: 0.16,
-        fontFace: FONT, fontSize: 6.5, color: C.muted, margin: 0,
-      });
+    // Las marcas dominantes del área son más accionables para una tienda
+    // automotriz que la edad media, así que van si queda espacio.
+    const marcas = pq.ranking_marcas.slice(0, 5);
+    const marcasFit = Math.min(marcas.length, rowsThatFit(y) - 1);
+    if (marcasFit > 0) {
+      slide.addTable(
+        [
+          headerRow(["Marca", "Vehículos", "% del parque"]),
+          ...marcas.slice(0, marcasFit).map((m, i) =>
+            row([m.marca, fmt(m.count), `${m.pct.toFixed(1)}%`], {
+              fill: i % 2 ? C.rowAlt : undefined,
+            }),
+          ),
+        ],
+        { x: ML, y, w: COL_W, colW: [COL_W * 0.42, COL_W * 0.28, COL_W * 0.3], rowH: ROW_H,
+          border: { type: "solid", color: C.grid, pt: 0.5 } },
+      );
+      y += (marcasFit + 1) * ROW_H + 0.16;
     }
   }
 
@@ -390,7 +387,11 @@ const addProjectionSlide = (
   );
   ry += (years.length + 1) * ROW_H + 0.22;
 
+  const comparablesTxt = proj.comparables.map((c) => c.name).join(", ");
   const notas = [
+    comparablesTxt
+      ? `Comparables usados (${proj.comparables.length}): ${comparablesTxt}.`
+      : null,
     proj.rampEnabled
       ? "El potencial estimado corresponde al nivel en régimen. Un local recién abierto no rinde eso desde el primer día: la curva parte en la fracción medida en la red y sube hasta el 100%."
       : "Se asume la ubicación ya en régimen desde el primer año.",
@@ -425,7 +426,7 @@ export const exportReportToPptx = async (
     background: { color: C.white },
   });
 
-  addTerritorySlide(pptx, report, images);
+  addTerritorySlide(pptx, report, images, !!projection?.isExpress);
   if (projection) addProjectionSlide(pptx, report, projection);
 
   const fecha = new Date(report.generatedAt).toISOString().slice(0, 10).replace(/-/g, "");

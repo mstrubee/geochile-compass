@@ -16,6 +16,7 @@ import { useIsochroneReport } from "@/hooks/useIsochroneReport";
 import { exportReportToPdf } from "@/utils/reportExportPdf";
 import { exportReportToPptx } from "@/utils/reportExportPptx";
 import type { MapCaptureImages } from "@/utils/mapCapture";
+import { MapCapturePreviewDialog } from "./MapCapturePreviewDialog";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 
 interface AnalysisPanelProps {
@@ -38,7 +39,7 @@ interface AnalysisPanelProps {
   /** Persiste los ajustes para recuperarlos al volver a abrir la isócrona. */
   onProjectionSettingsChange?: (s: ProjectionSettings) => void;
   /** Fotos del mapa para el informe (isócrona, GSE, gasto, atractores). */
-  onCaptureMapImages?: (iso: Isochrone) => Promise<MapCaptureImages | null>;
+  onCaptureMapImages?: (iso: Isochrone, zoomOffset?: number) => Promise<MapCaptureImages | null>;
 }
 
 /** Castigo del formato Express: vende menos que un local estándar. */
@@ -219,6 +220,7 @@ export const AnalysisPanel = ({
   // que el PDF diga exactamente lo mismo que la sección.
 
   const [exportingPptx, setExportingPptx] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   // La curva vive acá y no en la sección: el informe necesita el snapshot de
   // la proyección aunque esa sección esté colapsada (la sección se desmonta).
   const [curve, setCurve] = useState<MaturationCurve | null>(null);
@@ -818,18 +820,7 @@ export const AnalysisPanel = ({
                 </button>
               </div>
               <button
-                onClick={async () => {
-                  if (!fullReport || !isochrone) return;
-                  setExportingPptx(true);
-                  try {
-                    const imgs = onCaptureMapImages
-                      ? await onCaptureMapImages(isochrone)
-                      : null;
-                    await exportReportToPptx(fullReport, projForReport, imgs);
-                  } finally {
-                    setExportingPptx(false);
-                  }
-                }}
+                onClick={() => setPreviewOpen(true)}
                 disabled={!fullReport || exportingPptx}
                 className="mt-1.5 w-full rounded-lg bg-brand-red/10 px-2 py-2 text-[11px] font-medium text-brand-red transition-colors hover:bg-brand-red/20 disabled:opacity-40"
               >
@@ -851,6 +842,23 @@ export const AnalysisPanel = ({
           </>
         )}
       </div>
+
+      <MapCapturePreviewDialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        onCapture={async (z) =>
+          isochrone && onCaptureMapImages ? onCaptureMapImages(isochrone, z) : null
+        }
+        onConfirm={async (imgs) => {
+          if (!fullReport) return;
+          setExportingPptx(true);
+          try {
+            await exportReportToPptx(fullReport, projForReport, imgs);
+          } finally {
+            setExportingPptx(false);
+          }
+        }}
+      />
     </div>
   );
 };
