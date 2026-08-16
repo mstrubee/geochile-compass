@@ -1128,7 +1128,15 @@ const Index = () => {
       const saved = selectedIsoId
         ? savedIsos.find((x) => `saved:${x.id}` === selectedIsoId)
         : null;
-      if (saved) void updateSavedIso(saved.id, { projection_settings: s });
+      console.info("[proy-persistir]", {
+        selectedIsoId,
+        encontrada: saved?.name ?? null,
+        ajustes: s,
+      });
+      if (!saved) return;
+      void updateSavedIso(saved.id, { projection_settings: s })
+        .then(() => console.info("[proy-persistir] OK en base"))
+        .catch((e) => console.error("[proy-persistir] FALLÓ", e));
     },
     [selectedIsoId, savedIsos, updateSavedIso],
   );

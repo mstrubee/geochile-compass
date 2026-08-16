@@ -940,6 +940,7 @@ const ProjectionSection = ({
 
   // Restaura los ajustes recordados de esta ubicación; si no hay, valores por defecto.
   useEffect(() => {
+    console.info("[proy-restaurar]", savedSettings ?? "(sin ajustes guardados)");
     setAdjustPct(savedSettings?.adjustPct ?? 0);
     setRateOverrides(savedSettings?.rateOverrides ?? []);
     setRampEnabled(savedSettings?.rampEnabled ?? true);
@@ -955,11 +956,19 @@ const ProjectionSection = ({
   // Recuerda los ajustes de esta ubicación.
   const settingsKey = JSON.stringify({ adjustPct, rateOverrides, rampEnabled });
   useEffect(() => {
-    if (!onSettingsChange || !result) return;
+    if (!onSettingsChange || !result) {
+      console.info("[proy-guardar] omitido", { hayCallback: !!onSettingsChange, hayResultado: !!result });
+      return;
+    }
     // El primer valor tras restaurar es el ya guardado: no reescribirlo.
-    if (lastSavedKey.current === null) { lastSavedKey.current = settingsKey; return; }
+    if (lastSavedKey.current === null) {
+      lastSavedKey.current = settingsKey;
+      console.info("[proy-guardar] centinela inicial", settingsKey);
+      return;
+    }
     if (lastSavedKey.current === settingsKey) return;
     lastSavedKey.current = settingsKey;
+    console.info("[proy-guardar] guardando", settingsKey);
     onSettingsChange({ adjustPct, rateOverrides, rampEnabled });
   }, [settingsKey, adjustPct, rateOverrides, rampEnabled, result, onSettingsChange]);
 
