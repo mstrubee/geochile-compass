@@ -39,7 +39,10 @@ interface AnalysisPanelProps {
   /** Persiste los ajustes para recuperarlos al volver a abrir la isócrona. */
   onProjectionSettingsChange?: (s: ProjectionSettings) => void;
   /** Fotos del mapa para el informe (isócrona, GSE, gasto, atractores). */
-  onCaptureMapImages?: (iso: Isochrone, zoomOffset?: number) => Promise<MapCaptureImages | null>;
+  onCaptureMapImages?: (
+    iso: Isochrone,
+    heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
+  ) => Promise<MapCaptureImages | null>;
 }
 
 /** Castigo del formato Express: vende menos que un local estándar. */
@@ -846,8 +849,8 @@ export const AnalysisPanel = ({
       <MapCapturePreviewDialog
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
-        onCapture={async (z) =>
-          isochrone && onCaptureMapImages ? onCaptureMapImages(isochrone, z) : null
+        onCapture={async (h) =>
+          isochrone && onCaptureMapImages ? onCaptureMapImages(isochrone, h) : null
         }
         onConfirm={async (imgs) => {
           if (!fullReport) return;

@@ -196,6 +196,8 @@ interface MapViewProps {
   onFitIsochroneDone: () => void;
   /** Fuerza el contorno rojo grueso sin relleno de la isócrona, por encima de todo (para las fotos del informe). */
   isoOutlineOnly?: boolean;
+  /** Ajustes de heatmap solo para la captura del informe (no se guardan). */
+  commercialHeatOverride?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null;
   isoMode: boolean;
   onMapClick: (c: { lat: number; lng: number }) => void;
   savedPois: SavedPoi[];
@@ -311,6 +313,7 @@ export const MapView = ({
   customLayers,
   onMapReady,
   isoOutlineOnly,
+  commercialHeatOverride = null,
 }: MapViewProps) => {
   const tile = BASEMAPS[basemap];
   return (
@@ -408,6 +411,7 @@ export const MapView = ({
         visible={layers.commercial}
         activeCategories={activeCommercialCats ?? new Set(["all"])}
         isAdmin={isAdmin}
+        settingsOverride={commercialHeatOverride}
       />
       <GastoHeatLayer visible={layers.gasto && gastoView !== "manzana"} />
       <AgroplanetComunasLayer visible={layers.agroplanet} scoreMode={agroplanetScoreMode} />

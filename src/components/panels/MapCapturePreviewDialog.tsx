@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,12 +9,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCw, FileText } from "lucide-react";
 import type { MapCaptureImages } from "@/utils/mapCapture";
+import { DEFAULT_SETTINGS, type HeatmapSettings } from "@/hooks/useHeatmapSettings";
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** Toma las 4 fotos con el desplazamiento de zoom indicado. */
-  onCapture: (zoomOffset: number) => Promise<MapCaptureImages | null>;
+  /** Toma las 4 fotos aplicando estos ajustes al heatmap de atractores. */
+  onCapture: (heat: Partial<HeatmapSettings>) => Promise<MapCaptureImages | null>;
   /** Confirma y genera el informe con las fotos revisadas. */
   onConfirm: (images: MapCaptureImages | null) => Promise<void> | void;
 }
@@ -34,16 +35,22 @@ const TITULOS: Array<[keyof MapCaptureImages, string]> = [
  * directorio en vez de descubrirlo después.
  */
 export const MapCapturePreviewDialog = ({ open, onClose, onCapture, onConfirm }: Props) => {
-  const [zoom, setZoom] = useState(0);
+  // El radio del heatmap está en píxeles: lo que se ve bien en pantalla puede
+  // convertirse en una mancha que tapa la isócrona a la escala de la foto.
+  const [heat, setHeat] = useState<HeatmapSettings>(DEFAULT_SETTINGS.commercial);
+  // El handler de soltar el slider leería el valor del render anterior, o sea
+  // capturaría con un paso de atraso. La referencia siempre tiene el último.
+  const heatRef = useRef(heat);
+  heatRef.current = heat;
   const [images, setImages] = useState<MapCaptureImages | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   const capture = useCallback(
-    async (z: number) => {
+    async (h: HeatmapSettings) => {
       setCapturing(true);
       try {
-        setImages(await onCapture(z));
+        setImages(await onCapture(h));
       } finally {
         setCapturing(false);
       }
@@ -51,11 +58,12 @@ export const MapCapturePreviewDialog = ({ open, onClose, onCapture, onConfirm }:
     [onCapture],
   );
 
-  // Primera captura al abrir; el zoom vuelve a 0 en cada apertura.
+  // Primera captura al abrir, con los valores por defecto.
   useEffect(() => {
     if (!open) return;
-    setZoom(0);
-    void capture(0);
+    const inicial = DEFAULT_SETTINGS.commercial;
+    setHeat(inicial);
+    void capture(inicial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -69,8 +77,8 @@ export const MapCapturePreviewDialog = ({ open, onClose, onCapture, onConfirm }:
             Vista previa de los mapas
           </DialogTitle>
           <DialogDescription className="text-[11px] text-muted-foreground">
-            Revisa el encuadre antes de generar el informe. El zoom se aplica a
-            las cuatro por igual, para que muestren la misma superficie.
+            Ajusta el heatmap de atractores comerciales hasta que se lea bien
+            sobre la isócrona, y recién ahí genera el informe.
           </DialogDescription>
         </DialogHeader>
 
@@ -101,30 +109,42 @@ export const MapCapturePreviewDialog = ({ open, onClose, onCapture, onConfirm }:
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 px-5 py-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-muted-foreground">Zoom</span>
-            <input
-              type="range"
-              min={-3}
-              max={3}
-              step={1}
-              value={zoom}
-              disabled={busy}
-              onChange={(e) => setZoom(parseInt(e.target.value, 10))}
-              // Solo al soltar: cada captura mueve el mapa real y toma 4 fotos.
-              onMouseUp={() => void capture(zoom)}
-              onTouchEnd={() => void capture(zoom)}
-              className="w-40 accent-brand-red"
-            />
-            <span className="w-10 text-[11px] font-mono text-foreground">
-              {zoom > 0 ? `+${zoom}` : zoom}
-            </span>
+          <div className="flex flex-wrap items-center gap-3">
+            {([
+              ["radius", "Radio", 5, 60, 1],
+              ["blur", "Difuminado", 1, 50, 1],
+              ["opacity", "Opacidad", 0.1, 1, 0.05],
+            ] as Array<[keyof HeatmapSettings, string, number, number, number]>).map(
+              ([key, label, min, max, step]) => (
+                <div key={key} className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground">{label}</span>
+                  <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={heat[key]}
+                    disabled={busy}
+                    onChange={(e) =>
+                      setHeat((h) => ({ ...h, [key]: parseFloat(e.target.value) }))
+                    }
+                    // Solo al soltar: cada captura mueve el mapa y toma 4 fotos.
+                    onMouseUp={() => void capture(heatRef.current)}
+                    onTouchEnd={() => void capture(heatRef.current)}
+                    className="w-24 accent-brand-red"
+                  />
+                  <span className="w-8 text-[11px] font-mono text-foreground">
+                    {key === "opacity" ? heat[key].toFixed(2) : heat[key]}
+                  </span>
+                </div>
+              ),
+            )}
             <Button
               size="sm"
               variant="outline"
               className="h-7 text-[11px]"
               disabled={busy}
-              onClick={() => void capture(zoom)}
+              onClick={() => void capture(heatRef.current)}
             >
               <RefreshCw className="mr-1.5 h-3 w-3" /> Recapturar
             </Button>

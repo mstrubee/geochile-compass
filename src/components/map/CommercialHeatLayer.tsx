@@ -7,12 +7,12 @@
  * - minZoom configurable (default: 12 ≈ nivel de comuna)
  */
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet.heat";
 import rawData from "@/data/commercial_heatmap_points.json";
-import { useHeatmapSettings } from "@/hooks/useHeatmapSettings";
+import { useHeatmapSettings, type HeatmapSettings } from "@/hooks/useHeatmapSettings";
 import { HeatmapSettingsPanel } from "./HeatmapSettingsPanel";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -76,17 +76,32 @@ interface CommercialHeatLayerProps {
   visible: boolean;
   activeCategories: Set<CommercialCategory>;
   isAdmin?: boolean;
+  /**
+   * Ajustes que pisan a los guardados, sin escribirlos.
+   *
+   * El radio del heatmap está en PÍXELES, así que la mancha se ve distinta
+   * según la escala de la vista: lo que está bien calibrado en pantalla puede
+   * tapar la isócrona en la foto del informe. Esto permite afinarlo solo para
+   * la captura.
+   */
+  settingsOverride?: Partial<HeatmapSettings> | null;
 }
 
 export const CommercialHeatLayer = ({
-  visible, activeCategories, isAdmin = false,
+  visible, activeCategories, isAdmin = false, settingsOverride = null,
 }: CommercialHeatLayerProps) => {
   const map = useMap();
   const heatRef = useRef<L.HeatLayer | null>(null);
   const [zoom, setZoom] = useState(() => map.getZoom());
   const [showSettings, setShowSettings] = useState(false);
 
-  const { settings, setSettings, save, saving, error } = useHeatmapSettings("commercial");
+  const { settings: saved, setSettings, save, saving, error } = useHeatmapSettings("commercial");
+  // Memorizado: sin esto el objeto es nuevo en cada render y el efecto que
+  // reconstruye la capa se dispararía continuamente.
+  const settings = useMemo(
+    () => (settingsOverride ? { ...saved, ...settingsOverride } : saved),
+    [saved, settingsOverride],
+  );
 
   useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
 

@@ -272,8 +272,16 @@ const Index = () => {
   // Fuerza el contorno rojo grueso sin relleno de la isócrona, siempre por
   // encima de cualquier capa, mientras dura la captura de fotos del informe.
   const [isoOutlineCapture, setIsoOutlineCapture] = useState(false);
+  // Ajustes de heatmap solo para la foto de atractores: el radio está en
+  // píxeles, así que lo calibrado en pantalla puede tapar la isócrona en la
+  // captura. No se guardan.
+  const [heatOverride, setHeatOverride] =
+    useState<Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null>(null);
   const captureIsochroneMapImages = useCallback(
-    async (iso: Isochrone, zoomOffset = 0): Promise<MapCaptureImages | null> => {
+    async (
+      iso: Isochrone,
+      heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
+    ): Promise<MapCaptureImages | null> => {
       const map = mapRef.current;
       if (!map) return null;
 
@@ -333,6 +341,7 @@ const Index = () => {
           setComercialLayers(prevComercial);
           setGastoView(prevGastoView);
           setIsoOutlineCapture(false);
+          setHeatOverride(null);
           setIsochrones((prev) =>
             prev.map((i) => {
               const orig = prevVisibility.get(i.id);
@@ -1650,6 +1659,7 @@ const Index = () => {
             fitIsochroneId={fitIsoId}
             onFitIsochroneDone={handleFitIsoDone}
             isoOutlineOnly={isoOutlineCapture}
+            commercialHeatOverride={heatOverride}
             isoMode={mode === "isochrone"}
             onMapClick={handleMapClick}
             savedPois={visiblePois}
