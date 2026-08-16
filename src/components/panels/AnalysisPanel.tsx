@@ -214,8 +214,19 @@ export const AnalysisPanel = ({
   const [projResult,  setProjResult]  = useState<ProjectionResult | null>(null);
   // Snapshot de la proyección tal como quedó en pantalla (con ajustes), para
   // que el PDF diga exactamente lo mismo que la sección.
-  const [projForReport, setProjForReport] = useState<ReportProjection | null>(null);
+
   const [exportingPptx, setExportingPptx] = useState(false);
+  // La curva vive acá y no en la sección: el informe necesita el snapshot de
+  // la proyección aunque esa sección esté colapsada (la sección se desmonta).
+  const [curve, setCurve] = useState<MaturationCurve | null>(null);
+  useEffect(() => {
+    if (!projectionFolderId) { setCurve(null); return; }
+    let cancelled = false;
+    void fetchMaturationCurve(projectionFolderId).then((c) => {
+      if (!cancelled) setCurve(c);
+    });
+    return () => { cancelled = true; };
+  }, [projectionFolderId]);
   const [projLoading, setProjLoading] = useState(false);
   const [projError,   setProjError]   = useState<string | null>(null);
 
@@ -230,9 +241,55 @@ export const AnalysisPanel = ({
     setProjResult((projectionSettings?.result as ProjectionResult | null) ?? null);
     setProjAdjust(projectionSettings ?? null);
     setProjError(null);
-    setProjForReport(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isochrone?.id, projectionSettings]);
+
+  /**
+   * Proyección tal como quedaría en pantalla, para los informes.
+   *
+   * Se calcula acá y no en la sección porque esa se desmonta al colapsarla:
+   * exportar con la sección cerrada producía un informe sin la lámina de
+   * proyección aunque la proyección existiera.
+   */
+  const projForReport: ReportProjection | null = useMemo(() => {
+    if (!projResult) return null;
+    const adjustPct = projAdjust?.adjustPct ?? 0;
+    const rampEnabled = projAdjust?.rampEnabled ?? true;
+    const rows = buildProjRows(
+      projResult,
+      curve,
+      projAdjust?.rateOverrides ?? [],
+      rampEnabled,
+    );
+    const f = 1 + adjustPct / 100;
+    return {
+      folderName:
+        projectionFolders.find((x) => x.id === selectedFolderId)?.name ??
+        projResult.folderName,
+      baseYear: projResult.baseYear,
+      estimatedUf: projResult.estimatedUf * f,
+      estimatedClp: projResult.estimatedClp * f,
+      lowUf: projResult.lowUf * f,
+      highUf: projResult.highUf * f,
+      adjustPct,
+      usesMaturationCurve: !!curve && !curve.isFallback,
+      maturationIsCustom: !!curve?.isCustom,
+      maturationSampleSize: curve?.sampleSize ?? 0,
+      rampEnabled,
+      steadyStateUf: projResult.estimatedUf * f,
+      nWithSales: projResult.nWithSales,
+      nWithPredicted: projResult.nWithPredicted,
+      usedPredictions: projResult.usedPredictions,
+      diagnosticMsg: projResult.diagnosticMsg,
+      years: rows.map((r) => ({
+        label: r.label, uf: r.uf * f, clp: r.clp * f,
+        ratePct: r.ratePct, maturityPct: r.maturityPct, isBase: r.isBase,
+      })),
+      comparables: projResult.comparables.map((c) => ({
+        name: c.name, ufPerMonth: c.ufPerMonth, isActual: c.isActual, weight: c.weight,
+      })),
+    };
+  }, [projResult, projAdjust, curve, projectionFolders, selectedFolderId]);
 
   // Guarda resultado y ajustes juntos: son una sola cosa desde el punto de
   // vista del usuario ("la proyección de esta ubicación").
@@ -528,8 +585,8 @@ export const AnalysisPanel = ({
                   error={projError}
                   canRun={!!analysis}
                   onRun={runProjection}
-                  onReset={() => { setProjResult(null); setProjError(null); setProjForReport(null); }}
-                  onSnapshot={setProjForReport}
+                  onReset={() => { setProjResult(null); setProjError(null); }}
+                  curve={curve}
                   savedSettings={projectionSettings}
                   onSettingsChange={(s) => { setProjAdjust(s); persistProjection(s, projResult); }}
                   onRerun={runProjection}
@@ -916,8 +973,8 @@ interface ProjectionSectionProps {
   canRun:           boolean;
   onRun:            () => void;
   onReset:          () => void;
-  /** Publica la proyección visible (con ajustes) para incluirla en el PDF. */
-  onSnapshot?:      (p: ReportProjection | null) => void;
+  /** Curva de maduración vigente para la carpeta. */
+  curve?:           MaturationCurve | null;
   savedSettings?:   ProjectionSettings | null;
   onSettingsChange?: (s: ProjectionSettings) => void;
   /** Vuelve a correr el predictor descartando el resultado guardado. */
@@ -974,7 +1031,7 @@ const buildProjRows = (
 
 const ProjectionSection = ({
   folders, selectedFolderId, onFolderChange,
-  result, loading, error, canRun, onRun, onReset, onSnapshot,
+  result, loading, error, canRun, onRun, onReset, curve = null,
   savedSettings, onSettingsChange, onRerun,
 }: ProjectionSectionProps) => {
   // Ajuste manual sobre la estimación (castigo o premio, en %).
@@ -986,7 +1043,6 @@ const ProjectionSection = ({
   const [adjustPct, setAdjustPct] = useState(0);
   // Crecimiento por año. null en una posición = usar el de la curva.
   const [rateOverrides, setRateOverrides] = useState<(number | null)[]>([]);
-  const [curve, setCurve] = useState<MaturationCurve | null>(null);
   // Por defecto se proyecta una ubicación NUEVA, que parte en rampa.
   const [rampEnabled, setRampEnabled] = useState(true);
   // Último valor persistido, para no reescribir lo que acabamos de restaurar.
@@ -1016,51 +1072,6 @@ const ProjectionSection = ({
     lastSavedKey.current = settingsKey;
     onSettingsChange({ adjustPct, rateOverrides, rampEnabled });
   }, [settingsKey, adjustPct, rateOverrides, rampEnabled, result, onSettingsChange]);
-
-  // Publica lo que se ve (con ajuste manual y tasas editadas) para el PDF.
-  useEffect(() => {
-    if (!onSnapshot) return;
-    if (!result) { onSnapshot(null); return; }
-    const rows = buildProjRows(result, curve, rateOverrides, rampEnabled);
-    const f = 1 + adjustPct / 100;
-    onSnapshot({
-      folderName: folders.find((x) => x.id === selectedFolderId)?.name ?? result.folderName,
-      baseYear: result.baseYear,
-
-      estimatedUf: result.estimatedUf * f,
-      estimatedClp: result.estimatedClp * f,
-      lowUf: result.lowUf * f,
-      highUf: result.highUf * f,
-      adjustPct,
-      usesMaturationCurve: !!curve && !curve.isFallback,
-      maturationIsCustom: !!curve?.isCustom,
-      maturationSampleSize: curve?.sampleSize ?? 0,
-      rampEnabled,
-      steadyStateUf: result.estimatedUf * f,
-      nWithSales: result.nWithSales,
-      nWithPredicted: result.nWithPredicted,
-      usedPredictions: result.usedPredictions,
-      diagnosticMsg: result.diagnosticMsg,
-      years: rows.map((r) => ({
-        label: r.label, uf: r.uf * f, clp: r.clp * f,
-        ratePct: r.ratePct, maturityPct: r.maturityPct, isBase: r.isBase,
-      })),
-      comparables: result.comparables.map((c) => ({
-        name: c.name, ufPerMonth: c.ufPerMonth, isActual: c.isActual, weight: c.weight,
-      })),
-    });
-  }, [result, adjustPct, rateOverrides, rampEnabled, curve, folders, selectedFolderId, onSnapshot]);
-
-  // Curva de maduración de la red: el 3% es la tasa en régimen, pero un local
-  // recién abierto crece mucho más rápido los primeros años.
-  useEffect(() => {
-    if (!selectedFolderId) { setCurve(null); return; }
-    let cancelled = false;
-    void fetchMaturationCurve(selectedFolderId).then((c) => {
-      if (!cancelled) setCurve(c);
-    });
-    return () => { cancelled = true; };
-  }, [selectedFolderId]);
 
   if (loading) {
     return (

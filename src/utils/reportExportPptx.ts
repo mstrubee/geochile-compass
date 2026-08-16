@@ -100,12 +100,14 @@ const addColTitle = (slide: PptxGenJS.Slide, text: string, x: number, y: number)
 };
 
 /** Banda carmesí que titula una tabla, como el "Resumen Ejecutivo" del modelo. */
-const addTableBand = (slide: PptxGenJS.Slide, text: string, x: number, y: number) => {
+const addTableBand = (
+  slide: PptxGenJS.Slide, text: string, x: number, y: number, w: number = COL_W,
+) => {
   slide.addShape("rect", {
-    x, y, w: COL_W, h: 0.2, fill: { color: C.crimson }, line: { color: C.crimson },
+    x, y, w, h: 0.2, fill: { color: C.crimson }, line: { color: C.crimson },
   });
   slide.addText(text, {
-    x: x + 0.06, y, w: COL_W - 0.12, h: 0.2,
+    x: x + 0.06, y, w: w - 0.12, h: 0.2,
     fontFace: FONT, fontSize: 8, bold: true, color: C.white, valign: "middle", margin: 0,
   });
 };
@@ -117,7 +119,7 @@ const rowsThatFit = (y: number) => Math.max(0, Math.floor((BODY_BOTTOM - y) / RO
 
 
 
-// ── Lámina 1: perfil territorial ─────────────────────────────────────────────
+// ── Lámina 1: mapas + demografía ─────────────────────────────────────────────
 const addTerritorySlide = (
   pptx: PptxGenJS,
   report: IsochroneReport,
@@ -133,79 +135,93 @@ const addTerritorySlide = (
     `${name} → ${report.iso.modeLabel} ${report.iso.minutes.join("/")} min`,
   );
 
-  // ── Columna izquierda: cifras clave + comunas ──────────────────────────────
-  let y = BODY_TOP;
-  addColTitle(slide, "Aspectos clave", ML, y);
-  y += 0.3;
+  // Columna izquierda angosta para los datos; el resto, la grilla de mapas.
+  const DATA_W = 3.1;
+  const GRID_X = ML + DATA_W + 0.26;
+  const GRID_W = W - ML - GRID_X;
 
+  // ── Datos demográficos ─────────────────────────────────────────────────────
+  let y = BODY_TOP;
   const resumen: Array<[string, string]> = [
     ["Personas", fmt(band.totals.pop)],
     ["Hogares", fmt(band.totals.hh)],
-    ["Ingreso promedio por hogar", fmtCLP(band.totals.incomeAvgPerHh)],
-    ["Ingreso total del área / mes", fmtCLP(band.totals.incomeTotal)],
+    ["Ingreso prom./hogar", fmtCLP(band.totals.incomeAvgPerHh)],
     ["Área", `${band.area_km2.toFixed(2)} km²`],
     ["Densidad", `${fmt(band.density.popPerKm2)} hab/km²`],
-    ["Punto de análisis", `${report.iso.centerLat.toFixed(4)}, ${report.iso.centerLng.toFixed(4)}`],
   ];
-  addTableBand(slide, "RESUMEN EJECUTIVO DEL ÁREA", ML, y);
+  addTableBand(slide, "DEMOGRAFÍA DEL ÁREA", ML, y, DATA_W);
   y += 0.2;
   slide.addTable(
     resumen.map(([k, v], i) => row([k, v], { fill: i % 2 ? C.rowAlt : undefined })),
-    { x: ML, y, w: COL_W, colW: [COL_W * 0.62, COL_W * 0.38], rowH: ROW_H,
+    { x: ML, y, w: DATA_W, colW: [DATA_W * 0.56, DATA_W * 0.44], rowH: ROW_H,
       border: { type: "solid", color: C.grid, pt: 0.5 } },
   );
-  y += resumen.length * ROW_H + 0.22;
+  y += resumen.length * ROW_H + 0.2;
 
-  // Comunas: se recortan a lo que cabe, nunca desbordan la lámina.
-  const comunasFit = Math.min(band.communes.length, rowsThatFit(y + 0.2) - 1);
-  if (comunasFit > 0) {
-    addTableBand(slide, "COMUNAS EN EL ÁREA", ML, y);
-    y += 0.2;
-    const filas = band.communes.slice(0, comunasFit);
-    slide.addTable(
-      [
-        headerRow(["Comuna", "% del área", "Personas"]),
-        ...filas.map((c, i) =>
-          row(
-            [c.name, `${(c.areaShareInIso * 100).toFixed(0)}%`, fmt(c.popInIso)],
-            { fill: i % 2 ? C.rowAlt : undefined },
-          ),
-        ),
-      ],
-      { x: ML, y, w: COL_W, colW: [COL_W * 0.5, COL_W * 0.24, COL_W * 0.26], rowH: ROW_H,
-        border: { type: "solid", color: C.grid, pt: 0.5 } },
-    );
-  }
-
-  // ── Columna derecha: mezcla socioeconómica + mapa ──────────────────────────
-  let ry = BODY_TOP;
   const gseRows = band.nseDistribution.filter((n) => n.pct > 0);
   if (gseRows.length > 0) {
-    addTableBand(slide, "COMPOSICIÓN SOCIOECONÓMICA (% DE HOGARES)", COL_R_X, ry);
-    ry += 0.2;
+    addTableBand(slide, "COMPOSICIÓN GSE (% HOGARES)", ML, y, DATA_W);
+    y += 0.2;
     slide.addTable(
-      [
-        headerRow(["Grupo", "% hogares"]),
-        ...gseRows.map((n, i) =>
-          row([n.label, `${n.pct}%`], { fill: i % 2 ? C.rowAlt : undefined }),
-        ),
-      ],
-      { x: COL_R_X, y: ry, w: COL_W, colW: [COL_W * 0.6, COL_W * 0.4], rowH: ROW_H,
+      gseRows.map((n, i) => row([n.label, `${n.pct}%`], { fill: i % 2 ? C.rowAlt : undefined })),
+      { x: ML, y, w: DATA_W, colW: [DATA_W * 0.6, DATA_W * 0.4], rowH: ROW_H,
         border: { type: "solid", color: C.grid, pt: 0.5 } },
     );
-    ry += (gseRows.length + 1) * ROW_H + 0.2;
+    y += gseRows.length * ROW_H + 0.2;
   }
 
-  // El mapa ocupa el espacio que quede, respetando el pie.
-  const mapImg = images?.gse ?? images?.isoOnly ?? images?.atractores ?? null;
-  const mapH = BODY_BOTTOM - ry - 0.16;
-  if (mapImg && mapH > 0.9) {
-    slide.addImage({ data: mapImg, x: COL_R_X, y: ry, w: COL_W, h: mapH, sizing: { type: "cover", w: COL_W, h: mapH } });
-    slide.addText("Área analizada · composición socioeconómica por manzana", {
-      x: COL_R_X, y: ry + mapH + 0.01, w: COL_W, h: 0.16,
-      fontFace: FONT, fontSize: 6.5, color: C.muted, margin: 0,
-    });
+  const comunasFit = Math.min(band.communes.length, rowsThatFit(y + 0.2));
+  if (comunasFit > 0) {
+    addTableBand(slide, "COMUNAS", ML, y, DATA_W);
+    y += 0.2;
+    slide.addTable(
+      band.communes.slice(0, comunasFit).map((c, i) =>
+        row([c.name, `${(c.areaShareInIso * 100).toFixed(0)}%`, fmt(c.popInIso)], {
+          fill: i % 2 ? C.rowAlt : undefined,
+        }),
+      ),
+      { x: ML, y, w: DATA_W, colW: [DATA_W * 0.46, DATA_W * 0.2, DATA_W * 0.34], rowH: ROW_H,
+        border: { type: "solid", color: C.grid, pt: 0.5 } },
+    );
   }
+
+  // ── Grilla 2×2 de mapas, cada uno con su título ────────────────────────────
+  const mapas: Array<[string, string | null]> = [
+    ["Isócrona", images?.isoOnly ?? null],
+    ["GSE por manzana", images?.gse ?? null],
+    ["Gasto endógeno", images?.gasto ?? null],
+    ["Atractores comerciales", images?.atractores ?? null],
+  ];
+  const CAP_H = 0.17;
+  const GAP = 0.12;
+  const cellW = (GRID_W - GAP) / 2;
+  const cellH = (BODY_BOTTOM - BODY_TOP - GAP) / 2;
+  const imgH = cellH - CAP_H;
+
+  mapas.forEach(([titulo, data], i) => {
+    const cx = GRID_X + (i % 2) * (cellW + GAP);
+    const cy = BODY_TOP + Math.floor(i / 2) * (cellH + GAP);
+    slide.addText(titulo, {
+      x: cx, y: cy, w: cellW, h: CAP_H,
+      fontFace: FONT, fontSize: 7.5, bold: true, color: C.crimson, margin: 0,
+    });
+    if (data) {
+      slide.addImage({
+        data, x: cx, y: cy + CAP_H, w: cellW, h: imgH,
+        sizing: { type: "cover", w: cellW, h: imgH },
+      });
+    } else {
+      // Sin foto, se deja el marco: así se nota que falta y no queda un hueco.
+      slide.addShape("rect", {
+        x: cx, y: cy + CAP_H, w: cellW, h: imgH,
+        fill: { color: C.rowAlt }, line: { color: C.grid },
+      });
+      slide.addText("Sin captura", {
+        x: cx, y: cy + CAP_H + imgH / 2 - 0.1, w: cellW, h: 0.2,
+        fontFace: FONT, fontSize: 7, color: C.muted, align: "center", margin: 0,
+      });
+    }
+  });
 };
 
 // ── Lámina 2: proyección de venta ────────────────────────────────────────────
@@ -216,42 +232,62 @@ const addProjectionSlide = (
 ) => {
   const slide = pptx.addSlide();
   const name = report.iso.name ?? "Isócrona";
-  addHeader(slide, "Proyección de potencial de venta", `${name} → ${proj.folderName}`);
+  addHeader(slide, "Potencial económico y proyección", `${name} → ${proj.folderName}`);
 
-  // ── Columna izquierda: cifra central y supuestos ───────────────────────────
+  // ── Columna izquierda: economía del área ───────────────────────────────────
   let y = BODY_TOP;
-  addColTitle(slide, "Potencial estimado", ML, y);
-  y += 0.32;
+  const ge = report.gastoEndogeno;
+  if (ge && ge.totalHogaresObjetivo > 0) {
+    addTableBand(slide, "GASTO POTENCIAL DEL ÁREA (MERCADO OBJETIVO)", ML, y);
+    y += 0.2;
+    const resumenGe: Array<[string, string]> = [
+      ["Gasto objetivo total / mes", fmtCLP(ge.gastoMensualObjetivo)],
+      ["Hogares del mercado objetivo", fmt(ge.totalHogaresObjetivo)],
+      ["Gasto promedio por hogar / mes", fmtCLP(ge.gastoPromPorHogar)],
+    ];
+    slide.addTable(
+      resumenGe.map(([k, v], i) => row([k, v], { fill: i % 2 ? C.rowAlt : undefined })),
+      { x: ML, y, w: COL_W, colW: [COL_W * 0.58, COL_W * 0.42], rowH: ROW_H,
+        border: { type: "solid", color: C.grid, pt: 0.5 } },
+    );
+    y += resumenGe.length * ROW_H + 0.16;
 
-  slide.addText(`${fmt(proj.estimatedUf)} UF/mes`, {
-    x: ML, y, w: COL_W, h: 0.42,
-    fontFace: FONT, fontSize: 26, bold: true, color: C.crimson, margin: 0,
-  });
-  y += 0.44;
-  slide.addText(
-    `${fmtCLP(proj.estimatedClp)}/mes · en régimen · rango ${fmt(proj.lowUf)}–${fmt(proj.highUf)} UF`,
-    { x: ML, y, w: COL_W, h: 0.2, fontFace: FONT, fontSize: 8, color: C.muted, margin: 0 },
-  );
-  y += 0.3;
+    const geRows = ge.rows.filter((r) => r.hogares > 0);
+    if (geRows.length > 0) {
+      slide.addTable(
+        [
+          headerRow(["GSE", "Hogares", "Gasto / mes"]),
+          ...geRows.map((r, i) =>
+            row([r.gse, fmt(r.hogares), fmtCLP(r.gastoMensual)], {
+              fill: i % 2 ? C.rowAlt : undefined,
+            }),
+          ),
+        ],
+        { x: ML, y, w: COL_W, colW: [COL_W * 0.24, COL_W * 0.3, COL_W * 0.46], rowH: ROW_H,
+          border: { type: "solid", color: C.grid, pt: 0.5 } },
+      );
+      y += (geRows.length + 1) * ROW_H + 0.2;
+    }
+  }
 
-  const apertura = proj.years.find((r) => r.isBase);
-  const supuestos: Array<[string, string]> = [
-    ...(proj.rampEnabled && apertura
-      ? ([["Venta al abrir", `${fmt(apertura.uf)} UF/mes (${Math.round(apertura.maturityPct)}% del régimen)`]] as Array<[string, string]>)
-      : []),
-    ["Maduración", proj.rampEnabled ? "Ubicación nueva, parte en rampa" : "Ubicación ya en régimen"],
-    ["Ajuste manual del analista", proj.adjustPct !== 0 ? `${proj.adjustPct > 0 ? "+" : ""}${proj.adjustPct}%` : "Sin ajuste"],
-    ["Base de cálculo", `${proj.comparables.length} locales comparables`],
-  ];
-  addTableBand(slide, "SUPUESTOS", ML, y);
-  y += 0.2;
-  slide.addTable(
-    supuestos.map(([k, v], i) => row([k, v], { fill: i % 2 ? C.rowAlt : undefined })),
-    { x: ML, y, w: COL_W, colW: [COL_W * 0.42, COL_W * 0.58], rowH: ROW_H,
-      border: { type: "solid", color: C.grid, pt: 0.5 } },
-  );
-  y += supuestos.length * ROW_H + 0.22;
+  const pq = report.parqueStats;
+  if (pq && pq.vehiculos > 0 && rowsThatFit(y + 0.2) > 3) {
+    addTableBand(slide, "PARQUE VEHICULAR EN EL ÁREA", ML, y);
+    y += 0.2;
+    const pqRows: Array<[string, string]> = [
+      ["Vehículos estimados", fmt(pq.vehiculos)],
+      ["Edad media del parque", `${pq.edad_media.toFixed(1)} años`],
+      ["Rango intercuartil", `${pq.edad_p25.toFixed(0)}–${pq.edad_p75.toFixed(0)} años`],
+    ];
+    slide.addTable(
+      pqRows.map(([k, v], i) => row([k, v], { fill: i % 2 ? C.rowAlt : undefined })),
+      { x: ML, y, w: COL_W, colW: [COL_W * 0.58, COL_W * 0.42], rowH: ROW_H,
+        border: { type: "solid", color: C.grid, pt: 0.5 } },
+    );
+    y += pqRows.length * ROW_H + 0.2;
+  }
 
+  // Los comparables sostienen la cifra, así que van si queda espacio.
   const compFit = Math.min(proj.comparables.length, rowsThatFit(y + 0.2) - 1);
   if (compFit > 0) {
     addTableBand(slide, "LOCALES COMPARABLES", ML, y);
@@ -270,8 +306,40 @@ const addProjectionSlide = (
     );
   }
 
-  // ── Columna derecha: curva año a año ───────────────────────────────────────
+  // ── Columna derecha: proyección ────────────────────────────────────────────
   let ry = BODY_TOP;
+  addColTitle(slide, "Potencial estimado", COL_R_X, ry);
+  ry += 0.32;
+
+  slide.addText(`${fmt(proj.estimatedUf)} UF/mes`, {
+    x: COL_R_X, y: ry, w: COL_W, h: 0.42,
+    fontFace: FONT, fontSize: 24, bold: true, color: C.crimson, margin: 0,
+  });
+  ry += 0.42;
+  slide.addText(
+    `${fmtCLP(proj.estimatedClp)}/mes · en régimen · rango ${fmt(proj.lowUf)}–${fmt(proj.highUf)} UF`,
+    { x: COL_R_X, y: ry, w: COL_W, h: 0.18, fontFace: FONT, fontSize: 7.5, color: C.muted, margin: 0 },
+  );
+  ry += 0.26;
+
+  const apertura = proj.years.find((r) => r.isBase);
+  const supuestos: Array<[string, string]> = [
+    ...(proj.rampEnabled && apertura
+      ? ([["Venta al abrir", `${fmt(apertura.uf)} UF/mes (${Math.round(apertura.maturityPct)}% del régimen)`]] as Array<[string, string]>)
+      : []),
+    ["Maduración", proj.rampEnabled ? "Ubicación nueva, parte en rampa" : "Ubicación ya en régimen"],
+    ["Ajuste manual del analista", proj.adjustPct !== 0 ? `${proj.adjustPct > 0 ? "+" : ""}${proj.adjustPct}%` : "Sin ajuste"],
+    ["Base de cálculo", `${proj.comparables.length} locales comparables`],
+  ];
+  addTableBand(slide, "SUPUESTOS", COL_R_X, ry);
+  ry += 0.2;
+  slide.addTable(
+    supuestos.map(([k, v], i) => row([k, v], { fill: i % 2 ? C.rowAlt : undefined })),
+    { x: COL_R_X, y: ry, w: COL_W, colW: [COL_W * 0.42, COL_W * 0.58], rowH: ROW_H,
+      border: { type: "solid", color: C.grid, pt: 0.5 } },
+  );
+  ry += supuestos.length * ROW_H + 0.2;
+
   addTableBand(slide, "PROYECCIÓN AÑO A AÑO", COL_R_X, ry);
   ry += 0.2;
   const years = proj.years.slice(0, Math.max(0, rowsThatFit(ry) - 1));
