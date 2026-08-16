@@ -170,7 +170,9 @@ const addTerritorySlide = (
     y += gseRows.length * ROW_H + 0.2;
   }
 
-  const comunasFit = Math.min(band.communes.length, rowsThatFit(y + 0.2));
+  // Igual que con los comparables: si alguna comuna no cabe, se dice.
+  const comunasTotal = band.communes.length;
+  const comunasFit = Math.min(comunasTotal, rowsThatFit(y + 0.2));
   if (comunasFit > 0) {
     addTableBand(slide, "COMUNAS", ML, y, DATA_W);
     y += 0.2;
@@ -183,6 +185,13 @@ const addTerritorySlide = (
       { x: ML, y, w: DATA_W, colW: [DATA_W * 0.46, DATA_W * 0.2, DATA_W * 0.34], rowH: ROW_H,
         border: { type: "solid", color: C.grid, pt: 0.5 } },
     );
+    y += comunasFit * ROW_H;
+    if (comunasFit < comunasTotal) {
+      slide.addText(`+${comunasTotal - comunasFit} comuna(s) no listada(s) por espacio`, {
+        x: ML, y: y + 0.02, w: DATA_W, h: 0.16,
+        fontFace: FONT, fontSize: 6.5, color: C.muted, margin: 0,
+      });
+    }
   }
 
   // ── Grilla 2×2 de mapas, cada uno con su título ────────────────────────────
@@ -250,9 +259,12 @@ const addProjectionSlide = (
       { x: ML, y, w: COL_W, colW: [COL_W * 0.58, COL_W * 0.42], rowH: ROW_H,
         border: { type: "solid", color: C.grid, pt: 0.5 } },
     );
-    y += resumenGe.length * ROW_H + 0.16;
+    y += resumenGe.length * ROW_H + 0.14;
 
-    const geRows = ge.rows.filter((r) => r.hogares > 0);
+    // Solo el mercado objetivo: E queda fuera por definición (coeficiente 0),
+    // y listarlo con $0 dentro de una tabla titulada "mercado objetivo"
+    // confunde además de gastar una fila.
+    const geRows = ge.rows.filter((r) => r.esObjetivo && r.hogares > 0);
     if (geRows.length > 0) {
       slide.addTable(
         [
@@ -266,7 +278,7 @@ const addProjectionSlide = (
         { x: ML, y, w: COL_W, colW: [COL_W * 0.24, COL_W * 0.3, COL_W * 0.46], rowH: ROW_H,
           border: { type: "solid", color: C.grid, pt: 0.5 } },
       );
-      y += (geRows.length + 1) * ROW_H + 0.2;
+      y += (geRows.length + 1) * ROW_H + 0.16;
     }
   }
 
@@ -284,11 +296,13 @@ const addProjectionSlide = (
       { x: ML, y, w: COL_W, colW: [COL_W * 0.58, COL_W * 0.42], rowH: ROW_H,
         border: { type: "solid", color: C.grid, pt: 0.5 } },
     );
-    y += pqRows.length * ROW_H + 0.2;
+    y += pqRows.length * ROW_H + 0.16;
   }
 
-  // Los comparables sostienen la cifra, así que van si queda espacio.
-  const compFit = Math.min(proj.comparables.length, rowsThatFit(y + 0.2) - 1);
+  // Los comparables sostienen la cifra: si alguno no cabe hay que decirlo, si
+  // no los supuestos declaran 5 y la tabla muestra 4 sin explicación.
+  const compTotal = proj.comparables.length;
+  const compFit = Math.min(compTotal, rowsThatFit(y + 0.2) - 1);
   if (compFit > 0) {
     addTableBand(slide, "LOCALES COMPARABLES", ML, y);
     y += 0.2;
@@ -304,6 +318,13 @@ const addProjectionSlide = (
       { x: ML, y, w: COL_W, colW: [COL_W * 0.5, COL_W * 0.22, COL_W * 0.28], rowH: ROW_H,
         border: { type: "solid", color: C.grid, pt: 0.5 } },
     );
+    y += (compFit + 1) * ROW_H;
+    if (compFit < compTotal) {
+      slide.addText(`+${compTotal - compFit} comparable(s) no listado(s) por espacio`, {
+        x: ML, y: y + 0.02, w: COL_W, h: 0.16,
+        fontFace: FONT, fontSize: 6.5, color: C.muted, margin: 0,
+      });
+    }
   }
 
   // ── Columna derecha: proyección ────────────────────────────────────────────
