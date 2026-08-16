@@ -1,5 +1,24 @@
 import type { Feature, FeatureCollection, Point } from "geojson";
 
+/**
+ * Estado operativo del local.
+ *
+ * Un local cerrado conserva su análisis territorial —el entorno es un dato
+ * objetivo y sigue siendo útil— pero queda fuera de las proyecciones de venta:
+ * un cierre responde a razones que no dicen nada sobre el potencial del
+ * emplazamiento, así que usarlo como comparable contaminaría la estimación.
+ */
+export type PoiOperationalStatus =
+  | "operativo"
+  | "cerrado_definitivo"
+  | "cerrado_temporal";
+
+export const POI_STATUS_LABEL: Record<PoiOperationalStatus, string> = {
+  operativo: "Operativo",
+  cerrado_definitivo: "Cerrado definitivamente",
+  cerrado_temporal: "Cerrado temporalmente",
+};
+
 export interface SavedPoi {
   id: string;
   name: string;
@@ -15,6 +34,9 @@ export interface SavedPoi {
   created_at: string;
   updated_at?: string | null;
   deleted_at?: string | null;
+  operational_status?: PoiOperationalStatus;
+  closed_at?: string | null;
+  closure_reason?: string | null;
 }
 
 export interface PoiInsert {
@@ -28,6 +50,8 @@ export interface PoiInsert {
   properties?: Record<string, unknown>;
   source_layer?: string | null;
   folder_id?: string | null;
+  operational_status?: PoiOperationalStatus;
+  closure_reason?: string | null;
 }
 
 export interface PoiUpdate {
@@ -38,6 +62,9 @@ export interface PoiUpdate {
   icon?: string | null;
   folder_id?: string | null;
   properties?: Record<string, unknown>;
+  operational_status?: PoiOperationalStatus;
+  closed_at?: string | null;
+  closure_reason?: string | null;
 }
 
 export interface PoiFolder {

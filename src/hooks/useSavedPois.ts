@@ -7,7 +7,8 @@ import type { PoiInsert, PoiUpdate, SavedPoi } from "@/types/pois";
 // Columnas ligeras para pintar el mapa rápido (sin `properties` ni
 // `description` que pueden ser blobs gigantes con KMZ con logos embebidos).
 const LIGHT_COLS =
-  "id,name,category,color,icon,lat,lng,source_layer,folder_id,created_at,updated_at,deleted_at";
+  "id,name,category,color,icon,lat,lng,source_layer,folder_id,created_at,updated_at,deleted_at," +
+  "operational_status,closed_at,closure_reason";
 
 const PAGE = 250;
 // Debounce para escritura del caché en IndexedDB.

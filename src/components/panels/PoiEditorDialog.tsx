@@ -14,7 +14,14 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { PoiIconPreview } from "./PoiIconPreview";
-import type { PoiFolder, PoiInsert, PoiUpdate, SavedPoi } from "@/types/pois";
+import type {
+  PoiFolder,
+  PoiInsert,
+  PoiOperationalStatus,
+  PoiUpdate,
+  SavedPoi,
+} from "@/types/pois";
+import { POI_STATUS_LABEL } from "@/types/pois";
 
 const COLOR_OPTIONS = [
   "#34D399", "#F472B6", "#FBBF24", "#60A5FA",
@@ -35,6 +42,8 @@ export interface PoiEditorDraft {
   lng: string;
   folderId: string | null;
   sales: string;
+  operationalStatus: PoiOperationalStatus;
+  closureReason: string;
 }
 
 interface BaseProps {
@@ -196,6 +205,11 @@ export const PoiEditorDialog = (props: Props) => {
           icon: draft.icon.trim() || null,
           folder_id: draft.folderId,
           properties: newProps,
+          operational_status: draft.operationalStatus,
+          closure_reason:
+            draft.operationalStatus === "operativo"
+              ? null
+              : draft.closureReason.trim() || null,
         });
         toast.success(`POI "${trimmedName}" actualizado`);
       } else {
@@ -211,6 +225,11 @@ export const PoiEditorDialog = (props: Props) => {
           lng: lngNum,
           folder_id: draft.folderId,
           properties: props_obj,
+          operational_status: draft.operationalStatus,
+          closure_reason:
+            draft.operationalStatus === "operativo"
+              ? null
+              : draft.closureReason.trim() || null,
         });
         toast.success(`POI "${trimmedName}" creado`);
       }
@@ -324,6 +343,39 @@ export const PoiEditorDialog = (props: Props) => {
           </div>
 
           <div className="space-y-1">
+            <Label htmlFor="poi-status" className="text-xs">Estado operativo</Label>
+            <select
+              id="poi-status"
+              value={draft.operationalStatus}
+              onChange={(e) =>
+                setDraft((d) => ({
+                  ...d,
+                  operationalStatus: e.target.value as PoiOperationalStatus,
+                }))
+              }
+              className="h-8 w-full rounded-md border border-border/50 bg-surface-2/60 px-2 text-sm"
+            >
+              {(Object.keys(POI_STATUS_LABEL) as PoiOperationalStatus[]).map((s) => (
+                <option key={s} value={s}>{POI_STATUS_LABEL[s]}</option>
+              ))}
+            </select>
+            {draft.operationalStatus !== "operativo" && (
+              <>
+                <Input
+                  value={draft.closureReason}
+                  onChange={(e) => setDraft((d) => ({ ...d, closureReason: e.target.value }))}
+                  placeholder="Motivo del cierre (opcional)"
+                  className="mt-1 h-8 text-sm"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Conserva su análisis territorial, pero queda fuera de los
+                  comparables de las proyecciones de venta.
+                </p>
+              </>
+            )}
+          </div>
+
+          <div className="space-y-1">
             <Label className="text-xs">Color</Label>
             <div className="flex flex-wrap gap-1.5">
               {COLOR_OPTIONS.map((c) => (
@@ -432,6 +484,8 @@ function buildInitialDraft(
       lng: p.lng.toFixed(6),
       folderId: p.folder_id,
       sales,
+      operationalStatus: p.operational_status ?? "operativo",
+      closureReason: p.closure_reason ?? "",
     };
     return { ...base, ...initialDraft };
   }
@@ -449,6 +503,8 @@ function buildInitialDraft(
     lng: "",
     folderId,
     sales: "",
+    operationalStatus: "operativo",
+    closureReason: "",
   };
   return { ...base, ...initialDraft };
 }

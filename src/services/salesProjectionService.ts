@@ -256,12 +256,25 @@ export async function computeSalesProjection(
   if (cacheRows.length === 0) diagParts.push(`Sin features en caché para esta carpeta`);
   if (perfRows.length  === 0) diagParts.push(`Sin análisis de performance (ejecuta "Calcular performance")`);
 
-  // Cargar nombres de POIs
+  // Cargar nombres y estado operativo de los POIs
   const poiIds  = perfRows.map((r) => r.poi_id).filter(Boolean) as string[];
   const poisRes = poiIds.length
-    ? await supabase.from("pois").select("id, name").in("id", poiIds)
+    ? await supabase.from("pois").select("id, name, operational_status").in("id", poiIds)
     : { data: [] };
   const nameById = new Map((poisRes.data ?? []).map((p) => [p.id, p.name]));
+
+  // Locales cerrados: se excluyen como comparables. Un cierre responde a
+  // razones ajenas al potencial del emplazamiento (contrato, decisión
+  // comercial, pandemia), así que sus ventas no representan lo que rendiría
+  // una ubicación equivalente y arrastrarían la proyección hacia abajo.
+  const closedPoiIds = new Set(
+    (poisRes.data ?? [])
+      .filter((p) => {
+        const st = (p as { operational_status?: string }).operational_status;
+        return st != null && st !== "operativo";
+      })
+      .map((p) => p.id),
+  );
 
   // ── 2. UF actual para conversión CLP↔UF ────────────────────────────────────
   const ufMap = await loadUfMap();
@@ -285,8 +298,11 @@ export async function computeSalesProjection(
   let nWithPredicted = 0;
   let maxBaseYear = currentYear - 1; // fallback = año anterior
 
+  let nExcludedClosed = 0;
+
   for (const p of perfRows) {
     if (!p.poi_id) continue;
+    if (closedPoiIds.has(p.poi_id)) { nExcludedClosed += 1; continue; }
     const features = featureById.get(p.poi_id);
     if (!features) continue;
 
@@ -320,6 +336,13 @@ export async function computeSalesProjection(
       isActual,
       baseYear,
     });
+  }
+
+  // Que la exclusión sea visible: si no, la red parecería más chica sin motivo.
+  if (nExcludedClosed > 0) {
+    diagParts.push(
+      `${nExcludedClosed} local${nExcludedClosed === 1 ? "" : "es"} cerrado${nExcludedClosed === 1 ? "" : "s"} excluido${nExcludedClosed === 1 ? "" : "s"} de los comparables`,
+    );
   }
 
   if (comparable.length === 0) {
@@ -410,9 +433,15 @@ export async function computeSalesProjection(
   // ── 10. Factores clave ────────────────────────────────────────────────────
   const keyFactors = buildKeyFactors(newFeatures, comparable);
 
-  const diagnosticMsg = usedPredictions
-    ? `Usando predicciones del modelo Ridge (sin ventas reales cargadas)`
-    : null;
+  const diagNotes = [
+    usedPredictions
+      ? "Usando predicciones del modelo Ridge (sin ventas reales cargadas)"
+      : null,
+    nExcludedClosed > 0
+      ? `${nExcludedClosed} local${nExcludedClosed === 1 ? "" : "es"} cerrado${nExcludedClosed === 1 ? "" : "s"} excluido${nExcludedClosed === 1 ? "" : "s"}`
+      : null,
+  ].filter(Boolean) as string[];
+  const diagnosticMsg = diagNotes.length > 0 ? diagNotes.join(" · ") : null;
 
   return {
     estimatedUf:    Math.round(estimatedUf * 10) / 10,
