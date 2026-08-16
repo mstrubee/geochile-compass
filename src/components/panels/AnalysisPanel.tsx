@@ -851,6 +851,17 @@ const ProjectionSection = ({
   folders, selectedFolderId, onFolderChange,
   result, loading, error, canRun, onRun, onReset,
 }: ProjectionSectionProps) => {
+  // Ajuste manual sobre la estimación (castigo o premio, en %).
+  //
+  // Es deliberadamente arbitrario: sirve para incorporar lo que el modelo no
+  // ve —re-maduración tras un cierre, obras en la calle, un contrato
+  // particular—. Se aplica solo al mostrar: `result` queda intacto, así que
+  // "volver al original" es exacto y siempre se puede contrastar.
+  const [adjustPct, setAdjustPct] = useState(0);
+
+  // Una proyección nueva parte sin ajuste: arrastrarlo sería engañoso.
+  useEffect(() => { setAdjustPct(0); }, [result]);
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-4 justify-center text-[11px] text-muted-foreground">
@@ -941,6 +952,10 @@ const ProjectionSection = ({
   const displayProj     = currentYearProj ?? baseProj ?? { uf: result.estimatedUf, clp: result.estimatedClp };
   const displayYear     = currentYearProj?.year ?? result.baseYear;
 
+  const adjusted = adjustPct !== 0;
+  const factor   = 1 + adjustPct / 100;
+  const adj      = (v: number) => v * factor;
+
   return (
     <div className="space-y-3">
       {/* Aviso si usó predicciones del modelo en lugar de ventas reales */}
@@ -957,14 +972,73 @@ const ProjectionSection = ({
           {currentYearProj && <span className="ml-1 text-green-400/50">(año en curso)</span>}
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-[22px] font-bold text-green-400">{fmtUF(displayProj.uf)}</span>
+          <span className="text-[22px] font-bold text-green-400">{fmtUF(adj(displayProj.uf))}</span>
           <span className="text-[11px] text-green-400/60">/mes</span>
+          {adjusted && (
+            <span className={[
+              "rounded px-1 text-[9px] font-medium",
+              adjustPct > 0 ? "bg-green-400/15 text-green-300" : "bg-brand-orange/15 text-brand-orange",
+            ].join(" ")}>
+              {adjustPct > 0 ? "+" : ""}{adjustPct}% manual
+            </span>
+          )}
         </div>
-        <div className="text-[11px] text-muted-foreground">{fmtCLPM(displayProj.clp)}/mes</div>
+        <div className="text-[11px] text-muted-foreground">{fmtCLPM(adj(displayProj.clp))}/mes</div>
         <div className="mt-1.5 text-[10px] text-muted-foreground">
-          Rango: <span className="text-foreground">{fmtUF(result.lowUf)}</span> — <span className="text-foreground">{fmtUF(result.highUf)}</span>
+          Rango: <span className="text-foreground">{fmtUF(adj(result.lowUf))}</span> — <span className="text-foreground">{fmtUF(adj(result.highUf))}</span>
           <span className="ml-1 text-[9px]">(p25–p75 de comparables)</span>
         </div>
+        {adjusted && (
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            Cálculo original: <span className="text-foreground">{fmtUF(displayProj.uf)}</span>/mes
+          </div>
+        )}
+      </div>
+
+      {/* Ajuste manual */}
+      <div className="rounded-lg bg-surface-2/40 p-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Ajuste manual
+          </span>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min={-90}
+              max={200}
+              step={1}
+              value={adjustPct}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                setAdjustPct(Number.isFinite(n) ? Math.max(-90, Math.min(200, n)) : 0);
+              }}
+              className="h-7 w-16 rounded-md border border-border/50 bg-surface-3 px-1.5 text-right text-[11px] font-mono"
+            />
+            <span className="text-[11px] text-muted-foreground">%</span>
+            <button
+              onClick={() => setAdjustPct(0)}
+              disabled={!adjusted}
+              className="rounded-md px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground disabled:opacity-40"
+              title="Volver al cálculo original"
+            >
+              ↺ Reset
+            </button>
+          </div>
+        </div>
+        <input
+          type="range"
+          min={-90}
+          max={200}
+          step={1}
+          value={adjustPct}
+          onChange={(e) => setAdjustPct(parseInt(e.target.value, 10))}
+          className="mt-2 w-full accent-green-500"
+        />
+        <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">
+          Castiga o premia la estimación por factores que el modelo no ve (re-maduración
+          tras un cierre, obras, contrato particular). No altera el cálculo: es un
+          criterio propio y queda declarado como tal.
+        </p>
       </div>
 
       {/* Proyección 5 años */}
@@ -972,6 +1046,11 @@ const ProjectionSection = ({
         <div>
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
             Proyección {result.baseYear}–{result.fiveYearProjection[result.fiveYearProjection.length - 1].year}
+            {adjusted && (
+              <span className="ml-1 normal-case text-brand-orange">
+                · ajustada {adjustPct > 0 ? "+" : ""}{adjustPct}%
+              </span>
+            )}
             <span className="ml-1 normal-case text-[9px]">({(result.growthRate * 100).toFixed(0)}% anual)</span>
           </div>
           <div className="overflow-hidden rounded-lg border border-white/8">
@@ -997,10 +1076,10 @@ const ProjectionSection = ({
                       {yr.isBase && !yr.isCurrent && <span className="text-[8px] text-muted-foreground bg-surface-2/60 rounded px-1">base</span>}
                     </td>
                     <td className={["py-1 px-2 text-right tabular-nums font-mono", yr.isCurrent ? "text-green-400" : "text-foreground"].join(" ")}>
-                      {fmtUF(yr.uf)}
+                      {fmtUF(adj(yr.uf))}
                     </td>
                     <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
-                      {fmtCLPM(yr.clp)}
+                      {fmtCLPM(adj(yr.clp))}
                     </td>
                   </tr>
                 ))}
