@@ -440,7 +440,10 @@ export async function computeSalesProjection(
   });
 
   // ── 10. Factores clave ────────────────────────────────────────────────────
-  const keyFactors = buildKeyFactors(newFeatures, comparable);
+  // Solo los comparables efectivamente usados: son los que sostienen la
+  // estimación. Contra el promedio de TODA la red, la referencia incluía
+  // locales que el modelo descartó por poco parecidos.
+  const keyFactors = buildKeyFactors(newFeatures, topK.map((k) => comparable[k.idx]));
 
   const diagNotes = [
     usedPredictions
@@ -475,21 +478,32 @@ export async function computeSalesProjection(
 
 // ── Helpers adicionales ───────────────────────────────────────────────────────
 
+/**
+ * Diferencias con los comparables usados.
+ *
+ * Referencia = MEDIANA, no promedio: la distribución de población por isócrona
+ * es muy asimétrica (unas pocas isócronas urbanas enormes arrastran la media
+ * muy por encima de la mayoría), así que contra el promedio casi cualquier
+ * ubicación aparecía "por debajo de la red" y el dato dejaba de informar.
+ */
 function buildKeyFactors(
   newF: Record<string, number>,
   comparables: Array<{ features: Record<string, number>; ufPerMonth: number }>,
 ): ProjectionResult["keyFactors"] {
   if (comparables.length === 0) return [];
+  const medianOf = (k: string): number => {
+    const xs = comparables.map((c) => c.features[k] ?? 0).sort((a, b) => a - b);
+    const m = Math.floor(xs.length / 2);
+    return xs.length % 2 ? xs[m] : (xs[m - 1] + xs[m]) / 2;
+  };
   const avgF: Record<string, number> = {};
-  for (const k of Object.keys(newF)) {
-    avgF[k] = comparables.reduce((s, c) => s + (c.features[k] ?? 0), 0) / comparables.length;
-  }
+  for (const k of Object.keys(newF)) avgF[k] = medianOf(k);
   const factors: ProjectionResult["keyFactors"] = [];
 
   if (avgF["pop_total"] > 0) {
     const pct = ((newF["pop_total"] - avgF["pop_total"]) / avgF["pop_total"]) * 100;
     if (Math.abs(pct) > 10) factors.push({
-      label:  `Población ${Math.abs(pct).toFixed(0)}% ${pct > 0 ? "mayor" : "menor"} al promedio de red`,
+      label:  `Población ${Math.abs(pct).toFixed(0)}% ${pct > 0 ? "mayor" : "menor"} que sus comparables`,
       value:  Intl.NumberFormat("es-CL").format(Math.round(newF["pop_total"])),
       impact: pct > 0 ? "positive" : "negative",
     });
@@ -497,7 +511,7 @@ function buildKeyFactors(
   const nseHigh = (newF["nse_high_pct"] ?? 0) * 100;
   const avgNseHigh = (avgF["nse_high_pct"] ?? 0) * 100;
   if (Math.abs(nseHigh - avgNseHigh) > 5) factors.push({
-    label:  `NSE alto ${nseHigh.toFixed(0)}% (red: ${avgNseHigh.toFixed(0)}%)`,
+    label:  `NSE alto ${nseHigh.toFixed(0)}% (comparables: ${avgNseHigh.toFixed(0)}%)`,
     value:  `${nseHigh.toFixed(1)}%`,
     impact: nseHigh > avgNseHigh ? "positive" : "negative",
   });
@@ -512,7 +526,7 @@ function buildKeyFactors(
     });
   }
   if (factors.length === 0) {
-    factors.push({ label: "Perfil similar al promedio de la red", value: "—", impact: "neutral" });
+    factors.push({ label: "Perfil similar al de sus comparables", value: "—", impact: "neutral" });
   }
   return factors;
 }

@@ -24,6 +24,14 @@ export interface ProjectionSettings {
   rateOverrides: (number | null)[];
   /** false = la ubicación ya está en régimen (traslado, no apertura). */
   rampEnabled: boolean;
+  /**
+   * Resultado de la proyección ya corrida. Se guarda para no obligar a
+   * recalcular al reabrir la isócrona: correr el predictor consulta toda la
+   * red y sus features, y el resultado no cambia salvo que cambien esos datos.
+   */
+  result?: unknown | null;
+  /** Cuándo se corrió, para saber qué tan vigente es. */
+  computedAt?: string | null;
 }
 
 export interface SavedIsochrone {

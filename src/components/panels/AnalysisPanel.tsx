@@ -214,11 +214,35 @@ export const AnalysisPanel = ({
   const [projError,   setProjError]   = useState<string | null>(null);
 
   // Reset projection cuando cambia la isócrona
+  // Ajustes que reporta la sección (ajuste manual, tasas, rampa).
+  const [projAdjust, setProjAdjust] = useState<ProjectionSettings | null>(null);
+
   useEffect(() => {
-    setProjResult(null);
+    // Si esta ubicación ya tenía una proyección corrida, se muestra tal cual:
+    // recalcular consulta toda la red y da lo mismo mientras esos datos no
+    // cambien. Para rehacerla está el botón "Nueva proyección".
+    setProjResult((projectionSettings?.result as ProjectionResult | null) ?? null);
+    setProjAdjust(projectionSettings ?? null);
     setProjError(null);
     setProjForReport(null);
-  }, [isochrone?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isochrone?.id, projectionSettings]);
+
+  // Guarda resultado y ajustes juntos: son una sola cosa desde el punto de
+  // vista del usuario ("la proyección de esta ubicación").
+  const persistProjection = useCallback(
+    (adjust: ProjectionSettings | null, res: ProjectionResult | null) => {
+      if (!onProjectionSettingsChange) return;
+      onProjectionSettingsChange({
+        adjustPct: adjust?.adjustPct ?? 0,
+        rateOverrides: adjust?.rateOverrides ?? [],
+        rampEnabled: adjust?.rampEnabled ?? true,
+        result: res,
+        computedAt: res ? new Date().toISOString() : null,
+      });
+    },
+    [onProjectionSettingsChange],
+  );
 
   const runProjection = useCallback(async () => {
     if (!projectionFolderId || !analysis) return;
@@ -232,12 +256,13 @@ export const AnalysisPanel = ({
         parque:      parqueForProjection,
       });
       setProjResult(r);
+      persistProjection(projAdjust, r);
     } catch (e) {
       setProjError(e instanceof Error ? e.message : String(e));
     } finally {
       setProjLoading(false);
     }
-  }, [projectionFolderId, analysis, isoFeatureActive, parqueForProjection]);
+  }, [projectionFolderId, analysis, isoFeatureActive, parqueForProjection, persistProjection, projAdjust]);
   const toggleSection = (k: SectionKey) =>
     setSectionOpen((s) => ({ ...s, [k]: !s[k] }));
 
@@ -500,7 +525,8 @@ export const AnalysisPanel = ({
                   onReset={() => { setProjResult(null); setProjError(null); setProjForReport(null); }}
                   onSnapshot={setProjForReport}
                   savedSettings={projectionSettings}
-                  onSettingsChange={onProjectionSettingsChange}
+                  onSettingsChange={(s) => { setProjAdjust(s); persistProjection(s, projResult); }}
+                  onRerun={runProjection}
                 />
               </Section>
             )}
@@ -868,6 +894,8 @@ interface ProjectionSectionProps {
   onSnapshot?:      (p: ReportProjection | null) => void;
   savedSettings?:   ProjectionSettings | null;
   onSettingsChange?: (s: ProjectionSettings) => void;
+  /** Vuelve a correr el predictor descartando el resultado guardado. */
+  onRerun?:         () => void;
 }
 
 /**
@@ -921,7 +949,7 @@ const buildProjRows = (
 const ProjectionSection = ({
   folders, selectedFolderId, onFolderChange,
   result, loading, error, canRun, onRun, onReset, onSnapshot,
-  savedSettings, onSettingsChange,
+  savedSettings, onSettingsChange, onRerun,
 }: ProjectionSectionProps) => {
   // Ajuste manual sobre la estimación (castigo o premio, en %).
   //
@@ -1155,6 +1183,24 @@ const ProjectionSection = ({
           </div>
         )}
       </div>
+
+      {/* Volver a correr el predictor */}
+      {onRerun && (
+        <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+          <span>
+            {savedSettings?.computedAt
+              ? `Calculada el ${new Date(savedSettings.computedAt).toLocaleDateString("es-CL")}`
+              : "Proyección vigente"}
+          </span>
+          <button
+            onClick={onRerun}
+            className="rounded-md border border-border/50 px-2 py-1 text-[10px] transition-colors hover:bg-surface-3 hover:text-foreground"
+            title="Vuelve a consultar la red y recalcula desde cero"
+          >
+            ⟳ Nueva proyección
+          </button>
+        </div>
+      )}
 
       {/* Ajustes del analista */}
       <div className="rounded-lg bg-surface-2/40 p-2.5">
