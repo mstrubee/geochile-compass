@@ -18,7 +18,17 @@ import { DEFAULT_GROWTH_RATE } from "@/services/salesProjectionService";
  * crecimiento.
  */
 export interface MaturationCurve {
-  /** Crecimiento por año de vida: rates[0] = del año 0 al 1, rates[1] = del 1 al 2, … */
+  /**
+   * Fracción del nivel EN RÉGIMEN que alcanza el local en cada año de vida:
+   * rampFactors[0] = año de apertura, [1] = segundo año, …
+   *
+   * Es la corrección de fondo: la estimación sale de comparables ya maduros,
+   * o sea es el potencial EN RÉGIMEN de la ubicación. Un local recién abierto
+   * no rinde eso desde el primer día —lo alcanza tras un par de años—, así que
+   * arrancar la proyección en el 100% duplicaba el año de apertura.
+   */
+  rampFactors: number[];
+  /** Crecimiento por año de vida, derivado de rampFactors. */
   rates: number[];
   /** Locales con apertura real usados para derivarla. */
   sampleSize: number;
@@ -27,13 +37,22 @@ export interface MaturationCurve {
 }
 
 /**
- * Respaldo cuando no hay aperturas observadas. Refleja el patrón medido en la
- * red de Autoplanet (rampa fuerte hasta el año 2, luego régimen).
+ * Respaldo cuando no hay aperturas observadas: patrón medido en la red de
+ * Autoplanet — se abre a la mitad del régimen y se madura hacia el año 2.
  */
-const FALLBACK_RATES = [0.27, 0.43, 0.03];
+const FALLBACK_RAMP = [0.49, 0.63, 1.0];
 
-/** Años de vida a partir de los cuales se asume régimen. */
-export const MATURITY_YEAR = FALLBACK_RATES.length;
+/** Año de vida en que se considera alcanzado el régimen. */
+export const MATURITY_YEAR = FALLBACK_RAMP.length - 1;
+
+/** Crecimiento año a año implícito en una rampa. */
+const ratesFromRamp = (ramp: number[]): number[] => {
+  const out: number[] = [];
+  for (let i = 1; i < ramp.length; i++) {
+    if (ramp[i - 1] > 0) out.push(Math.round((ramp[i] / ramp[i - 1] - 1) * 1000) / 1000);
+  }
+  return out;
+};
 
 const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
@@ -45,7 +64,8 @@ export const fetchMaturationCurve = async (
   folderId: string,
 ): Promise<MaturationCurve> => {
   const fallback: MaturationCurve = {
-    rates: FALLBACK_RATES,
+    rampFactors: FALLBACK_RAMP,
+    rates: ratesFromRamp(FALLBACK_RAMP),
     sampleSize: 0,
     isFallback: true,
   };
@@ -117,17 +137,37 @@ export const fetchMaturationCurve = async (
 
     if (perStore.length < 2) return fallback;
 
-    const rates: number[] = [];
-    for (let y = 0; y < MATURITY_YEAR; y++) {
-      const gs = perStore
-        .filter((s) => s[y] != null && s[y + 1] != null && s[y] > 0)
-        .map((s) => s[y + 1] / s[y] - 1);
-      if (gs.length < 2) break;
-      rates.push(Math.round(median(gs) * 1000) / 1000);
+    // Nivel en régimen de cada local: promedio de sus años ya maduros.
+    const ramps: Array<Record<number, number>> = [];
+    for (const s of perStore) {
+      const mature = Object.entries(s)
+        .filter(([y]) => Number(y) >= MATURITY_YEAR)
+        .map(([, v]) => v);
+      if (mature.length === 0) continue;
+      const steady = mature.reduce((a, b) => a + b, 0) / mature.length;
+      if (steady <= 0) continue;
+      const f: Record<number, number> = {};
+      for (const [y, v] of Object.entries(s)) f[Number(y)] = v / steady;
+      ramps.push(f);
     }
-    if (rates.length === 0) return fallback;
+    if (ramps.length < 2) return fallback;
 
-    return { rates, sampleSize: perStore.length, isFallback: false };
+    const rampFactors: number[] = [];
+    for (let y = 0; y <= MATURITY_YEAR; y++) {
+      const xs = ramps.filter((r) => r[y] != null).map((r) => r[y]);
+      if (xs.length < 2) break;
+      rampFactors.push(Math.round(median(xs) * 1000) / 1000);
+    }
+    if (rampFactors.length < 2) return fallback;
+    // El último año de la rampa ES el régimen por definición.
+    rampFactors[rampFactors.length - 1] = 1;
+
+    return {
+      rampFactors,
+      rates: ratesFromRamp(rampFactors),
+      sampleSize: ramps.length,
+      isFallback: false,
+    };
   } catch {
     return fallback;
   }

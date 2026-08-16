@@ -716,15 +716,17 @@ const addProjectionPage = (
   autoTable(doc, {
     ...tableTheme,
     startY: y,
-    head: [["Año", "Crecimiento", "UF/mes", "CLP/mes"]],
+    head: [["Año", "Crecimiento", "% régimen", "UF/mes", "CLP/mes"]],
     body: p.years.map((r) => [
       `${r.year}${r.isBase ? " (base)" : r.isCurrent ? " (en curso)" : ""}`,
       r.isBase ? "—" : `${r.ratePct > 0 ? "+" : ""}${r.ratePct}%`,
+      `${Math.round(r.maturityPct)}%`,
       fmt(r.uf),
       fmtCLP(r.clp),
     ]),
     columnStyles: {
-      1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" },
+      1: { halign: "right" }, 2: { halign: "right" },
+      3: { halign: "right" }, 4: { halign: "right" },
     },
     tableWidth: PW - ML * 2,
     didDrawPage: (data) => {
@@ -740,10 +742,14 @@ const addProjectionPage = (
   doc.setFontSize(7);
   doc.setTextColor(...C.slate400);
   const notas = [
+    p.rampEnabled
+      ? `Ubicación nueva: el potencial en régimen es ${fmt(p.steadyStateUf)} UF/mes y la curva parte en ` +
+        `${Math.round(p.years[0]?.maturityPct ?? 100)}% de ese nivel, porque un local recién abierto no rinde ` +
+        "desde el primer día lo que rinde uno maduro."
+      : "Se asume la ubicación ya en régimen desde el año base (sin rampa de apertura).",
     p.usesMaturationCurve
-      ? `Crecimiento por año de vida derivado de ${p.maturationSampleSize} locales de la red con apertura observada; ` +
-        "un local nuevo madura rápido los primeros años y solo después entra en régimen."
-      : "Crecimiento en régimen aplicado año a año (sin curva de maduración derivada de la red).",
+      ? `Curva de maduración derivada de ${p.maturationSampleSize} locales de la red con apertura observada.`
+      : "Curva de maduración de respaldo: no hay suficientes aperturas observadas en la red.",
     `Base: media ponderada de ${p.comparables.length} locales comparables ` +
       `(${p.nWithSales} con ventas reales, ${p.nWithPredicted} con predicción del modelo).`,
     p.adjustPct !== 0

@@ -111,11 +111,15 @@ export interface ReportProjection {
   adjustPct: number;
   usesMaturationCurve: boolean;
   maturationSampleSize: number;
+  /** true si la curva parte en rampa (ubicación nueva) en vez de en régimen. */
+  rampEnabled: boolean;
+  /** Potencial en régimen, del que la rampa es una fracción. */
+  steadyStateUf: number;
   nWithSales: number;
   nWithPredicted: number;
   usedPredictions: boolean;
   diagnosticMsg: string | null;
-  years: Array<{ year: number; uf: number; clp: number; ratePct: number; isBase: boolean; isCurrent: boolean }>;
+  years: Array<{ year: number; uf: number; clp: number; ratePct: number; maturityPct: number; isBase: boolean; isCurrent: boolean }>;
   comparables: Array<{ name: string; ufPerMonth: number; isActual: boolean; weight: number }>;
 }
 

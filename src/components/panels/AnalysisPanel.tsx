@@ -859,24 +859,45 @@ interface ProjectionSectionProps {
   onSnapshot?:      (p: ReportProjection | null) => void;
 }
 
-/** Filas de la proyección: crecimiento compuesto año a año, editable por año. */
+/**
+ * Filas de la proyección.
+ *
+ * `result.estimatedUf` sale de comparables ya maduros: es el potencial EN
+ * RÉGIMEN de la ubicación, no lo que rinde un local recién abierto. Con
+ * `ramp` activo la curva parte en la fracción medida del régimen (≈50%) y
+ * sube hasta el 100%; sin él se asume la ubicación ya madura, que es lo que
+ * corresponde al evaluar el traslado de un local en marcha.
+ */
 const buildProjRows = (
   result: ProjectionResult,
   curve: MaturationCurve | null,
   overrides: (number | null)[],
-): Array<{ year: number; uf: number; clp: number; ratePct: number; isBase: boolean; isCurrent: boolean }> => {
+  ramp: boolean,
+): Array<{
+  year: number; uf: number; clp: number; ratePct: number;
+  maturityPct: number; isBase: boolean; isCurrent: boolean;
+}> => {
   const ufToClp = result.estimatedUf > 0 ? result.estimatedClp / result.estimatedUf : 0;
   const horizon = Math.max(0, result.fiveYearProjection.length - 1);
-  const rows: Array<{ year: number; uf: number; clp: number; ratePct: number; isBase: boolean; isCurrent: boolean }> = [];
+  const factors = curve?.rampFactors ?? [];
+  const startFactor = ramp && factors.length > 0 ? factors[0] : 1;
+
+  const rows: Array<{
+    year: number; uf: number; clp: number; ratePct: number;
+    maturityPct: number; isBase: boolean; isCurrent: boolean;
+  }> = [];
   for (let i = 0; i <= horizon; i++) {
-    const fallback = i <= 0
+    const fallbackRate = i <= 0
       ? 0
       : Math.round((curve?.rates[i - 1] ?? result.growthRate) * 1000) / 10;
-    const ratePct = overrides[i] ?? fallback;
-    const uf = i === 0 ? result.estimatedUf : rows[i - 1].uf * (1 + ratePct / 100);
+    const ratePct = overrides[i] ?? fallbackRate;
+    const uf = i === 0
+      ? result.estimatedUf * startFactor
+      : rows[i - 1].uf * (1 + ratePct / 100);
     const year = result.baseYear + i;
     rows.push({
       year, uf, clp: uf * ufToClp, ratePct,
+      maturityPct: result.estimatedUf > 0 ? (uf / result.estimatedUf) * 100 : 0,
       isBase: i === 0,
       isCurrent: year === result.currentYear,
     });
@@ -898,15 +919,17 @@ const ProjectionSection = ({
   // Crecimiento por año. null en una posición = usar el de la curva.
   const [rateOverrides, setRateOverrides] = useState<(number | null)[]>([]);
   const [curve, setCurve] = useState<MaturationCurve | null>(null);
+  // Por defecto se proyecta una ubicación NUEVA, que parte en rampa.
+  const [rampEnabled, setRampEnabled] = useState(true);
 
   // Una proyección nueva parte sin ajustes: arrastrarlos sería engañoso.
-  useEffect(() => { setAdjustPct(0); setRateOverrides([]); }, [result]);
+  useEffect(() => { setAdjustPct(0); setRateOverrides([]); setRampEnabled(true); }, [result]);
 
   // Publica lo que se ve (con ajuste manual y tasas editadas) para el PDF.
   useEffect(() => {
     if (!onSnapshot) return;
     if (!result) { onSnapshot(null); return; }
-    const rows = buildProjRows(result, curve, rateOverrides);
+    const rows = buildProjRows(result, curve, rateOverrides, rampEnabled);
     const f = 1 + adjustPct / 100;
     onSnapshot({
       folderName: folders.find((x) => x.id === selectedFolderId)?.name ?? result.folderName,
@@ -919,19 +942,22 @@ const ProjectionSection = ({
       adjustPct,
       usesMaturationCurve: !!curve && !curve.isFallback,
       maturationSampleSize: curve?.sampleSize ?? 0,
+      rampEnabled,
+      steadyStateUf: result.estimatedUf * f,
       nWithSales: result.nWithSales,
       nWithPredicted: result.nWithPredicted,
       usedPredictions: result.usedPredictions,
       diagnosticMsg: result.diagnosticMsg,
       years: rows.map((r) => ({
         year: r.year, uf: r.uf * f, clp: r.clp * f,
-        ratePct: r.ratePct, isBase: r.isBase, isCurrent: r.isCurrent,
+        ratePct: r.ratePct, maturityPct: r.maturityPct,
+        isBase: r.isBase, isCurrent: r.isCurrent,
       })),
       comparables: result.comparables.map((c) => ({
         name: c.name, ufPerMonth: c.ufPerMonth, isActual: c.isActual, weight: c.weight,
       })),
     });
-  }, [result, adjustPct, rateOverrides, curve, folders, selectedFolderId, onSnapshot]);
+  }, [result, adjustPct, rateOverrides, rampEnabled, curve, folders, selectedFolderId, onSnapshot]);
 
   // Curva de maduración de la red: el 3% es la tasa en régimen, pero un local
   // recién abierto crece mucho más rápido los primeros años.
@@ -1037,7 +1063,7 @@ const ProjectionSection = ({
   const ratesChanged = rateOverrides.some((r) => r != null);
   // Mismo helper que alimenta el snapshot del PDF: si divergieran, el informe
   // diría algo distinto de lo que el usuario tiene en pantalla.
-  const projRows = buildProjRows(result, curve, rateOverrides);
+  const projRows = buildProjRows(result, curve, rateOverrides, rampEnabled);
 
   const currentYearProj = projRows.find((y) => y.isCurrent);
   const baseProj        = projRows.find((y) => y.isBase);
@@ -1083,6 +1109,16 @@ const ProjectionSection = ({
         {adjusted && (
           <div className="mt-1 text-[10px] text-muted-foreground">
             Cálculo original: <span className="text-foreground">{fmtUF(displayProj.uf)}</span>/mes
+          </div>
+        )}
+        {rampEnabled && (
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            Potencial en régimen:{" "}
+            <span className="text-foreground">{fmtUF(adj(result.estimatedUf))}</span>/mes
+            {" · "}el año mostrado va al{" "}
+            {Math.round(
+              (projRows.find((y) => y.isCurrent) ?? projRows[0])?.maturityPct ?? 100,
+            )}% de ese nivel
           </div>
         )}
       </div>
@@ -1132,6 +1168,23 @@ const ProjectionSection = ({
           superficie). No altera el cálculo: es un criterio propio y queda declarado
           como tal.
         </p>
+
+        <label className="mt-3 flex cursor-pointer items-start gap-2 border-t border-border/30 pt-2.5">
+          <input
+            type="checkbox"
+            checked={rampEnabled}
+            onChange={(e) => setRampEnabled(e.target.checked)}
+            className="mt-0.5 h-3 w-3"
+          />
+          <span className="text-[10px] leading-relaxed text-muted-foreground">
+            <span className="font-medium text-foreground">Ubicación nueva (parte en rampa)</span>
+            <br />
+            El potencial estimado sale de locales ya maduros. Con esto activo la
+            curva parte en {Math.round((curve?.rampFactors[0] ?? 0.49) * 100)}% de ese
+            nivel y sube hasta el 100%. Desactívalo si evalúas trasladar un local
+            que ya está en régimen.
+          </span>
+        </label>
       </div>
 
       {/* Proyección 5 años */}
@@ -1175,6 +1228,7 @@ const ProjectionSection = ({
                       >↺</button>
                     </span>
                   </th>
+                  <th className="py-1 px-2 text-right text-[10px] text-muted-foreground font-medium">% rég.</th>
                   <th className="py-1 px-2 text-right text-[10px] text-muted-foreground font-medium">UF/mes</th>
                   <th className="py-1 px-2 text-right text-[10px] text-muted-foreground font-medium">CLP/mes</th>
                 </tr>
@@ -1216,6 +1270,9 @@ const ProjectionSection = ({
                           ].join(" ")}
                         />
                       )}
+                    </td>
+                    <td className="py-1 px-2 text-right tabular-nums text-[10px] text-muted-foreground">
+                      {Math.round(yr.maturityPct)}%
                     </td>
                     <td className={["py-1 px-2 text-right tabular-nums font-mono", yr.isCurrent ? "text-green-400" : "text-foreground"].join(" ")}>
                       {fmtUF(adj(yr.uf))}
