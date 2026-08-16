@@ -26,6 +26,8 @@ const rowToIso = (r: Row): SavedIsochrone => ({
   source_lat: r.source_lat == null ? null : Number(r.source_lat),
   source_lng: r.source_lng == null ? null : Number(r.source_lng),
   notes: (r.notes as string | null) ?? null,
+  projection_settings:
+    (r.projection_settings as SavedIsochrone["projection_settings"]) ?? null,
   created_at: r.created_at as string,
   updated_at: r.updated_at as string,
   deleted_at: (r.deleted_at as string | null) ?? null,

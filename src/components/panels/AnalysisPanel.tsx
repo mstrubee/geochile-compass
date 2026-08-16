@@ -935,13 +935,18 @@ const ProjectionSection = ({
   const [curve, setCurve] = useState<MaturationCurve | null>(null);
   // Por defecto se proyecta una ubicación NUEVA, que parte en rampa.
   const [rampEnabled, setRampEnabled] = useState(true);
+  // Último valor persistido, para no reescribir lo que acabamos de restaurar.
+  const lastSavedKey = useRef<string | null>(null);
 
-  // Una proyección nueva parte sin ajustes: arrastrarlos sería engañoso.
   // Restaura los ajustes recordados de esta ubicación; si no hay, valores por defecto.
   useEffect(() => {
     setAdjustPct(savedSettings?.adjustPct ?? 0);
     setRateOverrides(savedSettings?.rateOverrides ?? []);
     setRampEnabled(savedSettings?.rampEnabled ?? true);
+    // El centinela se reinicia ACÁ y no en un efecto aparte: uno posterior
+    // volvía a anularlo después del efecto de guardado, y el primer cambio del
+    // usuario se perdía siempre.
+    lastSavedKey.current = null;
     // Solo al cambiar de proyección: si dependiera de savedSettings, cada
     // guardado revertiría lo que el usuario está escribiendo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -949,7 +954,6 @@ const ProjectionSection = ({
 
   // Recuerda los ajustes de esta ubicación.
   const settingsKey = JSON.stringify({ adjustPct, rateOverrides, rampEnabled });
-  const lastSavedKey = useRef<string | null>(null);
   useEffect(() => {
     if (!onSettingsChange || !result) return;
     // El primer valor tras restaurar es el ya guardado: no reescribirlo.
@@ -958,9 +962,6 @@ const ProjectionSection = ({
     lastSavedKey.current = settingsKey;
     onSettingsChange({ adjustPct, rateOverrides, rampEnabled });
   }, [settingsKey, adjustPct, rateOverrides, rampEnabled, result, onSettingsChange]);
-
-  // Al cambiar de proyección se reinicia el centinela del guardado.
-  useEffect(() => { lastSavedKey.current = null; }, [result]);
 
   // Publica lo que se ve (con ajuste manual y tasas editadas) para el PDF.
   useEffect(() => {

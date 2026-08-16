@@ -1121,6 +1121,18 @@ const Index = () => {
     [loadedSavedIsoIds, loadSavedIsoToMap],
   );
 
+  const handleProjectionSettingsChange = useCallback(
+    (s: import("@/types/savedIsochrones").ProjectionSettings) => {
+      // Solo las guardadas persisten: una isócrona de trabajo no sobrevive a
+      // la sesión, así que no hay dónde recordarla.
+      const saved = selectedIsoId
+        ? savedIsos.find((x) => `saved:${x.id}` === selectedIsoId)
+        : null;
+      if (saved) void updateSavedIso(saved.id, { projection_settings: s });
+    },
+    [selectedIsoId, savedIsos, updateSavedIso],
+  );
+
   const analyzeSavedIso = useCallback(
     (id: string) => {
       const mapId = `saved:${id}`;
@@ -1751,14 +1763,7 @@ const Index = () => {
                 ? savedIsos.find((s) => `saved:${s.id}` === selectedIsoId)?.projection_settings ?? null
                 : null
             }
-            onProjectionSettingsChange={(s) => {
-              // Solo las guardadas persisten: una isócrona de trabajo no
-              // sobrevive a la sesión, así que no hay dónde recordarla.
-              const saved = selectedIsoId
-                ? savedIsos.find((x) => `saved:${x.id}` === selectedIsoId)
-                : null;
-              if (saved) void updateSavedIso(saved.id, { projection_settings: s });
-            }}
+            onProjectionSettingsChange={handleProjectionSettingsChange}
           />
         </div>
       </main>
