@@ -67,7 +67,7 @@ export interface ProjectionResult {
   folderName:    string;
   baseYear:      number;  // año de los datos de referencia
   currentYear:   number;  // año calendario en curso
-  /** Tasa de crecimiento anual aplicada (0.04 = 4%) */
+  /** Tasa de crecimiento anual aplicada (0.03 = 3%) */
   growthRate:    number;
   /** Si no hay datos reales, se usaron predicciones del modelo Ridge */
   usedPredictions: boolean;
@@ -85,11 +85,14 @@ export interface ProjectionInput {
    */
   isoFeature?: Feature<Polygon | MultiPolygon> | null;
   parque?:     ParqueIsochroneStats | null;
-  /** Tasa de crecimiento anual para la proyección (default 0.04 = 4%) */
+  /** Tasa de crecimiento anual para la proyección (default 0.03 = 3%) */
   growthRate?: number;
   /** Años a proyectar hacia adelante (default 5) */
   horizonYears?: number;
 }
+
+/** Crecimiento anual por defecto de la proyección (3%). */
+export const DEFAULT_GROWTH_RATE = 0.03;
 
 // ── Feature keys para similitud ───────────────────────────────────────────────
 
@@ -230,7 +233,7 @@ export async function computeSalesProjection(
 ): Promise<ProjectionResult> {
   const {
     folderId, isoAnalysis, isoFeature, parque,
-    growthRate    = 0.04,   // 4% anual por defecto (mercado automotriz Chile)
+    growthRate    = DEFAULT_GROWTH_RATE,
     horizonYears  = 5,
   } = input;
 

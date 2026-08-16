@@ -858,9 +858,11 @@ const ProjectionSection = ({
   // particular—. Se aplica solo al mostrar: `result` queda intacto, así que
   // "volver al original" es exacto y siempre se puede contrastar.
   const [adjustPct, setAdjustPct] = useState(0);
+  // Crecimiento anual. null = el del resultado (DEFAULT_GROWTH_RATE).
+  const [growthPct, setGrowthPct] = useState<number | null>(null);
 
-  // Una proyección nueva parte sin ajuste: arrastrarlo sería engañoso.
-  useEffect(() => { setAdjustPct(0); }, [result]);
+  // Una proyección nueva parte sin ajustes: arrastrarlos sería engañoso.
+  useEffect(() => { setAdjustPct(0); setGrowthPct(null); }, [result]);
 
   if (loading) {
     return (
@@ -947,8 +949,28 @@ const ProjectionSection = ({
 
   // Resultado
   const selectedFolderName = folders.find(f => f.id === selectedFolderId)?.name ?? result.folderName;
-  const currentYearProj = result.fiveYearProjection.find((y) => y.isCurrent);
-  const baseProj        = result.fiveYearProjection.find((y) => y.isBase);
+
+  // La curva se recalcula acá para que cambiar el crecimiento sea inmediato,
+  // sin volver a consultar comparables: solo cambia el factor por año.
+  const baseGrowthPct = Math.round(result.growthRate * 1000) / 10;
+  const effGrowthPct  = growthPct ?? baseGrowthPct;
+  const growthChanged = effGrowthPct !== baseGrowthPct;
+  const ufToClp = result.estimatedUf > 0 ? result.estimatedClp / result.estimatedUf : 0;
+  const horizon = Math.max(0, result.fiveYearProjection.length - 1);
+  const projRows = Array.from({ length: horizon + 1 }, (_, i) => {
+    const year = result.baseYear + i;
+    const uf   = result.estimatedUf * Math.pow(1 + effGrowthPct / 100, i);
+    return {
+      year,
+      uf,
+      clp: uf * ufToClp,
+      isBase: i === 0,
+      isCurrent: year === result.currentYear,
+    };
+  });
+
+  const currentYearProj = projRows.find((y) => y.isCurrent);
+  const baseProj        = projRows.find((y) => y.isBase);
   const displayProj     = currentYearProj ?? baseProj ?? { uf: result.estimatedUf, clp: result.estimatedClp };
   const displayYear     = currentYearProj?.year ?? result.baseYear;
 
@@ -1036,22 +1058,76 @@ const ProjectionSection = ({
         />
         <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">
           Castiga o premia la estimación por factores que el modelo no ve (re-maduración
-          tras un cierre, obras, contrato particular). No altera el cálculo: es un
-          criterio propio y queda declarado como tal.
+          tras un cierre, obras, contrato particular, formato express sin dato de
+          superficie). No altera el cálculo: es un criterio propio y queda declarado
+          como tal.
         </p>
+
+        {/* Crecimiento anual */}
+        <div className="mt-3 border-t border-border/30 pt-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Crecimiento anual
+            </span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={-20}
+                max={50}
+                step={0.5}
+                value={effGrowthPct}
+                onChange={(e) => {
+                  const n = parseFloat(e.target.value);
+                  setGrowthPct(Number.isFinite(n) ? Math.max(-20, Math.min(50, n)) : baseGrowthPct);
+                }}
+                className="h-7 w-16 rounded-md border border-border/50 bg-surface-3 px-1.5 text-right text-[11px] font-mono"
+              />
+              <span className="text-[11px] text-muted-foreground">%</span>
+              <button
+                onClick={() => setGrowthPct(null)}
+                disabled={!growthChanged}
+                className="rounded-md px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground disabled:opacity-40"
+                title={`Volver al ${baseGrowthPct}% original`}
+              >
+                ↺ Reset
+              </button>
+            </div>
+          </div>
+          <input
+            type="range"
+            min={-20}
+            max={50}
+            step={0.5}
+            value={effGrowthPct}
+            onChange={(e) => setGrowthPct(parseFloat(e.target.value))}
+            className="mt-2 w-full accent-green-500"
+          />
+          <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">
+            Tasa aplicada año a año desde el año base. Por defecto {baseGrowthPct}%.
+          </p>
+        </div>
       </div>
 
       {/* Proyección 5 años */}
-      {result.fiveYearProjection.length > 1 && (
+      {projRows.length > 1 && (
         <div>
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
-            Proyección {result.baseYear}–{result.fiveYearProjection[result.fiveYearProjection.length - 1].year}
+            {/* El año base es pasado: son los datos de referencia, no una
+                proyección. Rotularlo como tal evita leer 2025 como pronóstico. */}
+            Base {result.baseYear} · Proyección {result.baseYear + 1}–{projRows[projRows.length - 1].year}
             {adjusted && (
               <span className="ml-1 normal-case text-brand-orange">
                 · ajustada {adjustPct > 0 ? "+" : ""}{adjustPct}%
               </span>
             )}
-            <span className="ml-1 normal-case text-[9px]">({(result.growthRate * 100).toFixed(0)}% anual)</span>
+            <span
+              className={[
+                "ml-1 normal-case text-[9px]",
+                growthChanged ? "text-brand-orange" : "",
+              ].join(" ")}
+            >
+              ({effGrowthPct}% anual{growthChanged ? ", ajustado" : ""})
+            </span>
           </div>
           <div className="overflow-hidden rounded-lg border border-white/8">
             <table className="w-full text-[11px]">
@@ -1063,7 +1139,7 @@ const ProjectionSection = ({
                 </tr>
               </thead>
               <tbody>
-                {result.fiveYearProjection.map((yr, i) => (
+                {projRows.map((yr, i) => (
                   <tr key={yr.year} className={[
                     "border-t border-white/5",
                     yr.isCurrent ? "bg-green-900/20 font-semibold" :
