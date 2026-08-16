@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import { confirmDialog } from "@/components/ui/dialog-service";
 import type { PoiFolder, PoiUpdate, SavedPoi } from "@/types/pois";
+import { ClosureReviewSection } from "./ClosureReviewSection";
 
 interface Props {
   open: boolean;
@@ -432,6 +433,12 @@ export const PoiManagerDialog = ({
             </>
           )}
         </div>
+
+        {open && (
+          <div className="pb-1">
+            <ClosureReviewSection pois={pois} onUpdatePoi={onUpdatePoi} />
+          </div>
+        )}
 
         <div className="max-h-[55vh] overflow-y-auto pr-1">
           {creatingIn === "__root__" && (

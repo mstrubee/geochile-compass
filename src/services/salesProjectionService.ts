@@ -263,16 +263,22 @@ export async function computeSalesProjection(
     : { data: [] };
   const nameById = new Map((poisRes.data ?? []).map((p) => [p.id, p.name]));
 
-  // Locales cerrados: se excluyen como comparables. Un cierre responde a
-  // razones ajenas al potencial del emplazamiento (contrato, decisión
-  // comercial, pandemia), así que sus ventas no representan lo que rendiría
-  // una ubicación equivalente y arrastrarían la proyección hacia abajo.
+  // Solo los cerrados DEFINITIVAMENTE se excluyen: su trayectoria terminó y
+  // los últimos meses suelen ser de caída, así que no representan lo que
+  // rendiría el emplazamiento.
+  //
+  // Los cerrados TEMPORALMENTE sí cuentan: los meses sin operación ya se
+  // descartan al promediar, de modo que su cifra refleja solo los meses que
+  // estuvo abierto —evidencia válida de esa ubicación—. Y si el cierre fue
+  // largo, el mínimo de meses del cálculo de performance ya lo deja fuera de
+  // ese año por sí solo.
   const closedPoiIds = new Set(
     (poisRes.data ?? [])
-      .filter((p) => {
-        const st = (p as { operational_status?: string }).operational_status;
-        return st != null && st !== "operativo";
-      })
+      .filter(
+        (p) =>
+          (p as { operational_status?: string }).operational_status ===
+          "cerrado_definitivo",
+      )
       .map((p) => p.id),
   );
 
@@ -341,7 +347,7 @@ export async function computeSalesProjection(
   // Que la exclusión sea visible: si no, la red parecería más chica sin motivo.
   if (nExcludedClosed > 0) {
     diagParts.push(
-      `${nExcludedClosed} local${nExcludedClosed === 1 ? "" : "es"} cerrado${nExcludedClosed === 1 ? "" : "s"} excluido${nExcludedClosed === 1 ? "" : "s"} de los comparables`,
+      `${nExcludedClosed} local${nExcludedClosed === 1 ? "" : "es"} cerrado${nExcludedClosed === 1 ? "" : "s"} definitivamente excluido${nExcludedClosed === 1 ? "" : "s"} de los comparables`,
     );
   }
 
@@ -438,7 +444,7 @@ export async function computeSalesProjection(
       ? "Usando predicciones del modelo Ridge (sin ventas reales cargadas)"
       : null,
     nExcludedClosed > 0
-      ? `${nExcludedClosed} local${nExcludedClosed === 1 ? "" : "es"} cerrado${nExcludedClosed === 1 ? "" : "s"} excluido${nExcludedClosed === 1 ? "" : "s"}`
+      ? `${nExcludedClosed} cerrado${nExcludedClosed === 1 ? "" : "s"} definitivamente excluido${nExcludedClosed === 1 ? "" : "s"}`
       : null,
   ].filter(Boolean) as string[];
   const diagnosticMsg = diagNotes.length > 0 ? diagNotes.join(" · ") : null;

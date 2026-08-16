@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { SavedPoi } from "@/types/pois";
+import { POI_STATUS_LABEL } from "@/types/pois";
+import { usePoiClosureStats } from "@/hooks/usePoiClosureStats";
 import { usePoiMetrics, usePoiAttributes } from "@/hooks/usePoiMetrics";
 import {
   aggregateMetrics,
@@ -83,6 +85,10 @@ export const PoiDetailDialog = ({
   const [nameDraft, setNameDraft] = useState("");
   const [nameOverride, setNameOverride] = useState<string | null>(null);
   const displayName = nameOverride ?? poi?.name ?? "POI";
+  // Meses sin operación del local (solo ceros posteriores a su apertura).
+  const closureIds = useMemo(() => (poi ? [poi.id] : []), [poi]);
+  const { stats: closureByPoi } = usePoiClosureStats(closureIds, open);
+  const closureStats = poi ? closureByPoi.get(poi.id) ?? null : null;
 
   useEffect(() => {
     setNameOverride(null);
@@ -325,6 +331,30 @@ export const PoiDetailDialog = ({
               {(poi.properties as Record<string, unknown>)?.["Dirección"] as string ?? ""}
               {(poi.properties as Record<string, unknown>)?.["Comuna"]
                 ? ` · ${(poi.properties as Record<string, unknown>)["Comuna"] as string}`
+                : ""}
+            </div>
+          )}
+          {poi && (poi.operational_status ?? "operativo") !== "operativo" && (
+            <div className="mt-1 inline-flex items-center gap-1.5 self-start rounded-md bg-brand-orange/15 px-2 py-1 text-[10px] font-medium text-brand-orange">
+              {POI_STATUS_LABEL[poi.operational_status ?? "operativo"]}
+              {poi.closure_reason ? ` · ${poi.closure_reason}` : ""}
+              {poi.operational_status === "cerrado_definitivo" && (
+                <span className="font-normal opacity-80">
+                  — excluido de las proyecciones
+                </span>
+              )}
+            </div>
+          )}
+          {closureStats && closureStats.closedMonths > 0 && (
+            <div className="mt-1 text-[10px] text-muted-foreground">
+              {closureStats.closedMonths} mes
+              {closureStats.closedMonths === 1 ? "" : "es"} sin ventas tras su
+              apertura
+              {closureStats.longestClosedRun > 1
+                ? ` (racha máxima: ${closureStats.longestClosedRun})`
+                : ""}
+              {closureStats.preOpeningMonths > 0
+                ? ` · ${closureStats.preOpeningMonths} previos a la apertura, no cuentan como cierre`
                 : ""}
             </div>
           )}
