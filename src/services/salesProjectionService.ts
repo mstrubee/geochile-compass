@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
 import type { ParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import { loadUfMap } from "@/services/ufService";
+import { computeComplementScoreInPolygon } from "@/services/poiFeaturePayloadBuilder";
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -118,6 +119,7 @@ function extractFeatures(
   iso: IsochroneAnalysis,
   parque: ParqueIsochroneStats | null | undefined,
   nCompetitionInt: number,
+  complementScore: number | null,
 ): Record<string, number> {
   return {
     pop_total:          iso.totals.pop,
@@ -125,10 +127,31 @@ function extractFeatures(
     nse_high_pct:       extractNseHighPct(iso),
     nse_mid_pct:        extractNseMidPct(iso),
     income_avg:         iso.totals.incomeAvgPerHh,
-    complement_score:   iso.territorialPoints.total,
+    // null = sin definición común con los comparables; se excluye más abajo.
+    complement_score:   complementScore ?? NaN,
     n_competition_int:  nCompetitionInt,
     parque_n_vehiculos: parque?.vehiculos ?? 0,
   };
+}
+
+/**
+ * Deja fuera los features que no aportan a la similitud:
+ *  - los que no se pudieron medir en la ubicación nueva (NaN), y
+ *  - los que valen lo mismo en TODOS los comparables (varianza cero): no
+ *    distinguen entre candidatos y solo inflan la distancia, aplanando el
+ *    peso relativo de los vecinos.
+ */
+function selectUsableFeatures(
+  rows: Array<{ features: Record<string, number> }>,
+  newPoint: Record<string, number>,
+  keys: readonly string[],
+): string[] {
+  return keys.filter((k) => {
+    const v = newPoint[k];
+    if (!Number.isFinite(v)) return false;
+    const vals = rows.map((r) => r.features[k] ?? 0);
+    return vals.some((x) => x !== vals[0]);
+  });
 }
 
 /**
@@ -307,11 +330,17 @@ export async function computeSalesProjection(
   const usedPredictions = nWithSales === 0;
 
   // ── 4. Vector de features de la nueva ubicación ────────────────────────────
-  const nCompetitionInt = await countInternalCompetition(folderId, isoFeature);
-  const newFeatures = extractFeatures(isoAnalysis, parque, nCompetitionInt);
+  const [nCompetitionInt, complementScore] = await Promise.all([
+    countInternalCompetition(folderId, isoFeature),
+    isoFeature
+      ? computeComplementScoreInPolygon(folderId, isoFeature.geometry)
+      : Promise.resolve(null),
+  ]);
+  const newFeatures = extractFeatures(isoAnalysis, parque, nCompetitionInt, complementScore);
 
   // ── 5. Normalizar y calcular distancias ────────────────────────────────────
-  const { normRows, normNew } = normalizeFeatures(comparable, newFeatures, SIMILARITY_FEATURES);
+  const usableFeatures = selectUsableFeatures(comparable, newFeatures, SIMILARITY_FEATURES);
+  const { normRows, normNew } = normalizeFeatures(comparable, newFeatures, usableFeatures);
   const distances = normRows.map((row, i) => ({
     idx: i, distance: euclidean(row, normNew), poiId: comparable[i].poiId,
   }));
@@ -352,7 +381,9 @@ export async function computeSalesProjection(
   const comparableStores: ComparableStore[] = topK.map((t, i) => {
     const comp    = comparable[t.idx];
     const normVec = normRows[t.idx];
-    const keyDiffs = SIMILARITY_FEATURES
+    // Debe recorrer `usableFeatures`: `normNew`/`normVec` se construyeron con
+    // esa lista, así que usar la completa desalinearía los índices.
+    const keyDiffs = usableFeatures
       .map((k, ki) => ({
         feature: k, label: FEATURE_LABELS[k] ?? k,
         newVal:  newFeatures[k] ?? 0,

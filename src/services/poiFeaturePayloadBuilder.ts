@@ -27,7 +27,12 @@ import { crimeService } from "@/services/crimeService";
 // Sprint 3 Tarea 3 - DESACTIVADO temporalmente.
 // El cálculo nuevo desestabiliza el modelo Ridge.
 // Reactivar en Sprint 4 con normalización por área.
-const ENABLE_FOLDER_LAYER_ROLES = false;
+// Cuando la carpeta no tiene roles configurados, `buildFromFolderRoles`
+// devuelve null y se sigue usando la lógica antigua, así que habilitarlo no
+// cambia nada en ese caso. Con roles configurados, es la única forma de que
+// `complement_score` signifique lo mismo en los comparables y en la isócrona
+// analizada (ver `computeComplementScoreInPolygon`).
+const ENABLE_FOLDER_LAYER_ROLES = true;
 
 const ROLE_WEIGHTS_BUILDER = {
   competencia: -1.0,
@@ -309,7 +314,11 @@ const buildRmCells = async (
       income: gseMatched && gseClass
         ? GSE_INCOME[gseClass]
         : (f.properties.income ?? NSE_INCOME[nse]),
-      density: f.properties.density,
+      // Densidad sobre el área real de la manzana. `f.properties.density` la
+      // calcula asumiendo una superficie fija de 0,01 km² para toda manzana;
+      // las celdas GSE de regiones usan el área real, así que con la fórmula
+      // vieja la densidad de RM y regiones no sería comparable entre sí.
+      density: finalPop / (Math.max(1, area(f as never)) / 1_000_000),
       traffic: f.properties.traffic ?? 50,
       centroid,
       area_m2: 10_000,
@@ -363,6 +372,81 @@ const loadComunasIndex = async (): Promise<{
   }
   byNameCache = byName;
   return { byName };
+};
+
+/**
+ * Población comunal mínima para medir con manzanas GSE fuera de la RM.
+ * Bajo este umbral la isócrona suele cubrir buena parte de la comuna, así que
+ * la celda comunal es una aproximación aceptable.
+ */
+export const REGION_GSE_MIN_COMMUNE_POP = 100_000;
+
+/**
+ * Celdas construidas desde manzanas GSE (Censo 2024), disponibles para las 334
+ * comunas del país. Se usa fuera de la RM, donde no hay manzanas INE.
+ *
+ * Sin esto, un POI regional se medía con UNA sola celda igual a la comuna
+ * entera: `pop_total` terminaba siendo la población comunal completa (no la de
+ * la isócrona) y `nse_high_pct` solo podía dar 0% o 100%, porque con una única
+ * celda el promedio ponderado es binario.
+ *
+ * El filtrado por centroide se hace ACÁ y no en la edge function: esa solo
+ * filtra por isócrona cuando el POI es de la RM (`poi.is_rm`), así que mandar
+ * las manzanas sin filtrar sumaría todas las del bbox.
+ */
+const buildGseCells = async (
+  iso: Polygon | MultiPolygon,
+  isoBbox: [number, number, number, number],
+): Promise<ManzanaCell[]> => {
+  const [west, south, east, north] = isoBbox;
+  let features: GseFeature[] = [];
+  try {
+    const fc = await gseService.fetchGse({
+      west, south, east, north,
+      variable: "gse",
+      zoom: 14,
+      maxFeatures: 200_000,
+    });
+    features = fc.features ?? [];
+  } catch {
+    return [];
+  }
+
+  const cells: ManzanaCell[] = [];
+  for (const f of features) {
+    if (!f.geometry || !f.properties.gse) continue;
+    const ring =
+      f.geometry.type === "Polygon"
+        ? f.geometry.coordinates[0]
+        : f.geometry.coordinates[0]?.[0] ?? [];
+    if (!ring.length) continue;
+    let sx = 0;
+    let sy = 0;
+    for (const [x, y] of ring) { sx += x; sy += y; }
+    const centroid: [number, number] = [sx / ring.length, sy / ring.length];
+    if (!pointInPoly(centroid, iso)) continue;
+
+    const gseClass = f.properties.gse;
+    const p = f.properties as unknown as Record<string, unknown>;
+    const pop = typeof p["n_per"] === "number" ? p["n_per"] : 0;
+    const hh  = typeof p["n_hog"] === "number" ? p["n_hog"] : 0;
+    const areaM2 = Math.max(1, area(f as never));
+
+    cells.push({
+      id: String(f.properties.id ?? `${centroid[0]},${centroid[1]}`),
+      pop,
+      hh,
+      nse: GSE_TO_NSE[gseClass] ?? 3,
+      income: GSE_INCOME[gseClass],
+      density: pop / (areaM2 / 1_000_000),
+      traffic: 50,
+      centroid,
+      area_m2: areaM2,
+      crime_score: typeof p["crime_score"] === "number" ? (p["crime_score"] as number) : null,
+      gse_class: gseClass,
+    });
+  }
+  return cells;
 };
 
 const buildRegionCells = async (
@@ -546,6 +630,30 @@ const buildFromFolderRoles = async (
   return { competitors, complements, anchors };
 };
 
+/**
+ * `complement_score` de un polígono cualquiera, con la MISMA definición que
+ * usan los comparables del caché: suma de los pesos por rol de los puntos
+ * territoriales que caen dentro.
+ *
+ * Devuelve null si la carpeta no tiene roles configurados. En ese caso no hay
+ * definición común: los comparables se calcularon con la lógica antigua, y
+ * medir la isócrona con un conteo crudo de puntos compararía unidades
+ * distintas — quien llama debe excluir el feature en vez de inventar un valor.
+ */
+export const computeComplementScoreInPolygon = async (
+  folderId: string,
+  iso: Polygon | MultiPolygon,
+): Promise<number | null> => {
+  if (!ENABLE_FOLDER_LAYER_ROLES) return null;
+  try {
+    const buckets = await buildFromFolderRoles(folderId, iso, polygonBbox(iso), 0);
+    if (!buckets) return null;
+    return buckets.complements.reduce((s, c) => s + c.weight, 0);
+  } catch {
+    return null;
+  }
+};
+
 /* ---------- API pública ---------- */
 
 interface BuildPayloadDeps {
@@ -632,15 +740,24 @@ export const buildFeaturePayload = async (
   const bbox = polygonBbox(iso);
   const expanded = expandBbox(bbox, 1500);
 
-  // 3) Celdas: manzanas+GSE en RM, comuna real en regiones.
-  //    Si RM y manzanas dan 0 → fallback a celda comuna del IneIndex.
+  // 3) Celdas, de mayor a menor granularidad:
+  //    RM       → manzanas INE + overlay GSE.
+  //    Regiones → manzanas GSE si la comuna supera el umbral de población.
+  //    Fallback → una celda con la comuna entera (último recurso: vuelve
+  //               binario el nse_high_pct y sobrestima la población).
   let cells: ManzanaCell[] = [];
   if (isRm) {
     cells = await buildRmCells(bbox);
-    if (!cells.length) {
-      cells = await buildRegionCells(poi, comuna);
-    }
   } else {
+    const ine = await loadIneIndex();
+    const communePop = comuna
+      ? ine.byName.get(normalizeCommuneName(comuna))?.poblacion ?? 0
+      : 0;
+    if (communePop > REGION_GSE_MIN_COMMUNE_POP) {
+      cells = await buildGseCells(iso, bbox);
+    }
+  }
+  if (!cells.length) {
     cells = await buildRegionCells(poi, comuna);
   }
 
