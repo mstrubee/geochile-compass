@@ -39,7 +39,12 @@ import { useSavedIsochrones } from "@/hooks/useSavedIsochrones";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchIsochrone } from "@/services/isochroneService";
 import { pickBandFeature } from "@/utils/isochroneAnalysis";
-import { fitMapToBounds, captureAfterSettle, type MapCaptureImages } from "@/utils/mapCapture";
+import {
+  fitMapToBounds,
+  captureAfterSettle,
+  waitForRefChange,
+  type MapCaptureImages,
+} from "@/utils/mapCapture";
 import { findHexAt, loadParqueGeoJson, type ParqueHexProps } from "@/services/parqueData";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import { MapContextMenu, type MapContextMenuItem } from "@/components/ui-overlays/MapContextMenu";
@@ -50,7 +55,7 @@ import type { NSE, Commune } from "@/data/communes";
 import type { TrafficLevel } from "@/utils/traffic";
 import type { LayerState } from "@/types/layers";
 import type { ManzanaVariable } from "@/types/manzanas";
-import type { GseVariable } from "@/types/gse";
+import type { GseFeatureCollection, GseVariable } from "@/types/gse";
 import type { IneVariable } from "@/utils/ineScales";
 import type { UserLayer } from "@/types/userLayers";
 import { ISO_MODE_LABEL, type IsoMode, type Isochrone } from "@/types/isochrones";
@@ -125,6 +130,9 @@ const Index = () => {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const handleMapReady = useCallback((m: L.Map) => { mapRef.current = m; }, []);
+  // Referencia siempre-actualizada de gseData, para poder "esperar" desde
+  // fuera del ciclo de render (captura de fotos del informe de isócrona).
+  const gseDataRef = useRef<GseFeatureCollection | null>(null);
   const [layers, setLayers] = useState<LayerState>({
     communes: false,
     communesGeo: false,
@@ -293,13 +301,17 @@ const Index = () => {
         await fitMapToBounds(map, boundsBox);
         const isoOnly = await captureAfterSettle(map);
 
+        const beforeNse = gseDataRef.current;
         flushSync(() => setLayers({ ...ALL_LAYERS_OFF, nse: true }));
+        await waitForRefChange(gseDataRef, beforeNse);
         const gse = await captureAfterSettle(map);
 
+        const beforeGasto = gseDataRef.current;
         flushSync(() => {
           setLayers({ ...ALL_LAYERS_OFF, gasto: true });
           setGastoView("manzana");
         });
+        await waitForRefChange(gseDataRef, beforeGasto);
         const gasto = await captureAfterSettle(map);
 
         flushSync(() => setLayers({ ...ALL_LAYERS_OFF, commercial: true }));
@@ -1185,6 +1197,7 @@ const Index = () => {
     variable: crimeManzana ? "crime" : gastoManzana ? "gasto" : gseVariable,
     minZoom: 11,
   });
+  useEffect(() => { gseDataRef.current = gseData; }, [gseData]);
 
   const handleGseViewportChange = useCallback(
     (bbox: [number, number, number, number], zoom: number) => {

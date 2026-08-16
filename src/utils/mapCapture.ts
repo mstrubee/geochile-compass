@@ -19,6 +19,25 @@ const nextFrame = (): Promise<void> =>
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Espera a que un valor leído desde `ref.current` deje de ser `prevValue`
+ * (es decir, a que termine un fetch async disparado por un cambio de estado),
+ * con un timeout de seguridad. Usado para esperar datos de capas (GSE/gasto)
+ * que se cargan de forma asíncrona (debounce + red) tras activarlas.
+ */
+export const waitForRefChange = async <T,>(
+  ref: { current: T },
+  prevValue: T,
+  timeoutMs = 6500,
+  intervalMs = 120,
+): Promise<void> => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (ref.current !== prevValue) return;
+    await wait(intervalMs);
+  }
+};
+
 /** Espera a que termine el paneo/zoom del mapa (con timeout de seguridad). */
 const waitForMoveEnd = (map: L.Map, timeoutMs = 2000): Promise<void> =>
   new Promise((resolve) => {
@@ -53,7 +72,7 @@ export const fitMapToBounds = (map: L.Map, bounds: CaptureBounds): Promise<void>
 const settleForCapture = async (): Promise<void> => {
   await nextFrame();
   await nextFrame();
-  await wait(300);
+  await wait(450);
 };
 
 /** Toma una foto PNG (dataURL) del contenedor del mapa. Devuelve null si falla (p.ej. CORS). */
