@@ -1121,24 +1121,42 @@ const Index = () => {
     [loadedSavedIsoIds, loadSavedIsoToMap],
   );
 
+  /**
+   * Isócrona que el panel de análisis está mostrando.
+   *
+   * Antes el nombre y los ajustes se buscaban por `selectedIsoId`, pero el
+   * panel cae a la isócrona más reciente cuando no hay selección explícita
+   * —por ejemplo al encenderla desde la lista sin abrirla—. En ese caso
+   * analizaba una y leía los ajustes de otra (o de ninguna), así que lo
+   * guardado no volvía. Ahora ambas cosas salen de la MISMA isócrona.
+   */
+  const analysisIso = useMemo(() => {
+    if (selectedIsoId) {
+      // Seteado pero aún no cargado: null hasta que llegue, en vez de mostrar
+      // silenciosamente otra.
+      return isochrones.find((i) => i.id === selectedIsoId) ?? null;
+    }
+    return isochrones.length > 0
+      ? [...isochrones].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))[0]
+      : null;
+  }, [selectedIsoId, isochrones]);
+
+  const analysisSavedIso = useMemo(
+    () =>
+      analysisIso
+        ? savedIsos.find((s) => `saved:${s.id}` === analysisIso.id) ?? null
+        : null,
+    [analysisIso, savedIsos],
+  );
+
   const handleProjectionSettingsChange = useCallback(
     (s: import("@/types/savedIsochrones").ProjectionSettings) => {
       // Solo las guardadas persisten: una isócrona de trabajo no sobrevive a
       // la sesión, así que no hay dónde recordarla.
-      const saved = selectedIsoId
-        ? savedIsos.find((x) => `saved:${x.id}` === selectedIsoId)
-        : null;
-      console.info("[proy-persistir]", {
-        selectedIsoId,
-        encontrada: saved?.name ?? null,
-        ajustes: s,
-      });
-      if (!saved) return;
-      void updateSavedIso(saved.id, { projection_settings: s })
-        .then(() => console.info("[proy-persistir] OK en base"))
-        .catch((e) => console.error("[proy-persistir] FALLÓ", e));
+      if (!analysisSavedIso) return;
+      void updateSavedIso(analysisSavedIso.id, { projection_settings: s });
     },
-    [selectedIsoId, savedIsos, updateSavedIso],
+    [analysisSavedIso, updateSavedIso],
   );
 
   const analyzeSavedIso = useCallback(
@@ -1739,21 +1757,7 @@ const Index = () => {
           <AnalysisPanel
             open={panelOpen}
             onClose={userClosePanel}
-            isochrone={(() => {
-              // 1. Preferir la isócrona explícitamente seleccionada
-              if (selectedIsoId) {
-                const found = isochrones.find((i) => i.id === selectedIsoId);
-                if (found) return found;
-                // Si selectedIsoId está seteado pero aún no se cargó (race condition),
-                // retornar null en lugar del fallback silencioso incorrecto.
-                // El panel mostrará "Selecciona una isócrona" hasta que cargue.
-                return null;
-              }
-              // 2. Sin selección explícita: usar la más reciente (createdAt mayor)
-              return isochrones.length > 0
-                ? [...isochrones].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))[0]
-                : null;
-            })()}
+            isochrone={analysisIso}
             manzanas={manzanaData ?? densityData ?? null}
             width={panelWidth}
             onWidthChange={handlePanelWidthChange}
@@ -1761,16 +1765,8 @@ const Index = () => {
             maxWidth={PANEL_MAX_W}
             projectionFolders={folders.filter(f => !f.parent_id).map(f => ({ id: f.id, name: f.name }))}
             autoOpenProjection={!!projectionIsoId}
-            isochroneName={
-              selectedIsoId
-                ? savedIsos.find((s) => `saved:${s.id}` === selectedIsoId)?.name ?? null
-                : null
-            }
-            projectionSettings={
-              selectedIsoId
-                ? savedIsos.find((s) => `saved:${s.id}` === selectedIsoId)?.projection_settings ?? null
-                : null
-            }
+            isochroneName={analysisSavedIso?.name ?? null}
+            projectionSettings={analysisSavedIso?.projection_settings ?? null}
             onProjectionSettingsChange={handleProjectionSettingsChange}
           />
         </div>
