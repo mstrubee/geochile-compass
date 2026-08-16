@@ -757,7 +757,10 @@ export const buildFeaturePayload = async (
       cells = await buildGseCells(iso, bbox);
     }
   }
-  if (!cells.length) {
+  // Sin celdas, o con celdas que no suman ni una persona (una isócrona que solo
+  // toca parques o zona industrial), los agregados quedarían en cero: es
+  // preferible la estimación comunal, más gruesa pero no vacía.
+  if (!cells.length || cells.reduce((s, c) => s + c.pop, 0) <= 0) {
     cells = await buildRegionCells(poi, comuna);
   }
 
