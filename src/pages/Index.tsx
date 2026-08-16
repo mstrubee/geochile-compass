@@ -1787,6 +1787,7 @@ const Index = () => {
             isochroneName={analysisSavedIso?.name ?? null}
             projectionSettings={analysisSavedIso?.projection_settings ?? null}
             onProjectionSettingsChange={handleProjectionSettingsChange}
+            onCaptureMapImages={captureIsochroneMapImages}
           />
         </div>
       </main>

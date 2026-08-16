@@ -14,6 +14,8 @@ import { useIsochroneInsights } from "@/hooks/useIsochroneInsights";
 import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import { useIsochroneReport } from "@/hooks/useIsochroneReport";
 import { exportReportToPdf } from "@/utils/reportExportPdf";
+import { exportReportToPptx } from "@/utils/reportExportPptx";
+import type { MapCaptureImages } from "@/utils/mapCapture";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 
 interface AnalysisPanelProps {
@@ -35,6 +37,8 @@ interface AnalysisPanelProps {
   projectionSettings?: ProjectionSettings | null;
   /** Persiste los ajustes para recuperarlos al volver a abrir la isócrona. */
   onProjectionSettingsChange?: (s: ProjectionSettings) => void;
+  /** Fotos del mapa para el informe (isócrona, GSE, gasto, atractores). */
+  onCaptureMapImages?: (iso: Isochrone) => Promise<MapCaptureImages | null>;
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
@@ -150,6 +154,7 @@ export const AnalysisPanel = ({
   isochroneName = null,
   projectionSettings = null,
   onProjectionSettingsChange,
+  onCaptureMapImages,
 }: AnalysisPanelProps) => {
   // Folder seleccionado para proyección — default al primero de la lista
   const [selectedFolderId, setSelectedFolderId] = useState<string>(
@@ -210,6 +215,7 @@ export const AnalysisPanel = ({
   // Snapshot de la proyección tal como quedó en pantalla (con ajustes), para
   // que el PDF diga exactamente lo mismo que la sección.
   const [projForReport, setProjForReport] = useState<ReportProjection | null>(null);
+  const [exportingPptx, setExportingPptx] = useState(false);
   const [projLoading, setProjLoading] = useState(false);
   const [projError,   setProjError]   = useState<string | null>(null);
 
@@ -749,6 +755,26 @@ export const AnalysisPanel = ({
                   <FileJson className="mr-1 inline h-3 w-3" /> JSON
                 </button>
               </div>
+              <button
+                onClick={async () => {
+                  if (!fullReport || !isochrone) return;
+                  setExportingPptx(true);
+                  try {
+                    const imgs = onCaptureMapImages
+                      ? await onCaptureMapImages(isochrone)
+                      : null;
+                    await exportReportToPptx(fullReport, projForReport, imgs);
+                  } finally {
+                    setExportingPptx(false);
+                  }
+                }}
+                disabled={!fullReport || exportingPptx}
+                className="mt-1.5 w-full rounded-lg bg-brand-red/10 px-2 py-2 text-[11px] font-medium text-brand-red transition-colors hover:bg-brand-red/20 disabled:opacity-40"
+              >
+                {exportingPptx
+                  ? <><Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> Generando…</>
+                  : <><FileText className="mr-1 inline h-3 w-3" /> Informe directorio (2 láminas)</>}
+              </button>
               <button
                 onClick={() => {
                   if (!fullReport) return;
