@@ -118,7 +118,12 @@ export const useSavedIsochrones = () => {
   );
 
   const updateIso = useCallback(
-    async (id: string, patch: Partial<Pick<SavedIsochrone, "name" | "folder_id" | "color" | "notes">>) => {
+    async (
+      id: string,
+      patch: Partial<
+        Pick<SavedIsochrone, "name" | "folder_id" | "color" | "notes" | "projection_settings">
+      >,
+    ) => {
       const { error } = await supabase
         .from("saved_isochrones")
         .update(patch as never)

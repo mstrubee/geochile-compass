@@ -32,7 +32,12 @@ export function useParqueIsochroneStats(
 ): { stats: ParqueIsochroneStats | null; loading: boolean; enabled: boolean } {
   const { visible } = useParqueLayer();
   const active = visible || forceEnabled;
-  const [stats, setStats] = useState<ParqueIsochroneStats | null>(null);
+  // Guardado junto a la clave de la isócrona: limpiarlo en un efecto deja
+  // pasar un render con las cifras de la anterior.
+  const [statsState, setStatsState] = useState<{
+    key: string | null;
+    data: ParqueIsochroneStats | null;
+  }>({ key: null, data: null });
   const [loading, setLoading] = useState(false);
   const reqId = useRef(0);
 
@@ -45,11 +50,13 @@ export function useParqueIsochroneStats(
     }
   }, [isoFeature]);
 
+  const stats = statsState.key === key ? statsState.data : null;
+
   useEffect(() => {
-    // Limpiar SIEMPRE: al cambiar de isócrona, las cifras de parque de la
-    // anterior quedaban visibles hasta que resolvía el nuevo cálculo.
-    setStats(null);
-    if (!active || !isoFeature) return;
+    if (!active || !isoFeature) {
+      setStatsState({ key: null, data: null });
+      return;
+    }
     const myReq = ++reqId.current;
     setLoading(true);
 
@@ -92,13 +99,13 @@ export function useParqueIsochroneStats(
         }
 
         if (vehiculos <= 0) {
-          setStats({
+          setStatsState({ key, data: {
             vehiculos: 0,
             edad_media: 0,
             edad_p25: 0,
             edad_p75: 0,
             ranking_marcas: [],
-          });
+          } });
         } else {
           const totMarcas = Array.from(marcaMap.values()).reduce((a, b) => a + b, 0);
           const ranking = Array.from(marcaMap.entries())
@@ -109,18 +116,18 @@ export function useParqueIsochroneStats(
             }))
             .sort((a, b) => b.count - a.count)
             .slice(0, 10);
-          setStats({
+          setStatsState({ key, data: {
             vehiculos,
             edad_media: edadMedSum / vehiculos,
             edad_p25: edadP25Sum / vehiculos,
             edad_p75: edadP75Sum / vehiculos,
             ranking_marcas: ranking,
-          });
+          } });
         }
       })
       .catch((e) => {
         console.error("[useParqueIsochroneStats]", e);
-        if (myReq === reqId.current) setStats(null);
+        if (myReq === reqId.current) setStatsState({ key, data: null });
       })
       .finally(() => {
         if (myReq === reqId.current) setLoading(false);

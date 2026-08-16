@@ -27,7 +27,6 @@ interface Params {
   isochrone: Isochrone | null;
   isoName?: string | null;
   manzanas?: ManzanaFeatureCollection | null;
-  gse?: GseFeatureCollection | null;
   parqueStats?: ParqueIsochroneStats | null;
 }
 
@@ -41,7 +40,6 @@ export const useIsochroneReport = ({
   isochrone,
   isoName = null,
   manzanas = null,
-  gse = null,
   parqueStats = null,
 }: Params) => {
   const { groups, layers } = useTerritorialLayers();
@@ -97,22 +95,32 @@ export const useIsochroneReport = ({
    * y caía al promedio comunal (que asigna una sola clase por comuna y borra
    * la heterogeneidad real del área).
    */
-  const [gseForIso, setGseForIso] = useState<GseFeatureCollection | null>(null);
+  // Guardado junto a la clave del área: limpiarlo en un efecto deja pasar un
+  // render con las manzanas de la isócrona anterior, y un PDF exportado en esa
+  // ventana sale con datos del área equivocada.
+  const isoKey = outerBboxPadded
+    ? `${outerBboxPadded.west},${outerBboxPadded.south},${outerBboxPadded.east},${outerBboxPadded.north}`
+    : "";
+  const [gseState, setGseState] = useState<{
+    key: string;
+    data: GseFeatureCollection | null;
+  }>({ key: "", data: null });
+  const gseForIso = gseState.key === isoKey ? gseState.data : null;
+
   useEffect(() => {
-    // Limpiar SIEMPRE: si no, al cambiar de isócrona el informe se rearmaba
-    // con las manzanas de la anterior, y un PDF exportado en esa ventana salía
-    // con los datos del área equivocada.
-    setGseForIso(null);
-    if (!outerBboxPadded) return;
+    if (!outerBboxPadded) {
+      setGseState({ key: "", data: null });
+      return;
+    }
     let cancelled = false;
     gseService
       // maxFeatures alto: acá no se renderiza, y truncar subestimaría la
       // población y la distribución GSE de isócronas grandes.
       .fetchGse({ ...outerBboxPadded, variable: "gse", zoom: 13, maxFeatures: 200_000 })
-      .then((res) => { if (!cancelled) setGseForIso(res); })
-      .catch(() => { if (!cancelled) setGseForIso(null); });
+      .then((res) => { if (!cancelled) setGseState({ key: isoKey, data: res }); })
+      .catch(() => { if (!cancelled) setGseState({ key: isoKey, data: null }); });
     return () => { cancelled = true; };
-  }, [outerBboxPadded]);
+  }, [outerBboxPadded, isoKey]);
 
   const fetchCommerce = useCallback(
     async (categories: CommerceCategory[]) => {
@@ -163,9 +171,10 @@ export const useIsochroneReport = ({
       ineByName,
       nombresPorCodigo: comunas.nombresPorCodigo,
       manzanas,
-      // Las del área de la isócrona tienen prioridad; las del mapa solo sirven
-      // como respaldo mientras la carga por bbox está en vuelo.
-      gse: gseForIso ?? gse,
+      // Solo las del área de la isócrona. Las del mapa están acotadas al
+      // viewport y pueden cubrir otra zona: como respaldo daban un informe
+      // aparentemente preciso pero de un área distinta.
+      gse: gseForIso,
       parqueStats,
       commerceByCategory,
       categoriesQueried,
@@ -180,7 +189,6 @@ export const useIsochroneReport = ({
     comunas,
     ineByName,
     manzanas,
-    gse,
     gseForIso,
     parqueStats,
     commerceByCategory,

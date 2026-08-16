@@ -1746,6 +1746,19 @@ const Index = () => {
                 ? savedIsos.find((s) => `saved:${s.id}` === selectedIsoId)?.name ?? null
                 : null
             }
+            projectionSettings={
+              selectedIsoId
+                ? savedIsos.find((s) => `saved:${s.id}` === selectedIsoId)?.projection_settings ?? null
+                : null
+            }
+            onProjectionSettingsChange={(s) => {
+              // Solo las guardadas persisten: una isócrona de trabajo no
+              // sobrevive a la sesión, así que no hay dónde recordarla.
+              const saved = selectedIsoId
+                ? savedIsos.find((x) => `saved:${x.id}` === selectedIsoId)
+                : null;
+              if (saved) void updateSavedIso(saved.id, { projection_settings: s });
+            }}
           />
         </div>
       </main>
@@ -1787,7 +1800,6 @@ const Index = () => {
             : null
         }
         manzanas={manzanaData ?? densityData ?? null}
-        gse={gseData ?? null}
         onCaptureMapImages={captureIsochroneMapImages}
       />
 

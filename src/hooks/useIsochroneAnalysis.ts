@@ -69,15 +69,25 @@ export const useIsochroneAnalysis = ({
   );
   const isoBbox = useMemo(() => computeIsoBbox(bandFeature), [bandFeature]);
 
-  const [gse, setGse] = useState<GseFeatureCollection | null>(null);
+  // El GSE se guarda JUNTO A LA CLAVE del área a la que pertenece.
+  //
+  // Limpiarlo en un efecto no basta: los efectos corren DESPUÉS del render, así
+  // que al cambiar de isócrona alcanzaba a pintarse un render con el polígono
+  // nuevo y las manzanas viejas — el parpadeo con cifras que luego se
+  // corregían. Comparando la clave, un dato que no corresponde al área actual
+  // simplemente no se usa, y el panel muestra "cargando" en vez de algo falso.
+  const isoKey = isoBbox ? isoBbox.join(",") : "";
+  const [gseState, setGseState] = useState<{
+    key: string;
+    data: GseFeatureCollection | null;
+  }>({ key: "", data: null });
+  const gse = gseState.key === isoKey ? gseState.data : null;
 
   useEffect(() => {
-    // Limpiar SIEMPRE, no solo cuando no hay bbox: al cambiar de isócrona el
-    // GSE de la anterior seguía en estado hasta que llegaba el nuevo fetch, y
-    // el análisis se recalculaba de inmediato con el polígono nuevo y las
-    // manzanas viejas. De ahí el parpadeo con cifras que luego se corregían.
-    setGse(null);
-    if (!isoBbox) return;
+    if (!isoBbox) {
+      setGseState({ key: "", data: null });
+      return;
+    }
     let cancelled = false;
     gseService
       .fetchGse({
@@ -92,15 +102,15 @@ export const useIsochroneAnalysis = ({
         maxFeatures: 200_000,
       })
       .then((res) => {
-        if (!cancelled) setGse(res);
+        if (!cancelled) setGseState({ key: isoKey, data: res });
       })
       .catch(() => {
-        if (!cancelled) setGse(null);
+        if (!cancelled) setGseState({ key: isoKey, data: null });
       });
     return () => {
       cancelled = true;
     };
-  }, [isoBbox]);
+  }, [isoBbox, isoKey]);
 
   const comunasFc = comunas.fc;
   const nombresPorCodigo = comunas.nombresPorCodigo;

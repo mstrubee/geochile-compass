@@ -12,6 +12,20 @@ export interface IsochroneFolder {
   deleted_at: string | null;
 }
 
+/**
+ * Ajustes de la proyección hechos por el analista para una ubicación.
+ * Se recuerdan porque son criterio sobre ESE punto: rehacerlos de memoria
+ * cada vez que se vuelve a abrir invita a que no coincidan.
+ */
+export interface ProjectionSettings {
+  /** Castigo/premio manual en %. */
+  adjustPct: number;
+  /** Tasa por año; null en una posición = usar la de la curva. */
+  rateOverrides: (number | null)[];
+  /** false = la ubicación ya está en régimen (traslado, no apertura). */
+  rampEnabled: boolean;
+}
+
 export interface SavedIsochrone {
   id: string;
   user_id: string;
@@ -27,6 +41,8 @@ export interface SavedIsochrone {
   source_lat: number | null;
   source_lng: number | null;
   notes: string | null;
+  /** Ajustes de la proyección de venta para esta ubicación. */
+  projection_settings: ProjectionSettings | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

@@ -22,7 +22,6 @@ import { DialogDescription } from "@/components/ui/dialog";
 import type { Isochrone } from "@/types/isochrones";
 import { ISO_MODE_LABEL } from "@/types/isochrones";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
-import type { GseFeatureCollection } from "@/types/gse";
 import { useIsochroneReport } from "@/hooks/useIsochroneReport";
 import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import { pickBandFeature } from "@/utils/isochroneAnalysis";
@@ -41,7 +40,6 @@ interface Props {
   isochrone: Isochrone | null;
   savedName?: string | null;
   manzanas?: ManzanaFeatureCollection | null;
-  gse?: GseFeatureCollection | null;
   /** Genera las fotos de mapa (isócrona sola, GSE, gasto endógeno) para embeber en el PDF. */
   onCaptureMapImages?: (iso: Isochrone) => Promise<MapCaptureImages | null>;
 }
@@ -70,7 +68,6 @@ export const IsochroneReportDialog = ({
   isochrone,
   savedName = null,
   manzanas = null,
-  gse = null,
   onCaptureMapImages,
 }: Props) => {
   // Parque de la banda mayor: es la que rotula la página económica del informe.
@@ -85,7 +82,7 @@ export const IsochroneReportDialog = ({
     commerceLoading,
     fetchCommerce,
     commerceErrors,
-  } = useIsochroneReport({ isochrone, isoName: savedName, manzanas, gse, parqueStats });
+  } = useIsochroneReport({ isochrone, isoName: savedName, manzanas, parqueStats });
 
   const [exportingPdf, setExportingPdf] = useState(false);
   const [tab, setTab] = useState(0);

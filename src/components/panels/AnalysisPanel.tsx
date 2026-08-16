@@ -4,6 +4,7 @@ import { useCommercialCount } from "@/hooks/useCommercialCount";
 import { computeSalesProjection, type ProjectionResult } from "@/services/salesProjectionService";
 import { fetchMaturationCurve, type MaturationCurve } from "@/services/maturationCurveService";
 import type { ReportProjection } from "@/utils/reportData";
+import type { ProjectionSettings } from "@/types/savedIsochrones";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Isochrone } from "@/types/isochrones";
@@ -30,6 +31,10 @@ interface AnalysisPanelProps {
   autoOpenProjection?: boolean;
   /** Nombre de la isócrona guardada que se está analizando (para el header). */
   isochroneName?: string | null;
+  /** Ajustes de proyección recordados de esta ubicación. */
+  projectionSettings?: ProjectionSettings | null;
+  /** Persiste los ajustes para recuperarlos al volver a abrir la isócrona. */
+  onProjectionSettingsChange?: (s: ProjectionSettings) => void;
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
@@ -143,6 +148,8 @@ export const AnalysisPanel = ({
   projectionFolders = [],
   autoOpenProjection = false,
   isochroneName = null,
+  projectionSettings = null,
+  onProjectionSettingsChange,
 }: AnalysisPanelProps) => {
   // Folder seleccionado para proyección — default al primero de la lista
   const [selectedFolderId, setSelectedFolderId] = useState<string>(
@@ -492,6 +499,8 @@ export const AnalysisPanel = ({
                   onRun={runProjection}
                   onReset={() => { setProjResult(null); setProjError(null); setProjForReport(null); }}
                   onSnapshot={setProjForReport}
+                  savedSettings={projectionSettings}
+                  onSettingsChange={onProjectionSettingsChange}
                 />
               </Section>
             )}
@@ -857,6 +866,8 @@ interface ProjectionSectionProps {
   onReset:          () => void;
   /** Publica la proyección visible (con ajustes) para incluirla en el PDF. */
   onSnapshot?:      (p: ReportProjection | null) => void;
+  savedSettings?:   ProjectionSettings | null;
+  onSettingsChange?: (s: ProjectionSettings) => void;
 }
 
 /**
@@ -908,6 +919,7 @@ const buildProjRows = (
 const ProjectionSection = ({
   folders, selectedFolderId, onFolderChange,
   result, loading, error, canRun, onRun, onReset, onSnapshot,
+  savedSettings, onSettingsChange,
 }: ProjectionSectionProps) => {
   // Ajuste manual sobre la estimación (castigo o premio, en %).
   //
@@ -923,7 +935,30 @@ const ProjectionSection = ({
   const [rampEnabled, setRampEnabled] = useState(true);
 
   // Una proyección nueva parte sin ajustes: arrastrarlos sería engañoso.
-  useEffect(() => { setAdjustPct(0); setRateOverrides([]); setRampEnabled(true); }, [result]);
+  // Restaura los ajustes recordados de esta ubicación; si no hay, valores por defecto.
+  useEffect(() => {
+    setAdjustPct(savedSettings?.adjustPct ?? 0);
+    setRateOverrides(savedSettings?.rateOverrides ?? []);
+    setRampEnabled(savedSettings?.rampEnabled ?? true);
+    // Solo al cambiar de proyección: si dependiera de savedSettings, cada
+    // guardado revertiría lo que el usuario está escribiendo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
+
+  // Recuerda los ajustes de esta ubicación.
+  const settingsKey = JSON.stringify({ adjustPct, rateOverrides, rampEnabled });
+  const lastSavedKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!onSettingsChange || !result) return;
+    // El primer valor tras restaurar es el ya guardado: no reescribirlo.
+    if (lastSavedKey.current === null) { lastSavedKey.current = settingsKey; return; }
+    if (lastSavedKey.current === settingsKey) return;
+    lastSavedKey.current = settingsKey;
+    onSettingsChange({ adjustPct, rateOverrides, rampEnabled });
+  }, [settingsKey, adjustPct, rateOverrides, rampEnabled, result, onSettingsChange]);
+
+  // Al cambiar de proyección se reinicia el centinela del guardado.
+  useEffect(() => { lastSavedKey.current = null; }, [result]);
 
   // Publica lo que se ve (con ajuste manual y tasas editadas) para el PDF.
   useEffect(() => {
@@ -1124,8 +1159,17 @@ const ProjectionSection = ({
         )}
       </div>
 
-      {/* Ajuste manual */}
+      {/* Ajustes del analista */}
       <div className="rounded-lg bg-surface-2/40 p-2.5">
+        {(adjusted || ratesChanged || !rampEnabled) && (
+          <button
+            onClick={() => { setAdjustPct(0); setRateOverrides([]); setRampEnabled(true); }}
+            className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-brand-orange/40 bg-brand-orange/10 py-1.5 text-[10px] font-medium text-brand-orange transition-colors hover:bg-brand-orange/20"
+            title="Descarta todos los ajustes y vuelve al cálculo programado"
+          >
+            ↺ Volver al cálculo original
+          </button>
+        )}
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
             Ajuste manual
