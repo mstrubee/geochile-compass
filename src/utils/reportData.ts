@@ -103,7 +103,6 @@ export interface IsochroneReport {
 export interface ReportProjection {
   folderName: string;
   baseYear: number;
-  displayYear: number;
   estimatedUf: number;
   estimatedClp: number;
   lowUf: number;
@@ -121,7 +120,8 @@ export interface ReportProjection {
   nWithPredicted: number;
   usedPredictions: boolean;
   diagnosticMsg: string | null;
-  years: Array<{ year: number; uf: number; clp: number; ratePct: number; maturityPct: number; isBase: boolean; isCurrent: boolean }>;
+  /** Relativos a la apertura: 'Base', 'Año 1', … No hay año calendario porque no se sabe cuándo abre. */
+  years: Array<{ label: string; uf: number; clp: number; ratePct: number; maturityPct: number; isBase: boolean }>;
   comparables: Array<{ name: string; ufPerMonth: number; isActual: boolean; weight: number }>;
 }
 

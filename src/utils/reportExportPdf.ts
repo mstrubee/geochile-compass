@@ -684,7 +684,7 @@ const addProjectionPage = (
   let y = BODY_TOP;
   y = sectionTitle(doc, `Proyección de potencial de venta · ${p.folderName}`, y);
 
-  const display = p.years.find((r) => r.isCurrent) ?? p.years.find((r) => r.isBase);
+  const opening = p.years.find((r) => r.isBase);
 
   // KPI
   doc.setFillColor(...C.slate100);
@@ -692,17 +692,24 @@ const addProjectionPage = (
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
   doc.setTextColor(...C.emerald);
-  doc.text(`${fmt(display?.uf ?? p.estimatedUf)} UF/mes`, ML + 4, y + 9);
+  doc.text(`${fmt(p.estimatedUf)} UF/mes`, ML + 4, y + 9);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...C.slate600);
-  doc.text(`${fmtCLP(display?.clp ?? p.estimatedClp)}/mes`, ML + 4, y + 15);
+  doc.text(`${fmtCLP(p.estimatedClp)}/mes`, ML + 4, y + 15);
   doc.setFontSize(8);
   doc.setTextColor(...C.slate400);
   doc.text(
-    `Potencial estimado ${p.displayYear} · rango ${fmt(p.lowUf)}–${fmt(p.highUf)} UF (p25–p75 de comparables)`,
+    `Potencial en régimen · rango ${fmt(p.lowUf)}–${fmt(p.highUf)} UF (p25–p75 de comparables)`,
     PW - ML - 2, y + 9, { align: "right" },
   );
+  if (p.rampEnabled && opening) {
+    doc.setTextColor(...C.slate600);
+    doc.text(
+      `Al abrir: ${fmt(opening.uf)} UF/mes (${Math.round(opening.maturityPct)}% del régimen)`,
+      PW - ML - 2, y + 15, { align: "right" },
+    );
+  }
   if (p.adjustPct !== 0) {
     doc.setTextColor(...C.amber);
     doc.text(
@@ -718,7 +725,7 @@ const addProjectionPage = (
     startY: y,
     head: [["Año", "Crecimiento", "% régimen", "UF/mes", "CLP/mes"]],
     body: p.years.map((r) => [
-      `${r.year}${r.isBase ? " (base)" : r.isCurrent ? " (en curso)" : ""}`,
+      r.label,
       r.isBase ? "—" : `${r.ratePct > 0 ? "+" : ""}${r.ratePct}%`,
       `${Math.round(r.maturityPct)}%`,
       fmt(r.uf),

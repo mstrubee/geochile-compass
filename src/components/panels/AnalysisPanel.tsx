@@ -885,8 +885,8 @@ const buildProjRows = (
   overrides: (number | null)[],
   ramp: boolean,
 ): Array<{
-  year: number; uf: number; clp: number; ratePct: number;
-  maturityPct: number; isBase: boolean; isCurrent: boolean;
+  index: number; label: string; uf: number; clp: number;
+  ratePct: number; maturityPct: number; isBase: boolean;
 }> => {
   const ufToClp = result.estimatedUf > 0 ? result.estimatedClp / result.estimatedUf : 0;
   const horizon = Math.max(0, result.fiveYearProjection.length - 1);
@@ -894,8 +894,8 @@ const buildProjRows = (
   const startFactor = ramp && factors.length > 0 ? factors[0] : 1;
 
   const rows: Array<{
-    year: number; uf: number; clp: number; ratePct: number;
-    maturityPct: number; isBase: boolean; isCurrent: boolean;
+    index: number; label: string; uf: number; clp: number;
+    ratePct: number; maturityPct: number; isBase: boolean;
   }> = [];
   for (let i = 0; i <= horizon; i++) {
     const fallbackRate = i <= 0
@@ -905,12 +905,14 @@ const buildProjRows = (
     const uf = i === 0
       ? result.estimatedUf * startFactor
       : rows[i - 1].uf * (1 + ratePct / 100);
-    const year = result.baseYear + i;
     rows.push({
-      year, uf, clp: uf * ufToClp, ratePct,
+      index: i,
+      // Sin año calendario: no sabemos cuándo abre. Ponerle 2026 daría una
+      // precisión que el dato no tiene y envejecería mal.
+      label: i === 0 ? "Base" : `Año ${i}`,
+      uf, clp: uf * ufToClp, ratePct,
       maturityPct: result.estimatedUf > 0 ? (uf / result.estimatedUf) * 100 : 0,
       isBase: i === 0,
-      isCurrent: year === result.currentYear,
     });
   }
   return rows;
@@ -969,7 +971,7 @@ const ProjectionSection = ({
     onSnapshot({
       folderName: folders.find((x) => x.id === selectedFolderId)?.name ?? result.folderName,
       baseYear: result.baseYear,
-      displayYear: (rows.find((r) => r.isCurrent) ?? rows[0])?.year ?? result.baseYear,
+
       estimatedUf: result.estimatedUf * f,
       estimatedClp: result.estimatedClp * f,
       lowUf: result.lowUf * f,
@@ -985,9 +987,8 @@ const ProjectionSection = ({
       usedPredictions: result.usedPredictions,
       diagnosticMsg: result.diagnosticMsg,
       years: rows.map((r) => ({
-        year: r.year, uf: r.uf * f, clp: r.clp * f,
-        ratePct: r.ratePct, maturityPct: r.maturityPct,
-        isBase: r.isBase, isCurrent: r.isCurrent,
+        label: r.label, uf: r.uf * f, clp: r.clp * f,
+        ratePct: r.ratePct, maturityPct: r.maturityPct, isBase: r.isBase,
       })),
       comparables: result.comparables.map((c) => ({
         name: c.name, ufPerMonth: c.ufPerMonth, isActual: c.isActual, weight: c.weight,
@@ -1101,10 +1102,10 @@ const ProjectionSection = ({
   // diría algo distinto de lo que el usuario tiene en pantalla.
   const projRows = buildProjRows(result, curve, rateOverrides, rampEnabled);
 
-  const currentYearProj = projRows.find((y) => y.isCurrent);
-  const baseProj        = projRows.find((y) => y.isBase);
-  const displayProj     = currentYearProj ?? baseProj ?? { uf: result.estimatedUf, clp: result.estimatedClp };
-  const displayYear     = currentYearProj?.year ?? result.baseYear;
+  // El número estable de una ubicación es su potencial EN RÉGIMEN: la rampa de
+  // los primeros años es transitoria y depende de cuándo abra.
+  const baseProj    = projRows.find((y) => y.isBase);
+  const displayProj = { uf: result.estimatedUf, clp: result.estimatedClp };
 
   const adjusted = adjustPct !== 0;
   const factor   = 1 + adjustPct / 100;
@@ -1122,8 +1123,7 @@ const ProjectionSection = ({
       {/* KPI central — año en curso */}
       <div className="rounded-xl bg-gradient-to-br from-green-900/25 to-emerald-900/10 border border-green-500/20 p-3">
         <div className="text-[10px] text-green-400/70 uppercase tracking-wider mb-1">
-          Potencial estimado · {displayYear}
-          {currentYearProj && <span className="ml-1 text-green-400/50">(año en curso)</span>}
+          Potencial estimado · en régimen
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-[22px] font-bold text-green-400">{fmtUF(adj(displayProj.uf))}</span>
@@ -1147,14 +1147,10 @@ const ProjectionSection = ({
             Cálculo original: <span className="text-foreground">{fmtUF(displayProj.uf)}</span>/mes
           </div>
         )}
-        {rampEnabled && (
+        {rampEnabled && baseProj && (
           <div className="mt-1 text-[10px] text-muted-foreground">
-            Potencial en régimen:{" "}
-            <span className="text-foreground">{fmtUF(adj(result.estimatedUf))}</span>/mes
-            {" · "}el año mostrado va al{" "}
-            {Math.round(
-              (projRows.find((y) => y.isCurrent) ?? projRows[0])?.maturityPct ?? 100,
-            )}% de ese nivel
+            Al abrir: <span className="text-foreground">{fmtUF(adj(baseProj.uf))}</span>/mes
+            {" · "}{Math.round(baseProj.maturityPct)}% del régimen
           </div>
         )}
       </div>
@@ -1236,9 +1232,8 @@ const ProjectionSection = ({
       {projRows.length > 1 && (
         <div>
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
-            {/* El año base es pasado: son los datos de referencia, no una
-                proyección. Rotularlo como tal evita leer 2025 como pronóstico. */}
-            Base {result.baseYear} · Proyección {result.baseYear + 1}–{projRows[projRows.length - 1].year}
+            {/* Relativo a la apertura: no sabemos en qué año calendario abre. */}
+            Proyección a {projRows.length - 1} años desde la apertura
             {adjusted && (
               <span className="ml-1 normal-case text-brand-orange">
                 · ajustada {adjustPct > 0 ? "+" : ""}{adjustPct}%
@@ -1282,16 +1277,18 @@ const ProjectionSection = ({
               </thead>
               <tbody>
                 {projRows.map((yr, i) => (
-                  <tr key={yr.year} className={[
+                  <tr key={yr.index} className={[
                     "border-t border-white/5",
-                    yr.isCurrent ? "bg-green-900/20 font-semibold" :
-                    yr.isBase   ? "bg-surface-2/30" :
+                    yr.isBase   ? "bg-surface-2/30 font-semibold" :
                     i % 2 === 0 ? "bg-surface-1/20" : "",
                   ].join(" ")}>
                     <td className="py-1 px-2 flex items-center gap-1">
-                      {yr.year}
-                      {yr.isCurrent && <span className="text-[8px] text-green-400 bg-green-400/15 rounded px-1">hoy</span>}
-                      {yr.isBase && !yr.isCurrent && <span className="text-[8px] text-muted-foreground bg-surface-2/60 rounded px-1">base</span>}
+                      {yr.label}
+                      {yr.isBase && rampEnabled && (
+                        <span className="rounded bg-surface-2/60 px-1 text-[8px] text-muted-foreground">
+                          apertura
+                        </span>
+                      )}
                     </td>
                     <td className="py-1 px-2 text-right">
                       {yr.isBase ? (
@@ -1321,7 +1318,7 @@ const ProjectionSection = ({
                     <td className="py-1 px-2 text-right tabular-nums text-[10px] text-muted-foreground">
                       {Math.round(yr.maturityPct)}%
                     </td>
-                    <td className={["py-1 px-2 text-right tabular-nums font-mono", yr.isCurrent ? "text-green-400" : "text-foreground"].join(" ")}>
+                    <td className="py-1 px-2 text-right tabular-nums font-mono text-foreground">
                       {fmtUF(adj(yr.uf))}
                     </td>
                     <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
