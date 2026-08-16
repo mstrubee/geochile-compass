@@ -102,7 +102,9 @@ export const useIsochroneReport = ({
     }
     let cancelled = false;
     gseService
-      .fetchGse({ ...outerBboxPadded, variable: "gse", zoom: 13 })
+      // maxFeatures alto: acá no se renderiza, y truncar subestimaría la
+      // población y la distribución GSE de isócronas grandes.
+      .fetchGse({ ...outerBboxPadded, variable: "gse", zoom: 13, maxFeatures: 200_000 })
       .then((res) => { if (!cancelled) setGseForIso(res); })
       .catch(() => { if (!cancelled) setGseForIso(null); });
     return () => { cancelled = true; };

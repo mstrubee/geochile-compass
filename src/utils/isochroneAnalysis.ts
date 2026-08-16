@@ -534,27 +534,31 @@ export const computeIsochroneAnalysis = (params: {
 
   // ── Jerarquía de fuentes de población (mejor → peor) ────────────────────
   //
-  // 1. Manzanas INE Censo 2017 (solo RM, ~52 comunas) — mayor precisión
-  // 2. GSE Censo 2024 (n_per / n_hog por manzana, 334 comunas) — buena precisión
-  //    Usa share de área para prorratear manzanas parcialmente dentro de la iso.
-  // 3. Fallback comunal por área — solo si no hay GSE. Asume distribución
-  //    uniforme dentro de la comuna: INCORRECTO para comunas grandes/mixtas.
-  //    Se mantiene como último recurso.
+  // 1. GSE Censo 2024 (n_per / n_hog por manzana, 334 comunas). Se carga
+  //    siempre por bbox de la isócrona, así que cubre el área completa.
+  // 2. Manzanas INE Censo 2017 (solo RM). Van SEGUNDAS a propósito: provienen
+  //    de la capa del mapa, que solo existe si el usuario la tiene encendida y
+  //    está acotada al viewport. Si el viewport no cubre toda la isócrona, el
+  //    set es parcial y subcontaba la población — con la jerarquía anterior
+  //    ganaban igual, y el mismo análisis daba cifras distintas según dónde
+  //    estuviera el mapa. Solo se usan si no hay GSE.
+  // 3. Fallback comunal por área. Asume distribución uniforme dentro de la
+  //    comuna: INCORRECTO para comunas grandes/mixtas. Último recurso.
   //
   let pop = 0;
   let hh = 0;
   let source: "manzanas" | "comuna" = "comuna";
 
-  if (manzanasBD && manzanasBD.pop > 0) {
-    // Fuente 1: manzanas INE (Censo 2017, solo RM)
+  if (gseBD && gseBD.pop > 0) {
+    // Fuente 1: GSE Censo 2024 — n_per/n_hog por manzana × share de área
+    pop = gseBD.pop;
+    hh = gseBD.hh > 0 ? gseBD.hh : Math.round(pop / HH_SIZE_FALLBACK);
+    source = "manzanas";
+  } else if (manzanasBD && manzanasBD.pop > 0) {
+    // Fuente 2: manzanas INE (Censo 2017, solo RM)
     pop = manzanasBD.pop;
     hh = manzanasBD.hh > 0 ? manzanasBD.hh : Math.round(pop / HH_SIZE_FALLBACK);
     source = "manzanas";
-  } else if (gseBD && gseBD.pop > 0) {
-    // Fuente 2: GSE Censo 2024 — n_per/n_hog por manzana × share de área
-    pop = gseBD.pop;
-    hh = gseBD.hh > 0 ? gseBD.hh : Math.round(pop / HH_SIZE_FALLBACK);
-    source = "manzanas"; // misma precisión que manzanas INE, mostrar igual
   } else {
     // Fuente 3: estimación comunal por área proporcional (último recurso)
     pop = Math.round(communes.reduce((s, c) => s + c.popInIso, 0));

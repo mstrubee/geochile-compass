@@ -85,6 +85,9 @@ export const useIsochroneAnalysis = ({
         north: isoBbox[3],
         variable: "gse",
         zoom: 13,
+        // maxFeatures alto: acá no se renderiza, y truncar subestimaría la
+        // población y la distribución GSE de isócronas grandes.
+        maxFeatures: 200_000,
       })
       .then((res) => {
         if (!cancelled) setGse(res);

@@ -52,6 +52,12 @@ export interface GseParams {
   north: number;
   variable: GseVariable;
   zoom: number;
+  /**
+   * Tope de manzanas a devolver. El default protege el render del mapa; para
+   * análisis (población, distribución GSE) hay que subirlo, porque truncar
+   * equivale a perder población de la isócrona sin aviso.
+   */
+  maxFeatures?: number;
 }
 
 export interface GseIndexEntry {

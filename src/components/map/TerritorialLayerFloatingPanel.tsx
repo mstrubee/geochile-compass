@@ -251,7 +251,7 @@ export const TerritorialLayerFloatingPanel = ({
                     onChange={onGseVariableChange}
                   />
                   <p className="text-[9.5px] leading-relaxed text-text-muted">
-                    Censo 2012 — comunas sin datos muestran círculo estimado.
+                    Censo 2024 — comunas sin datos muestran círculo estimado.
                   </p>
                 </div>
               )}

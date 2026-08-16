@@ -98,7 +98,7 @@ export const GseLayer = ({
 
   const fallbackCommunes = useMemo(() => {
     if (!showCommuneFallback) return [];
-    // Comunas que NO están cubiertas por GSE 2012 → mostramos círculo estimado.
+    // Comunas que NO están cubiertas por GSE 2024 → mostramos círculo estimado.
     return COMMUNES.filter((c) => !coveredCommuneNames.has(norm(c.name)));
   }, [coveredCommuneNames, showCommuneFallback]);
 

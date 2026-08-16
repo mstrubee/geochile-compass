@@ -9,7 +9,7 @@ import type {
 } from "@/types/gse";
 
 /**
- * Carga manzanas con datos GSE (Censo 2012, AMS) pre-procesadas en
+ * Carga manzanas con datos GSE (Censo 2024, AMS) pre-procesadas en
  * /public/gse/<slug>.geojson + /public/gse/index.json.
  *
  * Estrategia (igual que manzanaService):
@@ -99,15 +99,23 @@ class GseService {
       };
     }
 
+    const cap = params.maxFeatures ?? MAX_FEATURES;
     const buckets = await Promise.all(matching.map((c) => this.loadCommune(c.slug)));
     const features: GseFeature[] = [];
+    let truncated = false;
     outer: for (const bucket of buckets) {
       for (const f of bucket) {
         if (!f.geometry) continue;
         if (!featureInBbox(f.geometry, viewportBbox)) continue;
         features.push({ type: "Feature", geometry: f.geometry, properties: f.properties });
-        if (features.length >= MAX_FEATURES) break outer;
+        if (features.length >= cap) { truncated = true; break outer; }
       }
+    }
+    if (truncated) {
+      console.warn(
+        `[gseService] Se alcanzó el tope de ${cap} manzanas: el resultado está ` +
+        `truncado y subestima la población/distribución del área consultada.`,
+      );
     }
 
     return {

@@ -235,7 +235,7 @@ export const Legend = ({
               GSE · {GSE_VARIABLE_LABEL[gseVariable]}
             </div>
             <span className="rounded-sm border border-brand-purple/40 bg-brand-purple/10 px-1.5 py-0.5 font-mono text-[8px] uppercase text-brand-purple">
-              Censo 2012
+              Censo 2024
             </span>
           </div>
           <div className="space-y-0.5">

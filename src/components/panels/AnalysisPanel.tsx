@@ -262,7 +262,7 @@ export const AnalysisPanel = ({
   }, [analysis]);
 
   const nseSource = analysis?.gse
-    ? "GSE manzana (Censo 2012)"
+    ? "GSE manzana (Censo 2024)"
     : analysis?.totals.source === "manzanas"
       ? "Manzanas Censo 2017"
       : "Comunal";
@@ -392,7 +392,7 @@ export const AnalysisPanel = ({
                 </span>
                 {analysis.gse && (
                   <div className="mt-1">
-                    GSE/NSE enriquecido con {analysis.gse.manzanaCount} manzanas Censo 2012.
+                    GSE/NSE enriquecido con {analysis.gse.manzanaCount} manzanas Censo 2024.
                   </div>
                 )}
               </div>
@@ -400,7 +400,7 @@ export const AnalysisPanel = ({
 
             {analysis.gse && (
               <Section
-                title="Indicadores GSE (Censo 2012)"
+                title="Indicadores GSE (Censo 2024)"
                 open={sectionOpen.gse}
                 onToggle={() => toggleSection("gse")}
               >

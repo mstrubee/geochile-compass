@@ -58,7 +58,7 @@ const NSE_BAR_COLOR: Record<string, string> = {
 };
 
 const NSE_SOURCE_LABEL: Record<string, string> = {
-  gse: "Manzanas GSE (Censo 2012), por hogares",
+  gse: "Manzanas GSE (Censo 2024), por hogares",
   manzanas: "Manzanas INE (Censo 2017), por población",
   comuna: "Estimación comunal — no refleja la variación interna del área",
 };

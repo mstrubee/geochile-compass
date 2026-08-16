@@ -252,7 +252,7 @@ const Index = () => {
     });
   };
 
-  // Capa GSE por manzana (Censo 2012)
+  // Capa GSE por manzana (Censo 2024)
   const [gseVariable, setGseVariable] = useState<GseVariable>("gse");
   const [chileCommunesVariable, setChileCommunesVariable] = useState<IneVariable>("poblacion");
   const [gseViewport, setGseViewport] = useState<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
