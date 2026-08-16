@@ -110,6 +110,8 @@ export interface ReportProjection {
   highUf: number;
   adjustPct: number;
   usesMaturationCurve: boolean;
+  /** true si la curva la fijó el admin en vez de derivarse. */
+  maturationIsCustom: boolean;
   maturationSampleSize: number;
   /** true si la curva parte en rampa (ubicación nueva) en vez de en régimen. */
   rampEnabled: boolean;

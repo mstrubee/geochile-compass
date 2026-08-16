@@ -941,6 +941,7 @@ const ProjectionSection = ({
       highUf: result.highUf * f,
       adjustPct,
       usesMaturationCurve: !!curve && !curve.isFallback,
+      maturationIsCustom: !!curve?.isCustom,
       maturationSampleSize: curve?.sampleSize ?? 0,
       rampEnabled,
       steadyStateUf: result.estimatedUf * f,
@@ -1207,9 +1208,11 @@ const ProjectionSection = ({
             >
               ({ratesChanged
                 ? "crecimiento ajustado"
-                : curve && !curve.isFallback
-                  ? `curva de maduración · ${curve.sampleSize} locales`
-                  : `${steadyPct}% anual`})
+                : curve?.isCustom
+                  ? "curva definida por admin"
+                  : curve && !curve.isFallback
+                    ? `curva de maduración · ${curve.sampleSize} locales`
+                    : `${steadyPct}% anual`})
             </span>
           </div>
           <div className="overflow-hidden rounded-lg border border-white/8">

@@ -34,6 +34,8 @@ export interface MaturationCurve {
   sampleSize: number;
   /** true si son los valores de respaldo (sin datos suficientes). */
   isFallback: boolean;
+  /** true si la fijó el admin a mano, en vez de derivarse de los datos. */
+  isCustom: boolean;
 }
 
 /**
@@ -54,6 +56,35 @@ const ratesFromRamp = (ramp: number[]): number[] => {
   return out;
 };
 
+/** Rampa fijada a mano por el admin, si existe y es válida. */
+export const fetchCustomRamp = async (
+  folderId: string,
+): Promise<number[] | null> => {
+  const { data } = await supabase
+    .from("analysis_settings")
+    .select("maturation_ramp")
+    .eq("folder_id", folderId)
+    .maybeSingle();
+  const raw = (data as { maturation_ramp?: unknown } | null)?.maturation_ramp;
+  if (!Array.isArray(raw) || raw.length < 2) return null;
+  const nums = raw.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  return nums.length === raw.length ? nums : null;
+};
+
+/** Guarda la rampa del admin. `null` vuelve a derivarla de los datos. */
+export const saveCustomRamp = async (
+  folderId: string,
+  ramp: number[] | null,
+): Promise<void> => {
+  const { error } = await supabase
+    .from("analysis_settings")
+    .upsert(
+      { folder_id: folderId, maturation_ramp: ramp } as never,
+      { onConflict: "folder_id" },
+    );
+  if (error) throw error;
+};
+
 const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
@@ -68,8 +99,21 @@ export const fetchMaturationCurve = async (
     rates: ratesFromRamp(FALLBACK_RAMP),
     sampleSize: 0,
     isFallback: true,
+    isCustom: false,
   };
   try {
+    // Una curva fijada por el admin manda sobre la derivada: puede conocer el
+    // negocio mejor que la muestra disponible.
+    const custom = await fetchCustomRamp(folderId);
+    if (custom) {
+      return {
+        rampFactors: custom,
+        rates: ratesFromRamp(custom),
+        sampleSize: 0,
+        isFallback: false,
+        isCustom: true,
+      };
+    }
     const { data: pois } = await supabase
       .from("pois")
       .select("id")
@@ -167,6 +211,7 @@ export const fetchMaturationCurve = async (
       rates: ratesFromRamp(rampFactors),
       sampleSize: ramps.length,
       isFallback: false,
+      isCustom: false,
     };
   } catch {
     return fallback;

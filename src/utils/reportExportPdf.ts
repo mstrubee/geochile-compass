@@ -747,9 +747,11 @@ const addProjectionPage = (
         `${Math.round(p.years[0]?.maturityPct ?? 100)}% de ese nivel, porque un local recién abierto no rinde ` +
         "desde el primer día lo que rinde uno maduro."
       : "Se asume la ubicación ya en régimen desde el año base (sin rampa de apertura).",
-    p.usesMaturationCurve
-      ? `Curva de maduración derivada de ${p.maturationSampleSize} locales de la red con apertura observada.`
-      : "Curva de maduración de respaldo: no hay suficientes aperturas observadas en la red.",
+    p.maturationIsCustom
+      ? "Curva de maduración definida manualmente por el administrador."
+      : p.usesMaturationCurve
+        ? `Curva de maduración derivada de ${p.maturationSampleSize} locales de la red con apertura observada.`
+        : "Curva de maduración de respaldo: no hay suficientes aperturas observadas en la red.",
     `Base: media ponderada de ${p.comparables.length} locales comparables ` +
       `(${p.nWithSales} con ventas reales, ${p.nWithPredicted} con predicción del modelo).`,
     p.adjustPct !== 0
