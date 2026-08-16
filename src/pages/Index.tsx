@@ -133,6 +133,7 @@ const Index = () => {
   // Referencia siempre-actualizada de gseData, para poder "esperar" desde
   // fuera del ciclo de render (captura de fotos del informe de isócrona).
   const gseDataRef = useRef<GseFeatureCollection | null>(null);
+  const gseViewportRef = useRef<{ bbox: [number, number, number, number]; zoom: number } | null>(null);
   const [layers, setLayers] = useState<LayerState>({
     communes: false,
     communesGeo: false,
@@ -292,18 +293,34 @@ const Index = () => {
       const prevCenter = map.getCenter();
       const prevZoom = map.getZoom();
 
+      const log = (msg: string, extra?: unknown) =>
+        // eslint-disable-next-line no-console
+        console.info(`[captura-informe] ${msg}`, extra ?? "");
+
       try {
+        log("isócrona objetivo", { id: iso.id, color: iso.color, bandas: iso.minutes });
+        log(
+          "isócronas visibles en el mapa",
+          isochrones.filter((i) => i.visible).map((i) => ({ id: i.id, color: i.color })),
+        );
+        log("bounds calculados", boundsBox);
         flushSync(() => {
           setLayers(ALL_LAYERS_OFF);
           setComercialLayers(ALL_COMERCIAL_OFF);
           setIsoOutlineCapture(true);
         });
         await fitMapToBounds(map, boundsBox);
+        log("vista encuadrada", { center: map.getCenter(), zoom: map.getZoom() });
         const isoOnly = await captureAfterSettle(map);
 
         const beforeNse = gseDataRef.current;
         flushSync(() => setLayers({ ...ALL_LAYERS_OFF, nse: true }));
-        await waitForRefChange(gseDataRef, beforeNse);
+        const nseWait = await waitForRefChange(gseDataRef, beforeNse);
+        log("GSE (nse) — datos listos?", {
+          ...nseWait,
+          features: gseDataRef.current?.features.length ?? null,
+          viewport: gseViewportRef.current,
+        });
         const gse = await captureAfterSettle(map);
 
         const beforeGasto = gseDataRef.current;
@@ -311,7 +328,12 @@ const Index = () => {
           setLayers({ ...ALL_LAYERS_OFF, gasto: true });
           setGastoView("manzana");
         });
-        await waitForRefChange(gseDataRef, beforeGasto);
+        const gastoWait = await waitForRefChange(gseDataRef, beforeGasto);
+        log("Gasto endógeno — datos listos?", {
+          ...gastoWait,
+          features: gseDataRef.current?.features.length ?? null,
+          viewport: gseViewportRef.current,
+        });
         const gasto = await captureAfterSettle(map);
 
         flushSync(() => setLayers({ ...ALL_LAYERS_OFF, commercial: true }));
@@ -328,6 +350,7 @@ const Index = () => {
         map.setView(prevCenter, prevZoom, { animate: false });
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `isochrones` se lee dentro (diagnóstico), declarado más abajo en el componente
     [layers, comercialLayers, gastoView],
   );
 
@@ -1198,6 +1221,7 @@ const Index = () => {
     minZoom: 11,
   });
   useEffect(() => { gseDataRef.current = gseData; }, [gseData]);
+  useEffect(() => { gseViewportRef.current = gseViewport; }, [gseViewport]);
 
   const handleGseViewportChange = useCallback(
     (bbox: [number, number, number, number], zoom: number) => {

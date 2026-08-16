@@ -30,12 +30,13 @@ export const waitForRefChange = async <T,>(
   prevValue: T,
   timeoutMs = 6500,
   intervalMs = 120,
-): Promise<void> => {
+): Promise<{ changed: boolean; elapsedMs: number }> => {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (ref.current !== prevValue) return;
+    if (ref.current !== prevValue) return { changed: true, elapsedMs: Date.now() - start };
     await wait(intervalMs);
   }
+  return { changed: false, elapsedMs: Date.now() - start };
 };
 
 /** Espera a que termine el paneo/zoom del mapa (con timeout de seguridad). */
