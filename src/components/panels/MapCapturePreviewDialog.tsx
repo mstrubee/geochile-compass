@@ -18,8 +18,13 @@ interface Props {
   onCapture: (heat: Partial<HeatmapSettings>) => Promise<MapCaptureImages | null>;
   /** Recaptura solo atractores: las otras tres no cambian al afinar el heatmap. */
   onCaptureAtractores?: (heat: Partial<HeatmapSettings>) => Promise<string | null>;
-  /** Confirma y genera el informe con las fotos revisadas. */
-  onConfirm: (images: MapCaptureImages | null) => Promise<void> | void;
+  /** Ajustes usados la última vez para esta isócrona. */
+  initialHeat?: Partial<HeatmapSettings> | null;
+  /** Confirma y genera el informe con las fotos y los ajustes revisados. */
+  onConfirm: (
+    images: MapCaptureImages | null,
+    heat: HeatmapSettings,
+  ) => Promise<void> | void;
 }
 
 const TITULOS: Array<[keyof MapCaptureImages, string]> = [
@@ -37,7 +42,7 @@ const TITULOS: Array<[keyof MapCaptureImages, string]> = [
  * directorio en vez de descubrirlo después.
  */
 export const MapCapturePreviewDialog = ({
-  open, onClose, onCapture, onCaptureAtractores, onConfirm,
+  open, onClose, onCapture, onCaptureAtractores, initialHeat, onConfirm,
 }: Props) => {
   // El radio del heatmap está en píxeles: lo que se ve bien en pantalla puede
   // convertirse en una mancha que tapa la isócrona a la escala de la foto.
@@ -78,10 +83,10 @@ export const MapCapturePreviewDialog = ({
     [onCaptureAtractores, capture],
   );
 
-  // Primera captura al abrir, con los valores por defecto.
+  // Primera captura al abrir, retomando los ajustes de la última exportación.
   useEffect(() => {
     if (!open) return;
-    const inicial = DEFAULT_SETTINGS.commercial;
+    const inicial = { ...DEFAULT_SETTINGS.commercial, ...(initialHeat ?? {}) };
     setHeat(inicial);
     void capture(inicial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -180,7 +185,7 @@ export const MapCapturePreviewDialog = ({
               onClick={async () => {
                 setGenerating(true);
                 try {
-                  await onConfirm(images);
+                  await onConfirm(images, heatRef.current);
                   onClose();
                 } finally {
                   setGenerating(false);

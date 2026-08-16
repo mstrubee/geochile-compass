@@ -38,6 +38,12 @@ export interface ProjectionSettings {
   result?: unknown | null;
   /** Cuándo se corrió, para saber qué tan vigente es. */
   computedAt?: string | null;
+  /**
+   * Ajustes del heatmap de atractores usados en la última exportación.
+   * Se calibran para la escala de la foto, no para la vista en vivo, así que
+   * rehacerlos en cada informe es trabajo repetido.
+   */
+  heatSettings?: { radius: number; blur: number; opacity: number } | null;
 }
 
 export interface SavedIsochrone {

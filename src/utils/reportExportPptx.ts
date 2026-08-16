@@ -31,6 +31,15 @@ const COL_R_X = ML + COL_W + COL_GAP;
 const BODY_TOP = 1.12;       // bajo el encabezado
 const BODY_BOTTOM = H - 0.32;
 
+/**
+ * Nombre sin el tiempo al final.
+ *
+ * Las isócronas suelen guardarse como "Fontova - 5min", y el título le agrega
+ * el tiempo otra vez: "Fontova - 5min – Isócrona 5min".
+ */
+const baseName = (name: string) =>
+  name.replace(/[\s–—-]*\d+\s*min(utos)?\.?\s*$/i, "").trim() || name;
+
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
 const fmtCLP = (n: number) => `$${fmt(n)}`;
 
@@ -127,7 +136,7 @@ const addTerritorySlide = (
 ) => {
   const slide = pptx.addSlide();
   const band = report.bands[report.bands.length - 1];
-  const name = report.iso.name ?? "Isócrona";
+  const name = baseName(report.iso.name ?? "Isócrona");
 
   addHeader(slide, "Análisis territorial", `${name} – Isócrona ${report.iso.minutes.join("/")}min`);
 
@@ -236,7 +245,7 @@ const addProjectionSlide = (
   proj: ReportProjection,
 ) => {
   const slide = pptx.addSlide();
-  const name = report.iso.name ?? "Isócrona";
+  const name = baseName(report.iso.name ?? "Isócrona");
   addHeader(
     slide,
     "Potencial económico y proyección",

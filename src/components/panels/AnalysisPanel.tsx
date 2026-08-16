@@ -316,6 +316,7 @@ export const AnalysisPanel = ({
         rateOverrides: adjust?.rateOverrides ?? [],
         rampEnabled: adjust?.rampEnabled ?? true,
         isExpress: adjust?.isExpress ?? false,
+        heatSettings: adjust?.heatSettings ?? null,
         result: res,
         computedAt: res ? new Date().toISOString() : null,
       });
@@ -861,10 +862,26 @@ export const AnalysisPanel = ({
         onCaptureAtractores={async (h) =>
           isochrone && onCaptureAtractores ? onCaptureAtractores(isochrone, h) : null
         }
-        onConfirm={async (imgs) => {
+        initialHeat={projAdjust?.heatSettings ?? null}
+        onConfirm={async (imgs, heat) => {
           if (!fullReport) return;
           setExportingPptx(true);
           try {
+            // Se guardan los ajustes con los que se generó ESTE informe, para
+            // que el próximo parta de ahí en vez de recalibrar desde cero.
+            const next: ProjectionSettings = {
+              adjustPct: projAdjust?.adjustPct ?? 0,
+              rateOverrides: projAdjust?.rateOverrides ?? [],
+              rampEnabled: projAdjust?.rampEnabled ?? true,
+              isExpress: projAdjust?.isExpress ?? false,
+              heatSettings: {
+                radius: heat.radius,
+                blur: heat.blur,
+                opacity: heat.opacity,
+              },
+            };
+            setProjAdjust(next);
+            persistProjection(next, projResult);
             await exportReportToPptx(fullReport, projForReport, imgs);
           } finally {
             setExportingPptx(false);
