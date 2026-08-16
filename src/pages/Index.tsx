@@ -1057,8 +1057,27 @@ const Index = () => {
   }, []);
   const removeIsochrone = useCallback((id: string) => {
     setIsochrones((prev) => prev.filter((i) => i.id !== id));
+    // Si era una guardada cargada al mapa, su interruptor en el árbol debe
+    // quedar apagado; si no, se vería encendida sin estar en el mapa.
+    if (id.startsWith("saved:")) {
+      const savedId = id.slice("saved:".length);
+      setLoadedSavedIsoIds((prev) => {
+        if (!prev.has(savedId)) return prev;
+        const next = new Set(prev);
+        next.delete(savedId);
+        return next;
+      });
+    }
   }, []);
-  const clearIsochrones = useCallback(() => setIsochrones([]), []);
+  /**
+   * Borra solo las isócronas de trabajo. Las guardadas se descargan desde su
+   * propio árbol: barrerlas desde acá dejaría sus interruptores encendidos
+   * apuntando a algo que ya no está en el mapa.
+   */
+  const clearIsochrones = useCallback(
+    () => setIsochrones((prev) => prev.filter((i) => i.id.startsWith("saved:"))),
+    [],
+  );
   const handleFitIsoDone = useCallback(() => setFitIsoId(null), []);
 
   // ---- Saved isochrones loading into the active map state ----

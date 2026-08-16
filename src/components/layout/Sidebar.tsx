@@ -839,6 +839,12 @@ export const Sidebar = ({
     }
   };
 
+  /** Isócronas de trabajo: las guardadas se listan en su propio árbol. */
+  const workingIsochrones = useMemo(
+    () => isochrones.filter((i) => !i.id.startsWith("saved:")),
+    [isochrones],
+  );
+
   // Indexación jerárquica
   const poiChildrenMap = useMemo(() => {
     const m = new Map<string | null, PoiFolder[]>();
@@ -1601,9 +1607,16 @@ export const Sidebar = ({
             )}
           </button>
 
-          {isochrones.length > 0 && (
+          {/*
+            Solo las isócronas de trabajo. Una guardada que se enciende se carga
+            al mapa con id `saved:<id>`, y antes también aparecía acá: la misma
+            isócrona listada dos veces, con dos interruptores que hacían cosas
+            distintas —apagar la de esta lista no apagaba el análisis, porque el
+            análisis seguía apuntando a la guardada—.
+          */}
+          {workingIsochrones.length > 0 && (
             <div className="space-y-0.5">
-              {isochrones.map((iso) => (
+              {workingIsochrones.map((iso) => (
                 <div
                   key={iso.id}
                   className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2/60"
