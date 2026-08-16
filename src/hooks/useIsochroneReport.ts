@@ -9,6 +9,7 @@ import {
 } from "@/hooks/useTerritorialLayers";
 import { useComunasGeoIndex } from "@/hooks/useComunasGeoIndex";
 import { normalizeCommuneName } from "@/services/communeDataService";
+import { gseService } from "@/services/gseService";
 import { pickBandFeature } from "@/utils/isochroneAnalysis";
 import {
   fetchCommerceCategories,
@@ -84,6 +85,29 @@ export const useIsochroneReport = ({
     return { south: s - dy, west: w - dx, north: n + dy, east: e + dx };
   }, [isochrone]);
 
+  /**
+   * Manzanas GSE del área de la isócrona.
+   *
+   * Se cargan aquí, por bbox de la isócrona, en vez de reutilizar las del mapa:
+   * aquellas solo existen si el usuario tiene encendida la capa "GSE por
+   * manzana" y están acotadas al viewport, así que el informe quedaba sin datos
+   * y caía al promedio comunal (que asigna una sola clase por comuna y borra
+   * la heterogeneidad real del área).
+   */
+  const [gseForIso, setGseForIso] = useState<GseFeatureCollection | null>(null);
+  useEffect(() => {
+    if (!outerBboxPadded) {
+      setGseForIso(null);
+      return;
+    }
+    let cancelled = false;
+    gseService
+      .fetchGse({ ...outerBboxPadded, variable: "gse", zoom: 13 })
+      .then((res) => { if (!cancelled) setGseForIso(res); })
+      .catch(() => { if (!cancelled) setGseForIso(null); });
+    return () => { cancelled = true; };
+  }, [outerBboxPadded]);
+
   const fetchCommerce = useCallback(
     async (categories: CommerceCategory[]) => {
       if (!isochrone || !outerBboxPadded || categories.length === 0) return;
@@ -133,7 +157,9 @@ export const useIsochroneReport = ({
       ineByName,
       nombresPorCodigo: comunas.nombresPorCodigo,
       manzanas,
-      gse,
+      // Las del área de la isócrona tienen prioridad; las del mapa solo sirven
+      // como respaldo mientras la carga por bbox está en vuelo.
+      gse: gseForIso ?? gse,
       commerceByCategory,
       categoriesQueried,
       commerceErrors,
@@ -148,6 +174,7 @@ export const useIsochroneReport = ({
     ineByName,
     manzanas,
     gse,
+    gseForIso,
     commerceByCategory,
     categoriesQueried,
     commerceErrors,

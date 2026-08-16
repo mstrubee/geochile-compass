@@ -26,8 +26,20 @@ const C = {
   e:         [185, 28,  28]  as [number,number,number],
 };
 
+/** Misma paleta que la capa "GSE por manzana" del mapa (ver GSE_COLORS). */
 const NSE_COLORS: Record<string, [number,number,number]> = {
-  ABC1: C.abc1, C2: C.c2, C3: C.c3, D: C.d, E: C.e,
+  ABC1: [30,  64, 175],
+  C1:   [59, 130, 246],
+  C2:   [14, 165, 233],
+  C3:   [234, 179,   8],
+  D:    [249, 115,  22],
+  E:    [220,  38,  38],
+};
+
+const NSE_SOURCE_LABEL: Record<string, string> = {
+  gse:      "Manzanas GSE · Censo 2012 · ponderado por hogares",
+  manzanas: "Manzanas INE · Censo 2017 · ponderado por población",
+  comuna:   "Estimación comunal — una sola clase por comuna, no refleja la variación interna del área",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -638,7 +650,16 @@ const addBandPage = (
       addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
       y = BODY_TOP;
     }
-    y = sectionTitle(doc, "Distribución NSE", y);
+    y = sectionTitle(
+      doc,
+      band.nseSource === "gse" ? "Distribución GSE" : "Distribución NSE",
+      y,
+    );
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...C.slate400);
+    doc.text(`Fuente: ${NSE_SOURCE_LABEL[band.nseSource]}`, ML, y);
+    y += 5;
     y = drawNseChart(doc, band.nseDistribution, y) + 4;
   }
 

@@ -47,12 +47,20 @@ interface Props {
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
 const fmtCLP = (n: number) => `$${fmt(n)}`;
+/** Misma paleta que la capa "GSE por manzana" del mapa (ver GSE_COLORS). */
 const NSE_BAR_COLOR: Record<string, string> = {
-  ABC1: "bg-[hsl(224_76%_38%)]",
-  C2: "bg-[hsl(217_91%_55%)]",
-  C3: "bg-brand-yellow",
-  D: "bg-brand-orange",
-  E: "bg-brand-red",
+  ABC1: "bg-[#1e40af]",
+  C1: "bg-[#3b82f6]",
+  C2: "bg-[#0ea5e9]",
+  C3: "bg-[#eab308]",
+  D: "bg-[#f97316]",
+  E: "bg-[#dc2626]",
+};
+
+const NSE_SOURCE_LABEL: Record<string, string> = {
+  gse: "Manzanas GSE (Censo 2012), por hogares",
+  manzanas: "Manzanas INE (Censo 2017), por población",
+  comuna: "Estimación comunal — no refleja la variación interna del área",
 };
 
 export const IsochroneReportDialog = ({
@@ -251,11 +259,16 @@ export const IsochroneReportDialog = ({
                 </Section>
 
                 {/* NSE */}
-                <Section title="Distribución NSE">
+                <Section
+                  title={band.nseSource === "gse" ? "Distribución GSE" : "Distribución NSE"}
+                >
                   {band.nseDistribution.length === 0 ? (
                     <Empty text="Sin datos NSE." />
                   ) : (
                     <div className="rounded-lg border border-border/30 bg-surface-2/40 p-3">
+                      <div className="mb-2 text-[10px] text-muted-foreground">
+                        {NSE_SOURCE_LABEL[band.nseSource]}
+                      </div>
                       {band.nseDistribution.map((n) => (
                         <div key={n.label} className="mb-2 flex items-center gap-2 last:mb-0">
                           <span className="w-9 flex-shrink-0 font-mono text-[11px]">

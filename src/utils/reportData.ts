@@ -8,7 +8,8 @@ import type { TerritorialFeature, TerritorialGroup, TerritorialLayer } from "@/t
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 import type { ComunaFC } from "@/hooks/useComunasGeoIndex";
 import type { IneCommuneStats } from "@/utils/ineScales";
-import type { GseFeatureCollection } from "@/types/gse";
+import type { GseClass, GseFeatureCollection } from "@/types/gse";
+import { GSE_ORDER } from "@/utils/gseScales";
 import {
   computeIsochroneAnalysis,
   listTerritorialPointsInIso,
@@ -26,8 +27,7 @@ import type { NSE } from "@/data/communes";
 import type { GastoEndogenoResult } from "@/utils/gastoEndogeno";
 import type { ParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 
-const NSE_LABELS = ["ABC1", "C2", "C3", "D", "E"] as const;
-const NSE_NUM_TO_LABEL: Record<NSE, (typeof NSE_LABELS)[number]> = {
+const NSE_NUM_TO_LABEL: Record<NSE, GseClass> = {
   5: "ABC1",
   4: "C2",
   3: "C3",
@@ -36,9 +36,20 @@ const NSE_NUM_TO_LABEL: Record<NSE, (typeof NSE_LABELS)[number]> = {
 };
 
 export interface NseShare {
-  label: (typeof NSE_LABELS)[number];
+  label: GseClass;
   pct: number; // 0-100
 }
+
+/**
+ * Origen de la distribución socioeconómica, de mayor a menor precisión:
+ *  - "gse":      manzanas GSE (Censo 2012), ponderado por hogares reales.
+ *                Es la misma fuente que pinta la capa "GSE por manzana".
+ *  - "manzanas": manzanas INE (Censo 2017), ponderado por población.
+ *  - "comuna":   promedio NSE de las comunas cubiertas. Solo estimación:
+ *                asigna una única clase a toda la comuna, por lo que puede
+ *                ocultar por completo la heterogeneidad interna del área.
+ */
+export type NseSource = "gse" | "manzanas" | "comuna";
 
 export interface IsochroneBandReport {
   bandSeconds: number;
@@ -47,6 +58,7 @@ export interface IsochroneBandReport {
   totals: IsochroneAnalysis["totals"];
   communes: CommuneBreakdownRow[];
   nseDistribution: NseShare[];
+  nseSource: NseSource;
   density: DensityBreakdown;
   gse: GseBreakdown | null;
   comparisons: ComparisonRow[];
@@ -81,23 +93,41 @@ export interface IsochroneReport {
   parqueStats?: ParqueIsochroneStats | null;
 }
 
-const computeNseDistribution = (analysis: IsochroneAnalysis): NseShare[] => {
-  // Si hay manzanas con NSE, usamos esa distribución (ponderada por población).
+const computeNseDistribution = (
+  analysis: IsochroneAnalysis,
+): { shares: NseShare[]; source: NseSource } => {
+  // 1. Manzanas GSE (Censo 2012), ponderadas por hogares reales. Es la misma
+  //    fuente que pinta la capa "GSE por manzana", así que el informe y el
+  //    mapa cuentan lo mismo. Incluye C1, que las otras fuentes no distinguen.
+  const gseDist = analysis.gse?.classDistribution;
+  if (gseDist && Object.keys(gseDist).length > 0) {
+    const shares = GSE_ORDER.map((label) => ({
+      label,
+      pct: Math.round(gseDist[label] ?? 0),
+    })).filter((s) => s.pct > 0);
+    if (shares.length > 0) return { shares, source: "gse" };
+  }
+
+  // 2. Manzanas INE (Censo 2017), ponderadas por población.
   if (
     analysis.manzanas &&
     Object.keys(analysis.manzanas.nseDistribution).length > 0
   ) {
     const dist = analysis.manzanas.nseDistribution;
     const total = Object.values(dist).reduce((s, v) => s + (v ?? 0), 0);
-    if (total <= 0) return [];
-    return NSE_LABELS.map((label) => {
-      const numKey = (Object.entries(NSE_NUM_TO_LABEL) as Array<[string, string]>)
-        .find(([, v]) => v === label)?.[0];
-      const v = numKey ? dist[Number(numKey) as NSE] ?? 0 : 0;
-      return { label, pct: Math.round((v / total) * 100) };
-    });
+    if (total > 0) {
+      const shares = (Object.entries(NSE_NUM_TO_LABEL) as Array<[string, GseClass]>)
+        .map(([numKey, label]) => ({
+          label,
+          pct: Math.round(((dist[Number(numKey) as NSE] ?? 0) / total) * 100),
+        }))
+        .sort((a, b) => GSE_ORDER.indexOf(a.label) - GSE_ORDER.indexOf(b.label));
+      return { shares, source: "manzanas" };
+    }
   }
-  // Fallback: distribución comunal ponderada por hogares dentro de la iso.
+
+  // 3. Último recurso: NSE comunal ponderado por hogares dentro de la iso.
+  //    Asigna una sola clase por comuna, así que aplana la realidad del área.
   const counts: Record<string, number> = {};
   let total = 0;
   for (const c of analysis.communes) {
@@ -105,11 +135,14 @@ const computeNseDistribution = (analysis: IsochroneAnalysis): NseShare[] => {
     counts[c.nse] = (counts[c.nse] ?? 0) + c.hhInIso;
     total += c.hhInIso;
   }
-  if (total <= 0) return [];
-  return NSE_LABELS.map((label) => ({
-    label,
-    pct: Math.round(((counts[label] ?? 0) / total) * 100),
-  }));
+  if (total <= 0) return { shares: [], source: "comuna" };
+  return {
+    shares: GSE_ORDER.map((label) => ({
+      label,
+      pct: Math.round(((counts[label] ?? 0) / total) * 100),
+    })).filter((s) => s.pct > 0),
+    source: "comuna",
+  };
 };
 
 const filterCommerceByPolygon = (
@@ -205,13 +238,16 @@ export const buildIsochroneReport = (params: BuildReportParams): IsochroneReport
       countsByCategory.push({ id: cat.id, label: cat.label, count: inside.length });
     }
 
+    const nse = computeNseDistribution(analysis);
+
     return {
       bandSeconds,
       bandMinutes: Math.round(bandSeconds / 60),
       area_km2: analysis.area_km2,
       totals: analysis.totals,
       communes: analysis.communes,
-      nseDistribution: computeNseDistribution(analysis),
+      nseDistribution: nse.shares,
+      nseSource: nse.source,
       density: analysis.density,
       gse: analysis.gse,
       comparisons: analysis.comparisons,
