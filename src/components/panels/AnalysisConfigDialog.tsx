@@ -56,6 +56,8 @@ export const AnalysisConfigDialog = ({
   // Form state — general
   const [isoRm, setIsoRm] = useState(5);
   const [isoReg, setIsoReg] = useState(7);
+  const [smallPopThreshold, setSmallPopThreshold] = useState(0);
+  const [isoSmall, setIsoSmall] = useState(10);
   const [extFolderIds, setExtFolderIds] = useState<string[]>([]);
   const [extLayerIds, setExtLayerIds] = useState<string[]>([]);
   const [useFineCanni, setUseFineCanni] = useState(true);
@@ -64,6 +66,8 @@ export const AnalysisConfigDialog = ({
     if (settings) {
       setIsoRm(settings.iso_minutes_rm);
       setIsoReg(settings.iso_minutes_regions);
+      setSmallPopThreshold(settings.small_commune_pop_threshold ?? 0);
+      setIsoSmall(settings.iso_minutes_small_commune ?? 10);
       setExtFolderIds(settings.external_competition_folder_ids ?? []);
       setExtLayerIds(settings.external_competition_layer_ids ?? []);
       setUseFineCanni(settings.use_fine_cannibalization);
@@ -71,6 +75,8 @@ export const AnalysisConfigDialog = ({
       // valores por defecto cuando es la primera vez
       setIsoRm(5);
       setIsoReg(7);
+      setSmallPopThreshold(0);
+      setIsoSmall(10);
       setExtFolderIds([]);
       setExtLayerIds([]);
       setUseFineCanni(true);
@@ -90,6 +96,8 @@ export const AnalysisConfigDialog = ({
       await save({
         iso_minutes_rm: isoRm,
         iso_minutes_regions: isoReg,
+        small_commune_pop_threshold: smallPopThreshold,
+        iso_minutes_small_commune: isoSmall,
         external_competition_folder_ids: extFolderIds,
         external_competition_layer_ids: extLayerIds,
         use_fine_cannibalization: useFineCanni,
@@ -99,6 +107,8 @@ export const AnalysisConfigDialog = ({
         !settings ||
         settings.iso_minutes_rm !== isoRm ||
         settings.iso_minutes_regions !== isoReg ||
+        (settings.small_commune_pop_threshold ?? 0) !== smallPopThreshold ||
+        (settings.iso_minutes_small_commune ?? 10) !== isoSmall ||
         settings.use_fine_cannibalization !== useFineCanni ||
         JSON.stringify(settings.external_competition_folder_ids) !== JSON.stringify(extFolderIds) ||
         JSON.stringify(settings.external_competition_layer_ids) !== JSON.stringify(extLayerIds);
@@ -189,6 +199,53 @@ export const AnalysisConfigDialog = ({
                       className="mt-1 h-8 text-[12px]"
                     />
                     <div className="mt-1 text-[10px] text-muted-foreground">Default: 7</div>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-lg bg-surface-2/40 p-3">
+                  <div className="text-[10px] font-medium text-foreground">
+                    Comunas pequeñas — isócrona mayor
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                    En comunas de baja población una isócrona corta captura muy poca
+                    gente. Bajo el umbral se usa el tiempo indicado, en vez del de
+                    RM/regiones. Umbral 0 = desactivado.
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Umbral de población (hab.)
+                      </div>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={2_000_000}
+                        step={1000}
+                        value={smallPopThreshold}
+                        onChange={(e) =>
+                          setSmallPopThreshold(
+                            Math.max(0, Math.min(2_000_000, parseInt(e.target.value) || 0)),
+                          )
+                        }
+                        className="mt-1 h-8 text-[12px]"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Isócrona bajo el umbral (min)
+                      </div>
+                      <Input
+                        type="number"
+                        min={3}
+                        max={30}
+                        value={isoSmall}
+                        onChange={(e) =>
+                          setIsoSmall(Math.max(3, Math.min(30, parseInt(e.target.value) || 10)))
+                        }
+                        className="mt-1 h-8 text-[12px]"
+                        disabled={smallPopThreshold <= 0}
+                      />
+                    </div>
                   </div>
                 </div>
               </section>

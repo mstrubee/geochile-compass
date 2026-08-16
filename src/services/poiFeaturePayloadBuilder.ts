@@ -11,6 +11,7 @@ import {
   type CompiledRule,
 } from "@/services/analysisSettingsService";
 import type { AnalysisSettings, ComplementWeightRule } from "@/types/analysis";
+import { isoMinutesForCommune } from "@/data/rmCommunes";
 import type { GseClass, GseFeature } from "@/types/gse";
 import { GSE_INCOME } from "@/data/gseIncome";
 import { resolveCommuneAndRegion } from "@/utils/communeReverseGeocode";
@@ -678,6 +679,9 @@ export interface BuildPayloadOptions {
   /** Configuración para resolver isoMinutes si no viene explícito. */
   isoMinutesRm?: number;
   isoMinutesRegions?: number;
+  /** Comunas con población <= a este umbral usan `isoMinutesSmallCommune`. 0 = off. */
+  smallCommunePopThreshold?: number;
+  isoMinutesSmallCommune?: number;
   precomputedIso?: Polygon | MultiPolygon;
   includeCompetitorIsos?: boolean;
   supabaseUrl: string;
@@ -700,6 +704,8 @@ export const buildFeaturePayload = async (
     zonaFallback = null,
     isoMinutesRm = 5,
     isoMinutesRegions = 7,
+    smallCommunePopThreshold = 0,
+    isoMinutesSmallCommune = 10,
   } = opts;
 
   // 0) Resolver comuna y flag RM si no vinieron explícitos
@@ -714,13 +720,31 @@ export const buildFeaturePayload = async (
     resolved = true;
   }
 
-  // Resolver minutos según RM/regiones si no vinieron
-  const isoMinutes = opts.isoMinutes ?? (isRm ? isoMinutesRm : isoMinutesRegions);
+  // Resolver minutos: RM/regiones, salvo que la comuna caiga bajo el umbral
+  // de población, donde se usa una isócrona mayor.
+  let isoMinutes = opts.isoMinutes ?? (isRm ? isoMinutesRm : isoMinutesRegions);
+  let usedSmallCommuneRule = false;
+  if (opts.isoMinutes == null && smallCommunePopThreshold > 0) {
+    const ineIdx = await loadIneIndex();
+    const communePop = comuna
+      ? ineIdx.byName.get(normalizeCommuneName(comuna))?.poblacion ?? null
+      : null;
+    const r = isoMinutesForCommune(comuna, {
+      rmMinutes: isoMinutesRm,
+      regionsMinutes: isoMinutesRegions,
+      communePop,
+      smallCommunePopThreshold,
+      smallCommuneMinutes: isoMinutesSmallCommune,
+    });
+    isoMinutes = r.minutes;
+    usedSmallCommuneRule = r.usedSmallCommuneRule;
+  }
 
   // Diagnóstico (visible solo en consola; ayuda al admin a verificar)
   if (resolved) {
     console.debug(
-      `[features] poi=${poi.name} resolved: comuna=${comuna ?? "?"}, isRm=${isRm}, iso=${isoMinutes}min`,
+      `[features] poi=${poi.name} resolved: comuna=${comuna ?? "?"}, isRm=${isRm}, ` +
+        `iso=${isoMinutes}min${usedSmallCommuneRule ? " (regla comuna pequeña)" : ""}`,
     );
   }
 

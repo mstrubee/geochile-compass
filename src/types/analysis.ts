@@ -17,6 +17,15 @@ export interface AnalysisSettings {
   folder_id: string;
   iso_minutes_rm: number; // default 5
   iso_minutes_regions: number; // default 7
+  /**
+   * Comunas con población <= a este umbral usan `iso_minutes_small_commune`
+   * en vez del valor RM/regiones. 0 = desactivado.
+   *
+   * En comunas chicas una isócrona corta captura muy poca gente y subestima
+   * el área de influencia real del local.
+   */
+  small_commune_pop_threshold: number; // default 0
+  iso_minutes_small_commune: number; // default 10
   external_competition_folder_ids: string[]; // ids de carpetas POI
   external_competition_layer_ids: string[]; // ids de user_layers
   use_fine_cannibalization: boolean;

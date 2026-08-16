@@ -180,6 +180,8 @@ export const usePoiFeaturesBatch = () => {
             zonaFallback: zonaHint, // fallback "RM1"/"RM2" → RM si reverse falla
             isoMinutesRm: opts.settings.iso_minutes_rm,
             isoMinutesRegions: opts.settings.iso_minutes_regions,
+            smallCommunePopThreshold: opts.settings.small_commune_pop_threshold ?? 0,
+            isoMinutesSmallCommune: opts.settings.iso_minutes_small_commune ?? 10,
             includeCompetitorIsos: opts.settings.use_fine_cannibalization,
             supabaseUrl,
             supabaseAnonKey,

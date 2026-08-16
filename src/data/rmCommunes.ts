@@ -92,20 +92,56 @@ export const isRmCommune = (comuna: string | null | undefined): boolean => {
   return RM_NORMALIZED.has(normalize(comuna));
 };
 
+export interface IsoMinutesOptions {
+  rmMinutes?: number;
+  regionsMinutes?: number;
+  /** Población de la comuna, para evaluar el umbral de comuna pequeña. */
+  communePop?: number | null;
+  /** Comunas con población <= a este valor usan `smallCommuneMinutes`. 0 = off. */
+  smallCommunePopThreshold?: number;
+  smallCommuneMinutes?: number;
+}
+
 /**
  * Tiempo de isócrona en minutos según comuna.
  * Defaults: 5 (RM) / 7 (regiones). Ambos en modo "auto".
  *
- * Permite override desde analysis_settings.iso_minutes_rm/regions.
+ * Permite override desde analysis_settings.iso_minutes_rm/regions, y una regla
+ * adicional por tamaño de comuna: bajo cierto umbral de población conviene una
+ * isócrona mayor, porque una corta captura muy poca gente y subestima el área
+ * de influencia del local.
  */
 export const isoMinutesForCommune = (
   comuna: string | null | undefined,
-  rmMinutes: number = 5,
-  regionsMinutes: number = 7,
-): { minutes: number; isRm: boolean } => {
+  rmMinutesOrOpts: number | IsoMinutesOptions = 5,
+  regionsMinutesArg: number = 7,
+): { minutes: number; isRm: boolean; usedSmallCommuneRule: boolean } => {
+  const opts: IsoMinutesOptions =
+    typeof rmMinutesOrOpts === "number"
+      ? { rmMinutes: rmMinutesOrOpts, regionsMinutes: regionsMinutesArg }
+      : rmMinutesOrOpts;
+
+  const {
+    rmMinutes = 5,
+    regionsMinutes = 7,
+    communePop = null,
+    smallCommunePopThreshold = 0,
+    smallCommuneMinutes = 10,
+  } = opts;
+
   const isRm = isRmCommune(comuna);
+
+  // La regla por tamaño manda sobre RM/regiones: aplica a cualquier comuna
+  // bajo el umbral, esté o no en la RM.
+  const isSmall =
+    smallCommunePopThreshold > 0 &&
+    communePop != null &&
+    communePop > 0 &&
+    communePop <= smallCommunePopThreshold;
+
   return {
-    minutes: isRm ? rmMinutes : regionsMinutes,
+    minutes: isSmall ? smallCommuneMinutes : isRm ? rmMinutes : regionsMinutes,
     isRm,
+    usedSmallCommuneRule: isSmall,
   };
 };
