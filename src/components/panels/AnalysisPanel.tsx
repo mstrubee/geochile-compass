@@ -2,6 +2,8 @@ import { X, Download, FileJson, FileText, Sparkles, RefreshCw, Loader2, ChevronD
 import { GastoEndogenoSection } from "./GastoEndogenoSection";
 import { useCommercialCount } from "@/hooks/useCommercialCount";
 import { computeSalesProjection, type ProjectionResult } from "@/services/salesProjectionService";
+import { fetchMaturationCurve, type MaturationCurve } from "@/services/maturationCurveService";
+import type { ReportProjection } from "@/utils/reportData";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Isochrone } from "@/types/isochrones";
@@ -183,6 +185,8 @@ export const AnalysisPanel = ({
       ...DEFAULT_SECTION_OPEN,
       proyeccion: autoOpenProjection,
     });
+    // La banda elegida es de la isócrona anterior: volver a la primera.
+    setTab(0);
   }, [isochrone?.id, autoOpenProjection]);
 
   // Proyección de potencial de venta
@@ -191,10 +195,14 @@ export const AnalysisPanel = ({
   // Informe completo para exportar PDF (sin consultas de comercio — solo geodata)
   const { report: fullReport } = useIsochroneReport({
     isochrone,
+    isoName: isochroneName,
     manzanas,
     parqueStats: parqueForProjection,
   });
   const [projResult,  setProjResult]  = useState<ProjectionResult | null>(null);
+  // Snapshot de la proyección tal como quedó en pantalla (con ajustes), para
+  // que el PDF diga exactamente lo mismo que la sección.
+  const [projForReport, setProjForReport] = useState<ReportProjection | null>(null);
   const [projLoading, setProjLoading] = useState(false);
   const [projError,   setProjError]   = useState<string | null>(null);
 
@@ -202,6 +210,7 @@ export const AnalysisPanel = ({
   useEffect(() => {
     setProjResult(null);
     setProjError(null);
+    setProjForReport(null);
   }, [isochrone?.id]);
 
   const runProjection = useCallback(async () => {
@@ -481,7 +490,8 @@ export const AnalysisPanel = ({
                   error={projError}
                   canRun={!!analysis}
                   onRun={runProjection}
-                  onReset={() => { setProjResult(null); setProjError(null); }}
+                  onReset={() => { setProjResult(null); setProjError(null); setProjForReport(null); }}
+                  onSnapshot={setProjForReport}
                 />
               </Section>
             )}
@@ -707,7 +717,7 @@ export const AnalysisPanel = ({
               <button
                 onClick={() => {
                   if (!fullReport) return;
-                  exportReportToPdf(fullReport);
+                  exportReportToPdf({ ...fullReport, projection: projForReport });
                 }}
                 disabled={!fullReport}
                 className="mt-1.5 w-full rounded-lg bg-blue-600/10 px-2 py-2 text-[11px] font-medium text-blue-400 transition-colors hover:bg-blue-600/20 disabled:opacity-40"
@@ -845,11 +855,38 @@ interface ProjectionSectionProps {
   canRun:           boolean;
   onRun:            () => void;
   onReset:          () => void;
+  /** Publica la proyección visible (con ajustes) para incluirla en el PDF. */
+  onSnapshot?:      (p: ReportProjection | null) => void;
 }
+
+/** Filas de la proyección: crecimiento compuesto año a año, editable por año. */
+const buildProjRows = (
+  result: ProjectionResult,
+  curve: MaturationCurve | null,
+  overrides: (number | null)[],
+): Array<{ year: number; uf: number; clp: number; ratePct: number; isBase: boolean; isCurrent: boolean }> => {
+  const ufToClp = result.estimatedUf > 0 ? result.estimatedClp / result.estimatedUf : 0;
+  const horizon = Math.max(0, result.fiveYearProjection.length - 1);
+  const rows: Array<{ year: number; uf: number; clp: number; ratePct: number; isBase: boolean; isCurrent: boolean }> = [];
+  for (let i = 0; i <= horizon; i++) {
+    const fallback = i <= 0
+      ? 0
+      : Math.round((curve?.rates[i - 1] ?? result.growthRate) * 1000) / 10;
+    const ratePct = overrides[i] ?? fallback;
+    const uf = i === 0 ? result.estimatedUf : rows[i - 1].uf * (1 + ratePct / 100);
+    const year = result.baseYear + i;
+    rows.push({
+      year, uf, clp: uf * ufToClp, ratePct,
+      isBase: i === 0,
+      isCurrent: year === result.currentYear,
+    });
+  }
+  return rows;
+};
 
 const ProjectionSection = ({
   folders, selectedFolderId, onFolderChange,
-  result, loading, error, canRun, onRun, onReset,
+  result, loading, error, canRun, onRun, onReset, onSnapshot,
 }: ProjectionSectionProps) => {
   // Ajuste manual sobre la estimación (castigo o premio, en %).
   //
@@ -858,11 +895,54 @@ const ProjectionSection = ({
   // particular—. Se aplica solo al mostrar: `result` queda intacto, así que
   // "volver al original" es exacto y siempre se puede contrastar.
   const [adjustPct, setAdjustPct] = useState(0);
-  // Crecimiento anual. null = el del resultado (DEFAULT_GROWTH_RATE).
-  const [growthPct, setGrowthPct] = useState<number | null>(null);
+  // Crecimiento por año. null en una posición = usar el de la curva.
+  const [rateOverrides, setRateOverrides] = useState<(number | null)[]>([]);
+  const [curve, setCurve] = useState<MaturationCurve | null>(null);
 
   // Una proyección nueva parte sin ajustes: arrastrarlos sería engañoso.
-  useEffect(() => { setAdjustPct(0); setGrowthPct(null); }, [result]);
+  useEffect(() => { setAdjustPct(0); setRateOverrides([]); }, [result]);
+
+  // Publica lo que se ve (con ajuste manual y tasas editadas) para el PDF.
+  useEffect(() => {
+    if (!onSnapshot) return;
+    if (!result) { onSnapshot(null); return; }
+    const rows = buildProjRows(result, curve, rateOverrides);
+    const f = 1 + adjustPct / 100;
+    onSnapshot({
+      folderName: folders.find((x) => x.id === selectedFolderId)?.name ?? result.folderName,
+      baseYear: result.baseYear,
+      displayYear: (rows.find((r) => r.isCurrent) ?? rows[0])?.year ?? result.baseYear,
+      estimatedUf: result.estimatedUf * f,
+      estimatedClp: result.estimatedClp * f,
+      lowUf: result.lowUf * f,
+      highUf: result.highUf * f,
+      adjustPct,
+      usesMaturationCurve: !!curve && !curve.isFallback,
+      maturationSampleSize: curve?.sampleSize ?? 0,
+      nWithSales: result.nWithSales,
+      nWithPredicted: result.nWithPredicted,
+      usedPredictions: result.usedPredictions,
+      diagnosticMsg: result.diagnosticMsg,
+      years: rows.map((r) => ({
+        year: r.year, uf: r.uf * f, clp: r.clp * f,
+        ratePct: r.ratePct, isBase: r.isBase, isCurrent: r.isCurrent,
+      })),
+      comparables: result.comparables.map((c) => ({
+        name: c.name, ufPerMonth: c.ufPerMonth, isActual: c.isActual, weight: c.weight,
+      })),
+    });
+  }, [result, adjustPct, rateOverrides, curve, folders, selectedFolderId, onSnapshot]);
+
+  // Curva de maduración de la red: el 3% es la tasa en régimen, pero un local
+  // recién abierto crece mucho más rápido los primeros años.
+  useEffect(() => {
+    if (!selectedFolderId) { setCurve(null); return; }
+    let cancelled = false;
+    void fetchMaturationCurve(selectedFolderId).then((c) => {
+      if (!cancelled) setCurve(c);
+    });
+    return () => { cancelled = true; };
+  }, [selectedFolderId]);
 
   if (loading) {
     return (
@@ -950,24 +1030,14 @@ const ProjectionSection = ({
   // Resultado
   const selectedFolderName = folders.find(f => f.id === selectedFolderId)?.name ?? result.folderName;
 
-  // La curva se recalcula acá para que cambiar el crecimiento sea inmediato,
-  // sin volver a consultar comparables: solo cambia el factor por año.
-  const baseGrowthPct = Math.round(result.growthRate * 1000) / 10;
-  const effGrowthPct  = growthPct ?? baseGrowthPct;
-  const growthChanged = effGrowthPct !== baseGrowthPct;
-  const ufToClp = result.estimatedUf > 0 ? result.estimatedClp / result.estimatedUf : 0;
-  const horizon = Math.max(0, result.fiveYearProjection.length - 1);
-  const projRows = Array.from({ length: horizon + 1 }, (_, i) => {
-    const year = result.baseYear + i;
-    const uf   = result.estimatedUf * Math.pow(1 + effGrowthPct / 100, i);
-    return {
-      year,
-      uf,
-      clp: uf * ufToClp,
-      isBase: i === 0,
-      isCurrent: year === result.currentYear,
-    };
-  });
+  // La curva se recalcula acá para que editar una tasa sea inmediato, sin
+  // volver a consultar comparables. El crecimiento NO es plano: un local nuevo
+  // madura rápido los primeros años y recién después entra en régimen.
+  const steadyPct = Math.round(result.growthRate * 1000) / 10;
+  const ratesChanged = rateOverrides.some((r) => r != null);
+  // Mismo helper que alimenta el snapshot del PDF: si divergieran, el informe
+  // diría algo distinto de lo que el usuario tiene en pantalla.
+  const projRows = buildProjRows(result, curve, rateOverrides);
 
   const currentYearProj = projRows.find((y) => y.isCurrent);
   const baseProj        = projRows.find((y) => y.isBase);
@@ -1062,50 +1132,6 @@ const ProjectionSection = ({
           superficie). No altera el cálculo: es un criterio propio y queda declarado
           como tal.
         </p>
-
-        {/* Crecimiento anual */}
-        <div className="mt-3 border-t border-border/30 pt-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Crecimiento anual
-            </span>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min={-20}
-                max={50}
-                step={0.5}
-                value={effGrowthPct}
-                onChange={(e) => {
-                  const n = parseFloat(e.target.value);
-                  setGrowthPct(Number.isFinite(n) ? Math.max(-20, Math.min(50, n)) : baseGrowthPct);
-                }}
-                className="h-7 w-16 rounded-md border border-border/50 bg-surface-3 px-1.5 text-right text-[11px] font-mono"
-              />
-              <span className="text-[11px] text-muted-foreground">%</span>
-              <button
-                onClick={() => setGrowthPct(null)}
-                disabled={!growthChanged}
-                className="rounded-md px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground disabled:opacity-40"
-                title={`Volver al ${baseGrowthPct}% original`}
-              >
-                ↺ Reset
-              </button>
-            </div>
-          </div>
-          <input
-            type="range"
-            min={-20}
-            max={50}
-            step={0.5}
-            value={effGrowthPct}
-            onChange={(e) => setGrowthPct(parseFloat(e.target.value))}
-            className="mt-2 w-full accent-green-500"
-          />
-          <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">
-            Tasa aplicada año a año desde el año base. Por defecto {baseGrowthPct}%.
-          </p>
-        </div>
       </div>
 
       {/* Proyección 5 años */}
@@ -1123,10 +1149,14 @@ const ProjectionSection = ({
             <span
               className={[
                 "ml-1 normal-case text-[9px]",
-                growthChanged ? "text-brand-orange" : "",
+                ratesChanged ? "text-brand-orange" : "",
               ].join(" ")}
             >
-              ({effGrowthPct}% anual{growthChanged ? ", ajustado" : ""})
+              ({ratesChanged
+                ? "crecimiento ajustado"
+                : curve && !curve.isFallback
+                  ? `curva de maduración · ${curve.sampleSize} locales`
+                  : `${steadyPct}% anual`})
             </span>
           </div>
           <div className="overflow-hidden rounded-lg border border-white/8">
@@ -1134,6 +1164,17 @@ const ProjectionSection = ({
               <thead>
                 <tr className="bg-surface-2/60">
                   <th className="py-1 px-2 text-left text-[10px] text-muted-foreground font-medium">Año</th>
+                  <th className="py-1 px-2 text-right text-[10px] text-muted-foreground font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      Crec.
+                      <button
+                        onClick={() => setRateOverrides([])}
+                        disabled={!ratesChanged}
+                        title="Volver a la curva original"
+                        className="text-[9px] text-muted-foreground hover:text-foreground disabled:opacity-30"
+                      >↺</button>
+                    </span>
+                  </th>
                   <th className="py-1 px-2 text-right text-[10px] text-muted-foreground font-medium">UF/mes</th>
                   <th className="py-1 px-2 text-right text-[10px] text-muted-foreground font-medium">CLP/mes</th>
                 </tr>
@@ -1150,6 +1191,31 @@ const ProjectionSection = ({
                       {yr.year}
                       {yr.isCurrent && <span className="text-[8px] text-green-400 bg-green-400/15 rounded px-1">hoy</span>}
                       {yr.isBase && !yr.isCurrent && <span className="text-[8px] text-muted-foreground bg-surface-2/60 rounded px-1">base</span>}
+                    </td>
+                    <td className="py-1 px-2 text-right">
+                      {yr.isBase ? (
+                        <span className="text-[10px] text-muted-foreground">—</span>
+                      ) : (
+                        <input
+                          type="number"
+                          min={-50}
+                          max={200}
+                          step={0.5}
+                          value={yr.ratePct}
+                          onChange={(e) => {
+                            const n = parseFloat(e.target.value);
+                            setRateOverrides((prev) => {
+                              const next = [...prev];
+                              next[i] = Number.isFinite(n) ? Math.max(-50, Math.min(200, n)) : null;
+                              return next;
+                            });
+                          }}
+                          className={[
+                            "h-6 w-14 rounded border border-border/40 bg-surface-3 px-1 text-right text-[10px] font-mono",
+                            rateOverrides[i] != null ? "text-brand-orange" : "text-muted-foreground",
+                          ].join(" ")}
+                        />
+                      )}
                     </td>
                     <td className={["py-1 px-2 text-right tabular-nums font-mono", yr.isCurrent ? "text-green-400" : "text-foreground"].join(" ")}>
                       {fmtUF(adj(yr.uf))}

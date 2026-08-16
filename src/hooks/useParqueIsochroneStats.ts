@@ -46,10 +46,10 @@ export function useParqueIsochroneStats(
   }, [isoFeature]);
 
   useEffect(() => {
-    if (!active || !isoFeature) {
-      setStats(null);
-      return;
-    }
+    // Limpiar SIEMPRE: al cambiar de isócrona, las cifras de parque de la
+    // anterior quedaban visibles hasta que resolvía el nuevo cálculo.
+    setStats(null);
+    if (!active || !isoFeature) return;
     const myReq = ++reqId.current;
     setLoading(true);
 

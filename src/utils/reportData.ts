@@ -91,6 +91,32 @@ export interface IsochroneReport {
   gastoEndogeno?: GastoEndogenoResult | null;
   /** Estadísticas del parque automotor en la isócrona (opcional). */
   parqueStats?: ParqueIsochroneStats | null;
+  /** Proyección de venta tal como quedó en pantalla, con sus ajustes. */
+  projection?: ReportProjection | null;
+}
+
+/**
+ * Proyección de venta para el informe. Refleja lo que el usuario tiene en
+ * pantalla —incluidos el ajuste manual y las tasas por año que haya tocado—,
+ * no un recálculo: el PDF debe decir lo mismo que la sección.
+ */
+export interface ReportProjection {
+  folderName: string;
+  baseYear: number;
+  displayYear: number;
+  estimatedUf: number;
+  estimatedClp: number;
+  lowUf: number;
+  highUf: number;
+  adjustPct: number;
+  usesMaturationCurve: boolean;
+  maturationSampleSize: number;
+  nWithSales: number;
+  nWithPredicted: number;
+  usedPredictions: boolean;
+  diagnosticMsg: string | null;
+  years: Array<{ year: number; uf: number; clp: number; ratePct: number; isBase: boolean; isCurrent: boolean }>;
+  comparables: Array<{ name: string; ufPerMonth: number; isActual: boolean; weight: number }>;
 }
 
 const computeNseDistribution = (

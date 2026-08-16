@@ -72,10 +72,12 @@ export const useIsochroneAnalysis = ({
   const [gse, setGse] = useState<GseFeatureCollection | null>(null);
 
   useEffect(() => {
-    if (!isoBbox) {
-      setGse(null);
-      return;
-    }
+    // Limpiar SIEMPRE, no solo cuando no hay bbox: al cambiar de isócrona el
+    // GSE de la anterior seguía en estado hasta que llegaba el nuevo fetch, y
+    // el análisis se recalculaba de inmediato con el polígono nuevo y las
+    // manzanas viejas. De ahí el parpadeo con cifras que luego se corregían.
+    setGse(null);
+    if (!isoBbox) return;
     let cancelled = false;
     gseService
       .fetchGse({

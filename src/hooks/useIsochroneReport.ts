@@ -99,10 +99,11 @@ export const useIsochroneReport = ({
    */
   const [gseForIso, setGseForIso] = useState<GseFeatureCollection | null>(null);
   useEffect(() => {
-    if (!outerBboxPadded) {
-      setGseForIso(null);
-      return;
-    }
+    // Limpiar SIEMPRE: si no, al cambiar de isócrona el informe se rearmaba
+    // con las manzanas de la anterior, y un PDF exportado en esa ventana salía
+    // con los datos del área equivocada.
+    setGseForIso(null);
+    if (!outerBboxPadded) return;
     let cancelled = false;
     gseService
       // maxFeatures alto: acá no se renderiza, y truncar subestimaría la

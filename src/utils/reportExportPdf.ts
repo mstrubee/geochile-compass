@@ -667,6 +667,130 @@ const addBandPage = (
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PROYECCIÓN DE VENTA
+// ─────────────────────────────────────────────────────────────────────────────
+
+const addProjectionPage = (
+  doc: jsPDF,
+  report: IsochroneReport,
+  totalPages: number,
+): void => {
+  const p = report.projection;
+  if (!p || p.years.length === 0) return;
+
+  doc.addPage();
+  addPageHeader(doc, report, report.iso.minutes[report.iso.minutes.length - 1]);
+
+  let y = BODY_TOP;
+  y = sectionTitle(doc, `Proyección de potencial de venta · ${p.folderName}`, y);
+
+  const display = p.years.find((r) => r.isCurrent) ?? p.years.find((r) => r.isBase);
+
+  // KPI
+  doc.setFillColor(...C.slate100);
+  doc.roundedRect(ML, y, PW - ML * 2, 20, 2, 2, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(...C.emerald);
+  doc.text(`${fmt(display?.uf ?? p.estimatedUf)} UF/mes`, ML + 4, y + 9);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(...C.slate600);
+  doc.text(`${fmtCLP(display?.clp ?? p.estimatedClp)}/mes`, ML + 4, y + 15);
+  doc.setFontSize(8);
+  doc.setTextColor(...C.slate400);
+  doc.text(
+    `Potencial estimado ${p.displayYear} · rango ${fmt(p.lowUf)}–${fmt(p.highUf)} UF (p25–p75 de comparables)`,
+    PW - ML - 2, y + 9, { align: "right" },
+  );
+  if (p.adjustPct !== 0) {
+    doc.setTextColor(...C.amber);
+    doc.text(
+      `Ajuste manual aplicado: ${p.adjustPct > 0 ? "+" : ""}${p.adjustPct}%`,
+      PW - ML - 2, y + 15, { align: "right" },
+    );
+  }
+  y += 26;
+
+  // Curva año a año
+  autoTable(doc, {
+    ...tableTheme,
+    startY: y,
+    head: [["Año", "Crecimiento", "UF/mes", "CLP/mes"]],
+    body: p.years.map((r) => [
+      `${r.year}${r.isBase ? " (base)" : r.isCurrent ? " (en curso)" : ""}`,
+      r.isBase ? "—" : `${r.ratePct > 0 ? "+" : ""}${r.ratePct}%`,
+      fmt(r.uf),
+      fmtCLP(r.clp),
+    ]),
+    columnStyles: {
+      1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" },
+    },
+    tableWidth: PW - ML * 2,
+    didDrawPage: (data) => {
+      addPageHeader(doc, report, report.iso.minutes[report.iso.minutes.length - 1]);
+      addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
+      if (data.cursor) data.cursor.y = Math.max(data.cursor.y, BODY_TOP);
+    },
+  });
+  y = (lastY(doc) || y) + 6;
+
+  // Metodología: de dónde salen las tasas y sobre qué base.
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...C.slate400);
+  const notas = [
+    p.usesMaturationCurve
+      ? `Crecimiento por año de vida derivado de ${p.maturationSampleSize} locales de la red con apertura observada; ` +
+        "un local nuevo madura rápido los primeros años y solo después entra en régimen."
+      : "Crecimiento en régimen aplicado año a año (sin curva de maduración derivada de la red).",
+    `Base: media ponderada de ${p.comparables.length} locales comparables ` +
+      `(${p.nWithSales} con ventas reales, ${p.nWithPredicted} con predicción del modelo).`,
+    p.adjustPct !== 0
+      ? `El ajuste manual de ${p.adjustPct > 0 ? "+" : ""}${p.adjustPct}% es un criterio del analista, no una salida del modelo.`
+      : null,
+    p.diagnosticMsg,
+  ].filter(Boolean) as string[];
+  for (const n of notas) {
+    const lines = doc.splitTextToSize(n, PW - ML * 2) as string[];
+    doc.text(lines, ML, y);
+    y += lines.length * 3.6 + 2;
+  }
+  y += 4;
+
+  // Comparables usados
+  if (p.comparables.length > 0) {
+    if (y > PH - 60) {
+      doc.addPage();
+      addPageHeader(doc, report, report.iso.minutes[report.iso.minutes.length - 1]);
+      addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
+      y = BODY_TOP;
+    }
+    y = sectionTitle(doc, "Locales comparables", y);
+    autoTable(doc, {
+      ...tableTheme,
+      startY: y,
+      head: [["Local", "UF/mes", "Fuente", "Peso"]],
+      body: p.comparables.map((c) => [
+        c.name,
+        fmt(c.ufPerMonth),
+        c.isActual ? "Venta real" : "Predicción",
+        `${Math.round(c.weight * 100)}%`,
+      ]),
+      columnStyles: { 1: { halign: "right" }, 3: { halign: "right" } },
+      tableWidth: PW - ML * 2,
+      didDrawPage: (data) => {
+        addPageHeader(doc, report, report.iso.minutes[report.iso.minutes.length - 1]);
+        addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
+        if (data.cursor) data.cursor.y = Math.max(data.cursor.y, BODY_TOP);
+      },
+    });
+  }
+
+  addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // VISTA TERRITORIAL (fotos del mapa: isócrona sola, GSE, gasto endógeno)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -736,8 +860,9 @@ export const exportReportToPdf = (
     mapImages &&
     (mapImages.isoOnly || mapImages.gse || mapImages.gasto || mapImages.atractores)
   );
+  const hasProjection = !!(report.projection && report.projection.years.length > 0);
   const estimatedPages =
-    1 + report.bands.length + (hasMapPhotos ? 1 : 0) + (hasEconomic ? 1 : 0);
+    1 + report.bands.length + (hasMapPhotos ? 1 : 0) + (hasProjection ? 1 : 0) + (hasEconomic ? 1 : 0);
 
   // Portada
   addCoverPage(doc, report);
@@ -750,6 +875,9 @@ export const exportReportToPdf = (
 
   // Vista territorial (fotos del mapa)
   if (hasMapPhotos) addMapPhotosPage(doc, report, mapImages!, estimatedPages);
+
+  // Proyección de potencial de venta
+  if (hasProjection) addProjectionPage(doc, report, estimatedPages);
 
   // Análisis económico (gasto endógeno + parque vehicular) — última página
   addEconomicPage(doc, report, estimatedPages);
