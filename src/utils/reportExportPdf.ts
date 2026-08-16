@@ -713,7 +713,7 @@ const addProjectionPage = (
   if (p.adjustPct !== 0) {
     doc.setTextColor(...C.amber);
     doc.text(
-      `Ajuste manual aplicado: ${p.adjustPct > 0 ? "+" : ""}${p.adjustPct}%`,
+      `${p.isExpress ? "Ajuste EXPRESS" : "Ajuste manual"}: ${p.adjustPct > 0 ? "+" : ""}${p.adjustPct}%`,
       PW - ML - 2, y + 15, { align: "right" },
     );
   }
@@ -762,7 +762,9 @@ const addProjectionPage = (
     `Base: media ponderada de ${p.comparables.length} locales comparables ` +
       `(${p.nWithSales} con ventas reales, ${p.nWithPredicted} con predicción del modelo).`,
     p.adjustPct !== 0
-      ? `El ajuste manual de ${p.adjustPct > 0 ? "+" : ""}${p.adjustPct}% es un criterio del analista, no una salida del modelo.`
+      ? p.isExpress
+        ? `Incluye el ajuste EXPRESS de ${p.adjustPct}%: el formato vende menos que un local estándar y la superficie aún no es una variable del modelo.`
+        : `El ajuste manual de ${p.adjustPct > 0 ? "+" : ""}${p.adjustPct}% es un criterio del analista, no una salida del modelo.`
       : null,
     p.diagnosticMsg,
   ].filter(Boolean) as string[];

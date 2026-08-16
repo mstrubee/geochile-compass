@@ -108,6 +108,8 @@ export interface ReportProjection {
   lowUf: number;
   highUf: number;
   adjustPct: number;
+  /** El ajuste corresponde al formato Express, no a un criterio puntual. */
+  isExpress: boolean;
   usesMaturationCurve: boolean;
   /** true si la curva la fijó el admin en vez de derivarse. */
   maturationIsCustom: boolean;

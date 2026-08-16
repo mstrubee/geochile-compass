@@ -41,6 +41,9 @@ interface AnalysisPanelProps {
   onCaptureMapImages?: (iso: Isochrone) => Promise<MapCaptureImages | null>;
 }
 
+/** Castigo del formato Express: vende menos que un local estándar. */
+const EXPRESS_ADJUST_PCT = -20;
+
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
 const fmtCLP = (n: number) => `$${fmt(n)}`;
 
@@ -241,7 +244,6 @@ export const AnalysisPanel = ({
     setProjResult((projectionSettings?.result as ProjectionResult | null) ?? null);
     setProjAdjust(projectionSettings ?? null);
     setProjError(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isochrone?.id, projectionSettings]);
 
   /**
@@ -255,6 +257,7 @@ export const AnalysisPanel = ({
     if (!projResult) return null;
     const adjustPct = projAdjust?.adjustPct ?? 0;
     const rampEnabled = projAdjust?.rampEnabled ?? true;
+    const isExpress = projAdjust?.isExpress ?? false;
     const rows = buildProjRows(
       projResult,
       curve,
@@ -272,6 +275,7 @@ export const AnalysisPanel = ({
       lowUf: projResult.lowUf * f,
       highUf: projResult.highUf * f,
       adjustPct,
+      isExpress,
       usesMaturationCurve: !!curve && !curve.isFallback,
       maturationIsCustom: !!curve?.isCustom,
       maturationSampleSize: curve?.sampleSize ?? 0,
@@ -300,6 +304,7 @@ export const AnalysisPanel = ({
         adjustPct: adjust?.adjustPct ?? 0,
         rateOverrides: adjust?.rateOverrides ?? [],
         rampEnabled: adjust?.rampEnabled ?? true,
+        isExpress: adjust?.isExpress ?? false,
         result: res,
         computedAt: res ? new Date().toISOString() : null,
       });
@@ -1045,6 +1050,7 @@ const ProjectionSection = ({
   const [rateOverrides, setRateOverrides] = useState<(number | null)[]>([]);
   // Por defecto se proyecta una ubicación NUEVA, que parte en rampa.
   const [rampEnabled, setRampEnabled] = useState(true);
+  const [isExpress, setIsExpress] = useState(false);
   // Último valor persistido, para no reescribir lo que acabamos de restaurar.
   const lastSavedKey = useRef<string | null>(null);
 
@@ -1053,6 +1059,7 @@ const ProjectionSection = ({
     setAdjustPct(savedSettings?.adjustPct ?? 0);
     setRateOverrides(savedSettings?.rateOverrides ?? []);
     setRampEnabled(savedSettings?.rampEnabled ?? true);
+    setIsExpress(savedSettings?.isExpress ?? false);
     // El centinela se reinicia ACÁ y no en un efecto aparte: uno posterior
     // volvía a anularlo después del efecto de guardado, y el primer cambio del
     // usuario se perdía siempre.
@@ -1063,15 +1070,15 @@ const ProjectionSection = ({
   }, [result]);
 
   // Recuerda los ajustes de esta ubicación.
-  const settingsKey = JSON.stringify({ adjustPct, rateOverrides, rampEnabled });
+  const settingsKey = JSON.stringify({ adjustPct, rateOverrides, rampEnabled, isExpress });
   useEffect(() => {
     if (!onSettingsChange || !result) return;
     // El primer valor tras restaurar es el ya guardado: no reescribirlo.
     if (lastSavedKey.current === null) { lastSavedKey.current = settingsKey; return; }
     if (lastSavedKey.current === settingsKey) return;
     lastSavedKey.current = settingsKey;
-    onSettingsChange({ adjustPct, rateOverrides, rampEnabled });
-  }, [settingsKey, adjustPct, rateOverrides, rampEnabled, result, onSettingsChange]);
+    onSettingsChange({ adjustPct, rateOverrides, rampEnabled, isExpress });
+  }, [settingsKey, adjustPct, rateOverrides, rampEnabled, isExpress, result, onSettingsChange]);
 
   if (loading) {
     return (
@@ -1241,18 +1248,41 @@ const ProjectionSection = ({
 
       {/* Ajustes del analista */}
       <div className="rounded-lg bg-surface-2/40 p-2.5">
-        {(adjusted || ratesChanged || !rampEnabled) && (
+        {(adjusted || ratesChanged || !rampEnabled || isExpress) && (
           <button
-            onClick={() => { setAdjustPct(0); setRateOverrides([]); setRampEnabled(true); }}
+            onClick={() => { setAdjustPct(0); setRateOverrides([]); setRampEnabled(true); setIsExpress(false); }}
             className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-brand-orange/40 bg-brand-orange/10 py-1.5 text-[10px] font-medium text-brand-orange transition-colors hover:bg-brand-orange/20"
             title="Descarta todos los ajustes y vuelve al cálculo programado"
           >
             ↺ Volver al cálculo original
           </button>
         )}
+        {/*
+          El formato Express vende menos que un local estándar. La superficie
+          todavía no es una variable del modelo, así que se corrige por fuera
+          con un valor fijo en vez de sumarse al ajuste que hubiera.
+        */}
+        <button
+          onClick={() => {
+            const next = !isExpress;
+            setIsExpress(next);
+            setAdjustPct(next ? EXPRESS_ADJUST_PCT : 0);
+          }}
+          className={[
+            "mb-2 flex w-full items-center justify-center gap-1.5 rounded-md border py-1.5 text-[10px] font-medium transition-colors",
+            isExpress
+              ? "border-brand-orange bg-brand-orange/20 text-brand-orange"
+              : "border-border/50 text-muted-foreground hover:bg-surface-3 hover:text-foreground",
+          ].join(" ")}
+          title={`Fija el ajuste en ${EXPRESS_ADJUST_PCT}%`}
+        >
+          <Store className="h-3 w-3" />
+          {isExpress ? `Local Express · ${EXPRESS_ADJUST_PCT}% aplicado` : "Marcar como local Express"}
+        </button>
+
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Ajuste manual
+            {isExpress ? "Ajuste Express" : "Ajuste manual"}
           </span>
           <div className="flex items-center gap-1.5">
             <input

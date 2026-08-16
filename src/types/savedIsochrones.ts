@@ -25,6 +25,12 @@ export interface ProjectionSettings {
   /** false = la ubicación ya está en régimen (traslado, no apertura). */
   rampEnabled: boolean;
   /**
+   * Local de formato Express. Fija el ajuste en -20%: el formato vende menos
+   * que uno estándar y la superficie todavía no es una variable del modelo,
+   * así que se corrige por fuera hasta que lo sea.
+   */
+  isExpress?: boolean;
+  /**
    * Resultado de la proyección ya corrida. Se guarda para no obligar a
    * recalcular al reabrir la isócrona: correr el predictor consulta toda la
    * red y sus features, y el resultado no cambia salvo que cambien esos datos.

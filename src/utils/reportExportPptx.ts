@@ -328,7 +328,10 @@ const addProjectionSlide = (
       ? ([["Venta al abrir", `${fmt(apertura.uf)} UF/mes (${Math.round(apertura.maturityPct)}% del régimen)`]] as Array<[string, string]>)
       : []),
     ["Maduración", proj.rampEnabled ? "Ubicación nueva, parte en rampa" : "Ubicación ya en régimen"],
-    ["Ajuste manual del analista", proj.adjustPct !== 0 ? `${proj.adjustPct > 0 ? "+" : ""}${proj.adjustPct}%` : "Sin ajuste"],
+    [
+      proj.isExpress ? "Ajuste EXPRESS" : "Ajuste manual del analista",
+      proj.adjustPct !== 0 ? `${proj.adjustPct > 0 ? "+" : ""}${proj.adjustPct}%` : "Sin ajuste",
+    ],
     ["Base de cálculo", `${proj.comparables.length} locales comparables`],
   ];
   addTableBand(slide, "SUPUESTOS", COL_R_X, ry);
@@ -371,7 +374,9 @@ const addProjectionSlide = (
       ? "El potencial estimado corresponde al nivel en régimen. Un local recién abierto no rinde eso desde el primer día: la curva parte en la fracción medida en la red y sube hasta el 100%."
       : "Se asume la ubicación ya en régimen desde el primer año.",
     proj.adjustPct !== 0
-      ? `Incluye un ajuste manual de ${proj.adjustPct > 0 ? "+" : ""}${proj.adjustPct}% aplicado por el analista, no derivado del modelo.`
+      ? proj.isExpress
+        ? `Incluye el ajuste EXPRESS de ${proj.adjustPct}%: el formato vende menos que un local estándar y la superficie aún no es una variable del modelo.`
+        : `Incluye un ajuste manual de ${proj.adjustPct > 0 ? "+" : ""}${proj.adjustPct}% aplicado por el analista, no derivado del modelo.`
       : null,
     "Estimación referencial construida por comparación con locales de la red; no reemplaza un estudio de terreno.",
   ].filter(Boolean) as string[];
