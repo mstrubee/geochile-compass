@@ -3,6 +3,7 @@ import { GastoEndogenoSection } from "./GastoEndogenoSection";
 import { useCommercialCount } from "@/hooks/useCommercialCount";
 import { computeSalesProjection, type ProjectionResult } from "@/services/salesProjectionService";
 import { fetchMaturationCurve, type MaturationCurve } from "@/services/maturationCurveService";
+import { DEFAULT_EXPRESS_ADJUST_PCT, fetchExpressAdjustPct } from "@/services/commercialSettingsService";
 import type { ReportProjection } from "@/utils/reportData";
 import type { ProjectionSettings } from "@/types/savedIsochrones";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -49,9 +50,6 @@ interface AnalysisPanelProps {
     heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
   ) => Promise<string | null>;
 }
-
-/** Castigo del formato Express: vende menos que un local estándar. */
-const EXPRESS_ADJUST_PCT = -20;
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
 const fmtCLP = (n: number) => `$${fmt(n)}`;
@@ -238,6 +236,17 @@ export const AnalysisPanel = ({
     let cancelled = false;
     void fetchMaturationCurve(projectionFolderId).then((c) => {
       if (!cancelled) setCurve(c);
+    });
+    return () => { cancelled = true; };
+  }, [projectionFolderId]);
+  // El castigo del formato Express es una definición comercial del admin, no
+  // un resultado del modelo, así que se lee de la configuración de la carpeta.
+  const [expressPct, setExpressPct] = useState(DEFAULT_EXPRESS_ADJUST_PCT);
+  useEffect(() => {
+    if (!projectionFolderId) { setExpressPct(DEFAULT_EXPRESS_ADJUST_PCT); return; }
+    let cancelled = false;
+    void fetchExpressAdjustPct(projectionFolderId).then((p) => {
+      if (!cancelled) setExpressPct(p);
     });
     return () => { cancelled = true; };
   }, [projectionFolderId]);
@@ -604,6 +613,7 @@ export const AnalysisPanel = ({
                   onRun={runProjection}
                   onReset={() => { setProjResult(null); setProjError(null); }}
                   curve={curve}
+                  expressPct={expressPct}
                   savedSettings={projectionSettings}
                   onSettingsChange={(s) => { setProjAdjust(s); persistProjection(s, projResult); }}
                   onRerun={runProjection}
@@ -1017,6 +1027,8 @@ interface ProjectionSectionProps {
   onReset:          () => void;
   /** Curva de maduración vigente para la carpeta. */
   curve?:           MaturationCurve | null;
+  /** Ajuste que fija el botón Express, definido por el admin en la carpeta. */
+  expressPct?:      number;
   savedSettings?:   ProjectionSettings | null;
   onSettingsChange?: (s: ProjectionSettings) => void;
   /** Vuelve a correr el predictor descartando el resultado guardado. */
@@ -1074,6 +1086,7 @@ const buildProjRows = (
 const ProjectionSection = ({
   folders, selectedFolderId, onFolderChange,
   result, loading, error, canRun, onRun, onReset, curve = null,
+  expressPct = DEFAULT_EXPRESS_ADJUST_PCT,
   savedSettings, onSettingsChange, onRerun,
 }: ProjectionSectionProps) => {
   // Ajuste manual sobre la estimación (castigo o premio, en %).
@@ -1303,7 +1316,7 @@ const ProjectionSection = ({
           onClick={() => {
             const next = !isExpress;
             setIsExpress(next);
-            setAdjustPct(next ? EXPRESS_ADJUST_PCT : 0);
+            setAdjustPct(next ? expressPct : 0);
           }}
           className={[
             "mb-2 flex w-full items-center justify-center gap-1.5 rounded-md border py-1.5 text-[10px] font-medium transition-colors",
@@ -1311,10 +1324,10 @@ const ProjectionSection = ({
               ? "border-brand-orange bg-brand-orange/20 text-brand-orange"
               : "border-border/50 text-muted-foreground hover:bg-surface-3 hover:text-foreground",
           ].join(" ")}
-          title={`Fija el ajuste en ${EXPRESS_ADJUST_PCT}%`}
+          title={`Fija el ajuste en ${expressPct}%`}
         >
           <Store className="h-3 w-3" />
-          {isExpress ? `Local Express · ${EXPRESS_ADJUST_PCT}% aplicado` : "Marcar como local Express"}
+          {isExpress ? `Local Express · ${expressPct}% aplicado` : "Marcar como local Express"}
         </button>
 
         <div className="flex items-center justify-between gap-2">

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound, MapPin, Download, TrendingUp } from "lucide-react";
+import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound, MapPin, Download, TrendingUp, Store } from "lucide-react";
 import { GeminiKeysAdminSection } from "@/components/admin/GeminiKeysAdminSection";
 import { SecretsAdminSection } from "@/components/admin/SecretsAdminSection";
 import { StorageAdminSection } from "@/components/admin/StorageAdminSection";
 import { MaturationCurveAdminSection } from "@/components/admin/MaturationCurveAdminSection";
+import { ExpressAdjustAdminSection } from "@/components/admin/ExpressAdjustAdminSection";
 import { htmlToGeoJson, downloadGeoJson } from "@/utils/htmlToGeoJson";
 import { parseFile, splitByFolderPath } from "@/utils/fileParsers";
 import { csvToGeoJSON } from "@/utils/parseGeoFile";
@@ -664,12 +665,28 @@ const AdminCapas = () => {
         </AdminCollapsible>
 
         <AdminCollapsible
-          id="maturation-curve"
-          title="Curva de maduración"
+          id="definiciones-comerciales"
+          title="Definiciones Comerciales"
           icon={<TrendingUp className="h-4 w-4" />}
-          description="Cuánto rinde un local nuevo en cada año hasta alcanzar su régimen. Define desde qué nivel parte la proyección de venta."
+          description="Parámetros de negocio que alimentan la proyección de venta y no se derivan de los datos."
         >
-          <MaturationCurveAdminSection />
+          <AdminCollapsible
+            id="maturation-curve"
+            title="Curva de maduración"
+            icon={<TrendingUp className="h-4 w-4" />}
+            description="Cuánto rinde un local nuevo en cada año hasta alcanzar su régimen. Define desde qué nivel parte la proyección de venta."
+          >
+            <MaturationCurveAdminSection />
+          </AdminCollapsible>
+
+          <AdminCollapsible
+            id="express-adjust"
+            title="Ajuste de local Express"
+            icon={<Store className="h-4 w-4" />}
+            description="Porcentaje que aplica el botón Express sobre la proyección. Por defecto -20%."
+          >
+            <ExpressAdjustAdminSection />
+          </AdminCollapsible>
         </AdminCollapsible>
 
         <AdminCollapsible
