@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RotateCcw, Save } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,6 @@ interface Folder { id: string; name: string }
 export const ExpressAdjustAdminSection = () => {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [folderId, setFolderId] = useState<string>("");
-  const [saved, setSaved] = useState<number>(DEFAULT_EXPRESS_ADJUST_PCT);
   const [draft, setDraft] = useState<number>(DEFAULT_EXPRESS_ADJUST_PCT);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -45,9 +44,7 @@ export const ExpressAdjustAdminSection = () => {
     if (!folderId) return;
     setLoading(true);
     try {
-      const pct = await fetchExpressAdjustPct(folderId);
-      setSaved(pct);
-      setDraft(pct);
+      setDraft(await fetchExpressAdjustPct(folderId));
     } finally {
       setLoading(false);
     }
@@ -55,12 +52,12 @@ export const ExpressAdjustAdminSection = () => {
 
   useEffect(() => { void load(); }, [load]);
 
-  const persist = async (pct: number | null) => {
+  const persist = async (pct: number) => {
     if (!folderId) return;
     setSaving(true);
     try {
       await saveExpressAdjustPct(folderId, pct);
-      toast.success(pct === null ? `Vuelve a ${DEFAULT_EXPRESS_ADJUST_PCT}%` : "Ajuste guardado");
+      toast.success("Ajuste guardado");
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo guardar");
@@ -112,16 +109,6 @@ export const ExpressAdjustAdminSection = () => {
         <Button size="sm" onClick={() => void persist(draft)} disabled={saving || !folderId}>
           {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
           Guardar
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => void persist(null)}
-          disabled={saving || !folderId || saved === DEFAULT_EXPRESS_ADJUST_PCT}
-          title={`Volver al valor por defecto (${DEFAULT_EXPRESS_ADJUST_PCT}%)`}
-        >
-          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-          Volver a {DEFAULT_EXPRESS_ADJUST_PCT}%
         </Button>
       </div>
     </div>
