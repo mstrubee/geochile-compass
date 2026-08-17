@@ -23,3 +23,12 @@ verify_jwt = true
 
 [functions.trigger-sync]
 verify_jwt = false
+
+# Exportación de solo lectura hacia leaseflow-pro. Sin verify_jwt porque el
+# caller no tiene sesión de este proyecto; el control de acceso es el header
+# `x-api-key` contra el secret EXPORT_API_KEY (ver _shared/export-auth.ts).
+[functions.list-saved-isochrones]
+verify_jwt = false
+
+[functions.export-sales-projection]
+verify_jwt = false
