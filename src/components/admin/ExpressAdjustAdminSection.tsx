@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   DEFAULT_EXPRESS_ADJUST_PCT,
+  defaultCommercialFolder,
   fetchExpressAdjustPct,
   saveExpressAdjustPct,
 } from "@/services/commercialSettingsService";
@@ -36,7 +37,8 @@ export const ExpressAdjustAdminSection = () => {
         .order("name");
       const list = (data ?? []) as Folder[];
       setFolders(list);
-      if (list.length > 0) setFolderId((prev) => prev || list[0].id);
+      const def = defaultCommercialFolder(list);
+      if (def) setFolderId((prev) => prev || def.id);
     })();
   }, []);
 

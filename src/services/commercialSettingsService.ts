@@ -42,3 +42,14 @@ export const saveExpressAdjustPct = async (
     );
   if (error) throw error;
 };
+
+/**
+ * Carpeta que conviene mostrar preseleccionada.
+ *
+ * Alfabéticamente la primera es Agroplanet, pero las definiciones comerciales
+ * casi siempre se ajustan sobre la red de Autoplanet.
+ */
+export const defaultCommercialFolder = <T extends { name: string }>(
+  folders: T[],
+): T | undefined =>
+  folders.find((f) => f.name.trim().toLowerCase() === "autoplanet") ?? folders[0];

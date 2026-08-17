@@ -3,6 +3,7 @@ import { Loader2, Save, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { defaultCommercialFolder } from "@/services/commercialSettingsService";
 import { Input } from "@/components/ui/input";
 import {
   fetchMaturationCurve,
@@ -42,7 +43,8 @@ export const MaturationCurveAdminSection = () => {
         .order("name");
       const list = (data ?? []) as Folder[];
       setFolders(list);
-      if (list.length > 0) setFolderId((prev) => prev || list[0].id);
+      const def = defaultCommercialFolder(list);
+      if (def) setFolderId((prev) => prev || def.id);
     })();
   }, []);
 
