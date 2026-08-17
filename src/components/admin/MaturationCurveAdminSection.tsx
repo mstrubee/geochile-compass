@@ -25,7 +25,11 @@ interface Folder { id: string; name: string }
  */
 export const MaturationCurveAdminSection = () => {
   const [folders, setFolders] = useState<Folder[]>([]);
-  const [folderId, setFolderId] = useState<string>("");
+  // La carpeta elegida a mano; mientras sea null manda la predeterminada.
+  // Guardar el id elegido de entrada haría que un cambio en la lista o en el
+  // valor por defecto no se notara: el estado viejo ganaría siempre.
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const folderId = pickedId ?? defaultCommercialFolder(folders)?.id ?? "";
   const [curve, setCurve] = useState<MaturationCurve | null>(null);
   // La derivada de los locales se muestra siempre como referencia, incluso
   // cuando el admin fijó otra: la decisión de seguirla es suya.
@@ -41,10 +45,7 @@ export const MaturationCurveAdminSection = () => {
         .select("id, name")
         .is("deleted_at", null)
         .order("name");
-      const list = (data ?? []) as Folder[];
-      setFolders(list);
-      const def = defaultCommercialFolder(list);
-      if (def) setFolderId((prev) => prev || def.id);
+      setFolders((data ?? []) as Folder[]);
     })();
   }, []);
 
@@ -93,7 +94,7 @@ export const MaturationCurveAdminSection = () => {
       <div className="flex flex-wrap items-center gap-2">
         <select
           value={folderId}
-          onChange={(e) => setFolderId(e.target.value)}
+          onChange={(e) => setPickedId(e.target.value)}
           className="h-8 rounded-md border border-border/50 bg-surface-2 px-2 text-xs"
         >
           {folders.map((f) => (
