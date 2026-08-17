@@ -3,7 +3,7 @@ import { GastoEndogenoSection } from "./GastoEndogenoSection";
 import { useCommercialCount } from "@/hooks/useCommercialCount";
 import { computeSalesProjection, type ProjectionResult } from "@/services/salesProjectionService";
 import { fetchMaturationCurve, type MaturationCurve } from "@/services/maturationCurveService";
-import { DEFAULT_EXPRESS_ADJUST_PCT, fetchExpressAdjustPct } from "@/services/commercialSettingsService";
+import { DEFAULT_EXPRESS_ADJUST_PCT, defaultCommercialFolder, fetchExpressAdjustPct } from "@/services/commercialSettingsService";
 import type { ReportProjection } from "@/utils/reportData";
 import type { ProjectionSettings } from "@/types/savedIsochrones";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -167,14 +167,15 @@ export const AnalysisPanel = ({
   onCaptureMapImages,
   onCaptureAtractores,
 }: AnalysisPanelProps) => {
-  // Folder seleccionado para proyección — default al primero de la lista
+  // Red con la que se compara. Por defecto Autoplanet: la primera de la lista
+  // es Agroplanet por orden alfabético, no por ser la habitual.
   const [selectedFolderId, setSelectedFolderId] = useState<string>(
-    () => projectionFolders[0]?.id ?? "",
+    () => defaultCommercialFolder(projectionFolders)?.id ?? "",
   );
   // Actualizar cuando cambian los folders disponibles
   useEffect(() => {
     if (projectionFolders.length > 0 && !projectionFolders.find(f => f.id === selectedFolderId)) {
-      setSelectedFolderId(projectionFolders[0].id);
+      setSelectedFolderId(defaultCommercialFolder(projectionFolders)!.id);
     }
   }, [projectionFolders]);
   const projectionFolderId = selectedFolderId || null;
