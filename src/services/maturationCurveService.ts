@@ -91,8 +91,16 @@ const median = (xs: number[]): number => {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 
+/**
+ * Curva vigente para la carpeta.
+ *
+ * Con `ignoreCustom` se salta la fijada por el admin y devuelve la que sale de
+ * los locales: sirve para mostrarla como recomendación al lado de la que él
+ * definió.
+ */
 export const fetchMaturationCurve = async (
   folderId: string,
+  { ignoreCustom = false }: { ignoreCustom?: boolean } = {},
 ): Promise<MaturationCurve> => {
   const fallback: MaturationCurve = {
     rampFactors: FALLBACK_RAMP,
@@ -104,7 +112,7 @@ export const fetchMaturationCurve = async (
   try {
     // Una curva fijada por el admin manda sobre la derivada: puede conocer el
     // negocio mejor que la muestra disponible.
-    const custom = await fetchCustomRamp(folderId);
+    const custom = ignoreCustom ? null : await fetchCustomRamp(folderId);
     if (custom) {
       return {
         rampFactors: custom,

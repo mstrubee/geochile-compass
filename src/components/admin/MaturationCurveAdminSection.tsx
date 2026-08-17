@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RotateCcw, Save, Plus, Minus } from "lucide-react";
+import { Loader2, Save, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,9 @@ export const MaturationCurveAdminSection = () => {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [folderId, setFolderId] = useState<string>("");
   const [curve, setCurve] = useState<MaturationCurve | null>(null);
+  // La derivada de los locales se muestra siempre como referencia, incluso
+  // cuando el admin fijó otra: la decisión de seguirla es suya.
+  const [derived, setDerived] = useState<MaturationCurve | null>(null);
   const [draft, setDraft] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -47,8 +50,12 @@ export const MaturationCurveAdminSection = () => {
     if (!folderId) return;
     setLoading(true);
     try {
-      const c = await fetchMaturationCurve(folderId);
+      const [c, d] = await Promise.all([
+        fetchMaturationCurve(folderId),
+        fetchMaturationCurve(folderId, { ignoreCustom: true }),
+      ]);
       setCurve(c);
+      setDerived(d);
       setDraft(c.rampFactors.map((f) => Math.round(f * 1000) / 10));
     } finally {
       setLoading(false);
@@ -78,19 +85,6 @@ export const MaturationCurveAdminSection = () => {
     }
   };
 
-  const handleReset = async () => {
-    if (!folderId) return;
-    setSaving(true);
-    try {
-      await saveCustomRamp(folderId, null);
-      toast.success("Vuelve a derivarse de los locales");
-      await load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo restablecer");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <div className="space-y-3">
@@ -122,6 +116,18 @@ export const MaturationCurveAdminSection = () => {
         el 100%. El último año es el régimen por definición, así que se guarda
         siempre como 100%.
       </p>
+
+      {derived && (
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          <strong className="text-foreground">Recomendación según los locales actuales:</strong>{" "}
+          {derived.rampFactors.map((f) => `${Math.round(f * 1000) / 10}%`).join(" · ")}
+          {" — "}
+          {derived.isFallback
+            ? "valores de respaldo, no hay aperturas observadas suficientes"
+            : `derivada de ${derived.sampleSize} locales con apertura observada`}
+          .
+        </p>
+      )}
 
       <div className="flex flex-wrap items-end gap-2">
         {draft.map((pct, i) => (
@@ -179,16 +185,6 @@ export const MaturationCurveAdminSection = () => {
         <Button size="sm" onClick={handleSave} disabled={saving || !folderId}>
           {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
           Guardar curva
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleReset}
-          disabled={saving || !curve?.isCustom}
-          title="Volver a derivarla de los locales de la red"
-        >
-          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-          Volver a la derivada
         </Button>
       </div>
     </div>
