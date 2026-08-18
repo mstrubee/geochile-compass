@@ -21,6 +21,8 @@ import type {
 
 const MAX_FEATURES = 8000;
 
+import { capEvenlyAcrossBuckets } from "@/utils/evenCap";
+
 const bboxIntersects = (
   a: [number, number, number, number],
   b: [number, number, number, number],
@@ -100,21 +102,23 @@ class GseService {
     }
 
     const cap = params.maxFeatures ?? MAX_FEATURES;
-    const buckets = await Promise.all(matching.map((c) => this.loadCommune(c.slug)));
-    const features: GseFeature[] = [];
-    let truncated = false;
-    outer: for (const bucket of buckets) {
-      for (const f of bucket) {
-        if (!f.geometry) continue;
-        if (!featureInBbox(f.geometry, viewportBbox)) continue;
-        features.push({ type: "Feature", geometry: f.geometry, properties: f.properties });
-        if (features.length >= cap) { truncated = true; break outer; }
-      }
-    }
+    const rawBuckets = await Promise.all(matching.map((c) => this.loadCommune(c.slug)));
+
+    // Un bucket por comuna, ya filtrado al viewport. El tope se reparte entre
+    // ellos en vez de llenarlos por orden: cortar en secuencia dejaba las
+    // últimas comunas del viewport completamente sin manzanas, que es el
+    // territorio en blanco que aparecía al alejar el zoom.
+    const inBbox: GseFeature[][] = rawBuckets.map((bucket) =>
+      bucket
+        .filter((f) => f.geometry && featureInBbox(f.geometry, viewportBbox))
+        .map((f) => ({ type: "Feature", geometry: f.geometry, properties: f.properties } as GseFeature)),
+    );
+    const { features, truncated, totalAvailable } = capEvenlyAcrossBuckets(inBbox, cap);
     if (truncated) {
       console.warn(
-        `[gseService] Se alcanzó el tope de ${cap} manzanas: el resultado está ` +
-        `truncado y subestima la población/distribución del área consultada.`,
+        `[gseService] ${totalAvailable} manzanas en el viewport exceden el tope de ${cap}: ` +
+        `se muestra una muestra repartida entre las ${matching.length} comunas. ` +
+        `Los totales de población/distribución quedan subestimados.`,
       );
     }
 
@@ -128,6 +132,8 @@ class GseService {
         source: `Censo ${sourceYear}`,
         source_year: sourceYear,
         fallbackCommunes: [],
+        truncated,
+        totalAvailable,
       },
     };
   }

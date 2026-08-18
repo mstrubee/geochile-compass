@@ -389,12 +389,15 @@ export const AnalysisPanel = ({
         rateOverrides: adjust?.rateOverrides ?? [],
         rampEnabled: adjust?.rampEnabled ?? true,
         isExpress: adjust?.isExpress ?? false,
-        heatSettings: adjust?.heatSettings ?? null,
+        // `?? projectionSettings?.heatSettings` es la red de seguridad: cualquier
+        // llamador que arme el objeto sin esta clave —hubo uno— borraría la
+        // calibración guardada de esta ubicación en vez de dejarla como estaba.
+        heatSettings: adjust?.heatSettings ?? projectionSettings?.heatSettings ?? null,
         result: res,
         computedAt: res ? new Date().toISOString() : null,
       });
     },
-    [onProjectionSettingsChange],
+    [onProjectionSettingsChange, projectionSettings],
   );
 
   const runProjection = useCallback(async () => {
@@ -996,7 +999,7 @@ export const AnalysisPanel = ({
         onCaptureAtractores={async (h) =>
           isochrone && onCaptureAtractores ? onCaptureAtractores(isochrone, h) : null
         }
-        initialHeat={projAdjust?.heatSettings ?? null}
+        initialHeat={projAdjust?.heatSettings ?? projectionSettings?.heatSettings ?? null}
         onConfirm={async (imgs, heat) => {
           if (!fullReport) return;
           setExportingPptx(true);
@@ -1263,8 +1266,15 @@ const ProjectionSection = ({
     if (lastSavedKey.current === null) { lastSavedKey.current = settingsKey; return; }
     if (lastSavedKey.current === settingsKey) return;
     lastSavedKey.current = settingsKey;
-    onSettingsChange({ adjustPct, rateOverrides, rampEnabled, isExpress });
-  }, [settingsKey, adjustPct, rateOverrides, rampEnabled, isExpress, result, onSettingsChange]);
+    // `heatSettings` se arrastra tal cual: esta sección no lo edita, y omitirlo
+    // hacía que `persistProjection` lo resolviera a null. O sea que cada vez que
+    // el analista tocaba el ajuste manual o una tasa, borraba la calibración del
+    // heatmap que había guardado para esta ubicación.
+    onSettingsChange({
+      adjustPct, rateOverrides, rampEnabled, isExpress,
+      heatSettings: savedSettings?.heatSettings ?? null,
+    });
+  }, [settingsKey, adjustPct, rateOverrides, rampEnabled, isExpress, result, onSettingsChange, savedSettings]);
 
   if (loading) {
     return (

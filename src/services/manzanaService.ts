@@ -44,6 +44,8 @@ interface RawProps {
 }
 
 const MAX_FEATURES = 6000;
+
+import { capEvenlyAcrossBuckets } from "@/utils/evenCap";
 const ASSUMED_BLOCK_AREA_KM2 = 0.01; // ~10,000 m² promedio por manzana urbana
 
 const norm = (s: string) =>
@@ -151,18 +153,23 @@ class RealManzanaService implements ManzanaService {
 
     const buckets = await Promise.all(matching.map((c) => this.loadCommune(c.slug)));
 
-    const features: ManzanaFeature[] = [];
-    outer: for (const bucket of buckets) {
-      for (const f of bucket) {
-        if (!f.geometry) continue;
-        if (!featureInBbox(f.geometry, viewportBbox)) continue;
-        features.push({
+    // Ver gseService: el tope se reparte entre comunas en vez de llenarlas por
+    // orden, para no dejar las últimas del viewport sin una sola manzana.
+    const inBbox: ManzanaFeature[][] = buckets.map((bucket) =>
+      bucket
+        .filter((f) => f.geometry && featureInBbox(f.geometry, viewportBbox))
+        .map((f) => ({
           type: "Feature",
           geometry: f.geometry,
           properties: enrichProps(f.properties),
-        });
-        if (features.length >= MAX_FEATURES) break outer;
-      }
+        } as ManzanaFeature)),
+    );
+    const { features, truncated, totalAvailable } = capEvenlyAcrossBuckets(inBbox, MAX_FEATURES);
+    if (truncated) {
+      console.warn(
+        `[manzanaService] ${totalAvailable} manzanas exceden el tope de ${MAX_FEATURES}: ` +
+        `se muestra una muestra repartida entre las ${matching.length} comunas.`,
+      );
     }
 
     return {
