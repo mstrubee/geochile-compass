@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.export-sales-projection]
 verify_jwt = false
+
+[functions.export-report-slides]
+verify_jwt = false

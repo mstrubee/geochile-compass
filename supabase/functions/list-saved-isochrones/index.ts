@@ -57,6 +57,20 @@ Deno.serve(async (req) => {
 
   const rows = (data ?? []) as Row[];
 
+  // Qué isócronas ya tienen láminas listas para extraer. Sin esto leaseflow
+  // tendría que pedir las láminas a ciegas y manejar un 422 por cada isócrona
+  // que no las tiene. Solo se traen los ids: el PNG en base64 pesa ~1 MB.
+  const slideIds = new Set<string>();
+  if (rows.length > 0) {
+    const { data: slides } = await admin
+      .from("isochrone_report_slides")
+      .select("isochrone_id, consumed_at")
+      .in("isochrone_id", rows.map((r) => r.id));
+    for (const s of (slides ?? []) as Array<{ isochrone_id: string }>) {
+      slideIds.add(s.isochrone_id);
+    }
+  }
+
   // El nombre de carpeta se resuelve en una segunda consulta y no con un join
   // embebido: `folder_id` es nullable y con `!inner` las isócronas sin carpeta
   // desaparecerían de la lista.
@@ -85,6 +99,7 @@ Deno.serve(async (req) => {
         centerLng: r.center_lng,
         hasProjection: !!computedAt,
         computedAt,
+        hasSlides: slideIds.has(r.id),
       };
     }),
   );
