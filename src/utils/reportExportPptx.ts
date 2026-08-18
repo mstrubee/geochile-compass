@@ -1,6 +1,7 @@
-import type PptxGenJS from "pptxgenjs";
 import type { IsochroneReport, ReportProjection } from "./reportData";
 import type { MapCaptureImages } from "./mapCapture";
+import type { Cell, SlideSurface } from "./slideSurface";
+import { PptxSlideSurface } from "./slideSurfacePptx";
 
 /**
  * Exporta el informe como 2 láminas para directorio, siguiendo el formato de
@@ -22,8 +23,10 @@ const C = {
 const FONT = "Arial";
 
 // Lámina 10 × 5.625" (16:9). Todo se posiciona dentro de estos límites.
-const W = 10;
-const H = 5.625;
+export const SLIDE_W = 10;
+export const SLIDE_H = 5.625;
+const W = SLIDE_W;
+const H = SLIDE_H;
 const ML = 0.5;              // margen izquierdo/derecho
 const COL_GAP = 0.28;
 const COL_W = (W - ML * 2 - COL_GAP) / 2;
@@ -45,7 +48,6 @@ const fmtCLP = (n: number) => `$${fmt(n)}`;
 
 /** Tipografía compartida de las tablas: densa pero legible al proyectar. */
 const cellBase = {
-  fontFace: FONT,
   fontSize: 7.5,
   color: C.ink,
   valign: "middle" as const,
@@ -54,14 +56,14 @@ const cellBase = {
   margin: [1, 3, 1, 3] as [number, number, number, number],
 };
 
-const headerRow = (labels: string[]) =>
+const headerRow = (labels: string[]): Cell[] =>
   labels.map((text, i) => ({
     text,
     options: {
       ...cellBase,
       bold: true,
       color: C.white,
-      fill: { color: C.crimson },
+      fill: C.crimson,
       align: (i === 0 ? "left" : "right") as "left" | "right",
     },
   }));
@@ -73,51 +75,43 @@ interface RowOpts {
   accent?: boolean;
 }
 
-const row = (cells: Array<string | number>, opts: RowOpts = {}) =>
+const row = (cells: Array<string | number>, opts: RowOpts = {}): Cell[] =>
   cells.map((c, i) => ({
     text: String(c),
     options: {
       ...cellBase,
       bold: opts.bold || opts.accent,
       color: opts.accent ? C.white : C.ink,
-      fill: opts.accent ? { color: C.crimson } : opts.fill ? { color: opts.fill } : undefined,
+      fill: opts.accent ? C.crimson : opts.fill,
       align: (i === 0 ? "left" : "right") as "left" | "right",
     },
   }));
 
 /** Encabezado común: cintillo de sección, título y línea divisoria. */
-const addHeader = (slide: PptxGenJS.Slide, eyebrow: string, title: string) => {
-  slide.addText(eyebrow.toUpperCase(), {
+const addHeader = (s: SlideSurface, eyebrow: string, title: string) => {
+  s.text(eyebrow.toUpperCase(), {
     x: ML, y: 0.22, w: W - ML * 2, h: 0.28,
-    fontFace: FONT, fontSize: 14, bold: true, color: C.crimson, margin: 0,
+    fontSize: 14, bold: true, color: C.crimson,
   });
-  slide.addText(title, {
+  s.text(title, {
     x: ML, y: 0.52, w: W - ML * 2, h: 0.38,
-    fontFace: FONT, fontSize: 16, bold: true, color: C.ink, margin: 0,
+    fontSize: 16, bold: true, color: C.ink,
   });
-  slide.addShape("line", {
-    x: ML, y: 1.0, w: W - ML * 2, h: 0,
-    line: { color: C.grid, width: 1 },
-  });
+  s.line({ x: ML, y: 1.0, w: W - ML * 2, color: C.grid, width: 1 });
 };
 
-const addColTitle = (slide: PptxGenJS.Slide, text: string, x: number, y: number) => {
-  slide.addText(text, {
-    x, y, w: COL_W, h: 0.24,
-    fontFace: FONT, fontSize: 11, bold: true, color: C.ink, margin: 0,
-  });
+const addColTitle = (s: SlideSurface, text: string, x: number, y: number) => {
+  s.text(text, { x, y, w: COL_W, h: 0.24, fontSize: 11, bold: true, color: C.ink });
 };
 
 /** Banda carmesí que titula una tabla, como el "Resumen Ejecutivo" del modelo. */
 const addTableBand = (
-  slide: PptxGenJS.Slide, text: string, x: number, y: number, w: number = COL_W,
+  s: SlideSurface, text: string, x: number, y: number, w: number = COL_W,
 ) => {
-  slide.addShape("rect", {
-    x, y, w, h: 0.2, fill: { color: C.crimson }, line: { color: C.crimson },
-  });
-  slide.addText(text, {
+  s.rect({ x, y, w, h: 0.2, fill: C.crimson, line: { color: C.crimson } });
+  s.text(text, {
     x: x + 0.06, y, w: w - 0.12, h: 0.2,
-    fontFace: FONT, fontSize: 8, bold: true, color: C.white, valign: "middle", margin: 0,
+    fontSize: 8, bold: true, color: C.white, valign: "middle",
   });
 };
 
@@ -129,12 +123,11 @@ const rowsThatFit = (y: number) => Math.max(0, Math.floor((BODY_BOTTOM - y) / RO
 
 
 // ── Lámina 1: mapas + demografía ─────────────────────────────────────────────
-const addTerritorySlide = (
-  pptx: PptxGenJS,
+export const drawTerritorySlide = (
+  slide: SlideSurface,
   report: IsochroneReport,
   images?: MapCaptureImages | null,
 ) => {
-  const slide = pptx.addSlide();
   const band = report.bands[report.bands.length - 1];
   const name = baseName(report.iso.name ?? "Isócrona");
 
@@ -156,10 +149,10 @@ const addTerritorySlide = (
   ];
   addTableBand(slide, "DEMOGRAFÍA DEL ÁREA", ML, y, DATA_W);
   y += 0.2;
-  slide.addTable(
+  slide.table(
     resumen.map(([k, v], i) => row([k, v], { fill: i % 2 ? C.rowAlt : undefined })),
     { x: ML, y, w: DATA_W, colW: [DATA_W * 0.56, DATA_W * 0.44], rowH: ROW_H,
-      border: { type: "solid", color: C.grid, pt: 0.5 } },
+      border: { color: C.grid, pt: 0.5 } },
   );
   y += resumen.length * ROW_H + 0.2;
 
@@ -167,10 +160,10 @@ const addTerritorySlide = (
   if (gseRows.length > 0) {
     addTableBand(slide, "COMPOSICIÓN GSE (% HOGARES)", ML, y, DATA_W);
     y += 0.2;
-    slide.addTable(
+    slide.table(
       gseRows.map((n, i) => row([n.label, `${n.pct}%`], { fill: i % 2 ? C.rowAlt : undefined })),
       { x: ML, y, w: DATA_W, colW: [DATA_W * 0.6, DATA_W * 0.4], rowH: ROW_H,
-        border: { type: "solid", color: C.grid, pt: 0.5 } },
+        border: { color: C.grid, pt: 0.5 } },
     );
     y += gseRows.length * ROW_H + 0.2;
   }
@@ -181,20 +174,20 @@ const addTerritorySlide = (
   if (comunasFit > 0) {
     addTableBand(slide, "COMUNAS", ML, y, DATA_W);
     y += 0.2;
-    slide.addTable(
+    slide.table(
       band.communes.slice(0, comunasFit).map((c, i) =>
         row([c.name, `${(c.areaShareInIso * 100).toFixed(0)}%`, fmt(c.popInIso)], {
           fill: i % 2 ? C.rowAlt : undefined,
         }),
       ),
       { x: ML, y, w: DATA_W, colW: [DATA_W * 0.46, DATA_W * 0.2, DATA_W * 0.34], rowH: ROW_H,
-        border: { type: "solid", color: C.grid, pt: 0.5 } },
+        border: { color: C.grid, pt: 0.5 } },
     );
     y += comunasFit * ROW_H;
     if (comunasFit < comunasTotal) {
-      slide.addText(`+${comunasTotal - comunasFit} comuna(s) no listada(s) por espacio`, {
+      slide.text(`+${comunasTotal - comunasFit} comuna(s) no listada(s) por espacio`, {
         x: ML, y: y + 0.02, w: DATA_W, h: 0.16,
-        fontFace: FONT, fontSize: 6.5, color: C.muted, margin: 0,
+        fontSize: 6.5, color: C.muted,
       });
     }
   }
@@ -215,36 +208,32 @@ const addTerritorySlide = (
   mapas.forEach(([titulo, data], i) => {
     const cx = GRID_X + (i % 2) * (cellW + GAP);
     const cy = BODY_TOP + Math.floor(i / 2) * (cellH + GAP);
-    slide.addText(titulo, {
+    slide.text(titulo, {
       x: cx, y: cy, w: cellW, h: CAP_H,
-      fontFace: FONT, fontSize: 7.5, bold: true, color: C.crimson, margin: 0,
+      fontSize: 7.5, bold: true, color: C.crimson,
     });
     if (data) {
-      slide.addImage({
-        data, x: cx, y: cy + CAP_H, w: cellW, h: imgH,
-        sizing: { type: "cover", w: cellW, h: imgH },
-      });
+      slide.image({ data, x: cx, y: cy + CAP_H, w: cellW, h: imgH });
     } else {
       // Sin foto, se deja el marco: así se nota que falta y no queda un hueco.
-      slide.addShape("rect", {
+      slide.rect({
         x: cx, y: cy + CAP_H, w: cellW, h: imgH,
-        fill: { color: C.rowAlt }, line: { color: C.grid },
+        fill: C.rowAlt, line: { color: C.grid },
       });
-      slide.addText("Sin captura", {
+      slide.text("Sin captura", {
         x: cx, y: cy + CAP_H + imgH / 2 - 0.1, w: cellW, h: 0.2,
-        fontFace: FONT, fontSize: 7, color: C.muted, align: "center", margin: 0,
+        fontSize: 7, color: C.muted, align: "center",
       });
     }
   });
 };
 
 // ── Lámina 2: proyección de venta ────────────────────────────────────────────
-const addProjectionSlide = (
-  pptx: PptxGenJS,
+export const drawProjectionSlide = (
+  slide: SlideSurface,
   report: IsochroneReport,
   proj: ReportProjection,
 ) => {
-  const slide = pptx.addSlide();
   const name = baseName(report.iso.name ?? "Isócrona");
   addHeader(
     slide,
@@ -263,10 +252,10 @@ const addProjectionSlide = (
       ["Hogares del mercado objetivo", fmt(ge.totalHogaresObjetivo)],
       ["Gasto promedio por hogar / mes", fmtCLP(ge.gastoPromPorHogar)],
     ];
-    slide.addTable(
+    slide.table(
       resumenGe.map(([k, v], i) => row([k, v], { fill: i % 2 ? C.rowAlt : undefined })),
       { x: ML, y, w: COL_W, colW: [COL_W * 0.58, COL_W * 0.42], rowH: ROW_H,
-        border: { type: "solid", color: C.grid, pt: 0.5 } },
+        border: { color: C.grid, pt: 0.5 } },
     );
     y += resumenGe.length * ROW_H + 0.14;
 
@@ -275,7 +264,7 @@ const addProjectionSlide = (
     // confunde además de gastar una fila.
     const geRows = ge.rows.filter((r) => r.esObjetivo && r.hogares > 0);
     if (geRows.length > 0) {
-      slide.addTable(
+      slide.table(
         [
           headerRow(["GSE", "Hogares", "Gasto / mes"]),
           ...geRows.map((r, i) =>
@@ -285,7 +274,7 @@ const addProjectionSlide = (
           ),
         ],
         { x: ML, y, w: COL_W, colW: [COL_W * 0.24, COL_W * 0.3, COL_W * 0.46], rowH: ROW_H,
-          border: { type: "solid", color: C.grid, pt: 0.5 } },
+          border: { color: C.grid, pt: 0.5 } },
       );
       y += (geRows.length + 1) * ROW_H + 0.16;
     }
@@ -300,10 +289,10 @@ const addProjectionSlide = (
       ["Edad media del parque", `${pq.edad_media.toFixed(1)} años`],
       ["Rango intercuartil", `${pq.edad_p25.toFixed(0)}–${pq.edad_p75.toFixed(0)} años`],
     ];
-    slide.addTable(
+    slide.table(
       pqRows.map(([k, v], i) => row([k, v], { fill: i % 2 ? C.rowAlt : undefined })),
       { x: ML, y, w: COL_W, colW: [COL_W * 0.58, COL_W * 0.42], rowH: ROW_H,
-        border: { type: "solid", color: C.grid, pt: 0.5 } },
+        border: { color: C.grid, pt: 0.5 } },
     );
     y += pqRows.length * ROW_H + 0.12;
 
@@ -312,7 +301,7 @@ const addProjectionSlide = (
     const marcas = pq.ranking_marcas.slice(0, 5);
     const marcasFit = Math.min(marcas.length, rowsThatFit(y) - 1);
     if (marcasFit > 0) {
-      slide.addTable(
+      slide.table(
         [
           headerRow(["Marca", "Vehículos", "% del parque"]),
           ...marcas.slice(0, marcasFit).map((m, i) =>
@@ -322,7 +311,7 @@ const addProjectionSlide = (
           ),
         ],
         { x: ML, y, w: COL_W, colW: [COL_W * 0.42, COL_W * 0.28, COL_W * 0.3], rowH: ROW_H,
-          border: { type: "solid", color: C.grid, pt: 0.5 } },
+          border: { color: C.grid, pt: 0.5 } },
       );
       y += (marcasFit + 1) * ROW_H + 0.16;
     }
@@ -330,19 +319,19 @@ const addProjectionSlide = (
 
   // ── Columna derecha: proyección ────────────────────────────────────────────
   let ry = BODY_TOP;
-  slide.addText("Potencial estimado", {
+  slide.text("Potencial estimado", {
     x: COL_R_X, y: ry, w: COL_W, h: 0.2,
-    fontFace: FONT, fontSize: 11, bold: true, color: C.ink, margin: 0,
+    fontSize: 11, bold: true, color: C.ink,
   });
   ry += 0.2;
-  slide.addText(`${fmt(proj.estimatedUf)} UF/mes`, {
+  slide.text(`${fmt(proj.estimatedUf)} UF/mes`, {
     x: COL_R_X, y: ry, w: COL_W, h: 0.34,
-    fontFace: FONT, fontSize: 22, bold: true, color: C.crimson, margin: 0,
+    fontSize: 22, bold: true, color: C.crimson,
   });
   ry += 0.34;
-  slide.addText(
+  slide.text(
     `${fmtCLP(proj.estimatedClp)}/mes · en régimen · rango ${fmt(proj.lowUf)}–${fmt(proj.highUf)} UF`,
-    { x: COL_R_X, y: ry, w: COL_W, h: 0.16, fontFace: FONT, fontSize: 7, color: C.muted, margin: 0 },
+    { x: COL_R_X, y: ry, w: COL_W, h: 0.16, fontSize: 7, color: C.muted },
   );
   ry += 0.2;
 
@@ -360,10 +349,10 @@ const addProjectionSlide = (
   ];
   addTableBand(slide, "SUPUESTOS", COL_R_X, ry);
   ry += 0.2;
-  slide.addTable(
+  slide.table(
     supuestos.map(([k, v], i) => row([k, v], { fill: i % 2 ? C.rowAlt : undefined })),
     { x: COL_R_X, y: ry, w: COL_W, colW: [COL_W * 0.42, COL_W * 0.58], rowH: ROW_H,
-      border: { type: "solid", color: C.grid, pt: 0.5 } },
+      border: { color: C.grid, pt: 0.5 } },
   );
   ry += supuestos.length * ROW_H + 0.1;
 
@@ -372,7 +361,7 @@ const addProjectionSlide = (
   if (proj.comparables.length > 0) {
     addTableBand(slide, "LOCALES COMPARABLES", COL_R_X, ry);
     ry += 0.2;
-    slide.addTable(
+    slide.table(
       [
         headerRow(["Local", "UF/mes", "Fuente"]),
         ...proj.comparables.map((c, i) =>
@@ -382,14 +371,14 @@ const addProjectionSlide = (
         ),
       ],
       { x: COL_R_X, y: ry, w: COL_W, colW: [COL_W * 0.54, COL_W * 0.22, COL_W * 0.24],
-        rowH: ROW_H, border: { type: "solid", color: C.grid, pt: 0.5 } },
+        rowH: ROW_H, border: { color: C.grid, pt: 0.5 } },
     );
     ry += (proj.comparables.length + 1) * ROW_H + 0.1;
   }
 
   addTableBand(slide, "PROYECCIÓN AÑO A AÑO", COL_R_X, ry);
   ry += 0.2;
-  slide.addTable(
+  slide.table(
     [
       headerRow(["Año", "Crecimiento", "% régimen", "UF/mes", "CLP/mes"]),
       ...proj.years.map((r, i) =>
@@ -407,7 +396,7 @@ const addProjectionSlide = (
     ],
     { x: COL_R_X, y: ry, w: COL_W,
       colW: [COL_W * 0.2, COL_W * 0.22, COL_W * 0.18, COL_W * 0.18, COL_W * 0.22],
-      rowH: ROW_H, border: { type: "solid", color: C.grid, pt: 0.5 } },
+      rowH: ROW_H, border: { color: C.grid, pt: 0.5 } },
   );
 
   // Notas al pie a lo ancho de la lámina: en una sola columna se comían el
@@ -422,10 +411,10 @@ const addProjectionSlide = (
         ? `Incluye un ajuste manual de ${proj.adjustPct > 0 ? "+" : ""}${proj.adjustPct}% aplicado por el analista, no derivado del modelo.`
         : "Estimación referencial construida por comparación con locales de la red; no reemplaza un estudio de terreno.",
   ];
-  slide.addText(notas.map((n) => ({ text: n, options: { breakLine: true } })), {
+  slide.text(notas.map((n) => ({ text: n, breakLine: true })), {
     // Bajo el pie de las tablas: la de años llega hasta BODY_BOTTOM.
     x: ML, y: BODY_BOTTOM + 0.02, w: W - ML * 2, h: 0.28,
-    fontFace: FONT, fontSize: 6.5, color: C.muted, valign: "top", margin: 0,
+    fontSize: 6.5, color: C.muted, valign: "top",
     lineSpacingMultiple: 1.15,
   });
 };
@@ -445,8 +434,10 @@ export const exportReportToPptx = async (
     background: { color: C.white },
   });
 
-  addTerritorySlide(pptx, report, images);
-  if (projection) addProjectionSlide(pptx, report, projection);
+  drawTerritorySlide(new PptxSlideSurface(pptx.addSlide()), report, images);
+  if (projection) {
+    drawProjectionSlide(new PptxSlideSurface(pptx.addSlide()), report, projection);
+  }
 
   const fecha = new Date(report.generatedAt).toISOString().slice(0, 10).replace(/-/g, "");
   const base = (report.iso.name ?? "isocrona").replace(/[^\w-]+/g, "_");

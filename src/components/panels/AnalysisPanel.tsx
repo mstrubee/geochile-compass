@@ -1,4 +1,4 @@
-import { X, Download, FileJson, FileText, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight, ShoppingCart, TrendingUp, Store } from "lucide-react";
+import { X, Download, FileJson, FileText, FileImage, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight, ShoppingCart, TrendingUp, Store } from "lucide-react";
 import { GastoEndogenoSection } from "./GastoEndogenoSection";
 import { useCommercialCount } from "@/hooks/useCommercialCount";
 import { computeSalesProjection, type ProjectionResult } from "@/services/salesProjectionService";
@@ -16,6 +16,7 @@ import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import { useIsochroneReport } from "@/hooks/useIsochroneReport";
 import { exportReportToPdf } from "@/utils/reportExportPdf";
 import { exportReportToPptx } from "@/utils/reportExportPptx";
+import { exportReportToPng, slidePngFileName } from "@/utils/reportExportPng";
 import type { MapCaptureImages } from "@/utils/mapCapture";
 import { MapCapturePreviewDialog } from "./MapCapturePreviewDialog";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
@@ -228,6 +229,10 @@ export const AnalysisPanel = ({
   // que el PDF diga exactamente lo mismo que la sección.
 
   const [exportingPptx, setExportingPptx] = useState(false);
+  // Qué botón abrió el diálogo de captura. Los dos formatos necesitan las
+  // mismas fotos del mapa, así que comparten toda esa interacción y recién
+  // se separan al momento de escribir el archivo.
+  const [exportFormat, setExportFormat] = useState<"pptx" | "png">("pptx");
   const [previewOpen, setPreviewOpen] = useState(false);
   // La curva vive acá y no en la sección: el informe necesita el snapshot de
   // la proyección aunque esa sección esté colapsada (la sección se desmonta).
@@ -841,13 +846,21 @@ export const AnalysisPanel = ({
                 </button>
               </div>
               <button
-                onClick={() => setPreviewOpen(true)}
+                onClick={() => { setExportFormat("pptx"); setPreviewOpen(true); }}
                 disabled={!fullReport || exportingPptx}
                 className="mt-1.5 w-full rounded-lg bg-brand-red/10 px-2 py-2 text-[11px] font-medium text-brand-red transition-colors hover:bg-brand-red/20 disabled:opacity-40"
               >
                 {exportingPptx
                   ? <><Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> Generando…</>
                   : <><FileText className="mr-1 inline h-3 w-3" /> Informe directorio (2 láminas)</>}
+              </button>
+              <button
+                onClick={() => { setExportFormat("png"); setPreviewOpen(true); }}
+                disabled={!fullReport || exportingPptx}
+                className="mt-1.5 w-full rounded-lg bg-brand-red/10 px-2 py-2 text-[11px] font-medium text-brand-red transition-colors hover:bg-brand-red/20 disabled:opacity-40"
+                title="Las mismas 2 láminas como imágenes, para insertarlas en otra presentación"
+              >
+                <FileImage className="mr-1 inline h-3 w-3" /> Informe directorio (2 PNG)
               </button>
               <button
                 onClick={() => {
@@ -893,7 +906,12 @@ export const AnalysisPanel = ({
             };
             setProjAdjust(next);
             persistProjection(next, projResult);
-            await exportReportToPptx(fullReport, projForReport, imgs);
+            if (exportFormat === "png") {
+              const laminas = await exportReportToPng(fullReport, projForReport, imgs);
+              for (const l of laminas) downloadDataUrl(l.dataUrl, slidePngFileName(fullReport, l.index));
+            } else {
+              await exportReportToPptx(fullReport, projForReport, imgs);
+            }
           } finally {
             setExportingPptx(false);
           }
@@ -1045,6 +1063,17 @@ interface ProjectionSectionProps {
  * sube hasta el 100%; sin él se asume la ubicación ya madura, que es lo que
  * corresponde al evaluar el traslado de un local en marcha.
  */
+/** Descarga un data URL con el nombre dado. */
+const downloadDataUrl = (dataUrl: string, fileName: string) => {
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = fileName;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => document.body.removeChild(a), 1000);
+};
+
 const buildProjRows = (
   result: ProjectionResult,
   curve: MaturationCurve | null,
