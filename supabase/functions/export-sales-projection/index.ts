@@ -44,14 +44,16 @@
  *    Trae 6, no 5: el loop es `for (i = 0; i <= horizonYears; i++)` con
  *    `horizonYears = 5` por defecto. El índice 0 es el que lleva `isBase: true`.
  *
- *    ⚠ OJO — el índice a tomar NO es "descartar isBase". En la escala de
- *    `buildProjRows`, el índice 0 es el AÑO DE APERTURA: arranca en
- *    `estimatedUf * rampFactors[0]` (≈49% del régimen), o sea es el año 1 de
- *    vida del local. El label "Año 1" del panel corresponde al índice 1, que es
- *    el SEGUNDO año de vida.
- *    ⇒ Años 1..5 de vida del local = índices 0..4. Descartar `isBase` daría los
- *      años 2..6 y sobreestimaría el año 1 del Business Case ~2x (se saltaría
- *      justamente el año de rampa, el más bajo).
+ *    CORRECCIÓN (post-deploy, confirmado por Matias): el índice 0 SÍ hay que
+ *    descartarlo. `AnalysisPanel.tsx:1078` (`buildProjRows`, la misma función
+ *    que replica esta) etiqueta ese índice literalmente como `"Base"`, y recién
+ *    el índice 1 es `"Año 1"` — son filas DISTINTAS en el panel que ve el
+ *    usuario, no dos nombres del mismo año. La versión anterior de este
+ *    comentario asumía que índice 0 = "año de apertura" = Año 1 de leaseflow;
+ *    esa lectura no está respaldada por el propio label del panel y quedó
+ *    descartada.
+ *    ⇒ Años 1..5 del Business Case = índices 1..5 de `rows` (que trae 6
+ *      elementos, 0..5, gracias a que `horizon` sale de `fiveYearProjection`).
  *
  * `ventaMes` va en MILLONES de CLP por mes, que es la unidad de `ventaMes` en
  * leaseflow-pro. `estimatedUf` va en UF/mes EN RÉGIMEN (sin rampa) para
@@ -247,13 +249,14 @@ Deno.serve(async (req) => {
   const rows = buildProjRows(result, curve, overrides, rampEnabled);
   const f = 1 + adjustPct / 100;
 
-  // Índices 0..4 = años 1..5 de VIDA del local (ver nota 3 arriba).
+  // rows[0] es "Base" (ver nota 3 arriba) — se descarta. Años 1..5 del
+  // Business Case = rows[1..5].
   // Si la proyección guardada tiene un horizonte más corto, se rellena
   // manteniendo la última tasa conocida en vez de cortar el array: leaseflow
   // espera 5 posiciones y un array corto rompería el Business Case.
   const ventaMes: number[] = [];
   for (let i = 0; i < YEARS_WANTED; i++) {
-    const row = rows[i];
+    const row = rows[i + 1];
     if (row) {
       ventaMes.push(row.clp * f);
       continue;
@@ -287,8 +290,8 @@ Deno.serve(async (req) => {
       savedIsochroneId: iso.id,
       computedAt: settings.computedAt,
       folderName: nombreCarpeta,
-      /** `ventaMes[0]` es el año de APERTURA, no un año calendario. */
-      yearsMeaning: "años 1..5 de vida del local (índice 0 = año de apertura)",
+      /** Sin años calendario: son años de vida del local desde la apertura. */
+      yearsMeaning: "años 1..5 de vida del local (\"Base\", el año 0, queda excluido)",
       adjustPct,
       isExpress: settings.isExpress ?? false,
       rampEnabled,
