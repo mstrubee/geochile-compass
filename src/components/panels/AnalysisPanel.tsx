@@ -1,4 +1,4 @@
-import { X, Download, FileJson, FileText, FileImage, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight, ShoppingCart, TrendingUp, Store } from "lucide-react";
+import { X, Download, FileJson, FileText, FileImage, Sparkles, RefreshCw, Loader2, ChevronDown, ChevronRight, ShoppingCart, TrendingUp, Store, Check, Eye, Trash2 } from "lucide-react";
 import { GastoEndogenoSection } from "./GastoEndogenoSection";
 import { useCommercialCount } from "@/hooks/useCommercialCount";
 import { computeSalesProjection, type ProjectionResult } from "@/services/salesProjectionService";
@@ -16,7 +16,15 @@ import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import { useIsochroneReport } from "@/hooks/useIsochroneReport";
 import { exportReportToPdf } from "@/utils/reportExportPdf";
 import { exportReportToPptx } from "@/utils/reportExportPptx";
-import { exportReportToPng, slidePngFileName } from "@/utils/reportExportPng";
+import { exportReportToPng } from "@/utils/reportExportPng";
+import {
+  deleteReportSlides,
+  fetchReportSlides,
+  fetchReportSlidesMeta,
+  saveReportSlides,
+  type StoredReportSlides,
+} from "@/services/isochroneReportSlidesService";
+import { ReportSlidesViewer } from "./ReportSlidesViewer";
 import type { MapCaptureImages } from "@/utils/mapCapture";
 import { MapCapturePreviewDialog } from "./MapCapturePreviewDialog";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
@@ -36,6 +44,12 @@ interface AnalysisPanelProps {
   autoOpenProjection?: boolean;
   /** Nombre de la isócrona guardada que se está analizando (para el header). */
   isochroneName?: string | null;
+  /**
+   * Id de la isócrona GUARDADA. Sin él no se pueden cachear las láminas para
+   * leaseflow: la tabla las referencia por `saved_isochrones.id`, así que una
+   * isócrona que todavía no se guardó no tiene dónde colgarlas.
+   */
+  savedIsochroneId?: string | null;
   /** Ajustes de proyección recordados de esta ubicación. */
   projectionSettings?: ProjectionSettings | null;
   /** Persiste los ajustes para recuperarlos al volver a abrir la isócrona. */
@@ -163,6 +177,7 @@ export const AnalysisPanel = ({
   projectionFolders = [],
   autoOpenProjection = false,
   isochroneName = null,
+  savedIsochroneId = null,
   projectionSettings = null,
   onProjectionSettingsChange,
   onCaptureMapImages,
@@ -233,6 +248,11 @@ export const AnalysisPanel = ({
   // mismas fotos del mapa, así que comparten toda esa interacción y recién
   // se separan al momento de escribir el archivo.
   const [exportFormat, setExportFormat] = useState<"pptx" | "png">("pptx");
+  // Metadatos de las láminas cacheadas: se consulta sin el contenido para no
+  // arrastrar ~1 MB de base64 cada vez que se abre el panel.
+  const [slidesMeta, setSlidesMeta] = useState<{ generatedAt: string; hasSlide2: boolean } | null>(null);
+  const [slidesOpen, setSlidesOpen] = useState<StoredReportSlides | null>(null);
+  const [slidesBusy, setSlidesBusy] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   // La curva vive acá y no en la sección: el informe necesita el snapshot de
   // la proyección aunque esa sección esté colapsada (la sección se desmonta).
@@ -279,6 +299,44 @@ export const AnalysisPanel = ({
    * exportar con la sección cerrada producía un informe sin la lámina de
    * proyección aunque la proyección existiera.
    */
+  // Estado de las láminas cacheadas. Se recarga al cambiar de isócrona porque
+  // leaseflow las borra al consumirlas: lo que había hace un rato puede ya no
+  // estar, y mostrar "guardadas" cuando no lo están es peor que no mostrar nada.
+  const refreshSlidesMeta = useCallback(async () => {
+    if (!savedIsochroneId) { setSlidesMeta(null); return; }
+    try {
+      setSlidesMeta(await fetchReportSlidesMeta(savedIsochroneId));
+    } catch {
+      setSlidesMeta(null);
+    }
+  }, [savedIsochroneId]);
+
+  useEffect(() => { void refreshSlidesMeta(); }, [refreshSlidesMeta]);
+
+  const handleOpenSlides = useCallback(async () => {
+    if (!savedIsochroneId) return;
+    setSlidesBusy(true);
+    try {
+      const s = await fetchReportSlides(savedIsochroneId);
+      if (!s) { setSlidesMeta(null); return; }
+      setSlidesOpen(s);
+    } finally {
+      setSlidesBusy(false);
+    }
+  }, [savedIsochroneId]);
+
+  const handleDeleteSlides = useCallback(async () => {
+    if (!savedIsochroneId) return;
+    setSlidesBusy(true);
+    try {
+      await deleteReportSlides(savedIsochroneId);
+      setSlidesOpen(null);
+      setSlidesMeta(null);
+    } finally {
+      setSlidesBusy(false);
+    }
+  }, [savedIsochroneId]);
+
   const projForReport: ReportProjection | null = useMemo(() => {
     if (!projResult) return null;
     const adjustPct = projAdjust?.adjustPct ?? 0;
@@ -856,12 +914,55 @@ export const AnalysisPanel = ({
               </button>
               <button
                 onClick={() => { setExportFormat("png"); setPreviewOpen(true); }}
-                disabled={!fullReport || exportingPptx}
+                disabled={!fullReport || exportingPptx || !savedIsochroneId}
                 className="mt-1.5 w-full rounded-lg bg-brand-red/10 px-2 py-2 text-[11px] font-medium text-brand-red transition-colors hover:bg-brand-red/20 disabled:opacity-40"
-                title="Las mismas 2 láminas como imágenes, para insertarlas en otra presentación"
+                title={savedIsochroneId
+                  ? "Genera las 2 láminas y las deja guardadas para que leaseflow las tome"
+                  : "Guarda la isócrona primero: las láminas se asocian a una isócrona guardada"}
               >
-                <FileImage className="mr-1 inline h-3 w-3" /> Informe directorio (2 PNG)
+                <FileImage className="mr-1 inline h-3 w-3" />
+                {slidesMeta ? "Regenerar láminas para leaseflow" : "Guardar láminas para leaseflow"}
               </button>
+
+              {!savedIsochroneId && (
+                <div className="mt-1 text-[9px] leading-snug text-muted-foreground">
+                  Guarda la isócrona para poder dejarle las láminas a leaseflow.
+                </div>
+              )}
+
+              {slidesMeta && (
+                <div className="mt-1.5 rounded-lg border border-green-500/25 bg-green-500/5 px-2 py-1.5">
+                  <div className="flex items-center gap-1.5 text-[10px] text-green-400">
+                    <Check className="h-3 w-3 flex-shrink-0" />
+                    <span className="flex-1 truncate">
+                      {slidesMeta.hasSlide2 ? "2 láminas guardadas" : "1 lámina guardada"} ·{" "}
+                      {new Date(slidesMeta.generatedAt).toLocaleDateString("es-CL")}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex gap-1">
+                    <button
+                      onClick={handleOpenSlides}
+                      disabled={slidesBusy}
+                      className="flex-1 rounded bg-surface-2/60 px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:bg-surface-3 disabled:opacity-40"
+                    >
+                      {slidesBusy
+                        ? <Loader2 className="mr-1 inline h-2.5 w-2.5 animate-spin" />
+                        : <Eye className="mr-1 inline h-2.5 w-2.5" />}
+                      Ver láminas
+                    </button>
+                    <button
+                      onClick={handleDeleteSlides}
+                      disabled={slidesBusy}
+                      className="flex-1 rounded bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-40"
+                    >
+                      <Trash2 className="mr-1 inline h-2.5 w-2.5" /> Eliminar
+                    </button>
+                  </div>
+                  <div className="mt-1 text-[9px] leading-snug text-muted-foreground">
+                    leaseflow las elimina al tomarlas.
+                  </div>
+                </div>
+              )}
               <button
                 onClick={() => {
                   if (!fullReport) return;
@@ -876,6 +977,15 @@ export const AnalysisPanel = ({
           </>
         )}
       </div>
+
+      {slidesOpen && (
+        <ReportSlidesViewer
+          slides={slidesOpen}
+          onClose={() => setSlidesOpen(null)}
+          onDelete={handleDeleteSlides}
+          deleting={slidesBusy}
+        />
+      )}
 
       <MapCapturePreviewDialog
         open={previewOpen}
@@ -907,8 +1017,15 @@ export const AnalysisPanel = ({
             setProjAdjust(next);
             persistProjection(next, projResult);
             if (exportFormat === "png") {
+              // No se descargan: quedan en la base para que leaseflow las
+              // extraiga. El analista las revisa desde "Ver láminas".
               const laminas = await exportReportToPng(fullReport, projForReport, imgs);
-              for (const l of laminas) downloadDataUrl(l.dataUrl, slidePngFileName(fullReport, l.index));
+              const saved = await saveReportSlides({
+                isochroneId: savedIsochroneId!,
+                slide1: laminas[0]?.dataUrl ?? "",
+                slide2: laminas[1]?.dataUrl ?? null,
+              });
+              setSlidesMeta({ generatedAt: saved.generatedAt, hasSlide2: !!saved.slide2 });
             } else {
               await exportReportToPptx(fullReport, projForReport, imgs);
             }
@@ -1063,17 +1180,6 @@ interface ProjectionSectionProps {
  * sube hasta el 100%; sin él se asume la ubicación ya madura, que es lo que
  * corresponde al evaluar el traslado de un local en marcha.
  */
-/** Descarga un data URL con el nombre dado. */
-const downloadDataUrl = (dataUrl: string, fileName: string) => {
-  const a = document.createElement("a");
-  a.href = dataUrl;
-  a.download = fileName;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => document.body.removeChild(a), 1000);
-};
-
 const buildProjRows = (
   result: ProjectionResult,
   curve: MaturationCurve | null,

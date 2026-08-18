@@ -1847,6 +1847,7 @@ const Index = () => {
             projectionFolders={folders.filter(f => !f.parent_id).map(f => ({ id: f.id, name: f.name }))}
             autoOpenProjection={!!projectionIsoId}
             isochroneName={analysisSavedIso?.name ?? null}
+            savedIsochroneId={analysisSavedIso?.id ?? null}
             projectionSettings={analysisSavedIso?.projection_settings ?? null}
             onProjectionSettingsChange={handleProjectionSettingsChange}
             onCaptureMapImages={captureIsochroneMapImages}
