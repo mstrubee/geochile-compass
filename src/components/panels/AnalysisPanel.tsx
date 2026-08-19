@@ -13,6 +13,7 @@ import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
 import { useIsochroneAnalysis } from "@/hooks/useIsochroneAnalysis";
 import { useIsochroneInsights } from "@/hooks/useIsochroneInsights";
 import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
+import { useCannibalization } from "@/hooks/useCannibalization";
 import { useIsochroneReport } from "@/hooks/useIsochroneReport";
 import { exportReportToPdf } from "@/utils/reportExportPdf";
 import { exportReportToPptx } from "@/utils/reportExportPptx";
@@ -232,6 +233,16 @@ export const AnalysisPanel = ({
   // Proyección de potencial de venta
   const { stats: parqueForProjection } = useParqueIsochroneStats(isoFeatureActive, open);
 
+  // Canibalización con locales propios: alimenta la proyección y el informe.
+  const { cannibalization } = useCannibalization({
+    folderId: projectionFolderId,
+    isoFeature: isoFeatureActive,
+    isoMinutes: selectedMin,
+    totalPop: analysis?.totals.pop ?? 0,
+    totalVehiculos: parqueForProjection?.vehiculos ?? 0,
+    enabled: open,
+  });
+
   // Informe completo para exportar PDF (sin consultas de comercio — solo geodata)
   const { report: fullReport } = useIsochroneReport({
     isochrone,
@@ -369,6 +380,24 @@ export const AnalysisPanel = ({
       nWithPredicted: projResult.nWithPredicted,
       usedPredictions: projResult.usedPredictions,
       diagnosticMsg: projResult.diagnosticMsg,
+      // El ajuste manual `f` NO se aplica a las cifras de canibalización: son
+      // una medición del territorio, no una proyección de venta. Solo `lostClp`
+      // y `lostUf` lo llevan, porque sí son plata proyectada.
+      cannibalization: projResult.cannibalization
+        ? {
+            popPct: projResult.cannibalization.popPct,
+            areaPct: projResult.cannibalization.areaPct,
+            vehiculosPct: projResult.cannibalization.vehiculosPct,
+            overlapPop: projResult.cannibalization.overlapPop,
+            overlapAreaKm2: projResult.cannibalization.overlapAreaKm2,
+            overlapVehiculos: projResult.cannibalization.overlapVehiculos,
+            lostUf: projResult.cannibalization.lostUf * f,
+            lostClp: projResult.cannibalization.lostClp * f,
+            overlapCount: projResult.cannibalization.overlaps.length,
+            overlaps: projResult.cannibalization.overlaps,
+            incomplete: projResult.cannibalization.incomplete,
+          }
+        : null,
       years: rows.map((r) => ({
         label: r.label, uf: r.uf * f, clp: r.clp * f,
         ratePct: r.ratePct, maturityPct: r.maturityPct, isBase: r.isBase,
@@ -410,6 +439,18 @@ export const AnalysisPanel = ({
         isoAnalysis: analysis,
         isoFeature:  isoFeatureActive,
         parque:      parqueForProjection,
+        cannibalization: cannibalization
+          ? {
+              popPct: cannibalization.popPct,
+              areaPct: cannibalization.areaPct,
+              vehiculosPct: cannibalization.vehiculosPct,
+              overlapPop: cannibalization.overlapPop,
+              overlapAreaKm2: cannibalization.overlapAreaKm2,
+              overlapVehiculos: cannibalization.overlapVehiculos,
+              overlaps: cannibalization.overlaps.map((o) => ({ name: o.name, areaKm2: o.areaKm2 })),
+              incomplete: cannibalization.incomplete,
+            }
+          : null,
       });
       setProjResult(r);
       persistProjection(projAdjust, r);
@@ -418,7 +459,7 @@ export const AnalysisPanel = ({
     } finally {
       setProjLoading(false);
     }
-  }, [projectionFolderId, analysis, isoFeatureActive, parqueForProjection, persistProjection, projAdjust]);
+  }, [projectionFolderId, analysis, isoFeatureActive, parqueForProjection, persistProjection, projAdjust, cannibalization]);
   const toggleSection = (k: SectionKey) =>
     setSectionOpen((s) => ({ ...s, [k]: !s[k] }));
 

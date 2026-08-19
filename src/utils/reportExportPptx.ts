@@ -45,6 +45,8 @@ const baseName = (name: string) =>
 
 const fmt = (n: number) => Math.round(n).toLocaleString("es-CL");
 const fmtCLP = (n: number) => `$${fmt(n)}`;
+/** Millones de pesos, que es la unidad en que se lee la plata en el informe. */
+const fmtMM = (n: number) => `$${(n / 1_000_000).toFixed(1)}MM`;
 
 /** Tipografía compartida de las tablas: densa pero legible al proyectar. */
 const cellBase = {
@@ -376,6 +378,27 @@ export const drawProjectionSlide = (
     ry += (proj.comparables.length + 1) * ROW_H + 0.1;
   }
 
+  // Canibalización: va antes de la proyección año a año porque explica por qué
+  // la cifra proyectada es menor que el potencial bruto del área.
+  const canni = proj.cannibalization;
+  if (canni && canni.overlapCount > 0) {
+    addTableBand(slide, "CANIBALIZACIÓN CON LA RED", COL_R_X, ry);
+    ry += 0.2;
+    const canniRows: Array<[string, string]> = [
+      ["Locales propios con solape", String(canni.overlapCount)],
+      ["Población solapada", `${fmt(canni.overlapPop)} (${canni.popPct.toFixed(0)}%)`],
+      ["Área solapada", `${canni.overlapAreaKm2.toFixed(2)} km² (${canni.areaPct.toFixed(0)}%)`],
+      ["Parque solapado", `${fmt(canni.overlapVehiculos)} (${canni.vehiculosPct.toFixed(0)}%)`],
+      ["Venta canibalizada", `${fmt(canni.lostUf)} UF/mes · ${fmtMM(canni.lostClp)}`],
+    ];
+    slide.table(
+      canniRows.map(([k, v], i) => row([k, v], { fill: i % 2 ? C.rowAlt : undefined })),
+      { x: COL_R_X, y: ry, w: COL_W, colW: [COL_W * 0.46, COL_W * 0.54], rowH: ROW_H,
+        border: { color: C.grid, pt: 0.5 } },
+    );
+    ry += canniRows.length * ROW_H + 0.12;
+  }
+
   addTableBand(slide, "PROYECCIÓN AÑO A AÑO", COL_R_X, ry);
   ry += 0.2;
   slide.table(
@@ -402,6 +425,9 @@ export const drawProjectionSlide = (
   // Notas al pie a lo ancho de la lámina: en una sola columna se comían el
   // espacio que necesita la tabla de comparables.
   const notas = [
+    canni && canni.overlapCount > 0
+      ? `Canibalización medida sobre la intersección de isócronas con ${canni.overlapCount} local${canni.overlapCount === 1 ? "" : "es"} propio${canni.overlapCount === 1 ? "" : "s"}. El % rector es de POBLACIÓN solapada; área y parque van como contexto. El castigo aplicado es relativo al solape promedio de los comparables, no absoluto: sus ventas ya reflejan la canibalización que ellos sufren.${canni.incomplete ? " Cifra parcial: falta la isócrona guardada de algún local cercano." : ""}`
+      : null,
     proj.rampEnabled
       ? "El potencial estimado corresponde al nivel en régimen. Un local recién abierto no rinde eso desde el primer día: la curva parte en la fracción medida en la red y sube hasta el 100%."
       : "Se asume la ubicación ya en régimen desde el primer año.",

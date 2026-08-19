@@ -51,6 +51,46 @@ export interface ComparableStore {
   }>;
 }
 
+/**
+ * Canibalización aplicada a la estimación.
+ *
+ * El castigo es RELATIVO, no absoluto, y esa es la decisión de fondo:
+ * `estimatedUf` sale del promedio ponderado de comparables reales, cuyas ventas
+ * YA reflejan la canibalización que ellos sufren. Descontar el solape absoluto
+ * de la ubicación nueva sobre esa cifra contaría la canibalización dos veces.
+ *
+ * Así que se compara la fracción exclusiva de la ubicación nueva contra la
+ * fracción exclusiva PROMEDIO de sus comparables: si solapa igual que ellos, el
+ * castigo es cero; si solapa más, se castiga solo la diferencia. Y si solapa
+ * menos, sube — el efecto es simétrico porque el sesgo también lo es.
+ */
+export interface CannibalizationAdjust {
+  /** % de población solapada con locales propios (0..100). */
+  popPct: number;
+  /** % de área solapada. Informativo. */
+  areaPct: number;
+  /** % del parque automotriz solapado. Informativo. */
+  vehiculosPct: number;
+  /** Población, área (km²) y vehículos dentro del solape. */
+  overlapPop: number;
+  overlapAreaKm2: number;
+  overlapVehiculos: number;
+  /** Fracción exclusiva de la ubicación nueva (1 - popPct/100). */
+  exclusiveShare: number;
+  /** Fracción exclusiva promedio ponderada de los comparables. */
+  comparablesExclusiveShare: number;
+  /** Multiplicador aplicado a la estimación: exclusiveShare / comparables. */
+  relativeFactor: number;
+  /** UF/mes que se pierden por canibalización respecto de los comparables. */
+  lostUf: number;
+  /** CLP/mes perdidos. */
+  lostClp: number;
+  /** Locales propios con los que se solapa, mayor solape primero. */
+  overlaps: Array<{ name: string; areaKm2: number }>;
+  /** true si algún vecino no tenía isócrona guardada y quedó sin medir. */
+  incomplete: boolean;
+}
+
 export interface ProjectionResult {
   estimatedUf:   number;
   estimatedClp:  number;
@@ -73,6 +113,13 @@ export interface ProjectionResult {
   usedPredictions: boolean;
   /** Mensaje diagnóstico para mostrar en la UI */
   diagnosticMsg: string | null;
+  /**
+   * Canibalización con locales propios. `null` si no se pudo medir (sin
+   * isócronas guardadas de los vecinos, o sin polígono de la isócrona nueva).
+   */
+  cannibalization: CannibalizationAdjust | null;
+  /** Estimación ANTES del ajuste por canibalización, para poder contrastar. */
+  estimatedUfBeforeCannibalization: number;
 }
 
 export interface ProjectionInput {
@@ -85,6 +132,18 @@ export interface ProjectionInput {
    */
   isoFeature?: Feature<Polygon | MultiPolygon> | null;
   parque?:     ParqueIsochroneStats | null;
+  /**
+   * Canibalización ya medida por `cannibalizationService`. Se pasa desde afuera
+   * en vez de calcularse acá porque necesita las manzanas GSE y el GeoJSON del
+   * parque, que el panel y el informe ya tienen cargados: recalcularlos dentro
+   * duplicaría trabajo pesado.
+   */
+  cannibalization?: {
+    popPct: number; areaPct: number; vehiculosPct: number;
+    overlapPop: number; overlapAreaKm2: number; overlapVehiculos: number;
+    overlaps: Array<{ name: string; areaKm2: number }>;
+    incomplete: boolean;
+  } | null;
   /** Tasa de crecimiento anual para la proyección (default 0.03 = 3%) */
   growthRate?: number;
   /** Años a proyectar hacia adelante (default 5) */
@@ -237,6 +296,7 @@ export async function computeSalesProjection(
 ): Promise<ProjectionResult> {
   const {
     folderId, isoAnalysis, isoFeature, parque,
+    cannibalization: canniInput = null,
     growthRate    = DEFAULT_GROWTH_RATE,
     horizonYears  = 5,
   } = input;
@@ -396,6 +456,50 @@ export async function computeSalesProjection(
   const p25 = sortedUf[Math.max(0, Math.floor(sortedUf.length * 0.25))] ?? sortedUf[0];
   const p75 = sortedUf[Math.min(sortedUf.length - 1, Math.floor(sortedUf.length * 0.75))] ?? sortedUf[sortedUf.length - 1];
 
+  // ── 7b. Canibalización, relativa a los comparables ─────────────────────────
+  const estimatedUfRaw = estimatedUf;
+  let cannibalization: CannibalizationAdjust | null = null;
+  let estimatedUfAdj = estimatedUf;
+
+  if (canniInput) {
+    const exclusiveShare = Math.max(0, 1 - canniInput.popPct / 100);
+
+    // Fracción exclusiva promedio de los comparables usados, ponderada por el
+    // mismo peso con que entran a la estimación. `cannibalization_factor` es
+    // justamente pop_exclusive / pop_total, medido por compute-poi-features.
+    // Un comparable sin el dato se toma como 1 (sin solape): es lo que valía
+    // antes de que existiera la medición, así que no introduce un salto.
+    const compShare = topK.reduce((acc, t, i) => {
+      const f = comparable[t.idx].features["cannibalization_factor"];
+      const v = Number.isFinite(f) && f > 0 ? f : 1;
+      return acc + v * normWeights[i];
+    }, 0);
+
+    const comparablesExclusiveShare = compShare > 0 ? compShare : 1;
+    const relativeFactor = comparablesExclusiveShare > 0
+      ? exclusiveShare / comparablesExclusiveShare
+      : 1;
+
+    estimatedUfAdj = estimatedUf * relativeFactor;
+    const lostUf = estimatedUf - estimatedUfAdj;
+
+    cannibalization = {
+      popPct: canniInput.popPct,
+      areaPct: canniInput.areaPct,
+      vehiculosPct: canniInput.vehiculosPct,
+      overlapPop: canniInput.overlapPop,
+      overlapAreaKm2: canniInput.overlapAreaKm2,
+      overlapVehiculos: canniInput.overlapVehiculos,
+      exclusiveShare,
+      comparablesExclusiveShare,
+      relativeFactor,
+      lostUf: Math.round(lostUf * 10) / 10,
+      lostClp: Math.round(lostUf * currentUf),
+      overlaps: canniInput.overlaps,
+      incomplete: canniInput.incomplete,
+    };
+  }
+
   // ── 8. Proyección a N años ────────────────────────────────────────────────
   // El año base es el año de los datos (maxBaseYear).
   // El año en curso es currentYear.
@@ -403,7 +507,7 @@ export async function computeSalesProjection(
   const fiveYearProjection: YearProjection[] = [];
   for (let i = 0; i <= horizonYears; i++) {
     const yr  = maxBaseYear + i;
-    const uf  = estimatedUf * Math.pow(1 + growthRate, i);
+    const uf  = estimatedUfAdj * Math.pow(1 + growthRate, i);
     fiveYearProjection.push({
       year:      yr,
       uf:        Math.round(uf * 10) / 10,
@@ -450,6 +554,12 @@ export async function computeSalesProjection(
   const keyFactors = buildKeyFactors(newFeatures, topK.map((k) => comparable[k.idx]));
 
   const diagNotes = [
+    cannibalization && cannibalization.popPct > 0.5
+      ? `Canibalización: ${cannibalization.popPct.toFixed(0)}% de la población ya cubierta por ${cannibalization.overlaps.length} local${cannibalization.overlaps.length === 1 ? "" : "es"} propio${cannibalization.overlaps.length === 1 ? "" : "s"}`
+      : null,
+    cannibalization?.incomplete
+      ? "Canibalización parcial: falta la isócrona guardada de algún local cercano"
+      : null,
     usedPredictions
       ? "Usando predicciones del modelo Ridge (sin ventas reales cargadas)"
       : null,
@@ -460,8 +570,8 @@ export async function computeSalesProjection(
   const diagnosticMsg = diagNotes.length > 0 ? diagNotes.join(" · ") : null;
 
   return {
-    estimatedUf:    Math.round(estimatedUf * 10) / 10,
-    estimatedClp:   Math.round(estimatedUf * currentUf),
+    estimatedUf:    Math.round(estimatedUfAdj * 10) / 10,
+    estimatedClp:   Math.round(estimatedUfAdj * currentUf),
     lowUf:          Math.round(p25 * 10) / 10,
     highUf:         Math.round(p75 * 10) / 10,
     lowClp:         Math.round(p25 * currentUf),
@@ -477,6 +587,8 @@ export async function computeSalesProjection(
     growthRate,
     usedPredictions,
     diagnosticMsg,
+    cannibalization,
+    estimatedUfBeforeCannibalization: Math.round(estimatedUfRaw * 10) / 10,
   };
 }
 
@@ -546,5 +658,7 @@ function emptyProjection(
     comparables: [], nWithSales: 0, nWithPredicted: 0,
     keyFactors: [{ label: diagnosticMsg, value: "—", impact: "neutral" }],
     folderName, baseYear, currentYear, growthRate, usedPredictions: false, diagnosticMsg,
+    cannibalization: null,
+    estimatedUfBeforeCannibalization: 0,
   };
 }

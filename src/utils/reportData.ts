@@ -122,6 +122,23 @@ export interface ReportProjection {
   nWithPredicted: number;
   usedPredictions: boolean;
   diagnosticMsg: string | null;
+  /**
+   * Canibalización con locales propios de la red. `null` si no se pudo medir.
+   * Los porcentajes van 0..100; `lostClp` en CLP/mes (el informe lo muestra en MM$).
+   */
+  cannibalization: {
+    popPct: number;
+    areaPct: number;
+    vehiculosPct: number;
+    overlapPop: number;
+    overlapAreaKm2: number;
+    overlapVehiculos: number;
+    lostUf: number;
+    lostClp: number;
+    overlapCount: number;
+    overlaps: Array<{ name: string; areaKm2: number }>;
+    incomplete: boolean;
+  } | null;
   /** Relativos a la apertura: 'Base', 'Año 1', … No hay año calendario porque no se sabe cuándo abre. */
   years: Array<{ label: string; uf: number; clp: number; ratePct: number; maturityPct: number; isBase: boolean }>;
   comparables: Array<{ name: string; ufPerMonth: number; isActual: boolean; weight: number }>;

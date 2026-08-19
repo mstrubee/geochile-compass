@@ -78,6 +78,32 @@ Deno.serve(async (req) => {
       attributes: ["area"],
     });
 
+    /**
+     * Cuota que informa ORS en sus cabeceras.
+     *
+     * ORS publica el límite y lo consumido en cada respuesta; sin exponerlo,
+     * saber cuántas isócronas quedan disponibles obligaba a inferirlo del plan
+     * documentado en vez de leerlo del servicio.
+     */
+    const quotaOf = (r: Response) => {
+      const pick = (...names: string[]) => {
+        for (const n of names) {
+          const v = r.headers.get(n);
+          if (v != null) return v;
+        }
+        return null;
+      };
+      const q = {
+        limitDay:      pick("x-ratelimit-limit", "X-Ratelimit-Limit"),
+        remainingDay:  pick("x-ratelimit-remaining", "X-Ratelimit-Remaining"),
+        resetAt:       pick("x-ratelimit-reset", "X-Ratelimit-Reset"),
+        limitMinute:   pick("x-ratelimit-limit-minute", "ratelimit-limit"),
+        remainingMin:  pick("x-ratelimit-remaining-minute", "ratelimit-remaining"),
+        retryAfter:    pick("retry-after", "Retry-After"),
+      };
+      return Object.values(q).some((v) => v != null) ? q : null;
+    };
+
     // Retry con backoff exponencial ante 429 (rate limit) o 5xx transitorios
     let orsRes: Response | null = null;
     let text = "";
@@ -102,10 +128,17 @@ Deno.serve(async (req) => {
         if (orsRes.ok) break;
         const retryable = orsRes.status === 429 || orsRes.status >= 500;
         if (!retryable || attempt === maxAttempts) {
-          console.error("ORS error", orsRes.status, text);
+          console.error("ORS error", orsRes.status, text, quotaOf(orsRes));
           const status = orsRes.status === 429 ? 429 : 502;
           return new Response(
-            JSON.stringify({ error: "ORS request failed", status: orsRes.status, details: text }),
+            JSON.stringify({
+              error: "ORS request failed",
+              status: orsRes.status,
+              details: text,
+              // Sin esto, un 429 no dice cuánta cuota queda ni cuándo se
+              // renueva, y la única salida era adivinar el plan de ORS.
+              quota: quotaOf(orsRes),
+            }),
             { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
@@ -130,9 +163,18 @@ Deno.serve(async (req) => {
       });
     }
 
+    // La cuota se devuelve como cabeceras y no dentro del JSON: el cuerpo es el
+    // GeoJSON que consumen los clientes y meterle campos ajenos lo cambiaría.
+    const q = quotaOf(orsRes);
+    const quotaHeaders: Record<string, string> = {};
+    if (q) {
+      for (const [k, v] of Object.entries(q)) {
+        if (v != null) quotaHeaders[`x-ors-${k.toLowerCase()}`] = String(v);
+      }
+    }
     return new Response(text, {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, ...quotaHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown error";

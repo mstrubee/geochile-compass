@@ -12,6 +12,7 @@ import { ManzanaLayer } from "./ManzanaLayer";
 import { UserLayersLayer } from "./UserLayersLayer";
 import { IsochroneLayer } from "./IsochroneLayer";
 import { SavedPoisLayer } from "./SavedPoisLayer";
+import { PoiIsochroneLayer } from "./PoiIsochroneLayer";
 import { TerritorialLayersLayer } from "./TerritorialLayersLayer";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
@@ -242,6 +243,9 @@ interface MapViewProps {
   onAddCommuneToCompare?: (c: import("@/data/communes").Commune) => void;
   outlinedCommuneNames?: string[];
   highlightedCommuneName?: string | null;
+  onPoiContextMenu?: (poi: import("@/types/pois").SavedPoi, at: { x: number; y: number }) => void;
+  /** Isócrona de un local mostrada a demanda desde su menú contextual. */
+  poiIsochrone?: { geometry: import("geojson").Polygon | import("geojson").MultiPolygon; label: string } | null;
   onMapContextMenu?: (c: { lat: number; lng: number; x: number; y: number }) => void;
   /** Cuando es true, el próximo click del mapa se delega a `onPickCoord` y nada más. */
   coordPickerActive?: boolean;
@@ -317,6 +321,8 @@ export const MapView = ({
   outlinedCommuneNames = [],
   highlightedCommuneName = null,
   onMapContextMenu,
+  onPoiContextMenu,
+  poiIsochrone = null,
   coordPickerActive = false,
   onPickCoord,
   onPoiClick,
@@ -456,8 +462,13 @@ export const MapView = ({
       })}
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
+      {poiIsochrone && (
+        <PoiIsochroneLayer geometry={poiIsochrone.geometry} label={poiIsochrone.label} />
+      )}
+
       {/* SavedPoisLayer aquí (post-ComercialPOILayers) para quedar encima en Z-order */}
       <SavedPoisLayer
+        onPoiContextMenu={onPoiContextMenu}
         pois={savedPois}
         visible={savedPoisVisible}
         onPoiClick={onPoiClick}

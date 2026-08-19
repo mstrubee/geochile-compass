@@ -3,7 +3,7 @@ import area from "@turf/area";
 import intersect from "@turf/intersect";
 import bboxFn from "@turf/bbox";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
-import { point, feature as turfFeature } from "@turf/helpers";
+import { point, feature as turfFeature, featureCollection } from "@turf/helpers";
 import { loadParqueGeoJson, type ParqueHexProps } from "@/services/parqueData";
 import { fetchPoiIsochrones } from "@/services/poiIsochroneService";
 import type { GseFeatureCollection } from "@/types/gse";
@@ -122,7 +122,7 @@ const vehiculosInPolygons = async (
     for (let i = 0; i < polys.length; i++) {
       if (!bboxesOverlap(hb, boxes[i])) continue;
       try {
-        const inter = intersect(hex as never, polys[i] as never);
+        const inter = intersect(featureCollection([hex as never, polys[i] as never]) as never);
         if (inter) covered += area(inter as never);
       } catch { /* ignora hexágonos con geometría problemática */ }
     }
@@ -174,7 +174,7 @@ export const computeCannibalization = async (
     const peerFeat = turfFeature(stored.geometry) as Feature<Polygon | MultiPolygon>;
     if (!bboxesOverlap(isoBbox, bboxFn(peerFeat as never) as number[])) continue;
     try {
-      const inter = intersect(isoFeature as never, peerFeat as never);
+      const inter = intersect(featureCollection([isoFeature as never, peerFeat as never]) as never);
       if (!inter) continue;
       const a = area(inter as never) / KM2;
       if (a <= 0) continue;

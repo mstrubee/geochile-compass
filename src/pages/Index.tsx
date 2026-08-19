@@ -48,6 +48,13 @@ import {
 import { findHexAt, loadParqueGeoJson, type ParqueHexProps } from "@/services/parqueData";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import { MapContextMenu, type MapContextMenuItem } from "@/components/ui-overlays/MapContextMenu";
+import { PoiIsochroneLayer } from "@/components/map/PoiIsochroneLayer";
+import {
+  fetchPoiIsochroneVariants,
+  generateMissingPoiIsochrones,
+  isStale,
+  type PoiIsochrone,
+} from "@/services/poiIsochroneService";
 import { fetchOverpassPreset, fetchOverpassFreeText, bboxAreaDegSq } from "@/services/overpassService";
 import { extractPointPois, countPoints, type PoiInsert, type SavedPoi, type PoiFolder } from "@/types/pois";
 import { parseFile, getExtension } from "@/utils/fileParsers";
@@ -852,6 +859,96 @@ const Index = () => {
     }
     openCreatePoiAt({ lat: mapMenu.lat, lng: mapMenu.lng }, null);
   }, [mapMenu, user, navigate, openCreatePoiAt]);
+
+  // ── Isócrona de un local, desde el clic derecho sobre el POI ──────────────
+  //
+  // Se muestra la que YA está guardada en `poi_isochrones`. Si el local no la
+  // tiene (o quedó obsoleta porque se movió), se ofrece generarla en el momento:
+  // cada generación consume cuota de ORS, así que no se dispara sola.
+  const [poiMenu, setPoiMenu] = useState<{
+    poi: SavedPoi; x: number; y: number; variants: PoiIsochrone[];
+  } | null>(null);
+  const [shownPoiIso, setShownPoiIso] = useState<
+    { geometry: PoiIsochrone["geometry"]; label: string } | null
+  >(null);
+
+  const handlePoiContextMenu = useCallback(
+    async (poi: SavedPoi, at: { x: number; y: number }) => {
+      setMapMenu(null);
+      setParqueInfo(null);
+      let variants: PoiIsochrone[] = [];
+      try {
+        variants = await fetchPoiIsochroneVariants(poi.id);
+      } catch {
+        variants = [];
+      }
+      setPoiMenu({ poi, x: at.x, y: at.y, variants });
+    },
+    [],
+  );
+
+  const handleGeneratePoiIso = useCallback(
+    async (poi: SavedPoi, minutes: number) => {
+      setPoiMenu(null);
+      const t = toast.loading(`Generando isócrona de ${minutes} min…`);
+      try {
+        await generateMissingPoiIsochrones(
+          [{ id: poi.id, name: poi.name, lat: poi.lat, lng: poi.lng, minutes }],
+          { force: true },
+        );
+        const variants = await fetchPoiIsochroneVariants(poi.id);
+        const made = variants.find((v) => v.minutes === minutes);
+        if (made) {
+          setShownPoiIso({ geometry: made.geometry, label: `${poi.name} · ${minutes} min` });
+          toast.success("Isócrona generada", { id: t });
+        } else {
+          toast.error("No se pudo generar la isócrona", { id: t });
+        }
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "No se pudo generar la isócrona",
+          { id: t },
+        );
+      }
+    },
+    [],
+  );
+
+  const poiMenuItems = useMemo<MapContextMenuItem[]>(() => {
+    if (!poiMenu) return [];
+    const { poi, variants } = poiMenu;
+    const items: MapContextMenuItem[] = variants.map((v) => ({
+      key: `iso-${v.minutes}`,
+      label: isStale(v, poi.lat, poi.lng)
+        ? `Ver isócrona ${v.minutes} min (local movido — regenerar)`
+        : `Ver isócrona ${v.minutes} min`,
+      icon: "⏱️",
+      onClick: () => {
+        setPoiMenu(null);
+        setShownPoiIso({ geometry: v.geometry, label: `${poi.name} · ${v.minutes} min` });
+      },
+    }));
+    // Siempre se ofrece generar las dos configuradas: son las que usan el
+    // análisis y la canibalización, así que son las que vale la pena tener.
+    for (const m of [5, 7]) {
+      if (variants.some((v) => v.minutes === m)) continue;
+      items.push({
+        key: `gen-${m}`,
+        label: `Generar isócrona ${m} min`,
+        icon: "✨",
+        onClick: () => void handleGeneratePoiIso(poi, m),
+      });
+    }
+    if (shownPoiIso) {
+      items.push({
+        key: "clear",
+        label: "Ocultar isócrona",
+        icon: "✖️",
+        onClick: () => { setPoiMenu(null); setShownPoiIso(null); },
+      });
+    }
+    return items;
+  }, [poiMenu, shownPoiIso, handleGeneratePoiIso]);
 
   const handleMenuParqueInfo = useCallback(() => {
     if (!mapMenu) return;
@@ -1733,6 +1830,8 @@ const Index = () => {
             outlinedCommuneNames={outlinedCommuneNames}
             highlightedCommuneName={highlightedCommuneName}
             onMapContextMenu={handleMapContextMenu}
+            onPoiContextMenu={handlePoiContextMenu}
+            poiIsochrone={shownPoiIso}
             coordPickerActive={!!coordPicker}
             onPickCoord={handlePickCoord}
             onPoiClick={handlePoiClick}
@@ -1862,6 +1961,15 @@ const Index = () => {
           y={mapMenu.y}
           items={mapMenuItems}
           onClose={() => setMapMenu(null)}
+        />
+      )}
+
+      {poiMenu && poiMenuItems.length > 0 && (
+        <MapContextMenu
+          x={poiMenu.x}
+          y={poiMenu.y}
+          items={poiMenuItems}
+          onClose={() => setPoiMenu(null)}
         />
       )}
 

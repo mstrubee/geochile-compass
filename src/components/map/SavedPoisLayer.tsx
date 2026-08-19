@@ -11,11 +11,13 @@ interface Props {
   /** Modo selección: cuando está en true, el cursor cambia y el click llama a onPickPoi. */
   pickMode?: boolean;
   onPickPoi?: (poi: SavedPoi) => void;
+  /** Clic derecho sobre un local: abre el menú contextual del POI. */
+  onPoiContextMenu?: (poi: SavedPoi, at: { x: number; y: number }) => void;
 }
 
 const SAVED_POI_PANE = "savedPoisPane";
 
-export const SavedPoisLayer = ({ pois, visible, onPoiClick, pickMode, onPickPoi }: Props) => {
+export const SavedPoisLayer = ({ pois, visible, onPoiClick, pickMode, onPickPoi, onPoiContextMenu }: Props) => {
   const map = useMap();
 
   useEffect(() => {
@@ -56,6 +58,19 @@ export const SavedPoisLayer = ({ pois, visible, onPoiClick, pickMode, onPickPoi 
             fillColor: color,
             fillOpacity: 0.95,
           });
+
+      // El clic derecho se engancha antes de cualquier `return` de modo, para
+      // que funcione también en pick mode: el usuario no tiene por qué salir
+      // del modo selección para consultar la isócrona de un local.
+      if (onPoiContextMenu) {
+        (marker as L.Marker | L.CircleMarker).on("contextmenu", (e) => {
+          L.DomEvent.stopPropagation(e);
+          // Evita el menú del navegador encima del nuestro.
+          L.DomEvent.preventDefault(e as unknown as Event);
+          const ev = (e as unknown as { originalEvent?: MouseEvent }).originalEvent;
+          onPoiContextMenu(p, { x: ev?.clientX ?? 0, y: ev?.clientY ?? 0 });
+        });
+      }
 
       // Pick mode: solo handler de click, sin popup ni info default.
       if (pickMode && onPickPoi) {
@@ -108,7 +123,7 @@ export const SavedPoisLayer = ({ pois, visible, onPoiClick, pickMode, onPickPoi 
         /* el mapa ya se desmontó */
       }
     };
-  }, [map, pois, visible, onPoiClick, pickMode, onPickPoi]);
+  }, [map, pois, visible, onPoiClick, pickMode, onPickPoi, onPoiContextMenu]);
 
   return null;
 };
