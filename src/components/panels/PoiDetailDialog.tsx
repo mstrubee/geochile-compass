@@ -45,6 +45,7 @@ import {
 import { fetchPoiInsights } from "@/services/poiInsightsService";
 import type { PoiFolderSchema } from "@/types/poiMetrics";
 import { PoiAnalysisPanel } from "@/components/panels/PoiAnalysisPanel";
+import { compareNatural, byNameNatural } from "@/utils/naturalSort";
 
 interface Props {
   open: boolean;
@@ -221,7 +222,7 @@ export const PoiDetailDialog = ({
     const futuros = esVentas
       ? [...pronosticoPorPeriodo.entries()]
           .filter(([period]) => period > currentPeriod)
-          .sort(([a], [b]) => a.localeCompare(b))
+          .sort(([a], [b]) => compareNatural(a, b))
           .map(([period, value]) => ({
             period,
             value: null as number | null,

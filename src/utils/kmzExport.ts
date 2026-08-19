@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
+import { compareNatural, byNameNatural } from "@/utils/naturalSort";
 
 /** Escapa caracteres reservados de XML. */
 const escapeXml = (s: string): string =>
@@ -64,12 +65,12 @@ const folderToFolderXml = (
   poisByFolder: Map<string | null, SavedPoi[]>,
 ): string => {
   const subs = (childrenMap.get(folder.id) ?? []).slice().sort((a, b) =>
-    a.name.localeCompare(b.name, "es"),
+    compareNatural(a.name, b.name),
   );
   const pois = (poisByFolder.get(folder.id) ?? [])
     .filter((p) => !p.deleted_at)
     .slice()
-    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+    .sort(byNameNatural);
 
   const innerSubs = subs.map((s) => folderToFolderXml(s, childrenMap, poisByFolder)).join("\n");
   const innerPois = pois.map(poiToPlacemarkXml).join("\n");

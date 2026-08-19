@@ -10,6 +10,7 @@ import {
   fetchExpressAdjustPct,
   saveExpressAdjustPct,
 } from "@/services/commercialSettingsService";
+import { compareNatural } from "@/utils/naturalSort";
 
 interface Folder { id: string; name: string }
 
@@ -39,7 +40,9 @@ export const ExpressAdjustAdminSection = () => {
         .select("id, name")
         .is("deleted_at", null)
         .order("name");
-      setFolders((data ?? []) as Folder[]);
+      // El `.order("name")` del SQL usa el collation de Postgres, que no es
+      // natural: "Carpeta 10" quedaría antes de "Carpeta 2". Se reordena acá.
+      setFolders(((data ?? []) as Folder[]).slice().sort((a, b) => compareNatural(a.name, b.name)));
     })();
   }, []);
 

@@ -10,6 +10,7 @@ import L from "leaflet";
 import { useMap } from "react-leaflet";
 import { useAgroplanetCompetitors, type AgroplanetCompetitor } from "@/hooks/useAgroplanetCompetitors";
 import { useBrandStyles, getBrandKey, type BrandStyle } from "@/hooks/useBrandStyles";
+import { compareNatural, byNameNatural } from "@/utils/naturalSort";
 
 interface Props {
   visible: boolean;
@@ -136,7 +137,7 @@ export const AgroplanetCompetitorsLayer = ({ visible }: Props) => {
     }
     // Ordenar cada grupo alfabéticamente para numeración consistente
     for (const [, arr] of groups) {
-      arr.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+      arr.sort((a, b) => compareNatural(a.nombre, b.nombre));
     }
     return groups;
   }, [data]);

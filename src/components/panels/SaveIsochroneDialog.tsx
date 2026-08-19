@@ -8,6 +8,7 @@ import { FolderPlus, Save } from "lucide-react";
 import type { IsochroneFolder, SaveIsochronePayload } from "@/types/savedIsochrones";
 import type { Isochrone } from "@/types/isochrones";
 import { ISO_MODE_LABEL } from "@/types/isochrones";
+import { compareNatural, byNameNatural } from "@/utils/naturalSort";
 
 interface Props {
   open: boolean;
@@ -29,7 +30,7 @@ const buildIndentedList = (folders: IsochroneFolder[]) => {
   }
   const out: { id: string; label: string }[] = [];
   const walk = (parent: string | null, depth: number) => {
-    const items = (byParent.get(parent) ?? []).sort((a, b) => a.name.localeCompare(b.name));
+    const items = (byParent.get(parent) ?? []).sort(byNameNatural);
     for (const it of items) {
       out.push({ id: it.id, label: `${"— ".repeat(depth)}${it.name}` });
       walk(it.id, depth + 1);

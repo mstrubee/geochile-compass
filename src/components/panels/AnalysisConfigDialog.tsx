@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import type { PoiFolder } from "@/types/pois";
 import { useAnalysisSettings, useUfMap, useComplementRules } from "@/hooks/useAnalysisConfig";
 import { TerritorialRolesTab } from "./TerritorialRolesTab";
+import { compareNatural, byNameNatural } from "@/utils/naturalSort";
 
 interface Props {
   open: boolean;
@@ -569,7 +570,7 @@ const buildTree = (folders: PoiFolder[]): TreeNode[] => {
     }
   }
   const sortRec = (nodes: TreeNode[]) => {
-    nodes.sort((a, b) => a.folder.name.localeCompare(b.folder.name, "es"));
+    nodes.sort((a, b) => compareNatural(a.folder.name, b.folder.name));
     nodes.forEach((n) => sortRec(n.children));
   };
   sortRec(roots);

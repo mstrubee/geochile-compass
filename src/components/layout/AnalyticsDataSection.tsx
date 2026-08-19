@@ -6,6 +6,7 @@ import {
 import {
   exportAnalyticsToPdf, exportAnalyticsToXlsx, type ExportColumn,
 } from "@/utils/analyticsExport";
+import { compareNatural, byNameNatural } from "@/utils/naturalSort";
 
 /**
  * "Datos analíticos": métricas de eficiencia de los locales.
@@ -100,7 +101,7 @@ export const AnalyticsDataSection = ({
       if (bv == null) return -1;
       const cmp = typeof av === "number" && typeof bv === "number"
         ? av - bv
-        : String(av).localeCompare(String(bv), "es");
+        : compareNatural(String(av), String(bv));
       return sortDesc ? -cmp : cmp;
     });
   }, [rows, query, onlyWithSales, sortKey, sortDesc]);

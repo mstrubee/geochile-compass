@@ -7,6 +7,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
 import type { PoiFolderSchema } from "@/types/poiMetrics";
+import { compareNatural, byNameNatural } from "@/utils/naturalSort";
 
 const CHUNK = 200;
 const PAGE = 1000;
@@ -222,14 +223,14 @@ export const exportFolderDataset = async (
   const schemaStatic = (schema?.static_columns ?? []).filter((c) => attrKeySet.has(c));
   const remainingStatic = [...attrKeySet]
     .filter((c) => !schemaStatic.includes(c))
-    .sort((a, b) => a.localeCompare(b));
+    .sort(compareNatural);
   const staticCols = [...schemaStatic, ...remainingStatic];
 
   // Features: alfabético, prefijo feat_
-  const featCols = [...featKeySet].sort((a, b) => a.localeCompare(b));
+  const featCols = [...featKeySet].sort(compareNatural);
 
   // Métricas: cronológico ascendente
-  const metricCols = [...metricColSet].sort((a, b) => a.localeCompare(b));
+  const metricCols = [...metricColSet].sort(compareNatural);
 
   const headers = [
     ...baseCols,

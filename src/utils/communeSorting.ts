@@ -1,4 +1,5 @@
 import type { Commune } from "@/data/communes";
+import { compareNatural, byNameNatural } from "@/utils/naturalSort";
 
 export type CommunePreset =
   | "north-south"
@@ -41,9 +42,9 @@ export const sortCommunesByPreset = (
     case "south-north":
       return arr.sort((a, b) => a.lat - b.lat);
     case "alpha-asc":
-      return arr.sort((a, b) => a.name.localeCompare(b.name, "es"));
+      return arr.sort((a, b) => compareNatural(a.name, b.name));
     case "alpha-desc":
-      return arr.sort((a, b) => b.name.localeCompare(a.name, "es"));
+      return arr.sort((a, b) => compareNatural(b.name, a.name));
     case "gse-high":
       return arr.sort((a, b) => b.nse - a.nse);
     case "gse-low":
@@ -62,8 +63,8 @@ export const sortCommunesByKey = (
     const bv = b[key];
     if (typeof av === "string" && typeof bv === "string") {
       return dir === "asc"
-        ? av.localeCompare(bv, "es")
-        : bv.localeCompare(av, "es");
+        ? compareNatural(av, bv)
+        : compareNatural(bv, av);
     }
     return dir === "asc"
       ? (av as number) - (bv as number)

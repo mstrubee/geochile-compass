@@ -45,6 +45,7 @@ import { BrandCatalogManager } from "@/components/admin/BrandCatalogManager";
 import type { ComercialCategoria, ComercialLayerState } from "@/types/comercial";
 import { CATEGORY_META } from "@/components/map/CommercialHeatLayer";
 import type { CommercialCategory } from "@/components/map/CommercialHeatLayer";
+import { compareNatural, byNameNatural } from "@/utils/naturalSort";
 
 const CRIME_TYPE_LABELS: Record<CrimeType, string> = {
   total:  "Todos los delitos",
@@ -348,7 +349,7 @@ const SavedIsochronesSubsection = ({
       arr.push(f);
       m.set(k, arr);
     }
-    for (const arr of m.values()) arr.sort((a, b) => a.name.localeCompare(b.name));
+    for (const arr of m.values()) arr.sort(byNameNatural);
     return m;
   }, [folders]);
 
@@ -360,7 +361,7 @@ const SavedIsochronesSubsection = ({
       arr.push(s);
       m.set(k, arr);
     }
-    for (const arr of m.values()) arr.sort((a, b) => a.name.localeCompare(b.name));
+    for (const arr of m.values()) arr.sort(byNameNatural);
     return m;
   }, [savedIsos]);
 
@@ -865,6 +866,9 @@ export const Sidebar = ({
       arr.push(p);
       m.set(k, arr);
     });
+    // Los POIs llegan del servidor en orden de creación. Ordenarlos por nombre
+    // acá es lo que hace la lista predecible cuando la carpeta tiene decenas.
+    for (const arr of m.values()) arr.sort(byNameNatural);
     return m;
   }, [savedPois]);
   // Recuento total (incluye descendientes). Usa el max entre el array cargado

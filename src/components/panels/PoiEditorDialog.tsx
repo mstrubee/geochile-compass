@@ -22,6 +22,7 @@ import type {
   SavedPoi,
 } from "@/types/pois";
 import { POI_STATUS_LABEL } from "@/types/pois";
+import { compareNatural, byNameNatural } from "@/utils/naturalSort";
 
 const COLOR_OPTIONS = [
   "#34D399", "#F472B6", "#FBBF24", "#60A5FA",
@@ -130,7 +131,7 @@ export const PoiEditorDialog = (props: Props) => {
   const folderOptions = useMemo(() => {
     return folders
       .map((f) => ({ id: f.id, label: folderPath(f.id, foldersById) }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+      .sort((a, b) => compareNatural(a.label, b.label));
   }, [folders, foldersById]);
 
   const [draft, setDraft] = useState<PoiEditorDraft>(() =>
