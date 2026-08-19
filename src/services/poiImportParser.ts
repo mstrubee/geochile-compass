@@ -88,10 +88,21 @@ const cellToString = (cell: unknown): string => {
 };
 
 /** Lee el archivo subido como ArrayBuffer y lo parsea. */
+export interface ParseOptions {
+  /**
+   * Métrica temporal a la que escribir. Por defecto se usa la primera de
+   * `metric_definitions` con `kind: "timeseries"` (históricamente "ventas").
+   * Se indica explícitamente al importar presupuesto, que viaja por el mismo
+   * pipeline pero a otra métrica.
+   */
+  metricKey?: string;
+}
+
 export const parseAutoPlanetSheet = async (
   file: File,
   schema: PoiFolderSchema,
-): Promise<ParsedSheet> => parseAutoPlanetBuffer(await file.arrayBuffer(), schema);
+  options?: ParseOptions,
+): Promise<ParsedSheet> => parseAutoPlanetBuffer(await file.arrayBuffer(), schema, options);
 
 /**
  * Igual que parseAutoPlanetSheet pero desde un buffer crudo, sin depender del
@@ -101,6 +112,7 @@ export const parseAutoPlanetSheet = async (
 export const parseAutoPlanetBuffer = (
   buf: ArrayBuffer | Uint8Array,
   schema: PoiFolderSchema,
+  options?: ParseOptions,
 ): ParsedSheet => {
   const wb = XLSX.read(buf, { cellDates: true, type: "array" });
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -120,10 +132,17 @@ export const parseAutoPlanetBuffer = (
 
   const identityCols = new Set(schema.identity_columns);
   const staticCols = new Set(schema.static_columns);
-  // En el preset AutoPlanet sólo hay una métrica de timeseries.
-  const tsMetric = schema.metric_definitions.find((m) => m.kind === "timeseries");
+  // Métrica destino: la pedida explícitamente (ej. presupuesto) o, por
+  // compatibilidad, la primera de tipo timeseries (históricamente "ventas").
+  const tsMetric = options?.metricKey
+    ? schema.metric_definitions.find((m) => m.key === options.metricKey && m.kind === "timeseries")
+    : schema.metric_definitions.find((m) => m.kind === "timeseries");
   if (!tsMetric) {
-    throw new Error("El esquema de la carpeta no tiene métrica temporal definida.");
+    throw new Error(
+      options?.metricKey
+        ? `El esquema de la carpeta no define la métrica temporal "${options.metricKey}".`
+        : "El esquema de la carpeta no tiene métrica temporal definida.",
+    );
   }
 
   // Clasificar columnas

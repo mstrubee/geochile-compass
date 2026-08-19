@@ -449,6 +449,8 @@ const Index = () => {
   const { isAdmin } = useUserRoles();
   const { schemas: poiFolderSchemas, refresh: refreshSchemas, upsertSchema } = usePoiFolderSchemas();
   const [importDialogFolderId, setImportDialogFolderId] = useState<string | null>(null);
+  /** Métrica que se está importando: undefined = ventas, "presupuesto" = metas. */
+  const [importDialogMetric, setImportDialogMetric] = useState<string | undefined>(undefined);
   const [schemaDialogFolderId, setSchemaDialogFolderId] = useState<string | null>(null);
   const [analysisConfigFolderId, setAnalysisConfigFolderId] = useState<string | null>(null);
   const [computeFeaturesFolderId, setComputeFeaturesFolderId] = useState<string | null>(null);
@@ -1794,7 +1796,10 @@ const Index = () => {
           onSearchedCommunesChange={setSearchedCommunes}
           isAdmin={isAdmin}
           poiFolderSchemas={poiFolderSchemas}
-          onImportToFolder={(folderId) => setImportDialogFolderId(folderId)}
+          onImportToFolder={(folderId, metricKey) => {
+            setImportDialogMetric(metricKey);
+            setImportDialogFolderId(folderId);
+          }}
           onConfigureFolderSchema={(folderId) => setSchemaDialogFolderId(folderId)}
           onConfigureAnalysis={(folderId) => setAnalysisConfigFolderId(folderId)}
           onComputeFeatures={(folderId) => setComputeFeaturesFolderId(folderId)}
@@ -2202,6 +2207,8 @@ const Index = () => {
           folder={folders.find((f) => f.id === importDialogFolderId) ?? null}
           schema={poiFolderSchemas.find((s) => s.folder_id === importDialogFolderId) ?? null}
           folderPois={pois.filter((p) => p.folder_id === importDialogFolderId)}
+          metricKey={importDialogMetric}
+          distributeAnnual={importDialogMetric === "presupuesto"}
           onPickPoiOnMap={(rowIndex) => {
             setPoiPickContext({ rowIndex });
             toast.info("Click en el mapa sobre el POI correcto");

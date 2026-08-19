@@ -13,6 +13,7 @@ import {
 } from "@/services/poiImportMatcher";
 import { fetchAliasesForPois } from "@/hooks/usePoiMetrics";
 import { commitImport, type CommitResult } from "@/services/poiImportCommit";
+import { computeSeasonalFactors, distributeAnnualBudget } from "@/services/budgetDistribution";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeAddress } from "@/utils/addressNormalize";
 
@@ -41,6 +42,18 @@ interface UseImportParams {
   schema: PoiFolderSchema | null;
   folderId: string | null;
   folderPois: SavedPoi[];
+  /**
+   * Métrica temporal a la que escribir. Por defecto (undefined) se usa la
+   * primera del esquema — históricamente "ventas". Se pasa "presupuesto" al
+   * importar metas, que viajan por este mismo pipeline.
+   */
+  metricKey?: string;
+  /**
+   * Si el archivo trae un total ANUAL por local (una sola columna por año),
+   * repartirlo en 12 metas mensuales según la estacionalidad real de la red
+   * en vez de dividir por 12. Ver services/budgetDistribution.ts.
+   */
+  distributeAnnual?: boolean;
 }
 
 /**
@@ -53,7 +66,13 @@ interface UseImportParams {
  *  - `manualAssignments`: rowIndex → poiId (override admin)
  *  - `skippedRows`: rowIndex set (filas a omitir)
  */
-export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) => {
+export const usePoiImport = ({
+  schema,
+  folderId,
+  folderPois,
+  metricKey,
+  distributeAnnual = false,
+}: UseImportParams) => {
   const [phase, setPhase] = useState<ImportPhase>("idle");
   const [filename, setFilename] = useState<string>("");
   const [parsed, setParsed] = useState<ParsedSheet | null>(null);
@@ -66,6 +85,8 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
   const [aliases, setAliases] = useState<PoiAddressAlias[]>([]);
   const [sourceFilePath, setSourceFilePath] = useState<string | null>(null);
+  /** Aviso al usuario cuando se repartió un total anual en metas mensuales. */
+  const [distributionNote, setDistributionNote] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const reset = useCallback(() => {
@@ -83,6 +104,7 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
     setCommitResult(null);
     setAliases([]);
     setSourceFilePath(null);
+    setDistributionNote(null);
   }, []);
 
   /** Etapa 1: parsea el Excel y lo sube a storage para poder retomarlo después. */
@@ -97,12 +119,39 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
         setPhase("parsing");
         setFilename(file.name);
         setError(null);
-        const result = await parseAutoPlanetSheet(file, schema);
+        let result = await parseAutoPlanetSheet(file, schema, { metricKey });
         if (result.missingIdentityColumns.length > 0) {
           throw new Error(
             `Faltan columnas requeridas: ${result.missingIdentityColumns.join(", ")}`,
           );
         }
+
+        // Presupuesto anual: expandir el total del año en 12 metas mensuales,
+        // ponderadas por la estacionalidad real de la red. Los factores se
+        // calculan de las ventas históricas, no están fijos en el código.
+        if (distributeAnnual) {
+          const { data: ventas } = await supabase
+            .from("poi_metrics")
+            .select("period, value")
+            .eq("metric_key", "ventas");
+          const factors = computeSeasonalFactors(
+            (ventas ?? []).map((v) => ({ period: String(v.period), value: Number(v.value) })),
+          );
+          const dist = distributeAnnualBudget(result.rows, factors);
+          if (dist.distributedYears.length > 0) {
+            result = {
+              ...result,
+              rows: dist.rows,
+              periods: [...new Set(dist.rows.flatMap((r) => r.metrics.map((m) => m.period)))].sort(),
+            };
+            setDistributionNote(
+              `Se repartió el total anual de ${dist.distributedYears.join(", ")} en 12 metas mensuales según la estacionalidad de la red.`,
+            );
+          } else {
+            setDistributionNote(null);
+          }
+        }
+
         setParsed(result);
         setPhase("parsed");
 
@@ -340,6 +389,7 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
     progressFrac,
     commitResult,
     stats,
+    distributionNote,
     parse,
     runMatching,
     assignManual,

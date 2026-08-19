@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText, Car, TrendingUp, Sheet, FileDown } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText, Car, TrendingUp, Sheet, FileDown, Target } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -202,7 +202,7 @@ interface SidebarProps {
   // Sales import system (admin only)
   isAdmin?: boolean;
   poiFolderSchemas?: import("@/types/poiMetrics").PoiFolderSchema[];
-  onImportToFolder?: (folderId: string) => void;
+  onImportToFolder?: (folderId: string, metricKey?: string) => void;
   onConfigureFolderSchema?: (folderId: string) => void;
   // Analysis module (admin only)
   onConfigureAnalysis?: (folderId: string) => void;
@@ -2293,6 +2293,22 @@ export const Sidebar = ({
                                   >
                                     <FileText className="mr-2 h-3.5 w-3.5" />
                                     Importar Excel de ventas{enabled ? "…" : " (sin esquema)"}
+                                  </ContextMenuItem>
+                                );
+                              })()}
+                              {/* Admin: importar presupuesto (misma tubería, otra métrica) */}
+                              {isAdmin && onImportToFolder && (() => {
+                                const sch = poiFolderSchemas.find((s) => s.folder_id === f.id);
+                                const tienePresupuesto = !!sch?.metric_definitions?.some(
+                                  (m) => m.key === "presupuesto",
+                                );
+                                return (
+                                  <ContextMenuItem
+                                    disabled={!tienePresupuesto}
+                                    onSelect={() => onImportToFolder(f.id, "presupuesto")}
+                                  >
+                                    <Target className="mr-2 h-3.5 w-3.5" />
+                                    Importar presupuesto{tienePresupuesto ? "…" : " (no configurado)"}
                                   </ContextMenuItem>
                                 );
                               })()}

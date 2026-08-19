@@ -41,6 +41,7 @@
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { parseAutoPlanetBuffer } from "@/services/poiImportParser";
+import { computeSeasonalFactors, distributeAnnualBudget } from "@/services/budgetDistribution";
 import { matchImportRows, DEFAULT_THRESHOLD_METERS } from "@/services/poiImportMatcher";
 import { commitImport } from "@/services/poiImportCommit";
 import { normalizeAddress } from "@/utils/addressNormalize";
@@ -62,6 +63,11 @@ const hasFlag = (flag: string): boolean => process.argv.slice(2).includes(`--${f
 const DRY_RUN = process.env.DRY_RUN === "true" || hasFlag("dry-run");
 const CLI_FILE = argValue("file") ?? process.env.SYNC_LOCAL_FILE;
 const CLI_FOLDER = argValue("folder") ?? process.env.SYNC_FOLDER_ID;
+/** Métrica destino: por defecto la primera del esquema (ventas). "presupuesto"
+ * para cargar metas, que viajan por este mismo pipeline. */
+const CLI_METRIC = argValue("metric") ?? process.env.SYNC_METRIC;
+/** El archivo trae un total anual por local, a repartir en 12 metas mensuales. */
+const CLI_ANNUAL = hasFlag("anual") || process.env.SYNC_ANNUAL === "true";
 
 const need = (name: string): string => {
   const v = process.env[name];
@@ -281,8 +287,23 @@ const syncFolder = async (admin: SupabaseClient, state: SyncStateRow): Promise<v
   // ── 3) Descargar y parsear ──────────────────────────────────────────────
   const bytes = await source.read();
   console.log(`leído: ${(bytes.byteLength / 1024).toFixed(0)} KB`);
-  const parsed = parseAutoPlanetBuffer(bytes, schema);
-  console.log(`parseado: ${parsed.rows.length} filas`);
+  let parsed = parseAutoPlanetBuffer(bytes, schema, { metricKey: CLI_METRIC });
+  console.log(`parseado: ${parsed.rows.length} filas · métrica: ${parsed.metricKeys.join(", ")}`);
+
+  // Presupuesto anual: repartir el total del año en 12 metas mensuales según la
+  // estacionalidad real de la red, no dividiendo por 12.
+  if (CLI_ANNUAL) {
+    const { data: ventas } = await admin.from("poi_metrics").select("period, value").eq("metric_key", "ventas");
+    const factors = computeSeasonalFactors(
+      (ventas ?? []).map((v: { period: string; value: number }) => ({ period: String(v.period), value: Number(v.value) })),
+    );
+    const dist = distributeAnnualBudget(parsed.rows, factors);
+    if (dist.distributedYears.length) {
+      parsed = { ...parsed, rows: dist.rows, periods: [...new Set(dist.rows.flatMap((r) => r.metrics.map((m) => m.period)))].sort() };
+      console.log(`   total anual de ${dist.distributedYears.join(", ")} repartido en 12 meses`);
+    }
+    if (dist.monthlyYears.length) console.log(`   ya venían mensualizados: ${dist.monthlyYears.join(", ")}`);
+  }
 
   // ── 4) Datos para el matching (misma fuente que la app) ─────────────────
   const { data: poisData, error: poisErr } = await admin

@@ -33,6 +33,10 @@ interface Props {
   folder: PoiFolder | null;
   schema: PoiFolderSchema | null;
   folderPois: SavedPoi[];
+  /** Métrica a importar. undefined = ventas (comportamiento histórico). */
+  metricKey?: string;
+  /** El archivo trae un total anual por local que hay que repartir en meses. */
+  distributeAnnual?: boolean;
   /** Activa el modo "elegir POI en el mapa" para una fila concreta. */
   onPickPoiOnMap: (
     rowIndex: number,
@@ -57,6 +61,8 @@ export const PoiImportDialog = ({
   folder,
   schema,
   folderPois,
+  metricKey,
+  distributeAnnual = false,
   onPickPoiOnMap,
   externalManualSelection,
   onConsumeExternalSelection,
@@ -68,6 +74,8 @@ export const PoiImportDialog = ({
     schema,
     folderId: folder?.id ?? null,
     folderPois,
+    metricKey,
+    distributeAnnual,
   });
   const [filter, setFilter] = useState<
     "all" | "ok" | "review" | "auto" | "alias" | "skipped"
@@ -225,7 +233,8 @@ export const PoiImportDialog = ({
         <DialogHeader className="border-b border-border/40 px-5 pb-3 pt-4">
           <DialogTitle className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
             <FileSpreadsheet className="h-4 w-4" />
-            Importar Excel · {folder?.name ?? "Carpeta"}
+            {metricKey === "presupuesto" ? "Importar presupuesto" : "Importar Excel"} ·{" "}
+            {folder?.name ?? "Carpeta"}
           </DialogTitle>
           {schema && (
             <DialogDescription className="text-[11px] text-muted-foreground">
@@ -444,6 +453,11 @@ export const PoiImportDialog = ({
                   <div className="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
                     Columnas desconocidas (se ignorarán):{" "}
                     {imp.parsed.unknownColumns.join(", ")}
+                  </div>
+                )}
+                {imp.distributionNote && (
+                  <div className="mt-3 rounded-md bg-primary/10 px-3 py-2 text-[11px] text-primary">
+                    {imp.distributionNote}
                   </div>
                 )}
                 <div className="mt-4 rounded-md bg-surface-2/40 px-3 py-3 text-[11px] text-muted-foreground">
