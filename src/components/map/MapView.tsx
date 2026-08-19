@@ -12,7 +12,7 @@ import { ManzanaLayer } from "./ManzanaLayer";
 import { UserLayersLayer } from "./UserLayersLayer";
 import { IsochroneLayer } from "./IsochroneLayer";
 import { SavedPoisLayer } from "./SavedPoisLayer";
-import { PoiIsochroneLayer } from "./PoiIsochroneLayer";
+import { PoiIsochroneLayer, type ShownPoiIsochrone } from "./PoiIsochroneLayer";
 import { TerritorialLayersLayer } from "./TerritorialLayersLayer";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
@@ -244,8 +244,10 @@ interface MapViewProps {
   outlinedCommuneNames?: string[];
   highlightedCommuneName?: string | null;
   onPoiContextMenu?: (poi: import("@/types/pois").SavedPoi, at: { x: number; y: number }) => void;
-  /** Isócrona de un local mostrada a demanda desde su menú contextual. */
-  poiIsochrone?: { geometry: import("geojson").Polygon | import("geojson").MultiPolygon; label: string } | null;
+  /** Isócronas de locales encendidas a demanda desde su menú contextual. */
+  poiIsochrones?: ShownPoiIsochrone[];
+  /** Click sobre una isócrona encendida: el padre pregunta si apagarla. */
+  onPoiIsochroneClick?: (iso: ShownPoiIsochrone) => void;
   onMapContextMenu?: (c: { lat: number; lng: number; x: number; y: number }) => void;
   /** Cuando es true, el próximo click del mapa se delega a `onPickCoord` y nada más. */
   coordPickerActive?: boolean;
@@ -322,7 +324,8 @@ export const MapView = ({
   highlightedCommuneName = null,
   onMapContextMenu,
   onPoiContextMenu,
-  poiIsochrone = null,
+  poiIsochrones,
+  onPoiIsochroneClick,
   coordPickerActive = false,
   onPickCoord,
   onPoiClick,
@@ -462,8 +465,11 @@ export const MapView = ({
       })}
       <TerritorialLayersHost />
       <ParqueHeatmapHost />
-      {poiIsochrone && (
-        <PoiIsochroneLayer geometry={poiIsochrone.geometry} label={poiIsochrone.label} />
+      {poiIsochrones && poiIsochrones.length > 0 && (
+        <PoiIsochroneLayer
+          isochrones={poiIsochrones}
+          onIsochroneClick={onPoiIsochroneClick}
+        />
       )}
 
       {/* SavedPoisLayer aquí (post-ComercialPOILayers) para quedar encima en Z-order */}

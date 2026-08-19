@@ -48,7 +48,17 @@ import {
 import { findHexAt, loadParqueGeoJson, type ParqueHexProps } from "@/services/parqueData";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 import { MapContextMenu, type MapContextMenuItem } from "@/components/ui-overlays/MapContextMenu";
-import { PoiIsochroneLayer } from "@/components/map/PoiIsochroneLayer";
+import type { ShownPoiIsochrone } from "@/components/map/PoiIsochroneLayer";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   fetchPoiIsochroneVariants,
   generateMissingPoiIsochrones,
@@ -84,6 +94,14 @@ import { FootTrafficPanel } from "@/components/map/FootTrafficPanel";
 import type { FootTrafficTarget } from "@/hooks/useFootTraffic";
 
 type Mode = "none" | "isochrone" | "microzone";
+
+/**
+ * Paleta para distinguir isócronas de locales encendidas simultáneamente.
+ *
+ * No se usa el color del POI: dos locales de la misma carpeta lo comparten, y
+ * con varias encendidas no se sabría cuál es cuál. Se asigna por posición.
+ */
+const ISO_COLORS = ["#38bdf8", "#f472b6", "#facc15", "#4ade80", "#a78bfa", "#fb923c"];
 
 const Index = () => {
   const mapProvider = useMapProvider();
@@ -868,9 +886,39 @@ const Index = () => {
   const [poiMenu, setPoiMenu] = useState<{
     poi: SavedPoi; x: number; y: number; variants: PoiIsochrone[];
   } | null>(null);
-  const [shownPoiIso, setShownPoiIso] = useState<
-    { geometry: PoiIsochrone["geometry"]; label: string } | null
-  >(null);
+  // Varias isócronas encendidas a la vez: la clave es local+banda, así que un
+  // mismo local puede tener su banda de 5 y de 7 minutos prendidas juntas.
+  const [shownPoiIsos, setShownPoiIsos] = useState<ShownPoiIsochrone[]>([]);
+  // Isócrona sobre la que se hizo click, esperando confirmación para apagarla.
+  const [isoToTurnOff, setIsoToTurnOff] = useState<ShownPoiIsochrone | null>(null);
+
+  const nextIsoColor = useCallback(
+    (taken: ShownPoiIsochrone[]) => {
+      const used = new Set(taken.map((i) => i.color));
+      return ISO_COLORS.find((c) => !used.has(c)) ?? ISO_COLORS[taken.length % ISO_COLORS.length];
+    },
+    [],
+  );
+
+  const togglePoiIso = useCallback(
+    (poi: SavedPoi, v: PoiIsochrone) => {
+      const key = `${poi.id}|${v.minutes}`;
+      setShownPoiIsos((prev) => {
+        if (prev.some((i) => i.key === key)) return prev.filter((i) => i.key !== key);
+        return [
+          ...prev,
+          {
+            key,
+            poiName: poi.name,
+            minutes: v.minutes,
+            geometry: v.geometry,
+            color: nextIsoColor(prev),
+          },
+        ];
+      });
+    },
+    [nextIsoColor],
+  );
 
   const handlePoiContextMenu = useCallback(
     async (poi: SavedPoi, at: { x: number; y: number }) => {
@@ -899,7 +947,17 @@ const Index = () => {
         const variants = await fetchPoiIsochroneVariants(poi.id);
         const made = variants.find((v) => v.minutes === minutes);
         if (made) {
-          setShownPoiIso({ geometry: made.geometry, label: `${poi.name} · ${minutes} min` });
+          setShownPoiIsos((prev) =>
+            prev.some((i) => i.key === `${poi.id}|${minutes}`)
+              ? prev
+              : [...prev, {
+                  key: `${poi.id}|${minutes}`,
+                  poiName: poi.name,
+                  minutes,
+                  geometry: made.geometry,
+                  color: nextIsoColor(prev),
+                }],
+          );
           toast.success("Isócrona generada", { id: t });
         } else {
           toast.error("No se pudo generar la isócrona", { id: t });
@@ -911,23 +969,29 @@ const Index = () => {
         );
       }
     },
-    [],
+    [nextIsoColor],
   );
 
   const poiMenuItems = useMemo<MapContextMenuItem[]>(() => {
     if (!poiMenu) return [];
     const { poi, variants } = poiMenu;
-    const items: MapContextMenuItem[] = variants.map((v) => ({
-      key: `iso-${v.minutes}`,
-      label: isStale(v, poi.lat, poi.lng)
-        ? `Ver isócrona ${v.minutes} min (local movido — regenerar)`
-        : `Ver isócrona ${v.minutes} min`,
-      icon: "⏱️",
-      onClick: () => {
-        setPoiMenu(null);
-        setShownPoiIso({ geometry: v.geometry, label: `${poi.name} · ${v.minutes} min` });
-      },
-    }));
+    const items: MapContextMenuItem[] = variants.map((v) => {
+      const on = shownPoiIsos.some((i) => i.key === `${poi.id}|${v.minutes}`);
+      const stale = isStale(v, poi.lat, poi.lng);
+      return {
+        key: `iso-${v.minutes}`,
+        label: on
+          ? `Ocultar isócrona ${v.minutes} min`
+          : stale
+            ? `Ver isócrona ${v.minutes} min (local movido — regenerar)`
+            : `Ver isócrona ${v.minutes} min`,
+        icon: on ? "👁️" : "⏱️",
+        onClick: () => {
+          setPoiMenu(null);
+          togglePoiIso(poi, v);
+        },
+      };
+    });
     // Siempre se ofrece generar las dos configuradas: son las que usan el
     // análisis y la canibalización, así que son las que vale la pena tener.
     for (const m of [5, 7]) {
@@ -939,16 +1003,16 @@ const Index = () => {
         onClick: () => void handleGeneratePoiIso(poi, m),
       });
     }
-    if (shownPoiIso) {
+    if (shownPoiIsos.length > 1) {
       items.push({
-        key: "clear",
-        label: "Ocultar isócrona",
+        key: "clear-all",
+        label: `Ocultar todas (${shownPoiIsos.length})`,
         icon: "✖️",
-        onClick: () => { setPoiMenu(null); setShownPoiIso(null); },
+        onClick: () => { setPoiMenu(null); setShownPoiIsos([]); },
       });
     }
     return items;
-  }, [poiMenu, shownPoiIso, handleGeneratePoiIso]);
+  }, [poiMenu, shownPoiIsos, handleGeneratePoiIso, togglePoiIso]);
 
   const handleMenuParqueInfo = useCallback(() => {
     if (!mapMenu) return;
@@ -1831,7 +1895,8 @@ const Index = () => {
             highlightedCommuneName={highlightedCommuneName}
             onMapContextMenu={handleMapContextMenu}
             onPoiContextMenu={handlePoiContextMenu}
-            poiIsochrone={shownPoiIso}
+            poiIsochrones={shownPoiIsos}
+            onPoiIsochroneClick={setIsoToTurnOff}
             coordPickerActive={!!coordPicker}
             onPickCoord={handlePickCoord}
             onPoiClick={handlePoiClick}
@@ -1963,6 +2028,34 @@ const Index = () => {
           onClose={() => setMapMenu(null)}
         />
       )}
+
+      <AlertDialog
+        open={!!isoToTurnOff}
+        onOpenChange={(v) => { if (!v) setIsoToTurnOff(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Apagar esta isócrona?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {isoToTurnOff
+                ? `${isoToTurnOff.poiName} · ${isoToTurnOff.minutes} min. Puedes volver a encenderla con clic derecho sobre el local.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Mantener</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!isoToTurnOff) return;
+                setShownPoiIsos((prev) => prev.filter((i) => i.key !== isoToTurnOff.key));
+                setIsoToTurnOff(null);
+              }}
+            >
+              Apagar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {poiMenu && poiMenuItems.length > 0 && (
         <MapContextMenu
