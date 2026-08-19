@@ -7,23 +7,32 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, FileText } from "lucide-react";
+import { Loader2, RefreshCw, FileText, ZoomIn } from "lucide-react";
 import type { MapCaptureImages } from "@/utils/mapCapture";
 import { DEFAULT_SETTINGS, type HeatmapSettings } from "@/hooks/useHeatmapSettings";
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** Toma las 4 fotos aplicando estos ajustes al heatmap de atractores. */
-  onCapture: (heat: Partial<HeatmapSettings>) => Promise<MapCaptureImages | null>;
+  /** Toma las 4 fotos aplicando estos ajustes al heatmap y al encuadre. */
+  onCapture: (
+    heat: Partial<HeatmapSettings>,
+    zoomOffset: number,
+  ) => Promise<MapCaptureImages | null>;
   /** Recaptura solo atractores: las otras tres no cambian al afinar el heatmap. */
-  onCaptureAtractores?: (heat: Partial<HeatmapSettings>) => Promise<string | null>;
+  onCaptureAtractores?: (
+    heat: Partial<HeatmapSettings>,
+    zoomOffset: number,
+  ) => Promise<string | null>;
   /** Ajustes usados la última vez para esta isócrona. */
   initialHeat?: Partial<HeatmapSettings> | null;
+  /** Zoom usado la última vez para esta isócrona. */
+  initialZoomOffset?: number | null;
   /** Confirma y genera el informe con las fotos y los ajustes revisados. */
   onConfirm: (
     images: MapCaptureImages | null,
     heat: HeatmapSettings,
+    zoomOffset: number,
   ) => Promise<void> | void;
 }
 
@@ -41,8 +50,20 @@ const TITULOS: Array<[keyof MapCaptureImages, string]> = [
  * capa, así que conviene revisarlo antes de que quede impreso en una lámina de
  * directorio en vez de descubrirlo después.
  */
+/**
+ * Rango del zoom relativo al encuadre automático.
+ *
+ * El encuadre por defecto mete la isócrona completa, así que en una isócrona
+ * grande —30 minutos en una comuna chica— las manzanas quedan del tamaño de un
+ * píxel y las capas dejan de leerse. Acercar sacrifica parte del polígono a
+ * cambio de que se vea el detalle, que es la decisión que el analista debe poder
+ * tomar. Alejar sirve para dar contexto alrededor.
+ */
+const ZOOM_MIN = -2;
+const ZOOM_MAX = 4;
+
 export const MapCapturePreviewDialog = ({
-  open, onClose, onCapture, onCaptureAtractores, initialHeat, onConfirm,
+  open, onClose, onCapture, onCaptureAtractores, initialHeat, initialZoomOffset, onConfirm,
 }: Props) => {
   // El radio del heatmap está en píxeles: lo que se ve bien en pantalla puede
   // convertirse en una mancha que tapa la isócrona a la escala de la foto.
@@ -51,16 +72,21 @@ export const MapCapturePreviewDialog = ({
   // capturaría con un paso de atraso. La referencia siempre tiene el último.
   const heatRef = useRef(heat);
   heatRef.current = heat;
+  // Zoom relativo al encuadre automático. Un solo valor para las 4 vistas: el
+  // informe las compara entre sí, y a escalas distintas esa comparación engaña.
+  const [zoomOffset, setZoomOffset] = useState(0);
+  const zoomRef = useRef(zoomOffset);
+  zoomRef.current = zoomOffset;
   const [images, setImages] = useState<MapCaptureImages | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [heatBusy, setHeatBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   const capture = useCallback(
-    async (h: HeatmapSettings) => {
+    async (h: HeatmapSettings, z: number) => {
       setCapturing(true);
       try {
-        setImages(await onCapture(h));
+        setImages(await onCapture(h, z));
       } finally {
         setCapturing(false);
       }
@@ -71,10 +97,10 @@ export const MapCapturePreviewDialog = ({
   /** Al mover un control solo cambia atractores: rehacer las cuatro es lento. */
   const recaptureHeat = useCallback(
     async (h: HeatmapSettings) => {
-      if (!onCaptureAtractores) return capture(h);
+      if (!onCaptureAtractores) return capture(h, zoomRef.current);
       setHeatBusy(true);
       try {
-        const img = await onCaptureAtractores(h);
+        const img = await onCaptureAtractores(h, zoomRef.current);
         setImages((prev) => (prev ? { ...prev, atractores: img } : prev));
       } finally {
         setHeatBusy(false);
@@ -87,8 +113,11 @@ export const MapCapturePreviewDialog = ({
   useEffect(() => {
     if (!open) return;
     const inicial = { ...DEFAULT_SETTINGS.commercial, ...(initialHeat ?? {}) };
+    const z = initialZoomOffset ?? 0;
     setHeat(inicial);
-    void capture(inicial);
+    setZoomOffset(z);
+    zoomRef.current = z;
+    void capture(inicial, z);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -102,8 +131,9 @@ export const MapCapturePreviewDialog = ({
             Vista previa de los mapas
           </DialogTitle>
           <DialogDescription className="text-[11px] text-muted-foreground">
-            Ajusta el heatmap de atractores comerciales hasta que se lea bien
-            sobre la isócrona, y recién ahí genera el informe.
+            Ajusta el heatmap y el zoom hasta que las capas se lean bien, y recién
+            ahí genera el informe. Acercar recorta parte de la isócrona a cambio
+            de ver el detalle: en isócronas grandes suele convenir.
           </DialogDescription>
         </DialogHeader>
 
@@ -164,12 +194,44 @@ export const MapCapturePreviewDialog = ({
                 </div>
               ),
             )}
+            {/* Zoom: uno solo para las 4 vistas. Cambiarlo obliga a rehacer las
+                cuatro fotos, no solo atractores, porque el encuadre es común. */}
+            <div className="flex items-center gap-1.5 border-l border-border/40 pl-3">
+              <ZoomIn className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-[11px] text-muted-foreground">Zoom</span>
+              <input
+                type="range"
+                min={ZOOM_MIN}
+                max={ZOOM_MAX}
+                step={1}
+                value={zoomOffset}
+                disabled={busy}
+                onChange={(e) => setZoomOffset(parseInt(e.target.value, 10))}
+                onMouseUp={() => void capture(heatRef.current, zoomRef.current)}
+                onTouchEnd={() => void capture(heatRef.current, zoomRef.current)}
+                className="w-24 accent-brand-red"
+              />
+              <span className="w-8 text-[11px] font-mono text-foreground">
+                {zoomOffset > 0 ? `+${zoomOffset}` : zoomOffset}
+              </span>
+              {zoomOffset !== 0 && (
+                <button
+                  onClick={() => { setZoomOffset(0); zoomRef.current = 0; void capture(heatRef.current, 0); }}
+                  disabled={busy}
+                  className="text-[10px] text-muted-foreground underline hover:text-foreground disabled:opacity-40"
+                  title="Volver al encuadre que mete la isócrona completa"
+                >
+                  auto
+                </button>
+              )}
+            </div>
+
             <Button
               size="sm"
               variant="outline"
               className="h-7 text-[11px]"
               disabled={busy}
-              onClick={() => void recaptureHeat(heatRef.current)}
+              onClick={() => void capture(heatRef.current, zoomRef.current)}
             >
               <RefreshCw className="mr-1.5 h-3 w-3" /> Recapturar
             </Button>
@@ -185,7 +247,7 @@ export const MapCapturePreviewDialog = ({
               onClick={async () => {
                 setGenerating(true);
                 try {
-                  await onConfirm(images, heatRef.current);
+                  await onConfirm(images, heatRef.current, zoomRef.current);
                   onClose();
                 } finally {
                   setGenerating(false);

@@ -397,9 +397,15 @@ const Index = () => {
         await fitMapToBounds(map, boundsBox, zoomOffset);
         const isoOnly = await captureAfterSettle(map);
 
+        // El encuadre se rehace antes de CADA foto, como pide fitMapToBounds:
+        // al aparecer la leyenda de una capa el contenedor cambia de tamaño, y a
+        // igual zoom un contenedor distinto abarca otra superficie. Sin esto las
+        // cuatro vistas salían a escalas ligeramente distintas, y con zoomOffset
+        // la diferencia se hace evidente.
         const beforeNse = gseDataRef.current;
         flushSync(() => setLayers({ ...ALL_LAYERS_OFF, nse: true }));
         await waitForRefChange(gseDataRef, beforeNse);
+        await fitMapToBounds(map, boundsBox, zoomOffset);
         const gse = await captureAfterSettle(map);
 
         const beforeGasto = gseDataRef.current;
@@ -408,9 +414,11 @@ const Index = () => {
           setGastoView("manzana");
         });
         await waitForRefChange(gseDataRef, beforeGasto);
+        await fitMapToBounds(map, boundsBox, zoomOffset);
         const gasto = await captureAfterSettle(map);
 
         flushSync(() => setLayers({ ...ALL_LAYERS_OFF, commercial: true }));
+        await fitMapToBounds(map, boundsBox, zoomOffset);
         const atractores = await captureAfterSettle(map);
 
         return { isoOnly, gse, gasto, atractores };

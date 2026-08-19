@@ -44,6 +44,15 @@ export interface ProjectionSettings {
    * rehacerlos en cada informe es trabajo repetido.
    */
   heatSettings?: { radius: number; blur: number; opacity: number } | null;
+  /**
+   * Zoom relativo al encuadre automático usado en la última exportación.
+   *
+   * Se recuerda por el mismo motivo que `heatSettings`: en una isócrona grande
+   * el encuadre automático deja las capas ilegibles, y el acercamiento que
+   * resuelve eso es criterio sobre ESA ubicación. Rehacerlo de memoria en cada
+   * informe invita a que las láminas no coincidan entre versiones.
+   */
+  captureZoomOffset?: number | null;
 }
 
 export interface SavedIsochrone {

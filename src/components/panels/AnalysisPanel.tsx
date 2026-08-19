@@ -59,11 +59,13 @@ interface AnalysisPanelProps {
   onCaptureMapImages?: (
     iso: Isochrone,
     heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
+    zoomOffset?: number,
   ) => Promise<MapCaptureImages | null>;
   /** Recaptura solo la foto de atractores, al afinar su heatmap. */
   onCaptureAtractores?: (
     iso: Isochrone,
     heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
+    zoomOffset?: number,
   ) => Promise<string | null>;
 }
 
@@ -422,6 +424,10 @@ export const AnalysisPanel = ({
         // llamador que arme el objeto sin esta clave —hubo uno— borraría la
         // calibración guardada de esta ubicación en vez de dejarla como estaba.
         heatSettings: adjust?.heatSettings ?? projectionSettings?.heatSettings ?? null,
+        // Misma red de seguridad que heatSettings: un llamador que omita la
+        // clave no debe borrar el encuadre calibrado de esta ubicación.
+        captureZoomOffset:
+          adjust?.captureZoomOffset ?? projectionSettings?.captureZoomOffset ?? null,
         result: res,
         computedAt: res ? new Date().toISOString() : null,
       });
@@ -1034,14 +1040,15 @@ export const AnalysisPanel = ({
       <MapCapturePreviewDialog
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
-        onCapture={async (h) =>
-          isochrone && onCaptureMapImages ? onCaptureMapImages(isochrone, h) : null
+        onCapture={async (h, z) =>
+          isochrone && onCaptureMapImages ? onCaptureMapImages(isochrone, h, z) : null
         }
-        onCaptureAtractores={async (h) =>
-          isochrone && onCaptureAtractores ? onCaptureAtractores(isochrone, h) : null
+        onCaptureAtractores={async (h, z) =>
+          isochrone && onCaptureAtractores ? onCaptureAtractores(isochrone, h, z) : null
         }
         initialHeat={projAdjust?.heatSettings ?? projectionSettings?.heatSettings ?? null}
-        onConfirm={async (imgs, heat) => {
+        initialZoomOffset={projAdjust?.captureZoomOffset ?? projectionSettings?.captureZoomOffset ?? 0}
+        onConfirm={async (imgs, heat, zoomOffset) => {
           if (!fullReport) return;
           setExportingPptx(true);
           try {
@@ -1057,6 +1064,7 @@ export const AnalysisPanel = ({
                 blur: heat.blur,
                 opacity: heat.opacity,
               },
+              captureZoomOffset: zoomOffset,
             };
             setProjAdjust(next);
             persistProjection(next, projResult);
@@ -1314,6 +1322,7 @@ const ProjectionSection = ({
     onSettingsChange({
       adjustPct, rateOverrides, rampEnabled, isExpress,
       heatSettings: savedSettings?.heatSettings ?? null,
+      captureZoomOffset: savedSettings?.captureZoomOffset ?? null,
     });
   }, [settingsKey, adjustPct, rateOverrides, rampEnabled, isExpress, result, onSettingsChange, savedSettings]);
 
