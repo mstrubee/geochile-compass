@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { GoogleTileLayer } from "./GoogleTileLayer";
 import type { MapProvider } from "@/hooks/useMapProvider";
@@ -66,9 +66,27 @@ const BASEMAPS = {
   },
 };
 
+/** Cada cuántos ms se refresca la lectura de coordenadas del puntero. */
+const COORDS_REFRESH_MS = 100;
+
 const MouseTracker = ({ onMouseMove }: { onMouseMove: (c: { lat: number; lng: number }) => void }) => {
+  // `mousemove` llega decenas de veces por segundo y cada llamada sube estado
+  // hasta Index, que re-renderiza el árbol entero (mapa con todas sus capas,
+  // sidebar y panel de análisis). Para un lector de coordenadas, refrescar 10
+  // veces por segundo es indistinguible a ojo y baja los renders un orden de
+  // magnitud. El callback se lee desde un ref para que cambiar su identidad no
+  // reinicie el contador del throttle.
+  const cbRef = useRef(onMouseMove);
+  cbRef.current = onMouseMove;
+  const lastRef = useRef(0);
+
   useMapEvents({
-    mousemove: (e) => onMouseMove({ lat: e.latlng.lat, lng: e.latlng.lng }),
+    mousemove: (e) => {
+      const now = performance.now();
+      if (now - lastRef.current < COORDS_REFRESH_MS) return;
+      lastRef.current = now;
+      cbRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
   });
   return null;
 };

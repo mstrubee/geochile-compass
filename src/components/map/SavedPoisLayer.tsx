@@ -96,6 +96,17 @@ export const SavedPoisLayer = ({ pois, visible, onPoiClick, pickMode, onPickPoi 
 
     return () => {
       group.remove();
+      // Igual que en IsochroneLayer: el renderer queda como capa del mapa y
+      // sobrevive al group. Acá pesa más porque este efecto se rehace muy
+      // seguido (sus deps incluyen callbacks que cambian de identidad en cada
+      // render), así que sin este cierre se acumulan <svg> huérfanos.
+      try {
+        const container = (svgRenderer as unknown as { _container?: HTMLElement })._container;
+        if (container?.parentNode) container.parentNode.removeChild(container);
+        svgRenderer.remove();
+      } catch {
+        /* el mapa ya se desmontó */
+      }
     };
   }, [map, pois, visible, onPoiClick, pickMode, onPickPoi]);
 

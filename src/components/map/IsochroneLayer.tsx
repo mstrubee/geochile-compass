@@ -166,6 +166,19 @@ export const IsochroneLayer = ({
 
     return () => {
       group.remove();
+      // El renderer NO se va con el group: Leaflet lo agrega al mapa como capa
+      // aparte, y quitar los paths solo los desengancha de él. Sin esto, cada
+      // vez que se prende/apaga una isócrona queda un <canvas> huérfano —con
+      // `padding: 0.5` mide 2× el viewport, decenas de MB— suscrito a
+      // zoom/moveend para siempre, y el mapa se va poniendo cada vez más lento.
+      // Mismo cierre que ParqueHeatmapLayer.
+      try {
+        const container = (renderer as unknown as { _container?: HTMLElement })._container;
+        if (container?.parentNode) container.parentNode.removeChild(container);
+        renderer.remove();
+      } catch {
+        /* el mapa ya se desmontó */
+      }
     };
   }, [map, visibleLayers, outlineOnly]);
 
