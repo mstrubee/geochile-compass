@@ -183,6 +183,81 @@ const resolvePoiFolderId = async (
   );
 };
 
+/**
+ * Estadísticos de la RED (no de los comparables) para el año base.
+ *
+ * Por qué la red y no los comparables: se verificó con validación
+ * leave-one-out sobre los 64 locales con venta real que el modelo de
+ * comparables explica 2,5% de la varianza y que predecir la MEDIANA de la red
+ * le gana a cualquier combinación de features disponibles (MAE 432 vs 515 UF).
+ * Así que la mediana de la red es el mejor estimador puntual que tenemos, y el
+ * p25 es el escenario conservador que un business case con arriendo
+ * comprometido necesita mirar.
+ *
+ * Devuelve null si no hay suficientes locales con venta para que los
+ * percentiles signifiquen algo.
+ */
+const networkStats = async (
+  admin: ReturnType<typeof getAdminClient>,
+  folderId: string | null,
+  ufToClp: number,
+): Promise<{ medianUf: number; p25Uf: number; n: number } | null> => {
+  if (!admin || !folderId || ufToClp <= 0) return null;
+
+  const { data: pois } = await admin
+    .from("pois")
+    .select("id")
+    .eq("folder_id", folderId)
+    .is("deleted_at", null);
+  const ids = ((pois ?? []) as Array<{ id: string }>).map((p) => p.id);
+  if (ids.length === 0) return null;
+
+  // Últimos 12 meses de cada local → venta mensual promedio, en UF.
+  const porLocal = new Map<string, number[]>();
+  for (let i = 0; i < ids.length; i += 40) {
+    const { data } = await admin
+      .from("poi_metrics")
+      .select("poi_id, period, value")
+      .eq("metric_key", "ventas")
+      .in("poi_id", ids.slice(i, i + 40))
+      .order("period", { ascending: false });
+    for (const r of (data ?? []) as Array<{ poi_id: string; value: number }>) {
+      const arr = porLocal.get(r.poi_id) ?? [];
+      if (arr.length < 12) arr.push(Number(r.value));
+      porLocal.set(r.poi_id, arr);
+    }
+  }
+
+  const ufs: number[] = [];
+  for (const [, vals] of porLocal) {
+    if (vals.length < 12) continue; // sin año completo no entra al percentil
+    const promedioClp = vals.reduce((a, b) => a + b, 0) / vals.length;
+    if (promedioClp > 0) ufs.push(promedioClp / ufToClp);
+  }
+  if (ufs.length < 10) return null;
+
+  ufs.sort((a, b) => a - b);
+  const q = (p: number) => ufs[Math.min(ufs.length - 1, Math.floor(ufs.length * p))];
+  return {
+    medianUf: Math.round(q(0.5) * 10) / 10,
+    p25Uf: Math.round(q(0.25) * 10) / 10,
+    n: ufs.length,
+  };
+};
+
+/** Población mínima y máxima de los locales que sostienen el modelo. */
+const comparablePopulationRange = async (
+  admin: ReturnType<typeof getAdminClient>,
+): Promise<{ minPop: number; maxPop: number; n: number } | null> => {
+  if (!admin) return null;
+  const { data } = await admin.from("poi_features_cache").select("features");
+  const pops = ((data ?? []) as Array<{ features: Record<string, number> | null }>)
+    .map((r) => Number(r.features?.pop_total ?? 0))
+    .filter((n) => n > 0);
+  if (pops.length < 10) return null;
+  return { minPop: Math.min(...pops), maxPop: Math.max(...pops), n: pops.length };
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -268,6 +343,23 @@ Deno.serve(async (req) => {
 
   const nombreCarpeta = result.folderName ?? null;
 
+  // Referencia de la red + señal de extrapolación. Aditivo: el contrato previo
+  // (estimatedUf, ventaMes, etc.) no cambia.
+  const red = await networkStats(admin, poiFolderId, ufToClp);
+
+  /**
+   * Rango de población en que el modelo tiene sustento.
+   *
+   * NO se puede decidir acá si la ubicación nueva está fuera de rango: la
+   * isócrona guardada no almacena su población. Lo que sí se puede entregar es
+   * el rango de los locales que sostienen el modelo, para que el informe
+   * verifique la aplicabilidad antes de usar la cifra. Importa porque fuera de
+   * ese rango el número no describe el caso: la red son locales urbanos
+   * maduros, y extrapolar a una ubicación mucho más chica lo infla (el caso
+   * Pitrufquén: ~25 mil habitantes contra un mínimo de ~41.500 en la red).
+   */
+  const rangoPoblacion = await comparablePopulationRange(admin);
+
   return json({
     locationName: iso.name,
     // Millones de CLP por mes, 3 decimales = precisión de ~mil pesos.
@@ -283,6 +375,53 @@ Deno.serve(async (req) => {
       weight: Number(c.weight ?? 0),
     })),
     diagnosticMsg: result.diagnosticMsg ?? null,
+
+    /**
+     * ── Referencia estadística de la red ──────────────────────────────────
+     * Para que el Business Case se pueda armar con un escenario central y uno
+     * conservador, en vez de un solo número.
+     *
+     * `networkMedianUf` es la MEDIANA de la red, no el estimado del modelo de
+     * comparables. Se verificó con validación leave-one-out sobre los 64
+     * locales con venta real que el modelo explica 2,5% de la varianza y que la
+     * mediana le gana (MAE 432 vs 515 UF): o sea que el mejor estimador
+     * disponible hoy es "un local promedio de la red".
+     *
+     * `networkP25Uf` es el escenario conservador. Importa porque el riesgo es
+     * asimétrico: el arriendo es un costo fijo por años y con la mediana hay
+     * ~50% de probabilidad de vender menos.
+     */
+    networkReference: red
+      ? {
+          medianUf: red.medianUf,
+          p25Uf: red.p25Uf,
+          medianClp: Math.round(red.medianUf * ufToClp),
+          p25Clp: Math.round(red.p25Uf * ufToClp),
+          nStores: red.n,
+          basis: "últimos 12 meses de cada local con año completo",
+        }
+      : null,
+
+    /**
+     * Rango de población en que el modelo tiene sustento. Quien arme el
+     * Business Case DEBE comparar la población de la ubicación contra esto: si
+     * queda fuera, la cifra no aplica (ver `modelCaveat`).
+     */
+    applicabilityRange: rangoPoblacion
+      ? { minPopulation: rangoPoblacion.minPop, maxPopulation: rangoPoblacion.maxPop, nStores: rangoPoblacion.n }
+      : null,
+
+    /**
+     * Advertencia obligatoria de interpretación. Se envía como texto para que
+     * el consumidor no tenga que conocer el detalle estadístico y para que no
+     * se pierda si alguien mira solo la cifra.
+     */
+    modelCaveat:
+      "El modelo de comparables no tiene poder predictivo demostrado (explica 2,5% de la " +
+      "varianza; validación leave-one-out sobre 64 locales). En la práctica devuelve un valor " +
+      "cercano a la mediana de la red para cualquier ubicación. Úsese networkMedianUf como " +
+      "escenario central y networkP25Uf como conservador, y verifíquese que la población de la " +
+      "ubicación caiga dentro de applicabilityRange: fuera de ese rango la cifra no aplica.",
 
     // ── Trazabilidad: para que leaseflow pueda mostrar de dónde sale la cifra
     //    y reconstruirla si hace falta. Aditivo, no rompe el contrato mínimo.
