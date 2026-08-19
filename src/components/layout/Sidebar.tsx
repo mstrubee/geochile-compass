@@ -33,6 +33,7 @@ import { exportFolderReportToPdf } from "@/utils/poiFolderReportPdf";
 import { CommuneSearch } from "./CommuneSearch";
 import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
+import { AnalyticsDataSection } from "./AnalyticsDataSection";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 
 import { AgroplanetGapPanel } from "@/components/map/AgroplanetGapPanel";
@@ -2624,6 +2625,14 @@ export const Sidebar = ({
             </SidebarSection>
           );
         })()}
+
+        <SidebarSection title="Datos analíticos" permissionKey="datos_analiticos">
+          <AnalyticsDataSection
+            folders={poiFolders
+              .filter((f) => f.parent_id === null)
+              .map((f) => ({ id: f.id, name: f.name }))}
+          />
+        </SidebarSection>
 
         <SidebarSection title="Mapa base">
           <div className="flex gap-0.5 rounded-lg bg-surface-2/60 p-0.5">
