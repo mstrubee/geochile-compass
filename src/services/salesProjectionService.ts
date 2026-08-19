@@ -170,7 +170,11 @@ async function countInternalCompetition(
   const { data, error } = await supabase
     .from("pois")
     .select("lat, lng")
-    .eq("folder_id", folderId);
+    .eq("folder_id", folderId)
+    // Un local cerrado dejó de competir: contarlo inflaba la competencia
+    // interna del área y castigaba la proyección de una ubicación que en
+    // realidad quedó más despejada.
+    .is("deleted_at", null);
   if (error || !data) return 0;
   let n = 0;
   for (const p of data) {
