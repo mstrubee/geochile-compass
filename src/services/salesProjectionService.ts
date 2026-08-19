@@ -118,6 +118,17 @@ export interface ProjectionResult {
    * isócronas guardadas de los vecinos, o sin polígono de la isócrona nueva).
    */
   cannibalization: CannibalizationAdjust | null;
+  /**
+   * Techo aplicado por existir un local propio dentro de la isócrona. `null`
+   * si no hay ninguno o si ninguno tiene venta real medida. `appliedUf` no
+   * nulo significa que el estimado se limitó.
+   */
+  localityCap: {
+    stores: Array<{ name: string; ufPerMonth: number }>;
+    capUf: number;
+    appliedUf: number | null;
+    reason: string;
+  } | null;
   /** Estimación ANTES del ajuste por canibalización, para poder contrastar. */
   estimatedUfBeforeCannibalization: number;
 }
@@ -221,30 +232,40 @@ function selectUsableFeatures(
  * Los comparables del caché traen este valor medido, así que dejarlo en 0
  * hacía que toda ubicación nueva pareciera libre de competencia propia.
  */
-async function countInternalCompetition(
+/**
+ * Locales PROPIOS que caen dentro de la isócrona.
+ *
+ * Devuelve la lista, no solo el conteo, porque su venta real es la referencia
+ * más informativa que existe para una ubicación nueva en la misma zona: si ya
+ * hay un local propio adentro, el nuevo comparte ese mercado. Ver el techo de
+ * realidad en el paso 7c.
+ */
+async function findInternalStores(
   folderId: string,
   isoFeature: Feature<Polygon | MultiPolygon> | null | undefined,
-): Promise<number> {
-  if (!isoFeature) return 0;
+): Promise<Array<{ poiId: string; name: string }>> {
+  if (!isoFeature) return [];
   const { data, error } = await supabase
     .from("pois")
-    .select("lat, lng")
+    .select("id, name, lat, lng")
     .eq("folder_id", folderId)
     // Un local cerrado dejó de competir: contarlo inflaba la competencia
     // interna del área y castigaba la proyección de una ubicación que en
     // realidad quedó más despejada.
     .is("deleted_at", null);
-  if (error || !data) return 0;
-  let n = 0;
+  if (error || !data) return [];
+  const out: Array<{ poiId: string; name: string }> = [];
   for (const p of data) {
     if (p.lat == null || p.lng == null) continue;
     try {
-      if (booleanPointInPolygon(point([p.lng, p.lat]), isoFeature as never)) n += 1;
+      if (booleanPointInPolygon(point([p.lng, p.lat]), isoFeature as never)) {
+        out.push({ poiId: p.id as string, name: (p.name as string) ?? "" });
+      }
     } catch {
       // Un punto con geometría inválida no debe tumbar la proyección.
     }
   }
-  return n;
+  return out;
 }
 
 // Los comparables del caché ponderan por POBLACIÓN (ver compute-poi-features:
@@ -426,12 +447,13 @@ export async function computeSalesProjection(
   const usedPredictions = nWithSales === 0;
 
   // ── 4. Vector de features de la nueva ubicación ────────────────────────────
-  const [nCompetitionInt, complementScore] = await Promise.all([
-    countInternalCompetition(folderId, isoFeature),
+  const [internalStores, complementScore] = await Promise.all([
+    findInternalStores(folderId, isoFeature),
     isoFeature
       ? computeComplementScoreInPolygon(folderId, isoFeature.geometry)
       : Promise.resolve(null),
   ]);
+  const nCompetitionInt = internalStores.length;
   const newFeatures = extractFeatures(isoAnalysis, parque, nCompetitionInt, complementScore);
 
   // ── 5. Normalizar y calcular distancias ────────────────────────────────────
@@ -498,6 +520,55 @@ export async function computeSalesProjection(
       overlaps: canniInput.overlaps,
       incomplete: canniInput.incomplete,
     };
+  }
+
+  // ── 7c. Techo de realidad por local propio dentro de la isócrona ──────────
+  /**
+   * Si ya hay un local PROPIO dentro de la isócrona, el nuevo se reparte ese
+   * mercado con él. Proyectar por encima de lo que vende el local que ya está
+   * ahí no es defendible: significaría que el segundo local de la misma zona
+   * vende más que el primero, con el mercado ya atendido.
+   *
+   * Por qué hace falta además de la canibalización del paso 7b: esa solo aplica
+   * cuando se pudo MEDIR el solape, y medirlo exige que los vecinos tengan su
+   * isócrona guardada. Cuando no la tienen, `canniInput` viene null y antes no
+   * se aplicaba castigo NI se avisaba — el default peligroso era "no medido =
+   * sin competencia". Este techo usa solo el punto del local dentro del
+   * polígono, que siempre se puede evaluar.
+   *
+   * Se aplica como TECHO, no como reemplazo: si el estimado ya venía por debajo
+   * de la venta del local interno, se deja tal cual.
+   */
+  let localityCap: {
+    stores: Array<{ name: string; ufPerMonth: number }>;
+    capUf: number;
+    appliedUf: number | null;
+    reason: string;
+  } | null = null;
+
+  if (internalStores.length > 0) {
+    const conVenta = internalStores
+      .map((st) => {
+        const cmp = comparable.find((c) => c.poiId === st.poiId);
+        return cmp && cmp.isActual ? { name: st.name, ufPerMonth: cmp.ufPerMonth } : null;
+      })
+      .filter((x): x is { name: string; ufPerMonth: number } => x !== null);
+
+    if (conVenta.length > 0) {
+      // Techo = el mejor local propio de adentro. Si hay más de uno, el mayor
+      // es el más exigente de superar y el más informativo del techo real.
+      const capUf = Math.max(...conVenta.map((x) => x.ufPerMonth));
+      const excede = estimatedUfAdj > capUf;
+      localityCap = {
+        stores: conVenta,
+        capUf: Math.round(capUf * 10) / 10,
+        appliedUf: excede ? Math.round(capUf * 10) / 10 : null,
+        reason: excede
+          ? `El estimado (${Math.round(estimatedUfAdj)} UF/mes) superaba la venta real de ${conVenta.length === 1 ? "el local propio" : "los locales propios"} dentro de la isócrona (${Math.round(capUf)} UF/mes). Se limitó a ese valor: un segundo local en la misma zona no puede proyectarse por encima del que ya opera ahí.`
+          : `Hay ${conVenta.length === 1 ? "un local propio" : `${conVenta.length} locales propios`} dentro de la isócrona (${conVenta.map((x) => `${x.name}: ${Math.round(x.ufPerMonth)} UF/mes`).join(", ")}). El estimado queda por debajo, así que no se limitó.`,
+      };
+      if (excede) estimatedUfAdj = capUf;
+    }
   }
 
   // ── 8. Proyección a N años ────────────────────────────────────────────────
@@ -588,6 +659,7 @@ export async function computeSalesProjection(
     usedPredictions,
     diagnosticMsg,
     cannibalization,
+    localityCap,
     estimatedUfBeforeCannibalization: Math.round(estimatedUfRaw * 10) / 10,
   };
 }
@@ -655,7 +727,7 @@ function emptyProjection(
     estimatedUf: 0, estimatedClp: 0,
     lowUf: 0, highUf: 0, lowClp: 0, highClp: 0,
     fiveYearProjection: [],
-    comparables: [], nWithSales: 0, nWithPredicted: 0,
+    comparables: [], nWithSales: 0, nWithPredicted: 0, localityCap: null,
     keyFactors: [{ label: diagnosticMsg, value: "—", impact: "neutral" }],
     folderName, baseYear, currentYear, growthRate, usedPredictions: false, diagnosticMsg,
     cannibalization: null,

@@ -1404,14 +1404,31 @@ const Index = () => {
     [analysisIso, savedIsos],
   );
 
+  /**
+   * Proyección calculada sobre una isócrona que TODAVÍA no está guardada.
+   *
+   * Antes se descartaba en silencio, y eso costó caro: si dibujabas la
+   * isócrona, proyectabas y recién después la guardabas, la proyección se
+   * perdía — la isócrona quedaba en la base con projection_settings en null y
+   * no había forma de auditar de dónde salió la cifra que viste en pantalla.
+   * Ahora se retiene por id de isócrona de trabajo y se escribe en cuanto esa
+   * isócrona pasa a estar guardada.
+   */
+  const pendingProjectionRef = useRef<Map<string, import("@/types/savedIsochrones").ProjectionSettings>>(
+    new Map(),
+  );
+
   const handleProjectionSettingsChange = useCallback(
     (s: import("@/types/savedIsochrones").ProjectionSettings) => {
-      // Solo las guardadas persisten: una isócrona de trabajo no sobrevive a
-      // la sesión, así que no hay dónde recordarla.
-      if (!analysisSavedIso) return;
-      void updateSavedIso(analysisSavedIso.id, { projection_settings: s });
+      if (analysisSavedIso) {
+        void updateSavedIso(analysisSavedIso.id, { projection_settings: s });
+        return;
+      }
+      // Isócrona de trabajo: se retiene hasta que se guarde (ver
+      // handleSaveIsochronePayload).
+      if (analysisIso?.id) pendingProjectionRef.current.set(analysisIso.id, s);
     },
-    [analysisSavedIso, updateSavedIso],
+    [analysisSavedIso, analysisIso?.id, updateSavedIso],
   );
 
   const analyzeSavedIso = useCallback(
@@ -1427,13 +1444,25 @@ const Index = () => {
   const handleSaveIsochronePayload = useCallback(
     async (payload: import("@/types/savedIsochrones").SaveIsochronePayload) => {
       try {
-        await saveIsochrone(payload);
-        toast.success("Isócrona guardada");
+        const inserted = await saveIsochrone(payload);
+        // Si esta isócrona ya tenía una proyección calculada mientras era de
+        // trabajo, se persiste ahora: es la cifra que el usuario vio y sobre la
+        // que puede haber decidido algo.
+        const pendiente = saveIsoDialogId
+          ? pendingProjectionRef.current.get(saveIsoDialogId)
+          : undefined;
+        if (inserted && pendiente) {
+          await updateSavedIso(inserted.id, { projection_settings: pendiente });
+          if (saveIsoDialogId) pendingProjectionRef.current.delete(saveIsoDialogId);
+          toast.success("Isócrona y proyección guardadas");
+        } else {
+          toast.success("Isócrona guardada");
+        }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Error al guardar");
       }
     },
-    [saveIsochrone],
+    [saveIsochrone, saveIsoDialogId, updateSavedIso],
   );
 
   const handleMapClick = useCallback(
