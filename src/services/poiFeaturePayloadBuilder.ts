@@ -16,7 +16,7 @@ import type { GseClass, GseFeature } from "@/types/gse";
 import { GSE_INCOME } from "@/data/gseIncome";
 import { resolveCommuneAndRegion } from "@/utils/communeReverseGeocode";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchPoiIsochrones } from "@/services/poiIsochroneService";
+import { fetchPoiIsochrone, fetchPoiIsochrones, isStale } from "@/services/poiIsochroneService";
 import area from "@turf/area";
 import { computeTerritorialExtras } from "@/services/territorialExtras";
 import { crimeService } from "@/services/crimeService";
@@ -750,9 +750,24 @@ export const buildFeaturePayload = async (
   }
 
   // 1) Isócrona del POI
-  const iso =
-    precomputedIso ??
-    (await fetchIsochrone(poi.lng, poi.lat, isoMinutes, supabaseUrl, supabaseAnonKey, bearer));
+  //
+  // Orden: la que venga precalculada, después la guardada en `poi_isochrones`,
+  // y solo si no hay ninguna se pide a ORS. Con la tabla poblada, recalcular la
+  // red completa deja de gastar una llamada externa por local — que era el
+  // motivo de fondo para persistirlas.
+  let iso = precomputedIso ?? null;
+  if (!iso) {
+    try {
+      const stored = await fetchPoiIsochrone(poi.id, isoMinutes);
+      // Si el local se movió, la guardada ya no corresponde a su ubicación.
+      if (stored && !isStale(stored, poi.lat, poi.lng)) iso = stored.geometry;
+    } catch {
+      // Sin acceso a la tabla se cae a ORS, que es el comportamiento anterior.
+    }
+  }
+  if (!iso) {
+    iso = await fetchIsochrone(poi.lng, poi.lat, isoMinutes, supabaseUrl, supabaseAnonKey, bearer);
+  }
 
   // 2) Bbox de la isócrona
   const bbox = polygonBbox(iso);
