@@ -105,7 +105,10 @@ export const geocodeAddress = async (
   }
 
   // 2. Google Geocoding (cuando el proveedor activo es Google o se solicita explícitamente)
-  const googleKey = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
+  // `import.meta.env` solo existe bajo Vite; en Node (sincronización automática
+  // desde Drive) es undefined, así que se accede de forma opcional para no
+  // romper. Sin key, este paso se salta y queda Nominatim.
+  const googleKey = (import.meta as { env?: Record<string, string> }).env?.VITE_GOOGLE_MAPS_KEY;
   if (googleKey && options?.preferGoogle) {
     const fullAddress = comuna ? `${address}, ${comuna}, Chile` : `${address}, Chile`;
     const googleResult = await geocodeWithGoogle(fullAddress, googleKey);

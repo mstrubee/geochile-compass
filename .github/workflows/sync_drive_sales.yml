@@ -1,0 +1,72 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# sync_drive_sales.yml
+#
+# Sincroniza el Excel de ventas desde Google Drive hacia Supabase.
+#
+# Corre a diario y solo hace trabajo si el archivo de Drive cambió (compara el
+# modifiedTime contra drive_sync_state.last_modified_time). Los días sin
+# cambios termina en segundos.
+#
+# NO reemplaza la importación manual desde la app: usa exactamente el mismo
+# parser, matcher y commit (scripts/sync-drive-sales.ts importa de src/).
+#
+# Ejecución: todos los días a las 09:00 UTC (06:00 Chile en horario de verano)
+# Manual:    Actions → "Sync Ventas desde Drive" → Run workflow
+#
+# Secrets requeridos en GitHub → Settings → Secrets and variables → Actions:
+#   SUPABASE_URL                 → https://<proyecto>.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY    → service_role key (Supabase → Settings → API)
+#   GOOGLE_SERVICE_ACCOUNT_JSON  → JSON COMPLETO de la cuenta de servicio
+#
+# El archivo a vigilar NO se configura acá, sino en la tabla drive_sync_state
+# (una fila por carpeta), para poder cambiarlo sin tocar el repo.
+# ═══════════════════════════════════════════════════════════════════════════
+
+name: Sync Ventas desde Drive
+
+on:
+  schedule:
+    # 09:00 UTC = 06:00 Chile (verano) / 05:00 (invierno)
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Solo revisar y reportar, sin escribir en la base"
+        type: boolean
+        default: false
+      folder_id:
+        description: "Limitar a una carpeta (UUID). Vacío = todas las habilitadas"
+        type: string
+        required: false
+
+# Evita que dos corridas se pisen escribiendo las mismas métricas.
+concurrency:
+  group: sync-drive-sales
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Sincronizar
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          SYNC_FOLDER_ID: ${{ inputs.folder_id }}
+        run: npm run sync:drive-sales

@@ -91,8 +91,17 @@ const cellToString = (cell: unknown): string => {
 export const parseAutoPlanetSheet = async (
   file: File,
   schema: PoiFolderSchema,
-): Promise<ParsedSheet> => {
-  const buf = await file.arrayBuffer();
+): Promise<ParsedSheet> => parseAutoPlanetBuffer(await file.arrayBuffer(), schema);
+
+/**
+ * Igual que parseAutoPlanetSheet pero desde un buffer crudo, sin depender del
+ * tipo `File` del navegador. Lo usa la sincronización automática desde Drive,
+ * que corre en Node (ver scripts/sync-drive-sales.ts).
+ */
+export const parseAutoPlanetBuffer = (
+  buf: ArrayBuffer | Uint8Array,
+  schema: PoiFolderSchema,
+): ParsedSheet => {
   const wb = XLSX.read(buf, { cellDates: true, type: "array" });
   const ws = wb.Sheets[wb.SheetNames[0]];
   if (!ws) throw new Error("La planilla no tiene hojas legibles.");

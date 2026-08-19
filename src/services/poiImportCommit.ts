@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ImportRow, RowMatchResult } from "@/types/poiMetrics";
 import { normalizeAddress } from "@/utils/addressNormalize";
 
@@ -11,14 +11,21 @@ import { normalizeAddress } from "@/utils/addressNormalize";
  *    c. Si la fila era manual (manual_assigned), crea alias en `poi_address_aliases`.
  * 3) Marca el job como completed.
  *
- * Toda esta operación corre en el cliente. Para volúmenes grandes
- * (>500 filas × 88 períodos = 44k upserts), usa batches.
+ * El cliente de Supabase se recibe por parámetro (no se importa el singleton
+ * del navegador) para que este mismo código corra tanto desde la app como
+ * headless en Node con service-role — es lo que permite la sincronización
+ * automática desde Drive sin duplicar la lógica. Ver
+ * scripts/sync-drive-sales.ts.
+ *
+ * Para volúmenes grandes (>500 filas × 88 períodos = 44k upserts), usa batches.
  */
 
 const METRICS_BATCH = 1000;
 const ATTRS_BATCH = 500;
 
 interface CommitParams {
+  /** Cliente de Supabase: el del navegador (sesión del admin) o uno de service-role. */
+  client: SupabaseClient;
   folderId: string;
   filename: string;
   /** Ruta del archivo en el bucket `poi-imports`, si fue subido. */
@@ -30,6 +37,17 @@ interface CommitParams {
   /** Filas a omitir del commit. */
   skippedRowIndices?: Set<number>;
   onProgress?: (msg: string, frac: number) => void;
+  /**
+   * Gancho opcional que corre justo ANTES de escribir las métricas, con la
+   * lista final ya deduplicada. La sincronización automática lo usa para
+   * respaldar en poi_metrics_snapshots los valores que va a sobrescribir, de
+   * modo que la corrida se pueda revertir. La importación manual no lo pasa:
+   * ahí el admin ve la pantalla antes de confirmar.
+   */
+  beforeMetricsWrite?: (
+    metrics: Array<{ poi_id: string; metric_key: string; period: string; value: number }>,
+    jobId: string,
+  ) => Promise<void>;
 }
 
 export interface CommitResult {
@@ -42,6 +60,7 @@ export interface CommitResult {
 }
 
 export const commitImport = async ({
+  client: supabase,
   folderId,
   filename,
   sourceFilePath = null,
@@ -50,9 +69,18 @@ export const commitImport = async ({
   manualAssignments = {},
   skippedRowIndices = new Set(),
   onProgress,
+  beforeMetricsWrite,
 }: CommitParams): Promise<CommitResult> => {
   // -------- Crear el job head --------
-  const { data: { user } } = await supabase.auth.getUser();
+  // Con un cliente de service-role no hay usuario en sesión: created_by queda
+  // null y el job se identifica por su filename ("Drive: ...").
+  let createdBy: string | null = null;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    createdBy = user?.id ?? null;
+  } catch {
+    createdBy = null;
+  }
   const { data: jobRow, error: jobErr } = await supabase
     .from("poi_import_jobs")
     .insert({
@@ -60,7 +88,7 @@ export const commitImport = async ({
       filename,
       status: "pending",
       rows_total: rows.length,
-      created_by: user?.id ?? null,
+      created_by: createdBy,
       source_file_path: sourceFilePath,
     })
     .select("id")
@@ -258,6 +286,12 @@ export const commitImport = async ({
     aliasMap.set(`${a.poi_id}|${a.normalized_address}`, a);
   }
   const dedupAliases = [...aliasMap.values()];
+
+  // -------- Respaldo previo (solo lo usa la sincronización automática) ------
+  if (beforeMetricsWrite && dedupMetrics.length > 0) {
+    onProgress?.("Respaldando valores anteriores…", 0.08);
+    await beforeMetricsWrite(dedupMetrics, jobId);
+  }
 
   // -------- Batch upserts --------
   for (let i = 0; i < dedupMetrics.length; i += METRICS_BATCH) {

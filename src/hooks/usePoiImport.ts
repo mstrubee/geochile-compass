@@ -268,6 +268,7 @@ export const usePoiImport = ({ schema, folderId, folderPois }: UseImportParams) 
       setPhase("committing");
       setProgressFrac(0);
       const res = await commitImport({
+        client: supabase,
         folderId,
         filename,
         sourceFilePath,
