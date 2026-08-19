@@ -96,7 +96,34 @@ export interface ParseOptions {
    * pipeline pero a otra métrica.
    */
   metricKey?: string;
+  /**
+   * Año declarado al importar un presupuesto. Habilita reconocer una columna de
+   * TOTAL ANUAL cuyo encabezado no es una fecha ("Presupuesto", "Meta 2025",
+   * "Total"). Sin esto, un archivo con esa forma no aportaría ningún valor
+   * porque la columna quedaría como desconocida.
+   */
+  annualColumnYear?: number;
 }
+
+const COMBINING_MARKS_RE = new RegExp(
+  `[${String.fromCharCode(768)}-${String.fromCharCode(879)}]`, "g",
+);
+
+/** Palabras que, en una columna sin fecha, indican el total del año. */
+const ANNUAL_HEADER_WORDS = ["presupuesto", "meta", "total", "ppto", "budget"];
+
+const isAnnualTotalHeader = (name: string, year: number): boolean => {
+  const norm = name
+    .normalize("NFD")
+    .replace(COMBINING_MARKS_RE, "")
+    .toLowerCase()
+    .trim();
+  if (!norm) return false;
+  // Contiene el año declarado como token de 4 dígitos ("Meta 2025", "2025").
+  if (new RegExp(`\\b${year}\\b`).test(norm)) return true;
+  // O es una de las palabras típicas de total anual.
+  return ANNUAL_HEADER_WORDS.some((w) => norm === w || norm.startsWith(`${w} `));
+};
 
 export const parseAutoPlanetSheet = async (
   file: File,
@@ -164,6 +191,13 @@ export const parseAutoPlanetBuffer = (
     // ¿Es un encabezado de período (Date)?
     const period = cellToPeriod(h);
     if (period) return { kind: "period", period };
+    // Presupuesto con año declarado explícitamente: la columna del total anual
+    // puede venir sin fecha en el encabezado ("Presupuesto", "Meta", "Total").
+    // Se acepta como el total del año declarado, y así el año lo manda quien
+    // importa en vez de depender de cómo esté escrito el encabezado.
+    if (options?.annualColumnYear && isAnnualTotalHeader(name, options.annualColumnYear)) {
+      return { kind: "period", period: `${options.annualColumnYear}-01-01` };
+    }
     return { kind: "unknown", name };
   });
 

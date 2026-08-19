@@ -70,12 +70,18 @@ export const PoiImportDialog = ({
   onViewOnMap,
   hidden = false,
 }: Props) => {
+  // Año del presupuesto. Por defecto el próximo, que es el caso más común al
+  // cargar metas; se puede elegir cualquier año con ventas (actual o pasado)
+  // para poder comparar histórico contra lo presupuestado en su momento.
+  const anioActual = new Date().getFullYear();
+  const [budgetYear, setBudgetYear] = useState<number>(anioActual + 1);
   const imp = usePoiImport({
     schema,
     folderId: folder?.id ?? null,
     folderPois,
     metricKey,
     distributeAnnual,
+    budgetYear: metricKey === "presupuesto" ? budgetYear : undefined,
   });
   const [filter, setFilter] = useState<
     "all" | "ok" | "review" | "auto" | "alias" | "skipped"
@@ -273,6 +279,25 @@ export const PoiImportDialog = ({
                         </div>
                       )}
                     </div>
+                    {metricKey === "presupuesto" && (
+                      <div className="mb-3 flex items-center justify-center gap-2">
+                        <label className="text-[11px] font-medium text-muted-foreground">
+                          Año del presupuesto
+                        </label>
+                        <select
+                          value={budgetYear}
+                          onChange={(e) => setBudgetYear(Number(e.target.value))}
+                          className="h-8 rounded-md border border-border bg-background px-2 text-sm"
+                        >
+                          {Array.from({ length: 10 }, (_, i) => anioActual + 1 - i).map((y) => (
+                            <option key={y} value={y}>
+                              {y}
+                              {y === anioActual + 1 ? " (próximo)" : y === anioActual ? " (actual)" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <label className="cursor-pointer">
                       <input
                         type="file"
@@ -453,6 +478,11 @@ export const PoiImportDialog = ({
                   <div className="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
                     Columnas desconocidas (se ignorarán):{" "}
                     {imp.parsed.unknownColumns.join(", ")}
+                  </div>
+                )}
+                {imp.distributionWarning && (
+                  <div className="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+                    {imp.distributionWarning}
                   </div>
                 )}
                 {imp.distributionNote && (

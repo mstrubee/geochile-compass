@@ -68,6 +68,8 @@ const CLI_FOLDER = argValue("folder") ?? process.env.SYNC_FOLDER_ID;
 const CLI_METRIC = argValue("metric") ?? process.env.SYNC_METRIC;
 /** El archivo trae un total anual por local, a repartir en 12 metas mensuales. */
 const CLI_ANNUAL = hasFlag("anual") || process.env.SYNC_ANNUAL === "true";
+/** Año del presupuesto, declarado explícitamente (manda sobre el encabezado). */
+const CLI_YEAR = argValue("anio") ? Number(argValue("anio")) : undefined;
 
 const need = (name: string): string => {
   const v = process.env[name];
@@ -287,7 +289,7 @@ const syncFolder = async (admin: SupabaseClient, state: SyncStateRow): Promise<v
   // ── 3) Descargar y parsear ──────────────────────────────────────────────
   const bytes = await source.read();
   console.log(`leído: ${(bytes.byteLength / 1024).toFixed(0)} KB`);
-  let parsed = parseAutoPlanetBuffer(bytes, schema, { metricKey: CLI_METRIC });
+  let parsed = parseAutoPlanetBuffer(bytes, schema, { metricKey: CLI_METRIC, annualColumnYear: CLI_ANNUAL ? CLI_YEAR : undefined });
   console.log(`parseado: ${parsed.rows.length} filas · métrica: ${parsed.metricKeys.join(", ")}`);
 
   // Presupuesto anual: repartir el total del año en 12 metas mensuales según la
@@ -297,12 +299,13 @@ const syncFolder = async (admin: SupabaseClient, state: SyncStateRow): Promise<v
     const factors = computeSeasonalFactors(
       (ventas ?? []).map((v: { period: string; value: number }) => ({ period: String(v.period), value: Number(v.value) })),
     );
-    const dist = distributeAnnualBudget(parsed.rows, factors);
+    const dist = distributeAnnualBudget(parsed.rows, factors, { targetYear: CLI_YEAR });
     if (dist.distributedYears.length) {
       parsed = { ...parsed, rows: dist.rows, periods: [...new Set(dist.rows.flatMap((r) => r.metrics.map((m) => m.period)))].sort() };
       console.log(`   total anual de ${dist.distributedYears.join(", ")} repartido en 12 meses`);
     }
     if (dist.monthlyYears.length) console.log(`   ya venían mensualizados: ${dist.monthlyYears.join(", ")}`);
+    if (dist.yearMismatch) console.log(`   ⚠ ${dist.yearMismatch}`);
   }
 
   // ── 4) Datos para el matching (misma fuente que la app) ─────────────────

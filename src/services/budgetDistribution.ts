@@ -100,6 +100,22 @@ export interface DistributionResult {
   distributedYears: string[];
   /** Años que ya venían mensualizados y se dejaron intactos. */
   monthlyYears: string[];
+  /**
+   * Aviso cuando el año declarado al importar no coincide con el que traen las
+   * columnas del archivo. No se corrige en silencio: manda el año declarado,
+   * pero se avisa para que se pueda revisar el archivo.
+   */
+  yearMismatch: string | null;
+}
+
+export interface DistributeOptions {
+  /**
+   * Año del presupuesto, declarado explícitamente al importar. Manda sobre lo
+   * que digan los encabezados: un archivo con la columna "2027" cargado como
+   * presupuesto 2028 se guarda en 2028. Evita que un encabezado mal escrito
+   * mande metas al año equivocado sin que nadie lo note.
+   */
+  targetYear?: number;
 }
 
 /**
@@ -109,24 +125,37 @@ export interface DistributionResult {
 export const distributeAnnualBudget = (
   rows: ImportRow[],
   factors: SeasonalFactors,
+  options?: DistributeOptions,
 ): DistributionResult => {
   const allPeriods = [...new Set(rows.flatMap((r) => r.metrics.map((m) => m.period)))];
   const annual = annualYears(allPeriods);
-  const monthly = [...new Set(allPeriods.map((p) => p.slice(0, 4)))].filter((y) => !annual.has(y));
+  const fileYears = [...new Set(allPeriods.map((p) => p.slice(0, 4)))].sort();
+  const monthly = fileYears.filter((y) => !annual.has(y));
+  const target = options?.targetYear ? String(options.targetYear) : null;
 
-  if (annual.size === 0) {
-    return { rows, distributedYears: [], monthlyYears: monthly };
+  // ¿El archivo habla de un año distinto al declarado?
+  const yearMismatch =
+    target && fileYears.length > 0 && !fileYears.includes(target)
+      ? `El archivo trae datos de ${fileYears.join(", ")} pero se está importando como presupuesto ${target}. Se guardó en ${target}.`
+      : null;
+
+  if (annual.size === 0 && !target) {
+    return { rows, distributedYears: [], monthlyYears: monthly, yearMismatch };
   }
 
   const out = rows.map((row) => {
     const metrics: ImportRow["metrics"] = [];
     for (const m of row.metrics) {
-      const year = m.period.slice(0, 4);
-      if (!annual.has(year)) {
-        metrics.push(m);
+      const fileYear = m.period.slice(0, 4);
+      const esAnual = annual.has(fileYear);
+
+      if (!esAnual) {
+        // Ya viene mensualizado: se respeta el mes, pero el año declarado manda.
+        metrics.push(target ? { ...m, period: `${target}-${m.period.slice(5)}` } : m);
         continue;
       }
-      // Repartir: el total anual se divide en 12 según el peso de cada mes.
+      // Total anual: se divide en 12 según el peso real de cada mes.
+      const year = target ?? fileYear;
       for (let mes = 1; mes <= 12; mes++) {
         metrics.push({
           key: m.key,
@@ -138,5 +167,6 @@ export const distributeAnnualBudget = (
     return { ...row, metrics };
   });
 
-  return { rows: out, distributedYears: [...annual].sort(), monthlyYears: monthly };
+  const distributed = target && annual.size > 0 ? [target] : [...annual].sort();
+  return { rows: out, distributedYears: distributed, monthlyYears: monthly, yearMismatch };
 };

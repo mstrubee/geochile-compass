@@ -138,12 +138,29 @@ export const PoiDetailDialog = ({
 
   const rawActive = aggregates.find((a) => a.metricKey === activeMetric) ?? aggregates[0] ?? null;
 
+  /**
+   * Presupuesto por período, para comparar contra la venta real. Se superpone
+   * en el gráfico de ventas en vez de vivir en una pestaña aparte: la pregunta
+   * de negocio es "¿cumplí la meta?", y eso solo se responde viendo las dos
+   * series juntas.
+   */
+  const presupuestoPorPeriodo = useMemo(() => {
+    const agg = aggregates.find((a) => a.metricKey === "presupuesto");
+    return new Map((agg?.series ?? []).map((p) => [p.period, p.value]));
+  }, [aggregates]);
+
+  /** true cuando la métrica en pantalla es la venta y hay presupuesto que comparar. */
+  const comparaPresupuesto =
+    (rawActive?.metricKey === "ventas") && presupuestoPorPeriodo.size > 0;
+
   // Sanitiza: descarta meses futuros (no se inventan valores)
   const active = useMemo(() => {
     if (!rawActive) return null;
     const now = new Date();
     const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    const series = rawActive.series.filter((p) => p.period <= currentPeriod);
+    const series = rawActive.series
+      .filter((p) => p.period <= currentPeriod)
+      .map((p) => ({ ...p, presupuesto: presupuestoPorPeriodo.get(p.period) ?? null }));
     const total = series.reduce((s, p) => s + p.value, 0);
     const latest = series.length ? series[series.length - 1] : null;
     let mom: number | null = null;
@@ -159,6 +176,14 @@ export const PoiDetailDialog = ({
       const prev = series.find((p) => p.period === prevYear);
       if (prev && prev.value > 0) yoy = ((latest.value - prev.value) / prev.value) * 100;
     }
+    // Cumplimiento del presupuesto: solo sobre los meses que tienen meta
+    // cargada, para no castigar meses sin presupuesto.
+    const conMeta = series.filter((p) => p.presupuesto != null && p.presupuesto > 0);
+    const metaTotal = conMeta.reduce((s, p) => s + (p.presupuesto ?? 0), 0);
+    const realEnMeses = conMeta.reduce((s, p) => s + p.value, 0);
+    const cumplimiento = metaTotal > 0 ? (realEnMeses / metaTotal) * 100 : null;
+    const mesesConMeta = conMeta.length;
+
     const trailing12 = series.slice(-12);
     const trailing12Sum = trailing12.reduce((s, p) => s + p.value, 0);
     const avgLast12 = trailing12.length > 0 ? trailing12Sum / trailing12.length : null;
@@ -190,8 +215,11 @@ export const PoiDetailDialog = ({
       avgLast12,
       avgLastCompletedYear,
       lastCompletedYear,
+      cumplimiento,
+      mesesConMeta,
+      metaTotal,
     };
-  }, [rawActive]);
+  }, [rawActive, presupuestoPorPeriodo]);
 
   // Series anuales (suma por año calendario)
   const annualSeries = useMemo(() => {
@@ -459,6 +487,34 @@ export const PoiDetailDialog = ({
                 />
               )}
 
+              {/* Cumplimiento del presupuesto (solo si hay metas cargadas) */}
+              {active && comparaPresupuesto && active.cumplimiento != null && (
+                <div className="mt-3 rounded-xl border border-border/30 bg-surface-2/40 p-3">
+                  <div className="flex items-baseline justify-between">
+                    <div>
+                      <div className="text-[11px] font-medium text-muted-foreground">
+                        Cumplimiento del presupuesto
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-muted-foreground">
+                        Sobre {active.mesesConMeta} {active.mesesConMeta === 1 ? "mes" : "meses"} con
+                        meta cargada · meta {formatMetricValue(active.metaTotal, active.format)}
+                      </div>
+                    </div>
+                    <div
+                      className={`text-2xl font-bold tabular-nums ${
+                        active.cumplimiento >= 100
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : active.cumplimiento >= 95
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-destructive"
+                      }`}
+                    >
+                      {active.cumplimiento.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Gráfico */}
               {active && active.series.length > 0 && (
                 <div className="mt-4 rounded-xl border border-border/30 bg-surface-2/40 p-3">
@@ -521,7 +577,12 @@ export const PoiDetailDialog = ({
                               fontSize: 11,
                             }}
                             labelFormatter={(v) => formatPeriod(String(v))}
-                            formatter={(v: number) => [formatMetricValue(v, active.format), labelByKey[active.metricKey] ?? active.metricKey]}
+                            formatter={(v: number, name: string) => [
+                              formatMetricValue(v, active.format),
+                              name === "presupuesto" || name === "Presupuesto"
+                                ? "Presupuesto"
+                                : labelByKey[active.metricKey] ?? active.metricKey,
+                            ]}
                           />
                           <Line
                             type="monotone"
@@ -530,7 +591,20 @@ export const PoiDetailDialog = ({
                             strokeWidth={2}
                             dot={false}
                             activeDot={{ r: 4 }}
+                            name="Real"
                           />
+                          {comparaPresupuesto && (
+                            <Line
+                              type="monotone"
+                              dataKey="presupuesto"
+                              stroke="hsl(38 92% 50%)"
+                              strokeWidth={2}
+                              strokeDasharray="4 3"
+                              dot={false}
+                              connectNulls
+                              name="Presupuesto"
+                            />
+                          )}
                         </LineChart>
                       ) : (
                         <BarChart data={annualSeries} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>

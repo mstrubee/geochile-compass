@@ -54,6 +54,11 @@ interface UseImportParams {
    * en vez de dividir por 12. Ver services/budgetDistribution.ts.
    */
   distributeAnnual?: boolean;
+  /**
+   * Año del presupuesto, declarado explícitamente al importar. Manda sobre los
+   * encabezados del archivo (ver budgetDistribution.ts).
+   */
+  budgetYear?: number;
 }
 
 /**
@@ -72,6 +77,7 @@ export const usePoiImport = ({
   folderPois,
   metricKey,
   distributeAnnual = false,
+  budgetYear,
 }: UseImportParams) => {
   const [phase, setPhase] = useState<ImportPhase>("idle");
   const [filename, setFilename] = useState<string>("");
@@ -87,6 +93,8 @@ export const usePoiImport = ({
   const [sourceFilePath, setSourceFilePath] = useState<string | null>(null);
   /** Aviso al usuario cuando se repartió un total anual en metas mensuales. */
   const [distributionNote, setDistributionNote] = useState<string | null>(null);
+  /** Aviso cuando el año del archivo no coincide con el año declarado. */
+  const [distributionWarning, setDistributionWarning] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const reset = useCallback(() => {
@@ -105,6 +113,7 @@ export const usePoiImport = ({
     setAliases([]);
     setSourceFilePath(null);
     setDistributionNote(null);
+    setDistributionWarning(null);
   }, []);
 
   /** Etapa 1: parsea el Excel y lo sube a storage para poder retomarlo después. */
@@ -119,7 +128,10 @@ export const usePoiImport = ({
         setPhase("parsing");
         setFilename(file.name);
         setError(null);
-        let result = await parseAutoPlanetSheet(file, schema, { metricKey });
+        let result = await parseAutoPlanetSheet(file, schema, {
+          metricKey,
+          annualColumnYear: distributeAnnual ? budgetYear : undefined,
+        });
         if (result.missingIdentityColumns.length > 0) {
           throw new Error(
             `Faltan columnas requeridas: ${result.missingIdentityColumns.join(", ")}`,
@@ -137,7 +149,9 @@ export const usePoiImport = ({
           const factors = computeSeasonalFactors(
             (ventas ?? []).map((v) => ({ period: String(v.period), value: Number(v.value) })),
           );
-          const dist = distributeAnnualBudget(result.rows, factors);
+          const dist = distributeAnnualBudget(result.rows, factors, { targetYear: budgetYear });
+          if (dist.yearMismatch) setDistributionWarning(dist.yearMismatch);
+          else setDistributionWarning(null);
           if (dist.distributedYears.length > 0) {
             result = {
               ...result,
@@ -173,7 +187,7 @@ export const usePoiImport = ({
         setPhase("error");
       }
     },
-    [schema, folderId],
+    [schema, folderId, metricKey, distributeAnnual, budgetYear],
   );
 
   /** Retoma un import previo descargando el archivo desde storage. */
@@ -390,6 +404,7 @@ export const usePoiImport = ({
     commitResult,
     stats,
     distributionNote,
+    distributionWarning,
     parse,
     runMatching,
     assignManual,
