@@ -53,6 +53,13 @@ export interface ProjectionSettings {
    * informe invita a que las láminas no coincidan entre versiones.
    */
   captureZoomOffset?: number | null;
+  /**
+   * Corrimiento manual del centro de la captura, en píxeles. Se recuerda por lo
+   * mismo que el zoom: encuadrar a mano una isócrona grande es criterio sobre
+   * ESA ubicación, y rehacerlo de memoria hace que las láminas no coincidan
+   * entre versiones del informe.
+   */
+  capturePanOffset?: { x: number; y: number } | null;
 }
 
 export interface SavedIsochrone {

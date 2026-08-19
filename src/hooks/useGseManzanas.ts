@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { LruCache } from "@/utils/lruCache";
 import { gseService } from "@/services/gseService";
 import type { GseFeatureCollection, GseParams, GseVariable } from "@/types/gse";
 
@@ -32,7 +33,10 @@ export const useGseManzanas = ({
   const [data, setData] = useState<GseFeatureCollection | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const cacheRef = useRef<Map<string, GseFeatureCollection>>(new Map());
+  // Tope de 12 entradas: cada una puede traer hasta 8.000 manzanas con
+  // geometría (~8 MB en heap), y la clave incluye bbox+zoom, o sea que crece con
+  // cada paneo. 12 cubre el ir y venir habitual sin acumular la sesión entera.
+  const cacheRef = useRef<LruCache<string, GseFeatureCollection>>(new LruCache(12));
   const reqIdRef = useRef(0);
 
   useEffect(() => {

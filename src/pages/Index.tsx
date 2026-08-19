@@ -312,6 +312,7 @@ const Index = () => {
       iso: Isochrone,
       heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
       zoomOffset = 0,
+      panOffset: { x: number; y: number } = { x: 0, y: 0 },
     ): Promise<string | null> => {
       const map = mapRef.current;
       if (!map) return null;
@@ -340,7 +341,7 @@ const Index = () => {
           setIsoOutlineCapture(true);
           setHeatOverride(heat ?? null);
         });
-        await fitMapToBounds(map, boundsBox, zoomOffset);
+        await fitMapToBounds(map, boundsBox, zoomOffset, panOffset);
         return await captureAfterSettle(map);
       } finally {
         flushSync(() => {
@@ -360,6 +361,7 @@ const Index = () => {
       iso: Isochrone,
       heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
       zoomOffset = 0,
+      panOffset: { x: number; y: number } = { x: 0, y: 0 },
     ): Promise<MapCaptureImages | null> => {
       const map = mapRef.current;
       if (!map) return null;
@@ -394,7 +396,7 @@ const Index = () => {
           setIsoOutlineCapture(true);
           setIsochrones((prev) => prev.map((i) => ({ ...i, visible: i.id === iso.id })));
         });
-        await fitMapToBounds(map, boundsBox, zoomOffset);
+        await fitMapToBounds(map, boundsBox, zoomOffset, panOffset);
         const isoOnly = await captureAfterSettle(map);
 
         // El encuadre se rehace antes de CADA foto, como pide fitMapToBounds:
@@ -405,7 +407,7 @@ const Index = () => {
         const beforeNse = gseDataRef.current;
         flushSync(() => setLayers({ ...ALL_LAYERS_OFF, nse: true }));
         await waitForRefChange(gseDataRef, beforeNse);
-        await fitMapToBounds(map, boundsBox, zoomOffset);
+        await fitMapToBounds(map, boundsBox, zoomOffset, panOffset);
         const gse = await captureAfterSettle(map);
 
         const beforeGasto = gseDataRef.current;
@@ -414,11 +416,11 @@ const Index = () => {
           setGastoView("manzana");
         });
         await waitForRefChange(gseDataRef, beforeGasto);
-        await fitMapToBounds(map, boundsBox, zoomOffset);
+        await fitMapToBounds(map, boundsBox, zoomOffset, panOffset);
         const gasto = await captureAfterSettle(map);
 
         flushSync(() => setLayers({ ...ALL_LAYERS_OFF, commercial: true }));
-        await fitMapToBounds(map, boundsBox, zoomOffset);
+        await fitMapToBounds(map, boundsBox, zoomOffset, panOffset);
         const atractores = await captureAfterSettle(map);
 
         return { isoOnly, gse, gasto, atractores };

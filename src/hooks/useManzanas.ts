@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { LruCache } from "@/utils/lruCache";
 import { manzanaService } from "@/services/manzanaService";
 import type {
   ManzanaFeatureCollection,
@@ -35,7 +36,9 @@ export const useManzanas = ({
   const [data, setData] = useState<ManzanaFeatureCollection | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const cacheRef = useRef<Map<string, ManzanaFeatureCollection>>(new Map());
+  // Mismo motivo que en useGseManzanas: hasta 6.000 manzanas por entrada y
+  // clave por viewport. Ver el comentario allá.
+  const cacheRef = useRef<LruCache<string, ManzanaFeatureCollection>>(new LruCache(12));
   const reqIdRef = useRef(0);
 
   useEffect(() => {

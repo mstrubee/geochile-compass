@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, FileText, ZoomIn } from "lucide-react";
+import { Loader2, RefreshCw, FileText, ZoomIn, Move } from "lucide-react";
 import type { MapCaptureImages } from "@/utils/mapCapture";
 import { DEFAULT_SETTINGS, type HeatmapSettings } from "@/hooks/useHeatmapSettings";
 
@@ -18,21 +18,26 @@ interface Props {
   onCapture: (
     heat: Partial<HeatmapSettings>,
     zoomOffset: number,
+    panOffset: { x: number; y: number },
   ) => Promise<MapCaptureImages | null>;
   /** Recaptura solo atractores: las otras tres no cambian al afinar el heatmap. */
   onCaptureAtractores?: (
     heat: Partial<HeatmapSettings>,
     zoomOffset: number,
+    panOffset: { x: number; y: number },
   ) => Promise<string | null>;
   /** Ajustes usados la última vez para esta isócrona. */
   initialHeat?: Partial<HeatmapSettings> | null;
   /** Zoom usado la última vez para esta isócrona. */
   initialZoomOffset?: number | null;
+  /** Corrimiento manual del centro usado la última vez. */
+  initialPanOffset?: { x: number; y: number } | null;
   /** Confirma y genera el informe con las fotos y los ajustes revisados. */
   onConfirm: (
     images: MapCaptureImages | null,
     heat: HeatmapSettings,
     zoomOffset: number,
+    panOffset: { x: number; y: number },
   ) => Promise<void> | void;
 }
 
@@ -63,7 +68,7 @@ const ZOOM_MIN = -2;
 const ZOOM_MAX = 4;
 
 export const MapCapturePreviewDialog = ({
-  open, onClose, onCapture, onCaptureAtractores, initialHeat, initialZoomOffset, onConfirm,
+  open, onClose, onCapture, onCaptureAtractores, initialHeat, initialZoomOffset, initialPanOffset, onConfirm,
 }: Props) => {
   // El radio del heatmap está en píxeles: lo que se ve bien en pantalla puede
   // convertirse en una mancha que tapa la isócrona a la escala de la foto.
@@ -77,16 +82,28 @@ export const MapCapturePreviewDialog = ({
   const [zoomOffset, setZoomOffset] = useState(0);
   const zoomRef = useRef(zoomOffset);
   zoomRef.current = zoomOffset;
+  /**
+   * Corrimiento manual del centro, en píxeles. Se arrastra sobre cualquiera de
+   * las cuatro vistas y afecta a las cuatro: el informe las compara entre sí, y
+   * centradas distinto esa comparación deja de servir.
+   */
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const panRef = useRef(pan);
+  panRef.current = pan;
+  /** Arrastre en curso: se muestra con un transform CSS para dar respuesta
+   *  inmediata, y solo al soltar se rehacen las fotos. */
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
   const [images, setImages] = useState<MapCaptureImages | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [heatBusy, setHeatBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   const capture = useCallback(
-    async (h: HeatmapSettings, z: number) => {
+    async (h: HeatmapSettings, z: number, pOff: { x: number; y: number }) => {
       setCapturing(true);
       try {
-        setImages(await onCapture(h, z));
+        setImages(await onCapture(h, z, pOff));
       } finally {
         setCapturing(false);
       }
@@ -97,10 +114,10 @@ export const MapCapturePreviewDialog = ({
   /** Al mover un control solo cambia atractores: rehacer las cuatro es lento. */
   const recaptureHeat = useCallback(
     async (h: HeatmapSettings) => {
-      if (!onCaptureAtractores) return capture(h, zoomRef.current);
+      if (!onCaptureAtractores) return capture(h, zoomRef.current, panRef.current);
       setHeatBusy(true);
       try {
-        const img = await onCaptureAtractores(h, zoomRef.current);
+        const img = await onCaptureAtractores(h, zoomRef.current, panRef.current);
         setImages((prev) => (prev ? { ...prev, atractores: img } : prev));
       } finally {
         setHeatBusy(false);
@@ -114,10 +131,13 @@ export const MapCapturePreviewDialog = ({
     if (!open) return;
     const inicial = { ...DEFAULT_SETTINGS.commercial, ...(initialHeat ?? {}) };
     const z = initialZoomOffset ?? 0;
+    const pOff = initialPanOffset ?? { x: 0, y: 0 };
     setHeat(inicial);
     setZoomOffset(z);
     zoomRef.current = z;
-    void capture(inicial, z);
+    setPan(pOff);
+    panRef.current = pOff;
+    void capture(inicial, z, pOff);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -132,12 +152,32 @@ export const MapCapturePreviewDialog = ({
           </DialogTitle>
           <DialogDescription className="text-[11px] text-muted-foreground">
             Ajusta el heatmap y el zoom hasta que las capas se lean bien, y recién
-            ahí genera el informe. Acercar recorta parte de la isócrona a cambio
-            de ver el detalle: en isócronas grandes suele convenir.
+            ahí genera el informe. Arrastra cualquier vista para centrar las
+            cuatro. Acercar recorta parte de la isócrona a cambio de ver el
+            detalle: en isócronas grandes suele convenir.
           </DialogDescription>
         </DialogHeader>
 
         <div className="max-h-[calc(92vh-190px)] overflow-y-auto px-5 py-4">
+          {(pan.x !== 0 || pan.y !== 0) && (
+            <div className="mb-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+              <Move className="h-3 w-3" />
+              Centro corrido {pan.x > 0 ? `${pan.x}px →` : `${-pan.x}px ←`} ·{" "}
+              {pan.y > 0 ? `${pan.y}px ↓` : `${-pan.y}px ↑`}
+              <button
+                onClick={() => {
+                  const z = { x: 0, y: 0 };
+                  setPan(z); panRef.current = z;
+                  void capture(heatRef.current, zoomRef.current, z);
+                }}
+                disabled={busy}
+                className="underline hover:text-foreground disabled:opacity-40"
+              >
+                centrar
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             {TITULOS.map(([key, titulo]) => {
               const src = images?.[key] ?? null;
@@ -150,7 +190,59 @@ export const MapCapturePreviewDialog = ({
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                       </div>
                     ) : src ? (
-                      <img src={src} alt={titulo} className="h-full w-full object-cover" />
+                      <img
+                        src={src}
+                        alt={titulo}
+                        draggable={false}
+                        onPointerDown={(e) => {
+                          if (busy) return;
+                          // `setPointerCapture` mantiene los eventos aunque el
+                          // puntero salga de la imagen: sin eso, arrastrar hacia
+                          // afuera dejaba el gesto colgado a medio camino.
+                          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                          dragStart.current = { x: e.clientX, y: e.clientY };
+                          setDrag({ x: 0, y: 0 });
+                        }}
+                        onPointerMove={(e) => {
+                          if (!dragStart.current) return;
+                          setDrag({
+                            x: e.clientX - dragStart.current.x,
+                            y: e.clientY - dragStart.current.y,
+                          });
+                        }}
+                        onPointerUp={(e) => {
+                          const st = dragStart.current;
+                          dragStart.current = null;
+                          const d = { x: e.clientX - (st?.x ?? e.clientX), y: e.clientY - (st?.y ?? e.clientY) };
+                          setDrag(null);
+                          // Un click sin desplazamiento real no debe gastar una
+                          // recaptura de cuatro fotos.
+                          if (!st || (Math.abs(d.x) < 3 && Math.abs(d.y) < 3)) return;
+                          // La vista previa se muestra a ~1/3 del ancho real del
+                          // mapa, así que el arrastre se escala: mover 10 px acá
+                          // son ~30 px de mapa. Sin el factor el paneo se sentiría
+                          // mucho más lento de lo que el usuario arrastra.
+                          const scale =
+                            (e.currentTarget as HTMLImageElement).naturalWidth /
+                            Math.max(1, (e.currentTarget as HTMLImageElement).clientWidth);
+                          // Se ARRASTRA la imagen, así que el mapa va al revés:
+                          // llevar la foto a la derecha significa mirar más a la
+                          // izquierda.
+                          const next = {
+                            x: Math.round(panRef.current.x - d.x * scale),
+                            y: Math.round(panRef.current.y - d.y * scale),
+                          };
+                          setPan(next);
+                          panRef.current = next;
+                          void capture(heatRef.current, zoomRef.current, next);
+                        }}
+                        className="h-full w-full cursor-grab object-cover active:cursor-grabbing"
+                        style={
+                          drag
+                            ? { transform: `translate(${drag.x}px, ${drag.y}px)`, transition: "none" }
+                            : undefined
+                        }
+                      />
                     ) : (
                       <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">
                         Sin captura
@@ -188,9 +280,32 @@ export const MapCapturePreviewDialog = ({
                     onTouchEnd={() => void recaptureHeat(heatRef.current)}
                     className="w-24 accent-brand-red"
                   />
-                  <span className="w-8 text-[11px] font-mono text-foreground">
-                    {key === "opacity" ? heat[key].toFixed(2) : heat[key]}
-                  </span>
+                  {/* Input numérico y no un span: las flechas ↑↓ del teclado
+                      ajustan el valor de a un paso sin tener que apuntar el
+                      slider con el mouse, que es lo que pidió Matias. */}
+                  <input
+                    type="number"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={key === "opacity" ? heat[key].toFixed(2) : heat[key]}
+                    disabled={busy}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (!Number.isFinite(v)) return;
+                      setHeat((h) => ({ ...h, [key]: Math.min(max, Math.max(min, v)) }));
+                    }}
+                    // Se recaptura al soltar la flecha o al salir del campo, no en
+                    // cada pulsación: mantener ↑ apretada dispararía una captura
+                    // por repetición del teclado.
+                    onKeyUp={(e) => {
+                      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                        void recaptureHeat(heatRef.current);
+                      }
+                    }}
+                    onBlur={() => void recaptureHeat(heatRef.current)}
+                    className="w-14 rounded border border-border/40 bg-surface-2/60 px-1 py-0.5 text-[11px] font-mono text-foreground"
+                  />
                 </div>
               ),
             )}
@@ -207,16 +322,35 @@ export const MapCapturePreviewDialog = ({
                 value={zoomOffset}
                 disabled={busy}
                 onChange={(e) => setZoomOffset(parseInt(e.target.value, 10))}
-                onMouseUp={() => void capture(heatRef.current, zoomRef.current)}
-                onTouchEnd={() => void capture(heatRef.current, zoomRef.current)}
+                onMouseUp={() => void capture(heatRef.current, zoomRef.current, panRef.current)}
+                onTouchEnd={() => void capture(heatRef.current, zoomRef.current, panRef.current)}
                 className="w-24 accent-brand-red"
               />
-              <span className="w-8 text-[11px] font-mono text-foreground">
-                {zoomOffset > 0 ? `+${zoomOffset}` : zoomOffset}
-              </span>
+              <input
+                type="number"
+                min={ZOOM_MIN}
+                max={ZOOM_MAX}
+                step={1}
+                value={zoomOffset}
+                disabled={busy}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  if (!Number.isFinite(v)) return;
+                  const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v));
+                  setZoomOffset(clamped);
+                  zoomRef.current = clamped;
+                }}
+                onKeyUp={(e) => {
+                  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                    void capture(heatRef.current, zoomRef.current, panRef.current);
+                  }
+                }}
+                onBlur={() => void capture(heatRef.current, zoomRef.current, panRef.current)}
+                className="w-14 rounded border border-border/40 bg-surface-2/60 px-1 py-0.5 text-[11px] font-mono text-foreground"
+              />
               {zoomOffset !== 0 && (
                 <button
-                  onClick={() => { setZoomOffset(0); zoomRef.current = 0; void capture(heatRef.current, 0); }}
+                  onClick={() => { setZoomOffset(0); zoomRef.current = 0; void capture(heatRef.current, 0, panRef.current); }}
                   disabled={busy}
                   className="text-[10px] text-muted-foreground underline hover:text-foreground disabled:opacity-40"
                   title="Volver al encuadre que mete la isócrona completa"
@@ -231,7 +365,7 @@ export const MapCapturePreviewDialog = ({
               variant="outline"
               className="h-7 text-[11px]"
               disabled={busy}
-              onClick={() => void capture(heatRef.current, zoomRef.current)}
+              onClick={() => void capture(heatRef.current, zoomRef.current, panRef.current)}
             >
               <RefreshCw className="mr-1.5 h-3 w-3" /> Recapturar
             </Button>
@@ -247,7 +381,7 @@ export const MapCapturePreviewDialog = ({
               onClick={async () => {
                 setGenerating(true);
                 try {
-                  await onConfirm(images, heatRef.current, zoomRef.current);
+                  await onConfirm(images, heatRef.current, zoomRef.current, panRef.current);
                   onClose();
                 } finally {
                   setGenerating(false);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { LruCache } from "@/utils/lruCache";
 import { supabase } from "@/integrations/supabase/client";
 import type { TerritorialGroup, TerritorialLayer, TerritorialFeature } from "@/types/territorial";
 
@@ -30,7 +31,13 @@ export type FeatureBbox = [number, number, number, number];
 
 // Caché de features por layer_id (+ bbox si se pidió recortado), sobrevive a
 // remounts dentro de la sesión.
-const featuresCache = new Map<string, TerritorialFeature[]>();
+/**
+ * Tope alto porque las entradas son por CAPA y hay 128 capas: una sola isócrona
+ * analizada agrega hasta 128 claves (capa + bbox). 400 permite tener unas tres
+ * isócronas completas en caché más las capas del mapa, sin que una sesión larga
+ * de análisis acumule miles de arrays de features.
+ */
+const featuresCache = new LruCache<string, TerritorialFeature[]>(400);
 const inflightCache = new Map<string, Promise<TerritorialFeature[]>>();
 
 /**
@@ -48,7 +55,7 @@ const cacheKeyFor = (layerId: string, bbox?: FeatureBbox | null) =>
 export const clearTerritorialFeaturesCache = (layerId?: string) => {
   if (layerId) {
     // Cae también cualquier variante recortada por bbox de esa capa.
-    for (const k of [...featuresCache.keys()]) {
+    for (const k of featuresCache.keys()) {
       if (k === layerId || k.startsWith(`${layerId}|`)) featuresCache.delete(k);
     }
     for (const k of [...inflightCache.keys()]) {

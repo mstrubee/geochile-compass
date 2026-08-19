@@ -40,20 +40,42 @@ export const waitForRefChange = async <T,>(
 };
 
 /** Espera a que termine el paneo/zoom del mapa (con timeout de seguridad). */
+/**
+ * Espera a que el mapa termine de moverse.
+ *
+ * El listener se quita SIEMPRE, también cuando gana el timeout. Con `map.once`
+ * y sin `off`, un `fitBounds` que no llega a mover el mapa —porque ya estaba en
+ * ese encuadre— dejaba el handler colgado para siempre: la promesa se resolvía
+ * por timeout, pero Leaflet seguía con la suscripción. Cada informe generado
+ * acumulaba listeners que después se disparaban en CADA paneo del usuario, y el
+ * mapa se ponía más lento con cada informe. Se agravó al reencuadrar antes de
+ * cada una de las 4 fotos en vez de una sola vez.
+ */
 const waitForMoveEnd = (map: L.Map, timeoutMs = 2000): Promise<void> =>
   new Promise((resolve) => {
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let delayed: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      map.off("moveend", onMoveEnd);
+      if (timer) { clearTimeout(timer); timer = null; }
+    };
     const finish = () => {
       if (settled) return;
       settled = true;
+      cleanup();
+      if (delayed) { clearTimeout(delayed); delayed = null; }
       resolve();
     };
-    const timer = setTimeout(finish, timeoutMs);
-    map.once("moveend", () => {
-      clearTimeout(timer);
+    function onMoveEnd() {
+      cleanup();
       // Da tiempo a que tiles/capas GeoJSON terminen de pintar tras el reflow.
-      setTimeout(finish, 350);
-    });
+      delayed = setTimeout(finish, 350);
+    }
+
+    timer = setTimeout(finish, timeoutMs);
+    map.on("moveend", onMoveEnd);
   });
 
 /**
@@ -69,6 +91,12 @@ export const fitMapToBounds = (
   map: L.Map,
   bounds: CaptureBounds,
   zoomOffset = 0,
+  /**
+   * Corrimiento manual en PÍXELES de pantalla respecto del centro automático.
+   * Va en píxeles y no en grados porque nace de arrastrar la vista previa con el
+   * mouse, y así el desplazamiento que hace el usuario es el mismo que ve.
+   */
+  panOffset: { x: number; y: number } = { x: 0, y: 0 },
 ): Promise<void> => {
   const p = waitForMoveEnd(map);
   map.invalidateSize({ animate: false });
@@ -79,6 +107,11 @@ export const fitMapToBounds = (
   map.fitBounds(latLng, { animate: false, padding: [24, 24] });
   if (zoomOffset !== 0) {
     map.setZoom(map.getZoom() + zoomOffset, { animate: false });
+  }
+  // El paneo va DESPUÉS del zoom: en píxeles, el mismo corrimiento cubre menos
+  // territorio a más zoom, que es justo lo que el usuario espera al arrastrar.
+  if (panOffset.x !== 0 || panOffset.y !== 0) {
+    map.panBy([panOffset.x, panOffset.y], { animate: false });
   }
   return p;
 };
