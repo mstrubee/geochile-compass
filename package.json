@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sync:drive-sales": "vite-node scripts/sync-drive-sales.ts",
-    "sync:ventas": "vite-node scripts/sync-drive-sales.ts"
+    "sync:ventas": "vite-node scripts/sync-drive-sales.ts",
+    "backtest:pronostico": "vite-node scripts/backtest-forecast.ts",
+    "proponer:presupuesto": "vite-node scripts/propose-budget.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

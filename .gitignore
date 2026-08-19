@@ -37,3 +37,6 @@ supabase/.temp/
 
 # Credenciales locales para la sincronización de ventas (scripts/sync-ventas.sh)
 .env.sync
+
+# Propuestas de presupuesto generadas (scripts/propose-budget.ts)
+propuesta_presupuesto_*.xlsx

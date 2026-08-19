@@ -311,6 +311,7 @@ const Index = () => {
     async (
       iso: Isochrone,
       heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
+      zoomOffset = 0,
     ): Promise<string | null> => {
       const map = mapRef.current;
       if (!map) return null;
@@ -339,7 +340,7 @@ const Index = () => {
           setIsoOutlineCapture(true);
           setHeatOverride(heat ?? null);
         });
-        await fitMapToBounds(map, boundsBox);
+        await fitMapToBounds(map, boundsBox, zoomOffset);
         return await captureAfterSettle(map);
       } finally {
         flushSync(() => {
@@ -358,6 +359,7 @@ const Index = () => {
     async (
       iso: Isochrone,
       heat?: Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null,
+      zoomOffset = 0,
     ): Promise<MapCaptureImages | null> => {
       const map = mapRef.current;
       if (!map) return null;
@@ -392,7 +394,7 @@ const Index = () => {
           setIsoOutlineCapture(true);
           setIsochrones((prev) => prev.map((i) => ({ ...i, visible: i.id === iso.id })));
         });
-        await fitMapToBounds(map, boundsBox);
+        await fitMapToBounds(map, boundsBox, zoomOffset);
         const isoOnly = await captureAfterSettle(map);
 
         const beforeNse = gseDataRef.current;

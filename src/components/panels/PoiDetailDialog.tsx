@@ -29,6 +29,9 @@ import {
   RefreshCw,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { supabase } from "@/integrations/supabase/client";
+import { computeSeasonalFactors } from "@/services/budgetDistribution";
+import { forecastStore } from "@/services/salesForecast";
 import type { SavedPoi } from "@/types/pois";
 import { POI_STATUS_LABEL } from "@/types/pois";
 import { usePoiClosureStats } from "@/hooks/usePoiClosureStats";
@@ -139,6 +142,51 @@ export const PoiDetailDialog = ({
   const rawActive = aggregates.find((a) => a.metricKey === activeMetric) ?? aggregates[0] ?? null;
 
   /**
+   * Totales de la red por mes (vista network_monthly_sales, ~91 filas): insumo
+   * para la estacionalidad, que se estima sobre la red y no sobre el local
+   * porque un local solo tiene ~7 observaciones por mes calendario.
+   */
+  const [networkMonthly, setNetworkMonthly] = useState<Array<{ period: string; value: number }>>([]);
+  useEffect(() => {
+    if (!poi?.id) return;
+    let cancelled = false;
+    (async () => {
+      // `network_monthly_sales` es una vista y no aparece en los tipos
+      // generados de Supabase (types.ts se regenera desde el esquema), así que
+      // se declara el tipo de retorno a mano para esta consulta.
+      const { data } = await supabase
+        .from("network_monthly_sales" as never)
+        .select("period, total")
+        .returns<Array<{ period: string; total: number }>>();
+      if (cancelled) return;
+      setNetworkMonthly(
+        (data ?? []).map((r) => ({
+          period: String(r.period).slice(0, 10),
+          value: Number(r.total),
+        })),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [poi?.id]);
+
+  /**
+   * Pronóstico de los próximos 12 meses del local. Se calcula al vuelo en vez
+   * de guardarse como métrica: así nunca queda desactualizado cuando entra un
+   * mes nuevo de ventas.
+   */
+  const pronosticoPorPeriodo = useMemo(() => {
+    if (!networkMonthly.length) return new Map<string, number>();
+    const ventas = metrics
+      .filter((m) => m.metric_key === "ventas")
+      .map((m) => ({ period: String(m.period).slice(0, 10), value: Number(m.value) }));
+    if (ventas.length < 12) return new Map<string, number>();
+    const factors = computeSeasonalFactors(networkMonthly);
+    return new Map(forecastStore(ventas, factors, { horizon: 12 }).map((p) => [p.period, p.value]));
+  }, [metrics, networkMonthly]);
+
+  /**
    * Presupuesto por período, para comparar contra la venta real. Se superpone
    * en el gráfico de ventas en vez de vivir en una pestaña aparte: la pregunta
    * de negocio es "¿cumplí la meta?", y eso solo se responde viendo las dos
@@ -158,47 +206,82 @@ export const PoiDetailDialog = ({
     if (!rawActive) return null;
     const now = new Date();
     const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    const series = rawActive.series
+    const historico = rawActive.series
       .filter((p) => p.period <= currentPeriod)
-      .map((p) => ({ ...p, presupuesto: presupuestoPorPeriodo.get(p.period) ?? null }));
-    const total = series.reduce((s, p) => s + p.value, 0);
-    const latest = series.length ? series[series.length - 1] : null;
+      .map((p) => ({
+        ...p,
+        presupuesto: presupuestoPorPeriodo.get(p.period) ?? null,
+        pronostico: null as number | null,
+      }));
+
+    // El pronóstico se dibuja HACIA ADELANTE: se agregan los meses futuros al
+    // final de la serie, con value=null para que la línea de venta real corte
+    // donde termina el dato duro y no parezca que hay venta donde no hay.
+    const esVentas = rawActive.metricKey === "ventas";
+    const futuros = esVentas
+      ? [...pronosticoPorPeriodo.entries()]
+          .filter(([period]) => period > currentPeriod)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([period, value]) => ({
+            period,
+            value: null as number | null,
+            presupuesto: presupuestoPorPeriodo.get(period) ?? null,
+            pronostico: value,
+          }))
+      : [];
+
+    // El último mes real also lleva el pronóstico, para que la línea arranque
+    // pegada a la serie en vez de aparecer flotando.
+    if (esVentas && futuros.length && historico.length) {
+      const ultimo = historico[historico.length - 1];
+      ultimo.pronostico = ultimo.value;
+    }
+
+    const series = [...historico, ...futuros];
+
+    // IMPORTANTE: todos los agregados se calculan sobre `historico`, nunca
+    // sobre `series`. `series` incluye los meses futuros del pronóstico (con
+    // value nulo) solo para dibujarlos; meterlos en un promedio o en un
+    // "último mes" daría números falsos.
+    const total = historico.reduce((s, p) => s + p.value, 0);
+    const latest = historico.length ? historico[historico.length - 1] : null;
     let mom: number | null = null;
-    if (series.length >= 2) {
-      const prev = series[series.length - 2];
-      const last = series[series.length - 1];
+    if (historico.length >= 2) {
+      const prev = historico[historico.length - 2];
+      const last = historico[historico.length - 1];
       if (prev.value > 0) mom = ((last.value - prev.value) / prev.value) * 100;
     }
     let yoy: number | null = null;
     if (latest) {
       const [y, m] = latest.period.split("-").map(Number);
       const prevYear = `${y - 1}-${String(m).padStart(2, "0")}-01`;
-      const prev = series.find((p) => p.period === prevYear);
+      const prev = historico.find((p) => p.period === prevYear);
       if (prev && prev.value > 0) yoy = ((latest.value - prev.value) / prev.value) * 100;
     }
-    // Cumplimiento del presupuesto: solo sobre los meses que tienen meta
-    // cargada, para no castigar meses sin presupuesto.
-    const conMeta = series.filter((p) => p.presupuesto != null && p.presupuesto > 0);
+    // Cumplimiento del presupuesto: solo sobre los meses que ya ocurrieron Y
+    // tienen meta cargada. Incluir meses futuros con meta daría un
+    // cumplimiento artificialmente bajo (meta cargada, venta todavía en 0).
+    const conMeta = historico.filter((p) => p.presupuesto != null && p.presupuesto > 0);
     const metaTotal = conMeta.reduce((s, p) => s + (p.presupuesto ?? 0), 0);
     const realEnMeses = conMeta.reduce((s, p) => s + p.value, 0);
     const cumplimiento = metaTotal > 0 ? (realEnMeses / metaTotal) * 100 : null;
     const mesesConMeta = conMeta.length;
 
-    const trailing12 = series.slice(-12);
+    const trailing12 = historico.slice(-12);
     const trailing12Sum = trailing12.reduce((s, p) => s + p.value, 0);
     const avgLast12 = trailing12.length > 0 ? trailing12Sum / trailing12.length : null;
 
     // Promedio del último año calendario completado
     const lastCompletedYear = new Date().getFullYear() - 1;
-    const yearSeries = series.filter((p) => p.period.startsWith(`${lastCompletedYear}-`));
+    const yearSeries = historico.filter((p) => p.period.startsWith(`${lastCompletedYear}-`));
     const avgLastCompletedYear =
       yearSeries.length === 12
         ? yearSeries.reduce((s, p) => s + p.value, 0) / 12
         : null;
 
-    let best = series[0] ?? null;
-    let worst = series[0] ?? null;
-    for (const p of series) {
+    let best = historico[0] ?? null;
+    let worst = historico[0] ?? null;
+    for (const p of historico) {
       if (p.value > (best?.value ?? -Infinity)) best = p;
       if (p.value < (worst?.value ?? Infinity)) worst = p;
     }
@@ -219,13 +302,15 @@ export const PoiDetailDialog = ({
       mesesConMeta,
       metaTotal,
     };
-  }, [rawActive, presupuestoPorPeriodo]);
+  }, [rawActive, presupuestoPorPeriodo, pronosticoPorPeriodo]);
 
   // Series anuales (suma por año calendario)
   const annualSeries = useMemo(() => {
     if (!active) return [] as Array<{ year: string; value: number; avg: number; complete: boolean; months: { period: string; value: number }[] }>;
     const map = new Map<string, { sum: number; months: { period: string; value: number }[] }>();
-    for (const p of active.series) {
+    // Solo meses con venta real: los del pronóstico traen value nulo y sumarlos
+    // haría aparecer un año futuro con total 0 en el gráfico anual.
+    for (const p of active.series.filter((x) => x.value != null)) {
       const y = p.period.slice(0, 4);
       const cur = map.get(y) ?? { sum: 0, months: [] };
       cur.sum += p.value;
@@ -581,7 +666,9 @@ export const PoiDetailDialog = ({
                               formatMetricValue(v, active.format),
                               name === "presupuesto" || name === "Presupuesto"
                                 ? "Presupuesto"
-                                : labelByKey[active.metricKey] ?? active.metricKey,
+                                : name === "pronostico" || name === "Pronóstico"
+                                  ? "Pronóstico"
+                                  : labelByKey[active.metricKey] ?? active.metricKey,
                             ]}
                           />
                           <Line
@@ -603,6 +690,18 @@ export const PoiDetailDialog = ({
                               dot={false}
                               connectNulls
                               name="Presupuesto"
+                            />
+                          )}
+                          {active.metricKey === "ventas" && pronosticoPorPeriodo.size > 0 && (
+                            <Line
+                              type="monotone"
+                              dataKey="pronostico"
+                              stroke="hsl(262 83% 58%)"
+                              strokeWidth={2}
+                              strokeDasharray="2 4"
+                              dot={false}
+                              connectNulls
+                              name="Pronóstico"
                             />
                           )}
                         </LineChart>
