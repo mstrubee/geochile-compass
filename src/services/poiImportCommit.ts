@@ -48,6 +48,17 @@ interface CommitParams {
     metrics: Array<{ poi_id: string; metric_key: string; period: string; value: number }>,
     jobId: string,
   ) => Promise<void>;
+  /**
+   * Igual que beforeMetricsWrite pero para los atributos estáticos y los
+   * nombres de POI, que la importación TAMBIÉN sobrescribe. Sin esto, una
+   * corrida automática con un archivo malo dejaba atributos equivocados sin
+   * forma de volver atrás.
+   */
+  beforeAttrsWrite?: (
+    attrs: Array<{ poi_id: string; attr_key: string; attr_value: string | null }>,
+    renames: Array<{ poi_id: string; name: string }>,
+    jobId: string,
+  ) => Promise<void>;
 }
 
 export interface CommitResult {
@@ -70,6 +81,7 @@ export const commitImport = async ({
   skippedRowIndices = new Set(),
   onProgress,
   beforeMetricsWrite,
+  beforeAttrsWrite,
 }: CommitParams): Promise<CommitResult> => {
   // -------- Crear el job head --------
   // Con un cliente de service-role no hay usuario en sesión: created_by queda
@@ -291,6 +303,14 @@ export const commitImport = async ({
   if (beforeMetricsWrite && dedupMetrics.length > 0) {
     onProgress?.("Respaldando valores anteriores…", 0.08);
     await beforeMetricsWrite(dedupMetrics, jobId);
+  }
+  if (beforeAttrsWrite && (dedupAttrs.length > 0 || poiRenames.size > 0)) {
+    onProgress?.("Respaldando atributos y nombres…", 0.09);
+    await beforeAttrsWrite(
+      dedupAttrs.map(({ poi_id, attr_key, attr_value }) => ({ poi_id, attr_key, attr_value })),
+      [...poiRenames.entries()].map(([poi_id, name]) => ({ poi_id, name })),
+      jobId,
+    );
   }
 
   // -------- Batch upserts --------

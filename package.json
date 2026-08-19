@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sync:drive-sales": "vite-node scripts/sync-drive-sales.ts"
+    "sync:drive-sales": "vite-node scripts/sync-drive-sales.ts",
+    "sync:ventas": "vite-node scripts/sync-drive-sales.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tarea agendada de macOS (launchd) para cargar el Excel de ventas a diario.
+
+  Cómo instalarla:
+    1. Edita las 3 rutas marcadas con CAMBIAR más abajo.
+    2. Copia el archivo (ya con tus rutas) a ~/Library/LaunchAgents/ con el
+       nombre com.geoplanet.sync-ventas.plist
+    3. Actívala:
+         launchctl load ~/Library/LaunchAgents/com.geoplanet.sync-ventas.plist
+    4. Para probarla ahora mismo, sin esperar la hora:
+         launchctl start com.geoplanet.sync-ventas
+    5. Revisa el resultado:
+         cat /tmp/sync-ventas.log
+
+  Para desactivarla:
+    launchctl unload ~/Library/LaunchAgents/com.geoplanet.sync-ventas.plist
+
+  OJO: solo corre si el computador está encendido. Si estaba apagado a la hora
+  agendada, launchd la ejecuta cuando vuelve a encenderse.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.geoplanet.sync-ventas</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <!-- CAMBIAR: ruta al script dentro de tu copia del repo -->
+    <string>/Users/mstrubee/Documents/GitHub/geochile-compass/scripts/sync-ventas.sh</string>
+    <!-- CAMBIAR: ruta al Excel de ventas en tu computador -->
+    <string>/Users/mstrubee/Documents/ventas.xlsx</string>
+  </array>
+
+  <!-- CAMBIAR: la carpeta del repo (necesario para que encuentre node_modules) -->
+  <key>WorkingDirectory</key>
+  <string>/Users/mstrubee/Documents/GitHub/geochile-compass</string>
+
+  <!-- Todos los días a las 09:00. Cambia Hour/Minute si prefieres otra hora. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/sync-ventas.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/sync-ventas.log</string>
+
+  <!-- npm/node suelen estar en /opt/homebrew/bin; launchd no hereda tu PATH. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

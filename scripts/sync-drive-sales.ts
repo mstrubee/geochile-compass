@@ -1,31 +1,43 @@
 /**
  * scripts/sync-drive-sales.ts
  * ───────────────────────────
- * Sincronización automática del Excel de ventas desde Google Drive.
+ * Sincronización del Excel de ventas hacia Supabase, desde Google Drive o
+ * desde un archivo local.
  *
- * Corre headless (GitHub Actions, a diario) con `vite-node`, que resuelve el
- * alias `@/` igual que la app — así este script usa EXACTAMENTE el mismo
- * parser, matcher y commit que la importación manual, sin lógica duplicada
- * que se pueda desincronizar.
+ * Corre headless con `vite-node`, que resuelve el alias `@/` igual que la app
+ * — así este script usa EXACTAMENTE el mismo parser, matcher y commit que la
+ * importación manual, sin lógica duplicada que se pueda desincronizar.
  *
- * Flujo:
- *   1. Lee drive_sync_state para saber qué archivo vigilar y cuál fue la
- *      última versión procesada.
- *   2. Pregunta a Drive el modifiedTime del archivo. Si no cambió, termina
- *      sin hacer nada (esto es el caso normal la mayoría de los días).
- *   3. Descarga el archivo, lo parsea y lo matchea contra la memoria de
+ * Dos formas de usarlo:
+ *
+ *   a) Archivo local, sin configurar nada:
+ *        npm run sync:ventas -- --file ~/ruta/ventas.xlsx [--dry-run]
+ *
+ *   b) Configurado en la tabla drive_sync_state (una fila por carpeta), que es
+ *      lo que usa el workflow diario de GitHub Actions para el modo Drive:
+ *        npm run sync:ventas
+ *      Cada fila define source_type = 'drive' (drive_file_id) o 'local'
+ *      (local_path). OJO: el modo 'local' NO lo puede correr GitHub Actions,
+ *      porque la nube no ve archivos de tu computador.
+ *
+ * Flujo (idéntico para ambas fuentes):
+ *   1. Averigua la fecha de modificación del archivo. Si no cambió desde la
+ *      última corrida, termina sin hacer nada (caso normal la mayoría de los
+ *      días). Con --file explícito se procesa siempre.
+ *   2. Lee el archivo, lo parsea y lo matchea contra la memoria de
  *      identidad/alias que ya dejaron las importaciones manuales previas.
- *   4. Respalda en poi_metrics_snapshots todo valor que vaya a sobrescribir,
+ *   3. Respalda en poi_metrics_snapshots todo valor que vaya a sobrescribir,
  *      para que la corrida sea reversible (restore_import_snapshot).
- *   5. Comprometeel resultado con commitImport (el mismo de la app).
- *   6. Las filas que no pudo asignar van a poi_import_pending_rows con sus
+ *   4. Compromete el resultado con commitImport (el mismo de la app).
+ *   5. Las filas que no pudo asignar van a poi_import_pending_rows con sus
  *      métricas intactas — NUNCA se descartan en silencio.
  *
- * Variables de entorno requeridas:
- *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
- *   GOOGLE_SERVICE_ACCOUNT_JSON  (el JSON completo de la cuenta de servicio)
- *   SYNC_FOLDER_ID               (opcional: limita a una carpeta)
- *   DRY_RUN=true                 (opcional: no escribe nada, solo reporta)
+ * Variables de entorno:
+ *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   (requeridas)
+ *   GOOGLE_SERVICE_ACCOUNT_JSON               (solo para el modo Drive)
+ *   SYNC_FOLDER_ID / --folder <uuid>          (limita a una carpeta)
+ *   DRY_RUN=true / --dry-run                  (no escribe nada, solo reporta)
+ *   SYNC_LOCAL_FILE / --file <ruta>           (archivo local, ignora la tabla)
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { parseAutoPlanetBuffer } from "@/services/poiImportParser";
@@ -35,8 +47,21 @@ import { normalizeAddress } from "@/utils/addressNormalize";
 import type { PoiFolderSchema, ImportRow, RowMatchResult } from "@/types/poiMetrics";
 import type { SavedPoi } from "@/types/pois";
 import { getDriveFileMeta, downloadDriveFile } from "./drive-client";
+import { getLocalFileMeta, readLocalFile } from "./local-file-client";
 
-const DRY_RUN = process.env.DRY_RUN === "true";
+/** Lee `--flag valor` y `--flag=valor` de la línea de comandos. */
+const argValue = (flag: string): string | undefined => {
+  const args = process.argv.slice(2);
+  const exact = args.indexOf(`--${flag}`);
+  if (exact !== -1 && args[exact + 1] && !args[exact + 1].startsWith("--")) return args[exact + 1];
+  const inline = args.find((a) => a.startsWith(`--${flag}=`));
+  return inline ? inline.slice(flag.length + 3) : undefined;
+};
+const hasFlag = (flag: string): boolean => process.argv.slice(2).includes(`--${flag}`);
+
+const DRY_RUN = process.env.DRY_RUN === "true" || hasFlag("dry-run");
+const CLI_FILE = argValue("file") ?? process.env.SYNC_LOCAL_FILE;
+const CLI_FOLDER = argValue("folder") ?? process.env.SYNC_FOLDER_ID;
 
 const need = (name: string): string => {
   const v = process.env[name];
@@ -46,10 +71,40 @@ const need = (name: string): string => {
 
 interface SyncStateRow {
   folder_id: string;
-  drive_file_id: string;
+  source_type: "drive" | "local";
+  drive_file_id: string | null;
+  local_path: string | null;
   enabled: boolean;
   last_modified_time: string | null;
+  /** true cuando la corrida viene de --file: se procesa siempre y no se
+   * persiste el estado (es una corrida puntual, no la vigilancia agendada). */
+  adHoc?: boolean;
 }
+
+/** Metadata + lector, resueltos según la fuente. Aísla al resto del script de
+ * si el archivo viene de Drive o del disco. */
+const openSource = async (
+  state: SyncStateRow,
+): Promise<{ name: string; modifiedTime: string; read: () => Promise<Uint8Array>; origen: string }> => {
+  if (state.source_type === "local") {
+    const path = state.local_path!;
+    const meta = await getLocalFileMeta(path);
+    return {
+      name: meta.name,
+      modifiedTime: meta.modifiedTime,
+      read: () => readLocalFile(path),
+      origen: `archivo local ${meta.path}`,
+    };
+  }
+  const fileId = state.drive_file_id!;
+  const meta = await getDriveFileMeta(fileId);
+  return {
+    name: meta.name,
+    modifiedTime: meta.modifiedTime,
+    read: () => downloadDriveFile(fileId),
+    origen: `Drive ${fileId}`,
+  };
+};
 
 /** Respalda los valores actuales de las métricas que se van a escribir. */
 const snapshotBeforeWrite = async (
@@ -99,6 +154,70 @@ const snapshotBeforeWrite = async (
   );
 };
 
+/**
+ * Respalda los atributos estáticos y los nombres de POI que se van a
+ * sobrescribir. La importación no solo escribe métricas: también pisa
+ * "Gerente Zonal", "Zona", etc. y el nombre del local con lo que traiga la
+ * planilla. Sin este respaldo, un archivo malo dejaba esos campos
+ * equivocados sin forma de volver atrás.
+ */
+const snapshotAttrsBeforeWrite = async (
+  admin: SupabaseClient,
+  attrs: Array<{ poi_id: string; attr_key: string; attr_value: string | null }>,
+  renames: Array<{ poi_id: string; name: string }>,
+  jobId: string,
+): Promise<void> => {
+  const poiIds = [...new Set([...attrs.map((a) => a.poi_id), ...renames.map((r) => r.poi_id)])];
+
+  const existingAttrs = new Map<string, string | null>();
+  const existingNames = new Map<string, string>();
+  const CHUNK = 40;
+  for (let i = 0; i < poiIds.length; i += CHUNK) {
+    const slice = poiIds.slice(i, i + CHUNK);
+    const [aRes, pRes] = await Promise.all([
+      admin.from("poi_attributes").select("poi_id, attr_key, attr_value").in("poi_id", slice),
+      admin.from("pois").select("id, name").in("id", slice),
+    ]);
+    if (aRes.error) throw new Error(`No se pudo leer poi_attributes para respaldo: ${aRes.error.message}`);
+    if (pRes.error) throw new Error(`No se pudo leer pois para respaldo: ${pRes.error.message}`);
+    for (const r of aRes.data ?? []) existingAttrs.set(`${r.poi_id}|${r.attr_key}`, r.attr_value);
+    for (const r of pRes.data ?? []) existingNames.set(r.id, r.name);
+  }
+
+  if (attrs.length) {
+    const snaps = attrs.map((a) => {
+      const key = `${a.poi_id}|${a.attr_key}`;
+      const had = existingAttrs.has(key);
+      return {
+        job_id: jobId,
+        poi_id: a.poi_id,
+        attr_key: a.attr_key,
+        old_value: had ? existingAttrs.get(key)! : null,
+        existed_before: had,
+      };
+    });
+    const { error } = await admin
+      .from("poi_attributes_snapshots")
+      .upsert(snaps, { onConflict: "job_id,poi_id,attr_key" });
+    if (error) throw new Error(`No se pudo respaldar los atributos: ${error.message}`);
+  }
+
+  // Solo respaldar nombres que realmente cambian.
+  const nameSnaps = renames
+    .filter((r) => existingNames.has(r.poi_id) && existingNames.get(r.poi_id) !== r.name)
+    .map((r) => ({ job_id: jobId, poi_id: r.poi_id, old_name: existingNames.get(r.poi_id)! }));
+  if (nameSnaps.length) {
+    const { error } = await admin
+      .from("poi_name_snapshots")
+      .upsert(nameSnaps, { onConflict: "job_id,poi_id" });
+    if (error) throw new Error(`No se pudo respaldar los nombres: ${error.message}`);
+  }
+
+  console.log(
+    `   respaldo: ${attrs.length} atributos, ${nameSnaps.length} nombre(s) que cambian`,
+  );
+};
+
 /** Guarda las filas sin asignar para revisión humana, con sus métricas intactas. */
 const savePendingRows = async (
   admin: SupabaseClient,
@@ -131,13 +250,15 @@ const savePendingRows = async (
 };
 
 const syncFolder = async (admin: SupabaseClient, state: SyncStateRow): Promise<void> => {
-  const { folder_id: folderId, drive_file_id: fileId } = state;
-  console.log(`\n=== carpeta ${folderId} · archivo de Drive ${fileId} ===`);
+  const { folder_id: folderId } = state;
+  const source = await openSource(state);
+  console.log(`\n=== carpeta ${folderId} · ${source.origen} ===`);
+  console.log(`archivo: "${source.name}" · modificado ${source.modifiedTime}`);
 
   // ── 1) ¿Cambió el archivo? ──────────────────────────────────────────────
-  const meta = await getDriveFileMeta(fileId);
-  console.log(`archivo: "${meta.name}" · modificado ${meta.modifiedTime}`);
-  if (state.last_modified_time && meta.modifiedTime === state.last_modified_time) {
+  // Una corrida puntual con --file se procesa siempre: el usuario la pidió
+  // explícitamente, no tiene sentido saltarla por no haber cambiado.
+  if (!state.adHoc && state.last_modified_time && source.modifiedTime === state.last_modified_time) {
     console.log("sin cambios desde la última corrida — no hay nada que hacer");
     await admin
       .from("drive_sync_state")
@@ -158,8 +279,8 @@ const syncFolder = async (admin: SupabaseClient, state: SyncStateRow): Promise<v
   const schema = schemaRow as unknown as PoiFolderSchema;
 
   // ── 3) Descargar y parsear ──────────────────────────────────────────────
-  const bytes = await downloadDriveFile(fileId);
-  console.log(`descargado: ${(bytes.byteLength / 1024).toFixed(0)} KB`);
+  const bytes = await source.read();
+  console.log(`leído: ${(bytes.byteLength / 1024).toFixed(0)} KB`);
   const parsed = parseAutoPlanetBuffer(bytes, schema);
   console.log(`parseado: ${parsed.rows.length} filas`);
 
@@ -222,11 +343,12 @@ const syncFolder = async (admin: SupabaseClient, state: SyncStateRow): Promise<v
   const result = await commitImport({
     client: admin,
     folderId,
-    filename: `Drive: ${meta.name}`,
+    filename: `${state.source_type === "local" ? "Local" : "Drive"}: ${source.name}`,
     rows: parsed.rows,
     matches,
     skippedRowIndices: skipped,
     beforeMetricsWrite: (metrics, jobId) => snapshotBeforeWrite(admin, metrics, jobId),
+    beforeAttrsWrite: (attrs, renames, jobId) => snapshotAttrsBeforeWrite(admin, attrs, renames, jobId),
     onProgress: (msg, frac) => console.log(`   ${msg} (${Math.round(frac * 100)}%)`),
   });
   console.log(
@@ -245,16 +367,21 @@ const syncFolder = async (admin: SupabaseClient, state: SyncStateRow): Promise<v
   if (pendingCount) console.log(`⚠ ${pendingCount} filas quedaron para revisión manual (poi_import_pending_rows)`);
 
   // ── 8) Marcar esta versión como procesada ───────────────────────────────
-  await admin
-    .from("drive_sync_state")
-    .update({
-      last_modified_time: meta.modifiedTime,
-      last_synced_at: new Date().toISOString(),
-      last_job_id: result.jobId,
-      last_status: "ok",
-      last_error: null,
-    })
-    .eq("folder_id", folderId);
+  // Solo para la vigilancia configurada. Una corrida puntual con --file no
+  // toca el estado: si lo hiciera, la vigilancia agendada creería que ya
+  // procesó una versión que quizá no es la que ella vigila.
+  if (!state.adHoc) {
+    await admin
+      .from("drive_sync_state")
+      .update({
+        last_modified_time: source.modifiedTime,
+        last_synced_at: new Date().toISOString(),
+        last_job_id: result.jobId,
+        last_status: "ok",
+        last_error: null,
+      })
+      .eq("folder_id", folderId);
+  }
 
   console.log(`listo · job ${result.jobId}`);
 };
@@ -264,17 +391,63 @@ const main = async (): Promise<void> => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  let q = admin.from("drive_sync_state").select("folder_id, drive_file_id, enabled, last_modified_time").eq("enabled", true);
-  if (process.env.SYNC_FOLDER_ID) q = q.eq("folder_id", process.env.SYNC_FOLDER_ID);
-  const { data, error } = await q;
-  if (error) throw new Error(`No se pudo leer drive_sync_state: ${error.message}`);
+  let states: SyncStateRow[];
 
-  const states = (data ?? []) as SyncStateRow[];
-  if (!states.length) {
-    console.log("No hay carpetas con sincronización de Drive configurada y habilitada. Nada que hacer.");
-    return;
+  if (CLI_FILE) {
+    // Corrida puntual con un archivo del computador, sin configurar nada.
+    // Necesita saber a qué carpeta va: se usa la indicada, o la única que
+    // tenga la importación habilitada.
+    let folderId = CLI_FOLDER;
+    if (!folderId) {
+      const { data, error } = await admin
+        .from("poi_folder_schemas")
+        .select("folder_id")
+        .eq("import_enabled", true);
+      if (error) throw new Error(`No se pudo leer los esquemas: ${error.message}`);
+      const enabled = (data ?? []) as Array<{ folder_id: string }>;
+      if (enabled.length === 0) {
+        throw new Error("Ninguna carpeta tiene la importación habilitada. Configúrala en la app (Configurar importación…).");
+      }
+      if (enabled.length > 1) {
+        throw new Error(
+          `Hay ${enabled.length} carpetas con importación habilitada; indica cuál con --folder <uuid>: ${enabled.map((e) => e.folder_id).join(", ")}`,
+        );
+      }
+      folderId = enabled[0].folder_id;
+      console.log(`carpeta destino (única habilitada): ${folderId}`);
+    }
+    states = [
+      {
+        folder_id: folderId,
+        source_type: "local",
+        drive_file_id: null,
+        local_path: CLI_FILE,
+        enabled: true,
+        last_modified_time: null,
+        adHoc: true,
+      },
+    ];
+  } else {
+    let q = admin
+      .from("drive_sync_state")
+      .select("folder_id, source_type, drive_file_id, local_path, enabled, last_modified_time")
+      .eq("enabled", true);
+    if (CLI_FOLDER) q = q.eq("folder_id", CLI_FOLDER);
+    const { data, error } = await q;
+    if (error) throw new Error(`No se pudo leer drive_sync_state: ${error.message}`);
+
+    states = (data ?? []) as SyncStateRow[];
+    if (!states.length) {
+      console.log(
+        "No hay sincronización configurada y habilitada.\n" +
+          "Para procesar un archivo del computador ahora mismo:\n" +
+          "  npm run sync:ventas -- --file /ruta/al/archivo.xlsx --dry-run",
+      );
+      return;
+    }
   }
-  console.log(`${states.length} carpeta(s) a revisar${DRY_RUN ? " (DRY_RUN)" : ""}`);
+
+  console.log(`${states.length} carpeta(s) a revisar${DRY_RUN ? " (DRY_RUN: no se escribe nada)" : ""}`);
 
   let failures = 0;
   for (const state of states) {
@@ -285,10 +458,13 @@ const main = async (): Promise<void> => {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`✗ carpeta ${state.folder_id}: ${msg}`);
       // Registrar el error para que se vea desde la app, no solo en los logs.
-      await admin
-        .from("drive_sync_state")
-        .update({ last_synced_at: new Date().toISOString(), last_status: "error", last_error: msg })
-        .eq("folder_id", state.folder_id);
+      // En corridas puntuales no hay fila de estado que actualizar.
+      if (!state.adHoc) {
+        await admin
+          .from("drive_sync_state")
+          .update({ last_synced_at: new Date().toISOString(), last_status: "error", last_error: msg })
+          .eq("folder_id", state.folder_id);
+      }
     }
   }
 

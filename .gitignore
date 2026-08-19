@@ -34,3 +34,6 @@ __pycache__/
 .env.local
 .env*.local
 supabase/.temp/
+
+# Credenciales locales para la sincronización de ventas (scripts/sync-ventas.sh)
+.env.sync
