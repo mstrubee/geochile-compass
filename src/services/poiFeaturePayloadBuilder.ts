@@ -16,6 +16,7 @@ import type { GseClass, GseFeature } from "@/types/gse";
 import { GSE_INCOME } from "@/data/gseIncome";
 import { resolveCommuneAndRegion } from "@/utils/communeReverseGeocode";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchPoiIsochrones } from "@/services/poiIsochroneService";
 import area from "@turf/area";
 import { computeTerritorialExtras } from "@/services/territorialExtras";
 import { crimeService } from "@/services/crimeService";
@@ -799,6 +800,41 @@ export const buildFeaturePayload = async (
       }
     } catch (e) {
       console.warn("[features] folder_layer_roles falló, fallback a lógica vieja:", e);
+    }
+  }
+
+  // Locales PROPIOS dentro del área — la canibalización.
+  //
+  // Esto va FUERA del `if (!usedRolesPath)` a propósito. `buildFromFolderRoles`
+  // solo produce competidores externos (los de las capas territoriales con rol
+  // "competencia"), y al marcar `usedRolesPath` apagaba el bloque viejo completo,
+  // que era el único que agregaba los locales de la propia red. Resultado: en
+  // toda carpeta con roles configurados —Autoplanet entre ellas—
+  // `n_competition_int` quedaba en 0 y `cannibalization_factor` en 1.0 para
+  // todos los locales, con locales a 1.577 m entre sí e isócronas de 5 minutos.
+  // La canibalización interna se había perdido en silencio al introducir los roles.
+  if (usedRolesPath) {
+    const internalPeers = deps.internalPeers
+      .filter((p) => p.id !== poi.id)
+      .filter((p) => inBbox(p, expanded));
+
+    // Las isócronas de los vecinos se leen de `poi_isochrones` en vez de
+    // pedirse a ORS una por una: es lo que permite que el recálculo no dependa
+    // del rate limit externo y que dos corridas den el mismo resultado.
+    const peerIsos = includeCompetitorIsos && internalPeers.length > 0
+      ? await fetchPoiIsochrones(internalPeers.map((p) => p.id), isoMinutes)
+      : new Map<string, { geometry: Polygon | MultiPolygon }>();
+
+    for (const p of internalPeers) {
+      competitors.push({
+        id: p.id, lng: p.lng, lat: p.lat,
+        iso_minutes: isoMinutes,
+        // Sin isócrona guardada el vecino cuenta como competencia (entra en
+        // n_competition_int) pero no aporta al reparto de población: es
+        // exactamente la degradación deseada, no un cero silencioso.
+        iso_polygon: peerIsos.get(p.id)?.geometry,
+        source: "internal",
+      });
     }
   }
 
