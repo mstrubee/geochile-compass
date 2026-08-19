@@ -7,6 +7,7 @@ import type { ParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
 import {
   useTerritorialLayers,
   useTerritorialFeatures,
+  type FeatureBbox,
 } from "@/hooks/useTerritorialLayers";
 import { useComunasGeoIndex } from "@/hooks/useComunasGeoIndex";
 import { normalizeCommuneName } from "@/services/communeDataService";
@@ -44,7 +45,20 @@ export const useIsochroneReport = ({
 }: Params) => {
   const { groups, layers } = useTerritorialLayers();
   const layerIds = useMemo(() => layers.map((l) => l.id), [layers]);
-  const features = useTerritorialFeatures(layerIds);
+
+  /**
+   * Bbox de la banda mayor, para recortar la carga de features territoriales.
+   * Ver la nota equivalente en useIsochroneAnalysis: no altera ningún número,
+   * el filtrado por polígono sigue ocurriendo aguas abajo.
+   */
+  const featuresBbox = useMemo<FeatureBbox | null>(() => {
+    if (!isochrone) return null;
+    const largest = pickBandFeature(isochrone.features);
+    if (!largest) return null;
+    return bbox(largest as never) as FeatureBbox;
+  }, [isochrone]);
+
+  const features = useTerritorialFeatures(layerIds, featuresBbox);
   const comunas = useComunasGeoIndex(true);
 
   const [commerceByCategory, setCommerceByCategory] = useState<

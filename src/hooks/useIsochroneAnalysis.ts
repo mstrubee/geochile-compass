@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Isochrone } from "@/types/isochrones";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 import type { GseFeatureCollection } from "@/types/gse";
-import { useTerritorialLayers, useTerritorialFeatures } from "@/hooks/useTerritorialLayers";
+import { useTerritorialLayers, useTerritorialFeatures, type FeatureBbox } from "@/hooks/useTerritorialLayers";
 import { useComunasGeoIndex } from "@/hooks/useComunasGeoIndex";
 import { gseService } from "@/services/gseService";
 import {
@@ -60,14 +60,30 @@ export const useIsochroneAnalysis = ({
 }: Params): IsochroneAnalysis | null => {
   const { groups, layers } = useTerritorialLayers();
   const layerIds = useMemo(() => layers.map((l) => l.id), [layers]);
-  const features = useTerritorialFeatures(layerIds);
-  const comunas = useComunasGeoIndex(true);
 
   const bandFeature = useMemo(
     () => (isochrone ? pickBandFeature(isochrone.features, bandSeconds) : null),
     [isochrone, bandSeconds],
   );
   const isoBbox = useMemo(() => computeIsoBbox(bandFeature), [bandFeature]);
+
+  /**
+   * Bbox de la BANDA MAYOR, para recortar la carga de features territoriales.
+   *
+   * Se usa la mayor y no `isoBbox` (la banda seleccionada) a propósito: es un
+   * superconjunto de todas las bandas, así que cambiar de banda no vuelve a
+   * pedir nada. Y no cambia ningún resultado, porque el filtrado real por
+   * polígono ocurre más abajo — esto solo evita traer features que se iban a
+   * descartar igual.
+   */
+  const featuresBbox = useMemo<FeatureBbox | null>(() => {
+    if (!isochrone) return null;
+    const largest = pickBandFeature(isochrone.features);
+    return computeIsoBbox(largest) as FeatureBbox | null;
+  }, [isochrone]);
+
+  const features = useTerritorialFeatures(layerIds, featuresBbox);
+  const comunas = useComunasGeoIndex(true);
 
   // El GSE se guarda JUNTO A LA CLAVE del área a la que pertenece.
   //

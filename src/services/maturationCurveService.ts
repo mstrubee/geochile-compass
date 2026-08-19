@@ -56,6 +56,40 @@ const ratesFromRamp = (ramp: number[]): number[] => {
   return out;
 };
 
+
+/**
+ * Caché en memoria de la curva por carpeta.
+ *
+ * Derivarla baja TODAS las ventas históricas de la carpeta (~5.600 filas y
+ * 400 KB hoy en Autoplanet, +64 filas por cada mes que pasa) para calcular tres
+ * números. Y se dispara en cada apertura del panel de análisis, porque el
+ * efecto que la pide se remonta con el panel.
+ *
+ * El TTL acota la desactualización sin necesidad de coordinar invalidaciones:
+ * las ventas se cargan por mes, así que un par de minutos de caché no puede
+ * mostrar una curva significativamente distinta. La curva que el admin fija a
+ * mano sí necesita invalidación inmediata y la hace `saveCustomRamp`, que vive
+ * en este mismo módulo.
+ *
+ * OJO: un cambio de `analysis_settings.maturation_ramp` hecho por fuera de la
+ * app (SQL directo) no invalida nada; se ve al vencer el TTL.
+ */
+const CACHE_TTL_MS = 2 * 60 * 1000;
+
+interface CacheEntry { at: number; curve: MaturationCurve }
+const curveCache = new Map<string, CacheEntry>();
+
+const cacheKeyFor = (folderId: string, ignoreCustom: boolean) =>
+  `${folderId}|${ignoreCustom ? "derived" : "current"}`;
+
+/** Descarta lo cacheado de una carpeta (o todo si no se pasa ninguna). */
+export const invalidateMaturationCurve = (folderId?: string): void => {
+  if (!folderId) { curveCache.clear(); return; }
+  for (const k of [...curveCache.keys()]) {
+    if (k.startsWith(`${folderId}|`)) curveCache.delete(k);
+  }
+};
+
 /** Rampa fijada a mano por el admin, si existe y es válida. */
 export const fetchCustomRamp = async (
   folderId: string,
@@ -83,6 +117,9 @@ export const saveCustomRamp = async (
       { onConflict: "folder_id" },
     );
   if (error) throw error;
+  // Sin esto el admin guardaría la curva y seguiría viendo la anterior hasta
+  // que venza el TTL.
+  invalidateMaturationCurve(folderId);
 };
 
 const median = (xs: number[]): number => {
@@ -101,6 +138,20 @@ const median = (xs: number[]): number => {
 export const fetchMaturationCurve = async (
   folderId: string,
   { ignoreCustom = false }: { ignoreCustom?: boolean } = {},
+): Promise<MaturationCurve> => {
+  const cacheKey = cacheKeyFor(folderId, ignoreCustom);
+  const hit = curveCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.curve;
+
+  const curve = await deriveMaturationCurve(folderId, ignoreCustom);
+  curveCache.set(cacheKey, { at: Date.now(), curve });
+  return curve;
+};
+
+/** Cálculo real, sin caché. Todo lo caro vive acá. */
+const deriveMaturationCurve = async (
+  folderId: string,
+  ignoreCustom: boolean,
 ): Promise<MaturationCurve> => {
   const fallback: MaturationCurve = {
     rampFactors: FALLBACK_RAMP,

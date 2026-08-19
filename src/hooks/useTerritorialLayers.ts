@@ -25,14 +25,35 @@ export const useTerritorialLayers = () => {
   return { groups, layers, loading, refresh };
 };
 
-// Caché de features por layer_id, sobrevive a remounts dentro de la sesión.
+/** [oeste, sur, este, norte] */
+export type FeatureBbox = [number, number, number, number];
+
+// Caché de features por layer_id (+ bbox si se pidió recortado), sobrevive a
+// remounts dentro de la sesión.
 const featuresCache = new Map<string, TerritorialFeature[]>();
 const inflightCache = new Map<string, Promise<TerritorialFeature[]>>();
 
+/**
+ * El bbox forma parte de la clave: sin él, pedir las features de una capa
+ * recortadas a una isócrona dejaría ese subconjunto cacheado bajo el id de la
+ * capa, y la isócrona siguiente —u otro consumidor que las quiera completas—
+ * recibiría el recorte de la anterior.
+ *
+ * Se redondea a 4 decimales (~11 m) para que un bbox recalculado con ruido de
+ * punto flotante siga cayendo en la misma entrada.
+ */
+const cacheKeyFor = (layerId: string, bbox?: FeatureBbox | null) =>
+  bbox ? `${layerId}|${bbox.map((v) => v.toFixed(4)).join(",")}` : layerId;
+
 export const clearTerritorialFeaturesCache = (layerId?: string) => {
   if (layerId) {
-    featuresCache.delete(layerId);
-    inflightCache.delete(layerId);
+    // Cae también cualquier variante recortada por bbox de esa capa.
+    for (const k of [...featuresCache.keys()]) {
+      if (k === layerId || k.startsWith(`${layerId}|`)) featuresCache.delete(k);
+    }
+    for (const k of [...inflightCache.keys()]) {
+      if (k === layerId || k.startsWith(`${layerId}|`)) inflightCache.delete(k);
+    }
   } else {
     featuresCache.clear();
     inflightCache.clear();
@@ -44,7 +65,44 @@ const PAGE = 1000;
 // actual cuando las features son puntos).
 const HEAVY_GEOM_THRESHOLD = 1500;
 
-const fetchLayerFeatures = async (layerId: string): Promise<TerritorialFeature[]> => {
+const fetchLayerFeatures = async (
+  layerId: string,
+  bbox?: FeatureBbox | null,
+): Promise<TerritorialFeature[]> => {
+  /**
+   * Camino recortado: solo las features dentro del bbox.
+   *
+   * Un punto fuera del bbox de la isócrona no puede estar dentro del polígono,
+   * así que esto no cambia ningún número del análisis — solo deja de traer lo
+   * que se iba a descartar. Sobre los datos actuales pasa de 67.664 features a
+   * entre 242 y 1.459 según la isócrona (98–99,6% menos).
+   *
+   * Tampoco se pide `feature_count`: el total de la capa no dice cuántas caen
+   * en el bbox, y ese `maybeSingle` por capa costaba un round-trip por cada una
+   * de las 128 capas. Acá se pagina hasta que una página venga incompleta.
+   */
+  if (bbox) {
+    const [w, s, e, n] = bbox;
+    const all: TerritorialFeature[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("territorial_features")
+        .select("id,layer_id,name,lat,lng,geometry,properties")
+        .eq("layer_id", layerId)
+        .gte("lng", w).lte("lng", e)
+        .gte("lat", s).lte("lat", n)
+        .range(from, from + PAGE - 1);
+      if (error || !data) break;
+      all.push(...(data as unknown as TerritorialFeature[]));
+      if (data.length < PAGE) break;
+    }
+    return all.map((f) => ({
+      ...f,
+      geometry: f.geometry ?? ({ type: "Point", coordinates: [f.lng ?? 0, f.lat ?? 0] } as GeoJSON.Geometry),
+      properties: f.properties ?? {},
+    }));
+  }
+
   // Obtener feature_count para saber cuántas páginas pedir en paralelo.
   const { data: meta } = await supabase
     .from("territorial_layers")
@@ -115,28 +173,55 @@ const fetchLayerFeatures = async (layerId: string): Promise<TerritorialFeature[]
   }));
 };
 
-const getLayerFeatures = (layerId: string): Promise<TerritorialFeature[]> => {
-  const cached = featuresCache.get(layerId);
+const getLayerFeatures = (
+  layerId: string,
+  bbox?: FeatureBbox | null,
+): Promise<TerritorialFeature[]> => {
+  const ck = cacheKeyFor(layerId, bbox);
+  const cached = featuresCache.get(ck);
   if (cached) return Promise.resolve(cached);
-  const inflight = inflightCache.get(layerId);
+  // Si ya tenemos la capa COMPLETA en caché, el recorte se hace en memoria en
+  // vez de pedirla otra vez: el superconjunto ya está pago.
+  if (bbox) {
+    const full = featuresCache.get(layerId);
+    if (full) {
+      const [w, s, e, n] = bbox;
+      const clipped = full.filter(
+        (f) => f.lng != null && f.lat != null &&
+          f.lng >= w && f.lng <= e && f.lat >= s && f.lat <= n,
+      );
+      featuresCache.set(ck, clipped);
+      return Promise.resolve(clipped);
+    }
+  }
+  const inflight = inflightCache.get(ck);
   if (inflight) return inflight;
-  const p = fetchLayerFeatures(layerId)
+  const p = fetchLayerFeatures(layerId, bbox)
     .then((feats) => {
-      featuresCache.set(layerId, feats);
-      inflightCache.delete(layerId);
+      featuresCache.set(ck, feats);
+      inflightCache.delete(ck);
       return feats;
     })
     .catch((e) => {
-      inflightCache.delete(layerId);
+      inflightCache.delete(ck);
       throw e;
     });
-  inflightCache.set(layerId, p);
+  inflightCache.set(ck, p);
   return p;
 };
 
-export const useTerritorialFeatures = (layerIds: string[]) => {
+/**
+ * `bbox` recorta la consulta al área dada. Los consumidores de análisis lo
+ * pasan (el bbox de la isócrona); el render del mapa no, y su comportamiento
+ * queda idéntico.
+ */
+export const useTerritorialFeatures = (
+  layerIds: string[],
+  bbox?: FeatureBbox | null,
+) => {
   const [features, setFeatures] = useState<TerritorialFeature[]>([]);
-  const key = layerIds.slice().sort().join(",");
+  const bboxKey = bbox ? bbox.map((v) => v.toFixed(4)).join(",") : "";
+  const key = `${layerIds.slice().sort().join(",")}#${bboxKey}`;
 
   useEffect(() => {
     let cancel = false;
@@ -148,7 +233,7 @@ export const useTerritorialFeatures = (layerIds: string[]) => {
     // Mostrar inmediatamente lo cacheado mientras se cargan las capas faltantes.
     const cachedNow: TerritorialFeature[] = [];
     layerIds.forEach((id) => {
-      const c = featuresCache.get(id);
+      const c = featuresCache.get(cacheKeyFor(id, bbox));
       if (c) cachedNow.push(...c);
     });
     if (cachedNow.length) setFeatures(cachedNow);
@@ -164,7 +249,7 @@ export const useTerritorialFeatures = (layerIds: string[]) => {
           while (true) {
             const idx = i++;
             if (idx >= layerIds.length) return;
-            lists[idx] = await getLayerFeatures(layerIds[idx]);
+            lists[idx] = await getLayerFeatures(layerIds[idx], bbox);
             if (cancel) return;
           }
         };
