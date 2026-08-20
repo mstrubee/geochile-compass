@@ -50,12 +50,19 @@ export interface ComparableStore {
     delta:   number;
   }>;
   /**
-   * Similitud (0..1, 1 = idéntico) por grupo de variables — ver
-   * `SIMILARITY_GROUPS`. Es la base de la tabla que compara este comparable
-   * contra la ubicación nueva dimensión por dimensión, para que el ajuste
-   * manual del analista se apoye en algo más fino que un % de similitud único.
+   * Similitud (0..1, 1 = idéntico) y diferencia CON SIGNO por grupo de
+   * variables — ver `SIMILARITY_GROUPS`. Es la base de la tabla que compara
+   * este comparable contra la ubicación nueva dimensión por dimensión, para
+   * que el ajuste manual del analista se apoye en algo más fino que un % de
+   * similitud único.
+   *
+   * `diffPct` > 0 = el COMPARABLE es mayor que la ubicación nueva en esa
+   * dimensión; < 0 = es menor. Es un promedio de diferencias normalizadas
+   * (escala 0-1 min-max de la red) por eso no es una razón directa entre
+   * valores crudos (p.ej. "18% más vehículos"), sino cuánto más arriba o abajo
+   * cae en el rango que cubre la red — mismo criterio que ya usaba `keyDiffs`.
    */
-  groupScores: Array<{ key: string; label: string; similarity: number }>;
+  groupScores: Array<{ key: string; label: string; similarity: number; diffPct: number }>;
 }
 
 /**
@@ -252,16 +259,27 @@ function computeGroupScores(
   normVec: number[],
   normNewVec: number[],
   keys: readonly string[],
-): Array<{ key: string; label: string; similarity: number }> {
+): Array<{ key: string; label: string; similarity: number; diffPct: number }> {
   return SIMILARITY_GROUPS.map((g) => {
     const idxs = keys
       .map((k, i) => (g.features.includes(k) ? i : -1))
       .filter((i) => i >= 0);
-    if (idxs.length === 0) return { key: g.key, label: g.label, similarity: NaN };
+    if (idxs.length === 0) return { key: g.key, label: g.label, similarity: NaN, diffPct: NaN };
     let sumSq = 0;
-    for (const i of idxs) sumSq += (normVec[i] - normNewVec[i]) ** 2;
+    let sumDiff = 0;
+    for (const i of idxs) {
+      // comparable - nueva: positivo = el comparable es mayor en esta dimensión.
+      const d = normVec[i] - normNewVec[i];
+      sumSq += d * d;
+      sumDiff += d;
+    }
     const rms = Math.sqrt(sumSq / idxs.length);
-    return { key: g.key, label: g.label, similarity: Math.max(0, 1 - rms) };
+    return {
+      key: g.key,
+      label: g.label,
+      similarity: Math.max(0, 1 - rms),
+      diffPct: (sumDiff / idxs.length) * 100,
+    };
   });
 }
 

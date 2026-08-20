@@ -1777,12 +1777,18 @@ const ProjectionSection = ({
                     {COMPARABLE_TABLE_GROUPS.map((tg) => {
                       // Proyecciones guardadas antes de este cambio no traen groupScores.
                       const g = c.groupScores?.find((x) => x.key === tg.key);
-                      const simPct = g && Number.isFinite(g.similarity) ? Math.round(g.similarity * 100) : null;
+                      const hasData = !!g && Number.isFinite(g.similarity) && Number.isFinite(g.diffPct);
+                      const simPct  = hasData ? Math.round(g!.similarity * 100) : null;
+                      const diffPct = hasData ? Math.round(g!.diffPct) : null;
                       return (
                         <td
                           key={tg.key}
                           className="px-1.5 py-1.5 text-center font-mono whitespace-nowrap"
-                          title={simPct == null ? "Sin dato" : `${tg.title}: ${simPct}% similar`}
+                          title={
+                            simPct == null
+                              ? "Sin dato"
+                              : `${tg.title}: el comparable es ${diffPct! > 0 ? `${diffPct}% mayor` : diffPct! < 0 ? `${Math.abs(diffPct!)}% menor` : "prácticamente igual"} que la ubicación nueva (${simPct}% similar)`
+                          }
                         >
                           {simPct == null ? (
                             <span className="text-muted-foreground/40">—</span>
@@ -1792,7 +1798,7 @@ const ProjectionSection = ({
                                 : simPct >= 50 ? "text-amber-400"
                                 : "text-red-400"
                             }>
-                              {simPct}%
+                              {diffPct === 0 ? "0%" : `${diffPct! > 0 ? "+" : ""}${diffPct}%`}
                             </span>
                           )}
                         </td>
@@ -1805,10 +1811,12 @@ const ProjectionSection = ({
           </div>
           <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">
             Cada columna compara la ubicación nueva contra ese local en una dimensión
-            (parque, NSE, población, comercio complementario): % alto y verde = muy
-            parecido, bajo y rojo = distinto. Si el estimado no calza con lo que la tabla
-            muestra —por ejemplo, se parece en parque pero no en comercio complementario—,
-            ese es el criterio para corregir con el ajuste de más abajo.
+            (parque, NSE, población, comercio complementario). El % es la diferencia:
+            "+" el comparable es mayor, "-" es menor. El color es qué tan parecidos son
+            en esa dimensión, no el signo: verde = muy parecido, ámbar = parcial, rojo =
+            distinto. Si el estimado no calza con lo que la tabla muestra —por ejemplo, se
+            parece en parque pero no en comercio complementario—, ese es el criterio para
+            corregir con el ajuste de más abajo.
           </p>
         </div>
       )}
