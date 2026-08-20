@@ -213,14 +213,28 @@ const networkStats = async (
   if (ids.length === 0) return null;
 
   // Últimos 12 meses de cada local → venta mensual promedio, en UF.
+  //
+  // Los lotes van en paralelo: son consultas independientes y encadenarlas
+  // multiplicaba la latencia por la cantidad de lotes. El orden del resultado
+  // no importa —cada fila se agrupa por `poi_id`— y dentro de cada lote se
+  // conserva el `order` descendente, así que los 12 que se toman siguen siendo
+  // los más recientes de ese local.
+  const lotes: string[][] = [];
+  for (let i = 0; i < ids.length; i += 40) lotes.push(ids.slice(i, i + 40));
+
+  const respuestas = await Promise.all(
+    lotes.map((lote) =>
+      admin
+        .from("poi_metrics")
+        .select("poi_id, period, value")
+        .eq("metric_key", "ventas")
+        .in("poi_id", lote)
+        .order("period", { ascending: false }),
+    ),
+  );
+
   const porLocal = new Map<string, number[]>();
-  for (let i = 0; i < ids.length; i += 40) {
-    const { data } = await admin
-      .from("poi_metrics")
-      .select("poi_id, period, value")
-      .eq("metric_key", "ventas")
-      .in("poi_id", ids.slice(i, i + 40))
-      .order("period", { ascending: false });
+  for (const { data } of respuestas) {
     for (const r of (data ?? []) as Array<{ poi_id: string; value: number }>) {
       const arr = porLocal.get(r.poi_id) ?? [];
       if (arr.length < 12) arr.push(Number(r.value));
@@ -343,22 +357,36 @@ Deno.serve(async (req) => {
 
   const nombreCarpeta = result.folderName ?? null;
 
+  // Factor UF→CLP de esta proyección. Se calcula acá, en el alcance del
+  // handler: existía solo como variable local de `buildProjRows`, así que las
+  // tres referencias de más abajo (networkStats y los *Clp de la respuesta)
+  // apuntaban a un nombre inexistente y la función tiraba ReferenceError en
+  // CADA llamada, antes de poder responder. Como el throw sale sin cabeceras
+  // CORS, el navegador no lo ve como un 500 sino como una conexión caída:
+  // "Load failed" en Safari, que es cómo se veía desde leaseflow.
+  const ufToClp = Number(result.estimatedUf ?? 0) > 0
+    ? Number(result.estimatedClp ?? 0) / Number(result.estimatedUf ?? 0)
+    : 0;
+
   // Referencia de la red + señal de extrapolación. Aditivo: el contrato previo
   // (estimatedUf, ventaMes, etc.) no cambia.
-  const red = await networkStats(admin, poiFolderId, ufToClp);
-
-  /**
-   * Rango de población en que el modelo tiene sustento.
-   *
-   * NO se puede decidir acá si la ubicación nueva está fuera de rango: la
-   * isócrona guardada no almacena su población. Lo que sí se puede entregar es
-   * el rango de los locales que sostienen el modelo, para que el informe
-   * verifique la aplicabilidad antes de usar la cifra. Importa porque fuera de
-   * ese rango el número no describe el caso: la red son locales urbanos
-   * maduros, y extrapolar a una ubicación mucho más chica lo infla (el caso
-   * Pitrufquén: ~25 mil habitantes contra un mínimo de ~41.500 en la red).
-   */
-  const rangoPoblacion = await comparablePopulationRange(admin);
+  //
+  // Van en paralelo y no una tras otra: son independientes entre sí, y esta
+  // función ya venía con varias idas y vueltas encadenadas. Sumarles dos más en
+  // serie hacía que el navegador de leaseflow cortara la llamada antes de
+  // recibir respuesta ("Load failed" en Safari, que no distingue un corte por
+  // lentitud de una caída).
+  //
+  // Rango de población: NO se puede decidir acá si la ubicación nueva está
+  // fuera de rango —la isócrona guardada no almacena su población—. Lo que sí
+  // se entrega es el rango de los locales que sostienen el modelo, para que el
+  // informe verifique la aplicabilidad antes de usar la cifra: la red son
+  // locales urbanos maduros y extrapolar a una ubicación mucho más chica infla
+  // el número (caso Pitrufquén: ~25 mil habitantes contra un mínimo de ~41.500).
+  const [red, rangoPoblacion] = await Promise.all([
+    networkStats(admin, poiFolderId, ufToClp),
+    comparablePopulationRange(admin),
+  ]);
 
   return json({
     locationName: iso.name,
