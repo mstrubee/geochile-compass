@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import type { IsochroneReport, IsochroneBandReport } from "./reportData";
+import { formatAdjustmentLabel, type IsochroneReport, type IsochroneBandReport } from "./reportData";
 import type { MapCaptureImages } from "./mapCapture";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -710,12 +710,12 @@ const addProjectionPage = (
       PW - ML - 2, y + 15, { align: "right" },
     );
   }
-  if (p.adjustPct !== 0) {
-    doc.setTextColor(...C.amber);
-    doc.text(
-      `${p.isExpress ? "Ajuste EXPRESS" : "Ajuste manual"}: ${p.adjustPct > 0 ? "+" : ""}${p.adjustPct}%`,
-      PW - ML - 2, y + 15, { align: "right" },
-    );
+  {
+    const label = formatAdjustmentLabel(p.isExpress, p.expressAppliedPct, p.exogenoPct);
+    if (label) {
+      doc.setTextColor(...C.amber);
+      doc.text(`Ajuste: ${label}`, PW - ML - 2, y + 15, { align: "right" });
+    }
   }
   y += 26;
 
@@ -761,11 +761,11 @@ const addProjectionPage = (
         : "Curva de maduración de respaldo: no hay suficientes aperturas observadas en la red.",
     `Base: media ponderada de ${p.comparables.length} locales comparables ` +
       `(${p.nWithSales} con ventas reales, ${p.nWithPredicted} con predicción del modelo).`,
-    p.adjustPct !== 0
-      ? p.isExpress
-        ? `Incluye el ajuste EXPRESS de ${p.adjustPct}%: el formato vende menos que un local estándar y la superficie aún no es una variable del modelo.`
-        : `El ajuste manual de ${p.adjustPct > 0 ? "+" : ""}${p.adjustPct}% es un criterio del analista, no una salida del modelo.`
-      : null,
+    p.isExpress
+      ? `Incluye el castigo fijo de formato EXPRESS (${p.expressAppliedPct}%)${p.exogenoPct !== 0 ? ` más un ajuste Exógeno de ${p.exogenoPct > 0 ? "+" : ""}${p.exogenoPct}%` : ""}: no son una salida del modelo.`
+      : p.exogenoPct !== 0
+        ? `El ajuste Exógeno de ${p.exogenoPct > 0 ? "+" : ""}${p.exogenoPct}% es un criterio del analista, no una salida del modelo.`
+        : null,
     p.diagnosticMsg,
   ].filter(Boolean) as string[];
   for (const n of notas) {

@@ -4,7 +4,7 @@ import { useCommercialCount } from "@/hooks/useCommercialCount";
 import { computeSalesProjection, type ProjectionResult } from "@/services/salesProjectionService";
 import { fetchMaturationCurve, type MaturationCurve } from "@/services/maturationCurveService";
 import { DEFAULT_EXPRESS_ADJUST_PCT, defaultCommercialFolder, fetchExpressAdjustPct } from "@/services/commercialSettingsService";
-import type { ReportProjection } from "@/utils/reportData";
+import { formatAdjustmentLabel, type ReportProjection } from "@/utils/reportData";
 import type { ProjectionSettings } from "@/types/savedIsochrones";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
@@ -354,9 +354,14 @@ export const AnalysisPanel = ({
 
   const projForReport: ReportProjection | null = useMemo(() => {
     if (!projResult) return null;
-    const adjustPct = projAdjust?.adjustPct ?? 0;
+    // Express (castigo fijo de formato) y Exógeno (criterio manual del
+    // analista) son independientes y se suman — ver ProjectionSection más
+    // abajo, donde vive la misma cuenta para lo que se ve en pantalla.
+    const exogenoPct = projAdjust?.adjustPct ?? 0;
     const rampEnabled = projAdjust?.rampEnabled ?? true;
     const isExpress = projAdjust?.isExpress ?? false;
+    const expressAppliedPct = isExpress ? expressPct : 0;
+    const adjustPct = expressAppliedPct + exogenoPct;
     const rows = buildProjRows(
       projResult,
       curve,
@@ -375,6 +380,8 @@ export const AnalysisPanel = ({
       highUf: projResult.highUf * f,
       adjustPct,
       isExpress,
+      expressAppliedPct,
+      exogenoPct,
       usesMaturationCurve: !!curve && !curve.isFallback,
       maturationIsCustom: !!curve?.isCustom,
       maturationSampleSize: curve?.sampleSize ?? 0,
@@ -410,7 +417,7 @@ export const AnalysisPanel = ({
         name: c.name, ufPerMonth: c.ufPerMonth, isActual: c.isActual, weight: c.weight,
       })),
     };
-  }, [projResult, projAdjust, curve, projectionFolders, selectedFolderId]);
+  }, [projResult, projAdjust, curve, projectionFolders, selectedFolderId, expressPct]);
 
   // Guarda resultado y ajustes juntos: son una sola cosa desde el punto de
   // vista del usuario ("la proyección de esta ubicación").
@@ -1209,6 +1216,18 @@ const fmtUF  = (v: number) => `${v.toFixed(1)} UF`;
 const fmtCLPM = (v: number) =>
   `$${new Intl.NumberFormat("es-CL").format(Math.round(v / 1_000_000))}M`;
 
+/**
+ * Columnas de similitud que se muestran en la tabla de comparables. De los 5
+ * grupos de `SIMILARITY_GROUPS` se dejan afuera de la vista "Competencia":
+ * ya se usa para elegir y rankear comparables, pero no se pidió como columna.
+ */
+const COMPARABLE_TABLE_GROUPS: Array<{ key: string; header: string; title: string }> = [
+  { key: "parque",  header: "Parque",         title: "Parque automotriz" },
+  { key: "nse",     header: "NSE",            title: "NSE y gasto endógeno" },
+  { key: "mercado", header: "Población",      title: "Tamaño de mercado" },
+  { key: "flujo",   header: "Com. compl.",    title: "Comercio complementario" },
+];
+
 interface ProjectionSectionProps {
   folders:          Array<{ id: string; name: string }>;
   selectedFolderId: string;
@@ -1433,9 +1452,17 @@ const ProjectionSection = ({
   const baseProj    = projRows.find((y) => y.isBase);
   const displayProj = { uf: result.estimatedUf, clp: result.estimatedClp };
 
-  const adjusted = adjustPct !== 0;
-  const factor   = 1 + adjustPct / 100;
+  // Express (castigo fijo de formato) y Exógeno (adjustPct, criterio manual
+  // del analista sobre flujo de paso u otro factor que el modelo no ve) son
+  // independientes y se SUMAN: activar Express ya no pisa lo que el analista
+  // haya puesto en la barra, ni al revés.
+  const expressAppliedPct = isExpress ? expressPct : 0;
+  const exogenoAdjusted   = adjustPct !== 0;
+  const totalPct = expressAppliedPct + adjustPct;
+  const adjusted = totalPct !== 0;
+  const factor   = 1 + totalPct / 100;
   const adj      = (v: number) => v * factor;
+  const adjustmentLabel = formatAdjustmentLabel(isExpress, expressAppliedPct, adjustPct);
 
   return (
     <div className="space-y-3">
@@ -1454,12 +1481,12 @@ const ProjectionSection = ({
         <div className="flex items-baseline gap-2">
           <span className="text-[22px] font-bold text-green-400">{fmtUF(adj(displayProj.uf))}</span>
           <span className="text-[11px] text-green-400/60">/mes</span>
-          {adjusted && (
+          {adjusted && adjustmentLabel && (
             <span className={[
               "rounded px-1 text-[9px] font-medium",
-              adjustPct > 0 ? "bg-green-400/15 text-green-300" : "bg-brand-orange/15 text-brand-orange",
+              totalPct > 0 ? "bg-green-400/15 text-green-300" : "bg-brand-orange/15 text-brand-orange",
             ].join(" ")}>
-              {adjustPct > 0 ? "+" : ""}{adjustPct}% manual
+              {adjustmentLabel}
             </span>
           )}
         </div>
@@ -1513,21 +1540,18 @@ const ProjectionSection = ({
         {/*
           El formato Express vende menos que un local estándar. La superficie
           todavía no es una variable del modelo, así que se corrige por fuera
-          con un valor fijo en vez de sumarse al ajuste que hubiera.
+          con un castigo FIJO — independiente del ajuste Exógeno de más abajo,
+          que sigue siendo criterio del analista y se suma, no se reemplaza.
         */}
         <button
-          onClick={() => {
-            const next = !isExpress;
-            setIsExpress(next);
-            setAdjustPct(next ? expressPct : 0);
-          }}
+          onClick={() => setIsExpress((v) => !v)}
           className={[
             "mb-2 flex w-full items-center justify-center gap-1.5 rounded-md border py-1.5 text-[10px] font-medium transition-colors",
             isExpress
               ? "border-brand-orange bg-brand-orange/20 text-brand-orange"
               : "border-border/50 text-muted-foreground hover:bg-surface-3 hover:text-foreground",
           ].join(" ")}
-          title={`Fija el ajuste en ${expressPct}%`}
+          title={`Castigo fijo de ${expressPct}%, independiente del ajuste Exógeno`}
         >
           <Store className="h-3 w-3" />
           {isExpress ? `Local Express · ${expressPct}% aplicado` : "Marcar como local Express"}
@@ -1535,7 +1559,7 @@ const ProjectionSection = ({
 
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            {isExpress ? "Ajuste Express" : "Ajuste manual"}
+            Diferencia Exógena
           </span>
           <div className="flex items-center gap-1.5">
             <input
@@ -1553,7 +1577,7 @@ const ProjectionSection = ({
             <span className="text-[11px] text-muted-foreground">%</span>
             <button
               onClick={() => setAdjustPct(0)}
-              disabled={!adjusted}
+              disabled={!exogenoAdjusted}
               className="rounded-md px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground disabled:opacity-40"
               title="Volver al cálculo original"
             >
@@ -1571,9 +1595,10 @@ const ProjectionSection = ({
           className="mt-2 w-full accent-green-500"
         />
         <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">
-          Castiga o premia la estimación por factores que el modelo no ve (re-maduración
-          tras un cierre, obras, contrato particular, formato express sin dato de
-          superficie). No altera el cálculo: es un criterio propio y queda declarado
+          Castiga o premia la estimación por gasto exógeno (flujo de paso) u otro
+          factor que el modelo no ve (re-maduración tras un cierre, obras, contrato
+          particular). Se suma al castigo fijo de Express si está marcado — no lo
+          reemplaza. No altera el cálculo: es un criterio propio y queda declarado
           como tal.
         </p>
 
@@ -1601,9 +1626,9 @@ const ProjectionSection = ({
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
             {/* Relativo a la apertura: no sabemos en qué año calendario abre. */}
             Proyección a {projRows.length - 1} años desde la apertura
-            {adjusted && (
+            {adjusted && adjustmentLabel && (
               <span className="ml-1 normal-case text-brand-orange">
-                · ajustada {adjustPct > 0 ? "+" : ""}{adjustPct}%
+                · ajustada {adjustmentLabel}
               </span>
             )}
             <span
@@ -1730,10 +1755,9 @@ const ProjectionSection = ({
                 <tr className="bg-surface-2/50 text-muted-foreground">
                   <th className="text-left font-medium px-2 py-1.5">Local</th>
                   <th className="text-right font-medium px-1.5 py-1.5">Venta real</th>
-                  {/* Proyecciones guardadas antes de este cambio no traen groupScores */}
-                  {(result.comparables[0]?.groupScores ?? []).map((g) => (
-                    <th key={g.key} className="px-1.5 py-1.5 font-medium" title={g.label}>
-                      {g.label.split(" ")[0]}
+                  {COMPARABLE_TABLE_GROUPS.map((tg) => (
+                    <th key={tg.key} className="px-1.5 py-1.5 font-medium" title={tg.title}>
+                      {tg.header}
                     </th>
                   ))}
                 </tr>
@@ -1750,24 +1774,30 @@ const ProjectionSection = ({
                     <td className="px-1.5 py-1.5 text-right font-mono text-green-400 whitespace-nowrap">
                       {fmtUF(c.ufPerMonth)}
                     </td>
-                    {(c.groupScores ?? []).map((g) => (
-                      <td key={g.key} className="px-1.5 py-1.5 text-center" title={`${g.label}: ${Number.isFinite(g.similarity) ? Math.round(g.similarity * 100) + "% similar" : "sin dato"}`}>
-                        {Number.isFinite(g.similarity) ? (
-                          <span
-                            className="inline-block h-2.5 w-2.5 rounded-full"
-                            style={{
-                              backgroundColor: g.similarity >= 0.8
-                                ? "rgb(74 222 128 / 0.9)"   // verde — muy parecido
-                                : g.similarity >= 0.5
-                                ? "rgb(251 191 36 / 0.8)"   // ámbar — parcial
-                                : "rgb(248 113 113 / 0.8)", // rojo — distinto
-                            }}
-                          />
-                        ) : (
-                          <span className="text-muted-foreground/40">—</span>
-                        )}
-                      </td>
-                    ))}
+                    {COMPARABLE_TABLE_GROUPS.map((tg) => {
+                      // Proyecciones guardadas antes de este cambio no traen groupScores.
+                      const g = c.groupScores?.find((x) => x.key === tg.key);
+                      const simPct = g && Number.isFinite(g.similarity) ? Math.round(g.similarity * 100) : null;
+                      return (
+                        <td
+                          key={tg.key}
+                          className="px-1.5 py-1.5 text-center font-mono whitespace-nowrap"
+                          title={simPct == null ? "Sin dato" : `${tg.title}: ${simPct}% similar`}
+                        >
+                          {simPct == null ? (
+                            <span className="text-muted-foreground/40">—</span>
+                          ) : (
+                            <span className={
+                              simPct >= 80 ? "text-green-400"
+                                : simPct >= 50 ? "text-amber-400"
+                                : "text-red-400"
+                            }>
+                              {simPct}%
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -1775,10 +1805,10 @@ const ProjectionSection = ({
           </div>
           <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">
             Cada columna compara la ubicación nueva contra ese local en una dimensión
-            (parque, NSE, flujo comercial, tamaño de mercado, competencia): verde = muy
-            parecido, rojo = distinto. Si el estimado no calza con lo que la tabla muestra
-            —por ejemplo, se parece en parque pero no en flujo comercial—, ese es el criterio
-            para corregir con el "Ajuste manual" de más abajo.
+            (parque, NSE, población, comercio complementario): % alto y verde = muy
+            parecido, bajo y rojo = distinto. Si el estimado no calza con lo que la tabla
+            muestra —por ejemplo, se parece en parque pero no en comercio complementario—,
+            ese es el criterio para corregir con el ajuste de más abajo.
           </p>
         </div>
       )}

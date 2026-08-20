@@ -107,9 +107,14 @@ export interface ReportProjection {
   estimatedClp: number;
   lowUf: number;
   highUf: number;
+  /** Total aplicado = expressAppliedPct + exogenoPct. Es lo que ya está descontado de estimatedUf/estimatedClp. */
   adjustPct: number;
   /** El ajuste corresponde al formato Express, no a un criterio puntual. */
   isExpress: boolean;
+  /** Castigo fijo de formato Express efectivamente aplicado (0 si isExpress es false). */
+  expressAppliedPct: number;
+  /** Ajuste manual por gasto exógeno u otro criterio del analista — independiente de Express, se suman. */
+  exogenoPct: number;
   usesMaturationCurve: boolean;
   /** true si la curva la fijó el admin en vez de derivarse. */
   maturationIsCustom: boolean;
@@ -142,6 +147,26 @@ export interface ReportProjection {
   /** Relativos a la apertura: 'Base', 'Año 1', … No hay año calendario porque no se sabe cuándo abre. */
   years: Array<{ label: string; uf: number; clp: number; ratePct: number; maturityPct: number; isBase: boolean }>;
   comparables: Array<{ name: string; ufPerMonth: number; isActual: boolean; weight: number }>;
+}
+
+/**
+ * Texto declarativo del ajuste aplicado a una proyección, para mostrar junto
+ * a la cifra en el panel y en los informes exportados.
+ *
+ * Express y Exógeno son independientes y se SUMAN, no se componen: por eso
+ * "-30% Express + -10% Exógeno" se lee directo como -40% total sin que el
+ * analista tenga que calcular nada. Con uno solo activo se omite el paréntesis.
+ */
+export function formatAdjustmentLabel(
+  isExpress: boolean,
+  expressAppliedPct: number,
+  exogenoPct: number,
+): string | null {
+  const parts: string[] = [];
+  if (isExpress) parts.push(`${expressAppliedPct > 0 ? "+" : ""}${expressAppliedPct}% Express`);
+  if (exogenoPct !== 0) parts.push(`${exogenoPct > 0 ? "+" : ""}${exogenoPct}% Exógeno`);
+  if (parts.length === 0) return null;
+  return parts.length === 2 ? `(${parts.join(" + ")})` : parts[0];
 }
 
 const computeNseDistribution = (

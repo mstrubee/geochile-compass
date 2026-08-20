@@ -1,4 +1,4 @@
-import type { IsochroneReport, ReportProjection } from "./reportData";
+import { formatAdjustmentLabel, type IsochroneReport, type ReportProjection } from "./reportData";
 import type { MapCaptureImages } from "./mapCapture";
 import type { Cell, SlideSurface } from "./slideSurface";
 import { PptxSlideSurface } from "./slideSurfacePptx";
@@ -344,8 +344,8 @@ export const drawProjectionSlide = (
       : []),
     ["Maduración", proj.rampEnabled ? "Ubicación nueva, parte en rampa" : "Ubicación ya en régimen"],
     [
-      proj.isExpress ? "Ajuste EXPRESS" : "Ajuste manual del analista",
-      proj.adjustPct !== 0 ? `${proj.adjustPct > 0 ? "+" : ""}${proj.adjustPct}%` : "Sin ajuste",
+      "Ajuste",
+      formatAdjustmentLabel(proj.isExpress, proj.expressAppliedPct, proj.exogenoPct) ?? "Sin ajuste",
     ],
     ["Base de cálculo", `${proj.comparables.length} locales comparables`],
   ];
@@ -431,10 +431,10 @@ export const drawProjectionSlide = (
     proj.rampEnabled
       ? "El potencial estimado corresponde al nivel en régimen. Un local recién abierto no rinde eso desde el primer día: la curva parte en la fracción medida en la red y sube hasta el 100%."
       : "Se asume la ubicación ya en régimen desde el primer año.",
-    proj.adjustPct !== 0 && proj.isExpress
-      ? `Incluye el ajuste EXPRESS de ${proj.adjustPct}%: el formato vende menos que un local estándar y la superficie aún no es una variable del modelo.`
-      : proj.adjustPct !== 0
-        ? `Incluye un ajuste manual de ${proj.adjustPct > 0 ? "+" : ""}${proj.adjustPct}% aplicado por el analista, no derivado del modelo.`
+    proj.isExpress
+      ? `Incluye el castigo fijo de formato EXPRESS (${proj.expressAppliedPct}%)${proj.exogenoPct !== 0 ? ` más un ajuste Exógeno de ${proj.exogenoPct > 0 ? "+" : ""}${proj.exogenoPct}%` : ""} aplicado por el analista, no derivado del modelo.`
+      : proj.exogenoPct !== 0
+        ? `Incluye un ajuste Exógeno de ${proj.exogenoPct > 0 ? "+" : ""}${proj.exogenoPct}% aplicado por el analista, no derivado del modelo.`
         : "Estimación referencial construida por comparación con locales de la red; no reemplaza un estudio de terreno.",
   ];
   slide.text(notas.map((n) => ({ text: n, breakLine: true })), {

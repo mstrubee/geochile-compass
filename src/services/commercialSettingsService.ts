@@ -11,9 +11,11 @@ import { supabase } from "@/integrations/supabase/client";
  *
  * Un Express vende menos que un local estándar, pero la superficie todavía no
  * es una variable del modelo, así que se corrige por fuera con un valor fijo.
- * Se usa cuando la carpeta no tiene uno propio definido.
+ * Se usa cuando la carpeta no tiene uno propio definido. Es un castigo FIJO,
+ * independiente del ajuste manual por gasto exógeno: los dos se suman, no se
+ * reemplazan (ver ProjectionSection en AnalysisPanel.tsx).
  */
-export const DEFAULT_EXPRESS_ADJUST_PCT = -20;
+export const DEFAULT_EXPRESS_ADJUST_PCT = -30;
 
 /** Ajuste Express de la carpeta, o el valor por defecto si no lo definieron. */
 export const fetchExpressAdjustPct = async (
