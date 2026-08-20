@@ -3,6 +3,7 @@ import { area as turfArea } from "@turf/area";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import booleanIntersects from "@turf/boolean-intersects";
 import intersect from "@turf/intersect";
+import simplify from "@turf/simplify";
 import { point, featureCollection } from "@turf/helpers";
 import type { TerritorialFeature, TerritorialLayer, TerritorialGroup } from "@/types/territorial";
 import type { ManzanaFeatureCollection, ManzanaFeature } from "@/types/manzanas";
@@ -263,6 +264,65 @@ const safeIntersect = (
   }
 };
 
+/**
+ * Tolerancia de simplificación para los cálculos de intersección (no para lo
+ * que se pinta en el mapa). ~11 m, la misma precisión que ya se usa para
+ * redondear bbox en `useTerritorialLayers`.
+ */
+const ANALYSIS_SIMPLIFY_TOLERANCE = 0.0001;
+
+/**
+ * El polígono que devuelve el proveedor de ruteo trae muchísimos más vértices
+ * de los que hacen falta para este análisis (agregados por comuna/manzana).
+ * Cada `intersect()`/`booleanIntersects()` contra una manzana escala con ese
+ * conteo, y una isócrona grande cruza miles de manzanas — así que simplificar
+ * UNA vez antes de recorrerlas es la ganancia más grande disponible acá.
+ * `area_km2` en `computeIsochroneAnalysis` sigue midiéndose sobre el polígono
+ * ORIGINAL para no mover esa cifra.
+ */
+const simplifyForAnalysis = (
+  f: Feature<Polygon | MultiPolygon>,
+): Feature<Polygon | MultiPolygon> => {
+  try {
+    return simplify(f as never, {
+      tolerance: ANALYSIS_SIMPLIFY_TOLERANCE,
+      highQuality: false,
+    }) as Feature<Polygon | MultiPolygon>;
+  } catch {
+    return f;
+  }
+};
+
+/**
+ * true si TODOS los vértices de `feat` caen dentro de `iso`. A la escala de
+ * una manzana censal frente al polígono de una isócrona, alcanza como
+ * sustituto de "contenido por completo": evita el `intersect()` (recorte
+ * completo de polígonos, lo más caro de este archivo) para el caso mayoritario
+ * de manzanas bien adentro de la isócrona, y solo cae al intersect real para
+ * las que cruzan el borde.
+ */
+const isFullyInside = (
+  iso: Feature<Polygon | MultiPolygon>,
+  feat: Feature<Polygon | MultiPolygon>,
+): boolean => {
+  const polys: number[][][][] =
+    feat.geometry.type === "Polygon"
+      ? [feat.geometry.coordinates]
+      : feat.geometry.coordinates;
+  for (const poly of polys) {
+    for (const ring of poly) {
+      for (const coord of ring) {
+        try {
+          if (!booleanPointInPolygon(coord, iso as never)) return false;
+        } catch {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+};
+
 export const communeBreakdown = (
   iso: Feature<Polygon | MultiPolygon>,
   comunasFC: ComunaFC | null,
@@ -332,7 +392,7 @@ export const manzanaBreakdown = (
     }
     const mArea = safeArea(m as never);
     let share = 1;
-    if (mArea > 0) {
+    if (mArea > 0 && !isFullyInside(iso, m as never)) {
       const inter = safeIntersect(iso, m as never);
       const interArea = inter ? safeArea(inter) : 0;
       share = interArea > 0 ? Math.min(1, interArea / mArea) : 0;
@@ -382,14 +442,19 @@ export const gseBreakdown = (
     } catch {
       continue;
     }
-    const inter = safeIntersect(iso, f as never);
-    if (!inter) continue;
-    const interArea = safeArea(inter);
-    if (interArea <= 0) continue;
-
     const manzanaArea = safeArea(f as never);
-    // share = fracción del polígono de manzana dentro de la isócrona
-    const share = manzanaArea > 0 ? Math.min(1, interArea / manzanaArea) : 1;
+    let interArea: number;
+    let share: number; // fracción del polígono de manzana dentro de la isócrona
+    if (isFullyInside(iso, f as never)) {
+      interArea = manzanaArea;
+      share = 1;
+    } else {
+      const inter = safeIntersect(iso, f as never);
+      if (!inter) continue;
+      interArea = safeArea(inter);
+      if (interArea <= 0) continue;
+      share = manzanaArea > 0 ? Math.min(1, interArea / manzanaArea) : 1;
+    }
 
     count += 1;
     totalArea += interArea;
@@ -547,15 +612,20 @@ export const computeIsochroneAnalysis = (params: {
   const bandMinutes = Math.round((isoFeature.properties?.value ?? 0) / 60);
   const area_km2 = safeArea(isoFeature) / 1_000_000;
 
+  // Simplificado UNA vez para las miles de comparaciones geométricas que
+  // siguen (puntos, comunas, manzanas, GSE); `area_km2` ya se calculó arriba
+  // sobre el polígono original, así que esa cifra no se mueve.
+  const analysisIso = simplifyForAnalysis(isoFeature);
+
   const territorialPoints = countTerritorialPoints(
-    isoFeature,
+    analysisIso,
     territorialFeatures,
     territorialLayers,
     territorialGroups,
   );
-  const communes = communeBreakdown(isoFeature, comunasFC, ineByName, nombresPorCodigo);
-  const manzanasBD = manzanaBreakdown(isoFeature, manzanas);
-  const gseBD = gseBreakdown(isoFeature, gse);
+  const communes = communeBreakdown(analysisIso, comunasFC, ineByName, nombresPorCodigo);
+  const manzanasBD = manzanaBreakdown(analysisIso, manzanas);
+  const gseBD = gseBreakdown(analysisIso, gse);
 
   // ── Jerarquía de fuentes de población (mejor → peor) ────────────────────
   //
