@@ -184,6 +184,28 @@ const resolvePoiFolderId = async (
 };
 
 /**
+ * Castigo fijo del formato Express, por carpeta — mismo criterio y misma
+ * tabla que fetchExpressAdjustPct en commercialSettingsService.ts (el
+ * servicio del front usa el cliente anon; acá el admin porque el caller de
+ * esta función no es un usuario autenticado del proyecto).
+ */
+const DEFAULT_EXPRESS_ADJUST_PCT = -30;
+const fetchExpressAdjustPct = async (
+  admin: ReturnType<typeof getAdminClient>,
+  folderId: string | null,
+): Promise<number> => {
+  if (!admin || !folderId) return DEFAULT_EXPRESS_ADJUST_PCT;
+  const { data } = await admin
+    .from("analysis_settings")
+    .select("express_adjust_pct")
+    .eq("folder_id", folderId)
+    .maybeSingle();
+  const raw = (data as { express_adjust_pct?: unknown } | null)?.express_adjust_pct;
+  const n = Number(raw);
+  return Number.isFinite(n) && raw !== null ? n : DEFAULT_EXPRESS_ADJUST_PCT;
+};
+
+/**
  * Estadísticos de la RED (no de los comparables) para el año base.
  *
  * Por qué la red y no los comparables: se verificó con validación
@@ -327,13 +349,26 @@ Deno.serve(async (req) => {
   }
 
   const rampEnabled = settings.rampEnabled ?? true;
-  const adjustPct = Number(settings.adjustPct ?? 0) || 0;
+  // `settings.adjustPct` es SOLO el ajuste "Exógeno" (criterio manual del
+  // analista) — isExpress es un campo aparte, con un castigo fijo por
+  // carpeta que se SUMA al exógeno para la cifra final (ver ProjectionSection
+  // en AnalysisPanel.tsx: "adjustPct = expressAppliedPct + exogenoPct"). Antes
+  // esta función solo aplicaba el exógeno y descartaba isExpress por
+  // completo: un local marcado Express exportaba a leaseflow-pro la MISMA
+  // venta que uno no-Express, con solo `meta.isExpress` (informativo) para
+  // avisarlo. Ahora se resuelve el castigo Express de la carpeta (mismo
+  // criterio que fetchExpressAdjustPct en commercialSettingsService.ts) y se
+  // suma, igual que en la vista de Geochile Compass.
+  const exogenoPct = Number(settings.adjustPct ?? 0) || 0;
+  const isExpress = settings.isExpress ?? false;
   const overrides = Array.isArray(settings.rateOverrides) ? settings.rateOverrides : [];
 
   const poiFolderId = await resolvePoiFolderId(admin, result.folderName);
   const curve = rampEnabled && poiFolderId
     ? await fetchMaturationCurve(admin, poiFolderId)
     : null;
+  const expressPct = isExpress ? await fetchExpressAdjustPct(admin, poiFolderId) : 0;
+  const adjustPct = exogenoPct + expressPct;
 
   const rows = buildProjRows(result, curve, overrides, rampEnabled);
   const f = 1 + adjustPct / 100;
@@ -459,8 +494,13 @@ Deno.serve(async (req) => {
       folderName: nombreCarpeta,
       /** Sin años calendario: son años de vida del local desde la apertura. */
       yearsMeaning: "años 1..5 de vida del local (\"Base\", el año 0, queda excluido)",
+      // adjustPct = exogenoPct + expressAppliedPct (el total ya aplicado a
+      // ventaMes/estimatedUf). Se desglosan los dos también, para trazar de
+      // dónde sale el número si hace falta.
       adjustPct,
-      isExpress: settings.isExpress ?? false,
+      exogenoPct,
+      expressAppliedPct: expressPct,
+      isExpress,
       rampEnabled,
       rampApplied: !!curve,
       rampFactors: curve?.rampFactors ?? null,
