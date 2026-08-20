@@ -1775,19 +1775,26 @@ const ProjectionSection = ({
                       {fmtUF(c.ufPerMonth)}
                     </td>
                     {COMPARABLE_TABLE_GROUPS.map((tg) => {
-                      // Proyecciones guardadas antes de este cambio no traen groupScores.
+                      // Proyecciones guardadas antes de este cambio traen
+                      // similarity pero no diffPct (se agregó después) — se
+                      // degrada mostrando el % de similitud sin signo en vez
+                      // de dejar todo en blanco. Antes de eso no hay ni
+                      // similarity: ahí sí no hay nada que mostrar.
                       const g = c.groupScores?.find((x) => x.key === tg.key);
-                      const hasData = !!g && Number.isFinite(g.similarity) && Number.isFinite(g.diffPct);
-                      const simPct  = hasData ? Math.round(g!.similarity * 100) : null;
-                      const diffPct = hasData ? Math.round(g!.diffPct) : null;
+                      const hasSimilarity = !!g && Number.isFinite(g.similarity);
+                      const hasDiff       = hasSimilarity && Number.isFinite(g!.diffPct);
+                      const simPct  = hasSimilarity ? Math.round(g!.similarity * 100) : null;
+                      const diffPct = hasDiff ? Math.round(g!.diffPct) : null;
                       return (
                         <td
                           key={tg.key}
                           className="px-1.5 py-1.5 text-center font-mono whitespace-nowrap"
                           title={
                             simPct == null
-                              ? "Sin dato"
-                              : `${tg.title}: el comparable es ${diffPct! > 0 ? `${diffPct}% mayor` : diffPct! < 0 ? `${Math.abs(diffPct!)}% menor` : "prácticamente igual"} que la ubicación nueva (${simPct}% similar)`
+                              ? "Sin dato — recalcula la proyección para verlo"
+                              : diffPct == null
+                                ? `${tg.title}: ${simPct}% similar — recalcula la proyección para ver la diferencia con signo`
+                                : `${tg.title}: el comparable es ${diffPct > 0 ? `${diffPct}% mayor` : diffPct < 0 ? `${Math.abs(diffPct)}% menor` : "prácticamente igual"} que la ubicación nueva (${simPct}% similar)`
                           }
                         >
                           {simPct == null ? (
@@ -1798,7 +1805,7 @@ const ProjectionSection = ({
                                 : simPct >= 50 ? "text-amber-400"
                                 : "text-red-400"
                             }>
-                              {diffPct === 0 ? "0%" : `${diffPct! > 0 ? "+" : ""}${diffPct}%`}
+                              {diffPct == null ? `${simPct}%` : diffPct === 0 ? "0%" : `${diffPct > 0 ? "+" : ""}${diffPct}%`}
                             </span>
                           )}
                         </td>
