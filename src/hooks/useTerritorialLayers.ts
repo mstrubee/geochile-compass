@@ -180,6 +180,74 @@ const fetchLayerFeatures = async (
   }));
 };
 
+/**
+ * Trae las features de VARIAS capas de una sola vez, filtradas al mismo bbox.
+ *
+ * El camino recortado (bbox) antes pedía una capa a la vez: analizar una
+ * isócrona dispara esto para las ~128 capas territoriales existentes, así que
+ * abría hasta 128 round-trips (2 en paralelo) aunque el total de features
+ * dentro del bbox rara vez pasa de unos pocos miles — el mismo comentario de
+ * `fetchLayerFeatures` ya medía 242 a 1.459 features típicas en TODA la red de
+ * capas. Un solo `.in(layer_id, ...)` trae lo mismo en 1-2 páginas.
+ */
+const fetchLayersFeaturesBatched = async (
+  layerIds: string[],
+  bbox: FeatureBbox,
+): Promise<Map<string, TerritorialFeature[]>> => {
+  const [w, s, e, n] = bbox;
+  const all: TerritorialFeature[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("territorial_features")
+      .select("id,layer_id,name,lat,lng,geometry,properties")
+      .in("layer_id", layerIds)
+      .gte("lng", w).lte("lng", e)
+      .gte("lat", s).lte("lat", n)
+      .range(from, from + PAGE - 1);
+    if (error || !data) break;
+    all.push(...(data as unknown as TerritorialFeature[]));
+    if (data.length < PAGE) break;
+  }
+  const byLayer = new Map<string, TerritorialFeature[]>(layerIds.map((id) => [id, []]));
+  for (const f of all) {
+    const normalized: TerritorialFeature = {
+      ...f,
+      geometry: f.geometry ?? ({ type: "Point", coordinates: [f.lng ?? 0, f.lat ?? 0] } as GeoJSON.Geometry),
+      properties: f.properties ?? {},
+    };
+    const arr = byLayer.get(f.layer_id);
+    if (arr) arr.push(normalized);
+    else byLayer.set(f.layer_id, [normalized]);
+  }
+  return byLayer;
+};
+
+const inflightBatchCache = new Map<string, Promise<Map<string, TerritorialFeature[]>>>();
+
+/** Dedup por lote: dos consumidores pidiendo el mismo bbox (p.ej. el panel de
+ *  análisis y el informe exportable de la misma isócrona) comparten un único
+ *  request en vez de disparar cada uno el suyo. */
+const getLayersFeaturesBboxBatched = (
+  layerIds: string[],
+  bbox: FeatureBbox,
+): Promise<Map<string, TerritorialFeature[]>> => {
+  const batchKey = `${layerIds.slice().sort().join(",")}|${bbox.map((v) => v.toFixed(4)).join(",")}`;
+  const inflight = inflightBatchCache.get(batchKey);
+  if (inflight) return inflight;
+  const p = fetchLayersFeaturesBatched(layerIds, bbox)
+    .then((byLayer) => {
+      for (const [id, feats] of byLayer) featuresCache.set(cacheKeyFor(id, bbox), feats);
+      inflightBatchCache.delete(batchKey);
+      return byLayer;
+    })
+    .catch((e) => {
+      inflightBatchCache.delete(batchKey);
+      throw e;
+    });
+  inflightBatchCache.set(batchKey, p);
+  return p;
+};
+
 const getLayerFeatures = (
   layerId: string,
   bbox?: FeatureBbox | null,
@@ -247,8 +315,44 @@ export const useTerritorialFeatures = (
 
     (async () => {
       try {
-        // Concurrencia limitada entre capas: evita iniciar la carga de todas
-        // las capas visibles a la vez (cada una abre múltiples requests).
+        if (bbox) {
+          // Analizar una isócrona pide TODAS las capas territoriales (~128)
+          // recortadas al mismo bbox. Antes esto abría un round-trip por
+          // capa; acá se resuelve lo ya cacheado en memoria (caché exacta o
+          // capa completa recortada localmente) y el resto se trae en UN
+          // solo `.in(layer_id, ...)` — ver `getLayersFeaturesBboxBatched`.
+          const resolved = new Map<string, TerritorialFeature[]>();
+          const missing: string[] = [];
+          for (const id of layerIds) {
+            const ck = cacheKeyFor(id, bbox);
+            const cached = featuresCache.get(ck);
+            if (cached) { resolved.set(id, cached); continue; }
+            const full = featuresCache.get(id);
+            if (full) {
+              const [w, s, e, n] = bbox;
+              const clipped = full.filter(
+                (f) => f.lng != null && f.lat != null &&
+                  f.lng >= w && f.lng <= e && f.lat >= s && f.lat <= n,
+              );
+              featuresCache.set(ck, clipped);
+              resolved.set(id, clipped);
+              continue;
+            }
+            missing.push(id);
+          }
+          if (missing.length) {
+            const byLayer = await getLayersFeaturesBboxBatched(missing, bbox);
+            if (cancel) return;
+            for (const [id, feats] of byLayer) resolved.set(id, feats);
+          }
+          if (cancel) return;
+          setFeatures(layerIds.flatMap((id) => resolved.get(id) ?? []));
+          return;
+        }
+
+        // Sin bbox (render del mapa): igual que antes, una capa a la vez con
+        // concurrencia limitada — acá cada capa completa puede ser grande y
+        // conviene no disparar todas a la vez.
         const LAYER_CONCURRENCY = 2;
         const lists: TerritorialFeature[][] = new Array(layerIds.length);
         let i = 0;
