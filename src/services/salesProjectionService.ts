@@ -49,6 +49,13 @@ export interface ComparableStore {
     compVal: number;
     delta:   number;
   }>;
+  /**
+   * Similitud (0..1, 1 = idéntico) por grupo de variables — ver
+   * `SIMILARITY_GROUPS`. Es la base de la tabla que compara este comparable
+   * contra la ubicación nueva dimensión por dimensión, para que el ajuste
+   * manual del analista se apoye en algo más fino que un % de similitud único.
+   */
+  groupScores: Array<{ key: string; label: string; similarity: number }>;
 }
 
 /**
@@ -186,6 +193,78 @@ const FEATURE_LABELS: Record<string, string> = {
   parque_n_vehiculos: "Vehículos en isócrona",
 };
 
+/**
+ * Agrupa `SIMILARITY_FEATURES` en las dimensiones con las que se lee un local
+ * en la práctica, cada una ponderada según cuánto explica realmente las
+ * ventas de los 64 locales de Autoplanet (leave-one-out, sesión ago-2026):
+ *
+ *   Parque automotriz         → r² individual 3.3%, pero 28% en locales
+ *                                aislados sin canibalización — es el driver
+ *                                principal una vez que se controla por eso
+ *                                (converge con el estudio de xbrein: 39-26%).
+ *   NSE / gasto endógeno      → nse_high/low_pct 8.1-8.5%, income_avg 6.0%:
+ *                                el bloque individualmente más explicativo.
+ *   Flujo y entorno comercial → complement_score, 0.0% aislado — se mantiene
+ *                                con peso bajo a propósito de ese resultado.
+ *   Tamaño de mercado         → pop_total 0.2%: casi no discrimina sola.
+ *   Competencia               → cannibalization_factor 3.6% marginal, pero es
+ *                                la variable que evita comparar un local
+ *                                canibalizado contra uno que no lo está.
+ *
+ * No son pesos ajustados a los datos (eso ya se probó y no generaliza fuera
+ * de muestra — ver validate-potential-model.ts): son una regla de bolsillo
+ * para RANKEAR comparables, pensada para que el analista compare manzanas
+ * con manzanas antes de aplicar su propio criterio (el "Ajuste manual").
+ */
+export interface SimilarityGroup {
+  key:      string;
+  label:    string;
+  weight:   number; // relativo; se renormaliza según qué features estén disponibles
+  features: readonly string[];
+}
+
+export const SIMILARITY_GROUPS: readonly SimilarityGroup[] = [
+  { key: "parque",      label: "Parque automotriz",            weight: 0.30, features: ["parque_n_vehiculos"] },
+  { key: "nse",         label: "NSE y gasto endógeno",         weight: 0.25, features: ["nse_high_pct", "nse_mid_pct", "income_avg"] },
+  { key: "flujo",       label: "Flujo y entorno comercial",    weight: 0.15, features: ["complement_score"] },
+  { key: "mercado",     label: "Tamaño de mercado",            weight: 0.15, features: ["pop_total", "pop_density_avg"] },
+  { key: "competencia", label: "Competencia",                  weight: 0.15, features: ["n_competition_int"] },
+] as const;
+
+/** Peso de cada feature usable = peso de su grupo repartido entre las
+ *  features de ese grupo que sí están disponibles para esta comparación. */
+function featureWeights(keys: readonly string[]): number[] {
+  return keys.map((k) => {
+    const group = SIMILARITY_GROUPS.find((g) => g.features.includes(k));
+    if (!group) return 0;
+    const presentInGroup = group.features.filter((f) => keys.includes(f)).length;
+    return presentInGroup > 0 ? group.weight / presentInGroup : 0;
+  });
+}
+
+/**
+ * Similitud 0..1 por grupo entre un comparable y la ubicación nueva, sobre
+ * los mismos vectores normalizados 0..1 usados para la distancia general.
+ * RMS en vez de suma para que un grupo con 3 features no "pese más" en la
+ * lectura visual solo por tener más variables.
+ */
+function computeGroupScores(
+  normVec: number[],
+  normNewVec: number[],
+  keys: readonly string[],
+): Array<{ key: string; label: string; similarity: number }> {
+  return SIMILARITY_GROUPS.map((g) => {
+    const idxs = keys
+      .map((k, i) => (g.features.includes(k) ? i : -1))
+      .filter((i) => i >= 0);
+    if (idxs.length === 0) return { key: g.key, label: g.label, similarity: NaN };
+    let sumSq = 0;
+    for (const i of idxs) sumSq += (normVec[i] - normNewVec[i]) ** 2;
+    const rms = Math.sqrt(sumSq / idxs.length);
+    return { key: g.key, label: g.label, similarity: Math.max(0, 1 - rms) };
+  });
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function extractFeatures(
@@ -304,9 +383,14 @@ function normalizeFeatures(
   return { normRows: rows.map((r) => norm(r.features)), normNew: norm(newPoint) };
 }
 
-function euclidean(a: number[], b: number[]): number {
+/**
+ * Antes era euclidiana plana: las 8 features pesaban lo mismo, así que
+ * `n_competition_int` (0.0% explicativo aislado) tenía el mismo voto que
+ * `parque_n_vehiculos`. Ahora cada feature pesa según `SIMILARITY_GROUPS`.
+ */
+function weightedEuclidean(a: number[], b: number[], weights: number[]): number {
   let s = 0;
-  for (let i = 0; i < a.length; i++) s += (a[i] - b[i]) ** 2;
+  for (let i = 0; i < a.length; i++) s += weights[i] * (a[i] - b[i]) ** 2;
   return Math.sqrt(s);
 }
 
@@ -458,9 +542,10 @@ export async function computeSalesProjection(
 
   // ── 5. Normalizar y calcular distancias ────────────────────────────────────
   const usableFeatures = selectUsableFeatures(comparable, newFeatures, SIMILARITY_FEATURES);
+  const groupWeights = featureWeights(usableFeatures);
   const { normRows, normNew } = normalizeFeatures(comparable, newFeatures, usableFeatures);
   const distances = normRows.map((row, i) => ({
-    idx: i, distance: euclidean(row, normNew), poiId: comparable[i].poiId,
+    idx: i, distance: weightedEuclidean(row, normNew, groupWeights), poiId: comparable[i].poiId,
   }));
 
   const K    = Math.min(5, comparable.length);
@@ -615,6 +700,7 @@ export async function computeSalesProjection(
       isActual:      comp.isActual,
       weight:        normWeights[i],
       keyDiffs,
+      groupScores:   computeGroupScores(normVec, normNew, usableFeatures),
     };
   });
 

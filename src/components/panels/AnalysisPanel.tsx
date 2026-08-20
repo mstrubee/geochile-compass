@@ -1713,7 +1713,7 @@ const ProjectionSection = ({
         ))}
       </div>
 
-      {/* Comparables */}
+      {/* Comparables — tabla agrupada por dimensión, para ajustar a criterio */}
       {result.comparables.length > 0 && (
         <div>
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
@@ -1724,16 +1724,61 @@ const ProjectionSection = ({
               {result.nWithPredicted > 0 ? ` · ${result.nWithPredicted} predichos` : ""})
             </span>
           </div>
-          <div className="space-y-1">
-            {result.comparables.map((c) => (
-              <div key={c.poiId} className="flex items-center gap-2 rounded-lg bg-surface-2/30 px-2.5 py-1.5 text-[11px]">
-                <span className="flex-1 truncate text-foreground">{c.name}</span>
-                {!c.isActual && <span className="text-[8px] text-amber-400/70 bg-amber-400/10 rounded px-1">pred.</span>}
-                <span className="font-mono text-green-400">{fmtUF(c.ufPerMonth)}</span>
-                <span className="text-[10px] text-muted-foreground">{Math.round((1-c.distanceScore)*100)}% sim.</span>
-              </div>
-            ))}
+          <div className="overflow-x-auto rounded-lg border border-border/30">
+            <table className="w-full text-[10px] border-collapse">
+              <thead>
+                <tr className="bg-surface-2/50 text-muted-foreground">
+                  <th className="text-left font-medium px-2 py-1.5">Local</th>
+                  <th className="text-right font-medium px-1.5 py-1.5">Venta real</th>
+                  {result.comparables[0]?.groupScores.map((g) => (
+                    <th key={g.key} className="px-1.5 py-1.5 font-medium" title={g.label}>
+                      {g.label.split(" ")[0]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {result.comparables.map((c) => (
+                  <tr key={c.poiId} className="border-t border-border/20 hover:bg-surface-2/30">
+                    <td className="px-2 py-1.5 max-w-[92px] truncate text-foreground" title={c.name}>
+                      {c.name}
+                      {!c.isActual && (
+                        <span className="ml-1 text-[8px] text-amber-400/70">pred.</span>
+                      )}
+                    </td>
+                    <td className="px-1.5 py-1.5 text-right font-mono text-green-400 whitespace-nowrap">
+                      {fmtUF(c.ufPerMonth)}
+                    </td>
+                    {c.groupScores.map((g) => (
+                      <td key={g.key} className="px-1.5 py-1.5 text-center" title={`${g.label}: ${Number.isFinite(g.similarity) ? Math.round(g.similarity * 100) + "% similar" : "sin dato"}`}>
+                        {Number.isFinite(g.similarity) ? (
+                          <span
+                            className="inline-block h-2.5 w-2.5 rounded-full"
+                            style={{
+                              backgroundColor: g.similarity >= 0.8
+                                ? "rgb(74 222 128 / 0.9)"   // verde — muy parecido
+                                : g.similarity >= 0.5
+                                ? "rgb(251 191 36 / 0.8)"   // ámbar — parcial
+                                : "rgb(248 113 113 / 0.8)", // rojo — distinto
+                            }}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground/40">—</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+          <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">
+            Cada columna compara la ubicación nueva contra ese local en una dimensión
+            (parque, NSE, flujo comercial, tamaño de mercado, competencia): verde = muy
+            parecido, rojo = distinto. Si el estimado no calza con lo que la tabla muestra
+            —por ejemplo, se parece en parque pero no en flujo comercial—, ese es el criterio
+            para corregir con el "Ajuste manual" de más abajo.
+          </p>
         </div>
       )}
 
