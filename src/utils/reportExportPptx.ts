@@ -436,7 +436,7 @@ export const drawProjectionSlide = (
       : proj.exogenoPct !== 0
         ? `Incluye un ajuste Exógeno de ${proj.exogenoPct > 0 ? "+" : ""}${proj.exogenoPct}% aplicado por el analista, no derivado del modelo.`
         : "Estimación referencial construida por comparación con locales de la red; no reemplaza un estudio de terreno.",
-  ];
+  ].filter((n): n is string => n != null);
   slide.text(notas.map((n) => ({ text: n, breakLine: true })), {
     // Bajo el pie de las tablas: la de años llega hasta BODY_BOTTOM.
     x: ML, y: BODY_BOTTOM + 0.02, w: W - ML * 2, h: 0.28,
