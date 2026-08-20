@@ -298,7 +298,33 @@ export const AnalysisPanel = ({
   // Ajustes que reporta la sección (ajuste manual, tasas, rampa).
   const [projAdjust, setProjAdjust] = useState<ProjectionSettings | null>(null);
 
+  /**
+   * Hidrata la proyección desde lo guardado.
+   *
+   * Depender de `projectionSettings` a secas creaba un CICLO: cada guardado
+   * —y se guarda en cada tecla del ajuste— vuelve desde la base como un objeto
+   * nuevo, esto reseteaba `projResult` a una identidad nueva, y la sección de
+   * proyección (que restaura sus controles cuando cambia `result`) pisaba lo
+   * que el usuario estaba escribiendo con el valor del guardado ANTERIOR.
+   * Escribiendo rápido, el campo saltaba a valores viejos: el comportamiento
+   * errático del ajuste Exógeno.
+   *
+   * Se hidrata al cambiar de isócrona —ahí sí hay que traer lo suyo— y una
+   * vez más si los ajustes llegan después, porque la carga de isócronas
+   * guardadas es asíncrona. El eco de nuestro propio guardado ya no re-hidrata.
+   */
+  const hydratedIsoRef = useRef<{ isoId: string | null; hadSettings: boolean }>({
+    isoId: null,
+    hadSettings: false,
+  });
+
   useEffect(() => {
+    const isoId = isochrone?.id ?? null;
+    const prev = hydratedIsoRef.current;
+    const switching = prev.isoId !== isoId;
+    const arrivedLate = !prev.hadSettings && projectionSettings != null;
+    if (!switching && !arrivedLate) return;
+    hydratedIsoRef.current = { isoId, hadSettings: projectionSettings != null };
     // Si esta ubicación ya tenía una proyección corrida, se muestra tal cual:
     // recalcular consulta toda la red y da lo mismo mientras esos datos no
     // cambien. Para rehacerla está el botón "Nueva proyección".
@@ -740,6 +766,7 @@ export const AnalysisPanel = ({
                   curve={curve}
                   expressPct={expressPct}
                   savedSettings={projectionSettings}
+                  identityKey={`${savedIsochroneId ?? isochrone?.id ?? ""}|${selectedFolderId}`}
                   onSettingsChange={(s) => { setProjAdjust(s); persistProjection(s, projResult); }}
                   onRerun={runProjection}
                 />
@@ -1084,13 +1111,28 @@ export const AnalysisPanel = ({
             if (exportFormat === "png") {
               // No se descargan: quedan en la base para que leaseflow las
               // extraiga. El analista las revisa desde "Ver láminas".
-              const laminas = await exportReportToPng(fullReport, projForReport, imgs);
-              const saved = await saveReportSlides({
-                isochroneId: savedIsochroneId!,
-                slide1: laminas[0]?.dataUrl ?? "",
-                slide2: laminas[1]?.dataUrl ?? null,
-              });
-              setSlidesMeta({ generatedAt: saved.generatedAt, hasSlide2: !!saved.slide2 });
+              //
+              // Sin isócrona GUARDADA no hay `isochrone_id` al cual asociar
+              // las láminas: antes esto seguía igual con `savedIsochroneId!`
+              // (undefined en runtime), la escritura fallaba en silencio, y
+              // el informe quedaba generado pero jamás guardado ni visible
+              // para Leaseflow. Ahora se avisa en vez de fallar callado.
+              if (!savedIsochroneId) {
+                alert("Esta isócrona no está guardada todavía. Guárdala primero para que el informe quede disponible para Leaseflow/Directorio.");
+                return;
+              }
+              try {
+                const laminas = await exportReportToPng(fullReport, projForReport, imgs);
+                const saved = await saveReportSlides({
+                  isochroneId: savedIsochroneId,
+                  slide1: laminas[0]?.dataUrl ?? "",
+                  slide2: laminas[1]?.dataUrl ?? null,
+                });
+                setSlidesMeta({ generatedAt: saved.generatedAt, hasSlide2: !!saved.slide2 });
+              } catch (e) {
+                console.error("[saveReportSlides]", e);
+                alert(`No se pudo guardar el informe: ${e instanceof Error ? e.message : String(e)}`);
+              }
             } else {
               await exportReportToPptx(fullReport, projForReport, imgs);
             }
@@ -1295,6 +1337,13 @@ interface ProjectionSectionProps {
   /** Ajuste que fija el botón Express, definido por el admin en la carpeta. */
   expressPct?:      number;
   savedSettings?:   ProjectionSettings | null;
+  /**
+   * Identidad de la ubicación+red que se está ajustando. Los controles se
+   * restauran cuando cambia ESTO, no cuando cambia la identidad de `result`:
+   * un resultado nuevo con los mismos ajustes (recalcular, o el eco de un
+   * guardado) no debe pisar lo que el usuario está escribiendo.
+   */
+  identityKey?:     string;
   onSettingsChange?: (s: ProjectionSettings) => void;
   /** Vuelve a correr el predictor descartando el resultado guardado. */
   onRerun?:         () => void;
@@ -1352,7 +1401,7 @@ const ProjectionSection = ({
   folders, selectedFolderId, onFolderChange,
   result, loading, error, canRun, onRun, onReset, curve = null,
   expressPct = DEFAULT_EXPRESS_ADJUST_PCT,
-  savedSettings, onSettingsChange, onRerun,
+  savedSettings, identityKey = "", onSettingsChange, onRerun,
 }: ProjectionSectionProps) => {
   // Ajuste manual sobre la estimación (castigo o premio, en %).
   //
@@ -1379,10 +1428,12 @@ const ProjectionSection = ({
     // volvía a anularlo después del efecto de guardado, y el primer cambio del
     // usuario se perdía siempre.
     lastSavedKey.current = null;
-    // Solo al cambiar de proyección: si dependiera de savedSettings, cada
-    // guardado revertiría lo que el usuario está escribiendo.
+    // Solo al cambiar de ubicación/red. Antes dependía de `result`, pero su
+    // identidad cambia también al recalcular y al volver el eco de un guardado
+    // —y ahí esto revertía lo que el usuario estaba escribiendo—. La identidad
+    // de la ubicación es lo que de verdad define "otros ajustes que restaurar".
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result]);
+  }, [identityKey]);
 
   // Recuerda los ajustes de esta ubicación.
   const settingsKey = JSON.stringify({ adjustPct, rateOverrides, rampEnabled, isExpress });
