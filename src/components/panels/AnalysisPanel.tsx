@@ -1217,6 +1217,58 @@ const fmtCLPM = (v: number) =>
   `$${new Intl.NumberFormat("es-CL").format(Math.round(v / 1_000_000))}M`;
 
 /**
+ * Input numérico con signo (Exógeno, tasas por año).
+ *
+ * `type="number"` + `parseInt`/`parseFloat` en cada tecla es errático para
+ * valores negativos: al escribir "-" solo, el DOM reporta `e.target.value`
+ * como "" (así es el comportamiento nativo de `type="number"` frente a un
+ * valor intermedio inválido) → eso da NaN → el código caía a un valor por
+ * defecto → y como el input es controlado, React repintaba ESE valor encima
+ * de lo que se estaba escribiendo. El signo desaparecía en cada tecla.
+ *
+ * `type="text"` reporta el string tal cual, así que el signo y los dígitos
+ * parciales sobreviven en pantalla hasta formar un número válido, que recién
+ * ahí se commitea. `emptyValue` decide qué pasa si se borra todo el campo
+ * (0 para un ajuste que siempre tiene valor, null para uno opcional).
+ */
+function SignedNumberInput({
+  value, min, max, step = 1, emptyValue = 0, onCommit, className, title,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  emptyValue?: number | null;
+  onCommit: (n: number | null) => void;
+  className?: string;
+  title?: string;
+}) {
+  const [text, setText] = useState(() => String(value));
+  useEffect(() => { setText(String(value)); }, [value]);
+  const allowsDecimals = step < 1;
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      title={title}
+      value={text}
+      onChange={(e) => {
+        const raw = e.target.value;
+        const pattern = allowsDecimals ? /^-?\d*\.?\d*$/ : /^-?\d*$/;
+        if (!pattern.test(raw)) return;
+        setText(raw);
+        if (raw === "-") return; // en progreso: podría ser el inicio de un negativo
+        if (raw === "") { onCommit(emptyValue); return; }
+        const n = allowsDecimals ? parseFloat(raw) : parseInt(raw, 10);
+        if (Number.isFinite(n)) onCommit(Math.max(min, Math.min(max, n)));
+      }}
+      onBlur={() => setText(String(value))}
+      className={className}
+    />
+  );
+}
+
+/**
  * Columnas de similitud que se muestran en la tabla de comparables. De los 5
  * grupos de `SIMILARITY_GROUPS` se dejan afuera de la vista "Competencia":
  * ya se usa para elegir y rankear comparables, pero no se pidió como columna.
@@ -1562,16 +1614,13 @@ const ProjectionSection = ({
             Diferencia Exógena
           </span>
           <div className="flex items-center gap-1.5">
-            <input
-              type="number"
+            <SignedNumberInput
+              value={adjustPct}
               min={-90}
               max={200}
               step={1}
-              value={adjustPct}
-              onChange={(e) => {
-                const n = parseInt(e.target.value, 10);
-                setAdjustPct(Number.isFinite(n) ? Math.max(-90, Math.min(200, n)) : 0);
-              }}
+              emptyValue={0}
+              onCommit={(n) => setAdjustPct(n ?? 0)}
               className="h-7 w-16 rounded-md border border-border/50 bg-surface-3 px-1.5 text-right text-[11px] font-mono"
             />
             <span className="text-[11px] text-muted-foreground">%</span>
@@ -1686,17 +1735,16 @@ const ProjectionSection = ({
                       {yr.isBase ? (
                         <span className="text-[10px] text-muted-foreground">—</span>
                       ) : (
-                        <input
-                          type="number"
+                        <SignedNumberInput
+                          value={yr.ratePct}
                           min={-50}
                           max={200}
                           step={0.5}
-                          value={yr.ratePct}
-                          onChange={(e) => {
-                            const n = parseFloat(e.target.value);
+                          emptyValue={null}
+                          onCommit={(n) => {
                             setRateOverrides((prev) => {
                               const next = [...prev];
-                              next[i] = Number.isFinite(n) ? Math.max(-50, Math.min(200, n)) : null;
+                              next[i] = n;
                               return next;
                             });
                           }}
