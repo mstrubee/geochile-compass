@@ -1730,7 +1730,8 @@ const ProjectionSection = ({
                 <tr className="bg-surface-2/50 text-muted-foreground">
                   <th className="text-left font-medium px-2 py-1.5">Local</th>
                   <th className="text-right font-medium px-1.5 py-1.5">Venta real</th>
-                  {result.comparables[0]?.groupScores.map((g) => (
+                  {/* Proyecciones guardadas antes de este cambio no traen groupScores */}
+                  {(result.comparables[0]?.groupScores ?? []).map((g) => (
                     <th key={g.key} className="px-1.5 py-1.5 font-medium" title={g.label}>
                       {g.label.split(" ")[0]}
                     </th>
@@ -1749,7 +1750,7 @@ const ProjectionSection = ({
                     <td className="px-1.5 py-1.5 text-right font-mono text-green-400 whitespace-nowrap">
                       {fmtUF(c.ufPerMonth)}
                     </td>
-                    {c.groupScores.map((g) => (
+                    {(c.groupScores ?? []).map((g) => (
                       <td key={g.key} className="px-1.5 py-1.5 text-center" title={`${g.label}: ${Number.isFinite(g.similarity) ? Math.round(g.similarity * 100) + "% similar" : "sin dato"}`}>
                         {Number.isFinite(g.similarity) ? (
                           <span
