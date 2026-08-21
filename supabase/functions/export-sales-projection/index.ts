@@ -379,15 +379,24 @@ Deno.serve(async (req) => {
   // manteniendo la última tasa conocida en vez de cortar el array: leaseflow
   // espera 5 posiciones y un array corto rompería el Business Case.
   const ventaMes: number[] = [];
+  // growthRates: la curva de maduración año a año (rows[i].ratePct), la misma
+  // que muestra la columna "Crec." del panel de Geochile Compass. adjustPct
+  // (Express + exógeno) es un desplazamiento parejo a todos los años — no
+  // cambia el crecimiento RELATIVO entre uno y otro, así que ratePct no lleva
+  // el factor `f`. Para leaseflow-pro: va en BCInputs.ventaGrowthPct, NUNCA en
+  // ufRates (esa es la UF real/inflación, un supuesto totalmente aparte).
+  const growthRates: number[] = [];
   for (let i = 0; i < YEARS_WANTED; i++) {
     const row = rows[i + 1];
     if (row) {
       ventaMes.push(row.clp * f);
+      growthRates.push(row.ratePct);
       continue;
     }
     const prev = ventaMes[i - 1] ?? 0;
     const lastRate = rows.length > 0 ? rows[rows.length - 1].ratePct : adjustPct * 0;
     ventaMes.push(prev * (1 + lastRate / 100));
+    growthRates.push(lastRate);
   }
 
   const nombreCarpeta = result.folderName ?? null;
@@ -427,6 +436,12 @@ Deno.serve(async (req) => {
     locationName: iso.name,
     // Millones de CLP por mes, 3 decimales = precisión de ~mil pesos.
     ventaMes: ventaMes.map((clp) => Math.round((clp / 1_000_000) * 1000) / 1000),
+    // Curva de maduración año a año (la misma columna "Crec." del panel de
+    // Geochile Compass) — para que leaseflow-pro pueda importar la curva
+    // completa, no solo los montos ya proyectados con ella. 5 valores, años
+    // 1..5. NO confundir con growthRate (singular): esa es solo la tasa base
+    // en régimen, sin la rampa de maduración.
+    growthRates: growthRates.map((r) => Math.round(r * 10) / 10),
     estimatedUf: Math.round(Number(result.estimatedUf ?? 0) * f * 10) / 10,
     baseYear: Number(result.baseYear ?? 0),
     growthRate: Number.isFinite(Number(result.growthRate))
