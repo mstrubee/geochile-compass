@@ -161,6 +161,19 @@ export const IsochroneLayer = ({
           fillColor: "#ffffff",
           fillOpacity: 1,
         }).addTo(group);
+      } else {
+        // Punto de origen bien visible en las fotos que van a las láminas
+        // (informe directorio / leaseflow): en `outlineOnly` no había marcador
+        // y el origen se perdía contra el satelital.
+        L.circleMarker([iso.center.lat, iso.center.lng], {
+          renderer,
+          pane: OUTLINE_PANE,
+          radius: 8,
+          color: "#ffffff",
+          weight: 2,
+          fillColor: OUTLINE_STYLE.color,
+          fillOpacity: 1,
+        }).addTo(group);
       }
     });
 
