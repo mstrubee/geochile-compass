@@ -58,26 +58,53 @@ export const fetchReportSlidesMeta = async (
   return { generatedAt: r.generated_at, hasSlide2: !!r.slide2_png };
 };
 
-/** Guarda (o reemplaza) las láminas de una isócrona. */
+/** true si el error es de sesión vencida/RLS, no un problema real de datos. */
+const isAuthError = (e: unknown): boolean => {
+  const err = e as { code?: string; status?: number } | null;
+  return err?.code === "42501" || err?.status === 401;
+};
+
+/**
+ * Guarda (o reemplaza) las láminas de una isócrona.
+ *
+ * Generar un informe implica calibrar el mapa y revisar la vista previa, que
+ * puede tomar varios minutos — tiempo suficiente para que el token de sesión
+ * venza. El cliente lo renueva solo en segundo plano, pero un tab en background
+ * puede atrasarse, y entonces el guardado fallaba con un genérico "no se pudo
+ * guardar" sin explicar por qué. Ahora, si el primer intento falla por sesión
+ * vencida, se refresca y se reintenta una vez antes de darlo por fallado.
+ */
 export const saveReportSlides = async (params: {
   isochroneId: string;
   slide1: string;
   slide2: string | null;
 }): Promise<StoredReportSlides> => {
-  const { data, error } = await supabase
-    .from(TABLE as never)
-    .upsert(
-      {
-        isochrone_id: params.isochroneId,
-        slide1_png: params.slide1,
-        slide2_png: params.slide2,
-        generated_at: new Date().toISOString(),
-      } as never,
-      { onConflict: "isochrone_id" },
-    )
-    .select()
-    .single();
-  if (error) throw error;
+  const write = () =>
+    supabase
+      .from(TABLE as never)
+      .upsert(
+        {
+          isochrone_id: params.isochroneId,
+          slide1_png: params.slide1,
+          slide2_png: params.slide2,
+          generated_at: new Date().toISOString(),
+        } as never,
+        { onConflict: "isochrone_id" },
+      )
+      .select()
+      .single();
+
+  let { data, error } = await write();
+  if (error && isAuthError(error)) {
+    await supabase.auth.refreshSession();
+    ({ data, error } = await write());
+  }
+  if (error) {
+    if (isAuthError(error)) {
+      throw new Error("Tu sesión venció mientras preparabas el informe. Vuelve a iniciar sesión e inténtalo de nuevo.");
+    }
+    throw error;
+  }
   return toStored(data);
 };
 
