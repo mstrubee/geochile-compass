@@ -132,8 +132,14 @@ export const drawTerritorySlide = (
 ) => {
   const band = report.bands[report.bands.length - 1];
   const name = baseName(report.iso.name ?? "Isócrona");
+  const zonas = report.zonasAledanas ?? [];
 
-  addHeader(slide, "Análisis territorial", `${name} – Isócrona ${report.iso.minutes.join("/")}min`);
+  addHeader(
+    slide,
+    "Análisis territorial",
+    `${name} – Isócrona ${report.iso.minutes.join("/")}min` +
+      (zonas.length > 0 ? ` + ${zonas.length} zona${zonas.length === 1 ? "" : "s"} aledaña${zonas.length === 1 ? "" : "s"}` : ""),
+  );
 
   // Columna izquierda angosta para los datos; el resto, la grilla de mapas.
   const DATA_W = 3.1;
@@ -157,6 +163,19 @@ export const drawTerritorySlide = (
       border: { color: C.grid, pt: 0.5 } },
   );
   y += resumen.length * ROW_H + 0.2;
+
+  // Zonas aledañas: isócronas fusionadas como hijas. La demografía de arriba
+  // YA las incluye (se analizó la unión) — esto solo identifica cuáles son.
+  if (zonas.length > 0) {
+    addTableBand(slide, "ZONAS ALEDAÑAS (área sumada)", ML, y, DATA_W);
+    y += 0.2;
+    slide.table(
+      zonas.map((z, i) => row([z.name], { fill: i % 2 ? C.rowAlt : undefined })),
+      { x: ML, y, w: DATA_W, colW: [DATA_W], rowH: ROW_H,
+        border: { color: C.grid, pt: 0.5 } },
+    );
+    y += zonas.length * ROW_H + 0.2;
+  }
 
   const gseRows = band.nseDistribution.filter((n) => n.pct > 0);
   if (gseRows.length > 0) {

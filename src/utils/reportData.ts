@@ -93,6 +93,13 @@ export interface IsochroneReport {
   parqueStats?: ParqueIsochroneStats | null;
   /** Proyección de venta tal como quedó en pantalla, con sus ajustes. */
   projection?: ReportProjection | null;
+  /**
+   * Isócronas fusionadas como hijas de esta ("madre"): su área ya está
+   * sumada en todo el análisis de arriba (bands, gastoEndogeno, parqueStats,
+   * projection) — esto es solo para IDENTIFICARLAS en el informe, no una
+   * fuente adicional de datos.
+   */
+  zonasAledanas?: Array<{ name: string }>;
 }
 
 /**

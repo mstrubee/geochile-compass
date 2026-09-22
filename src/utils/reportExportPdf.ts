@@ -189,6 +189,28 @@ const addCoverPage = (doc: jsPDF, report: IsochroneReport): void => {
     doc.text(band.area_km2.toFixed(2),      178, by);
   });
 
+  // Zonas aledañas: isócronas fusionadas como hijas. La tabla de bandas de
+  // arriba YA las incluye (se analizó la unión) — esto solo identifica
+  // cuáles son, como pide el informe.
+  if (report.zonasAledanas && report.zonasAledanas.length > 0) {
+    const zonasY = bandY + 8 + report.bands.length * 9 + 8;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...C.slate400);
+    doc.text(
+      `ZONAS ALEDAÑAS FUSIONADAS (${report.zonasAledanas.length}) — su área ya está sumada arriba`,
+      ML, zonasY,
+    );
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...C.navy);
+    doc.text(
+      report.zonasAledanas.map((z) => z.name).join(" · "),
+      ML, zonasY + 6,
+      { maxWidth: PW - ML * 2 },
+    );
+  }
+
   // Nota de confidencialidad
   const noteY = PH - 30;
   doc.setFillColor(254, 243, 199); // amber-100

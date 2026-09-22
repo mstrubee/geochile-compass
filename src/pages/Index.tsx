@@ -1508,6 +1508,23 @@ const Index = () => {
   }, [analysisIso, analysisIsoChildren]);
 
   /**
+   * Nombres de las hijas para IDENTIFICARLAS en el informe ("Zonas
+   * Aledañas") — su área ya viene sumada en `analysisIsoEffective`, esto es
+   * solo la etiqueta. Una hija todavía sin guardar no tiene nombre propio.
+   */
+  const analysisIsoChildrenNames = useMemo(
+    () =>
+      analysisIsoChildren.map((c, idx) => {
+        if (c.id.startsWith("saved:")) {
+          const saved = savedIsos.find((s) => s.id === c.id.slice("saved:".length));
+          if (saved) return { name: saved.name };
+        }
+        return { name: `Zona aledaña ${idx + 1}` };
+      }),
+    [analysisIsoChildren, savedIsos],
+  );
+
+  /**
    * Proyección calculada sobre una isócrona que TODAVÍA no está guardada.
    *
    * Antes se descartaba en silencio, y eso costó caro: si dibujabas la
@@ -2244,6 +2261,7 @@ const Index = () => {
             onProjectionSettingsChange={handleProjectionSettingsChange}
             onCaptureMapImages={captureIsochroneMapImages}
             onCaptureAtractores={captureAtractoresOnly}
+            zonasAledanas={analysisIsoChildrenNames}
           />
         </div>
       </main>

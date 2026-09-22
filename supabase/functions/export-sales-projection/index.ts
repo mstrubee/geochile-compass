@@ -427,10 +427,26 @@ Deno.serve(async (req) => {
   // informe verifique la aplicabilidad antes de usar la cifra: la red son
   // locales urbanos maduros y extrapolar a una ubicación mucho más chica infla
   // el número (caso Pitrufquén: ~25 mil habitantes contra un mínimo de ~41.500).
-  const [red, rangoPoblacion] = await Promise.all([
+  // Zonas aledañas: isócronas "hijas" fusionadas con esta ("madre"). Su área
+  // ya está sumada dentro de `result` (el análisis y la proyección se
+  // calcularon sobre la unión, no sobre la madre sola — ver
+  // `analysisIsoEffective` en Index.tsx). Acá solo se identifican para que
+  // leaseflow-pro pueda declarar en el Business Case de dónde sale la cifra.
+  const zonasAledanasPromise = admin
+    .from("saved_isochrones")
+    .select("id, name")
+    .eq("parent_isochrone_id", savedIsochroneId)
+    .is("deleted_at", null);
+
+  const [red, rangoPoblacion, zonasAledanasRes] = await Promise.all([
     networkStats(admin, poiFolderId, ufToClp),
     comparablePopulationRange(admin),
+    zonasAledanasPromise,
   ]);
+  const zonasAledanas = (zonasAledanasRes.data ?? []).map((z) => ({
+    id: z.id as string,
+    name: z.name as string,
+  }));
 
   return json({
     locationName: iso.name,
@@ -453,6 +469,8 @@ Deno.serve(async (req) => {
       weight: Number(c.weight ?? 0),
     })),
     diagnosticMsg: result.diagnosticMsg ?? null,
+    /** Isócronas fusionadas cuya área ya está sumada en esta proyección. */
+    zonasAledanas,
 
     /**
      * ── Referencia estadística de la red ──────────────────────────────────

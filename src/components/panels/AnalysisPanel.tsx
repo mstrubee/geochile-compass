@@ -45,6 +45,8 @@ interface AnalysisPanelProps {
   autoOpenProjection?: boolean;
   /** Nombre de la isócrona guardada que se está analizando (para el header). */
   isochroneName?: string | null;
+  /** Isócronas fusionadas como hijas: se identifican en el informe, no aportan datos aparte (ya suman en `isochrone`). */
+  zonasAledanas?: Array<{ name: string }>;
   /**
    * Id de la isócrona GUARDADA. Sin él no se pueden cachear las láminas para
    * leaseflow: la tabla las referencia por `saved_isochrones.id`, así que una
@@ -182,6 +184,7 @@ export const AnalysisPanel = ({
   projectionFolders = [],
   autoOpenProjection = false,
   isochroneName = null,
+  zonasAledanas = [],
   savedIsochroneId = null,
   projectionSettings = null,
   onProjectionSettingsChange,
@@ -1054,7 +1057,7 @@ export const AnalysisPanel = ({
               <button
                 onClick={() => {
                   if (!fullReport) return;
-                  exportReportToPdf({ ...fullReport, projection: projForReport });
+                  exportReportToPdf({ ...fullReport, projection: projForReport, zonasAledanas });
                 }}
                 disabled={!fullReport}
                 className="mt-1.5 w-full rounded-lg bg-blue-600/10 px-2 py-2 text-[11px] font-medium text-blue-400 transition-colors hover:bg-blue-600/20 disabled:opacity-40"
@@ -1122,7 +1125,7 @@ export const AnalysisPanel = ({
                 return;
               }
               try {
-                const laminas = await exportReportToPng(fullReport, projForReport, imgs);
+                const laminas = await exportReportToPng({ ...fullReport, zonasAledanas }, projForReport, imgs);
                 const saved = await saveReportSlides({
                   isochroneId: savedIsochroneId,
                   slide1: laminas[0]?.dataUrl ?? "",
@@ -1134,7 +1137,7 @@ export const AnalysisPanel = ({
                 alert(`No se pudo guardar el informe: ${e instanceof Error ? e.message : String(e)}`);
               }
             } else {
-              await exportReportToPptx(fullReport, projForReport, imgs);
+              await exportReportToPptx({ ...fullReport, zonasAledanas }, projForReport, imgs);
             }
           } finally {
             setExportingPptx(false);
