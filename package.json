@@ -61,6 +61,7 @@
     "@turf/length": "^7.3.5",
     "@turf/polygon-to-line": "^7.3.5",
     "@turf/simplify": "^7.3.5",
+    "@turf/union": "^7.4.0",
     "@turf/voronoi": "^7.3.5",
     "@types/geojson": "^7946.0.16",
     "@types/leaflet": "1.9.12",

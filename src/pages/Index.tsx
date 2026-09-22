@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type L from "leaflet";
 import bbox from "@turf/bbox";
+import turfUnion from "@turf/union";
+import { featureCollection as turfFeatureCollection } from "@turf/helpers";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/layout/Header";
@@ -1309,6 +1311,54 @@ const Index = () => {
     }
   }, []);
   /**
+   * Fusiona `childId` como hija de `motherId`: su área se suma a la de la
+   * madre para el análisis territorial y la proyección de venta, en vez de
+   * analizarse por separado. Se permiten solo 2 niveles (madre → hijas): una
+   * hija no puede tener hijas propias, y una madre no puede fusionarse bajo
+   * otra — mantiene la unión de polígonos y la reconciliación al guardar
+   * simples, sin cadenas.
+   */
+  const handleMergeIsochrone = useCallback(
+    (childId: string, motherId: string) => {
+      if (childId === motherId) return;
+      const child = isochrones.find((i) => i.id === childId);
+      const mother = isochrones.find((i) => i.id === motherId);
+      if (!child || !mother) return;
+      if (mother.parentId) {
+        toast.error(`"${mother.id === motherId ? "Esa isócrona" : motherId}" ya es hija de otra — fusiónala con su madre en vez de con ella.`);
+        return;
+      }
+      if (isochrones.some((i) => i.parentId === childId)) {
+        toast.error("Esa isócrona ya tiene hijas propias: no puede fusionarse como hija de otra.");
+        return;
+      }
+      setIsochrones((prev) =>
+        prev.map((i) => (i.id === childId ? { ...i, parentId: motherId } : i)),
+      );
+      if (childId.startsWith("saved:") && motherId.startsWith("saved:")) {
+        void updateSavedIso(childId.slice("saved:".length), {
+          parent_isochrone_id: motherId.slice("saved:".length),
+        });
+      }
+      toast.success("Isócronas fusionadas: el análisis de la madre ahora suma esta área.");
+    },
+    [isochrones, updateSavedIso],
+  );
+
+  /** "Apagar" una hija: no se elimina, solo se excluye de la fusión (y del mapa). */
+  const handleUnmergeIsochrone = useCallback(
+    (childId: string) => {
+      setIsochrones((prev) =>
+        prev.map((i) => (i.id === childId ? { ...i, parentId: null } : i)),
+      );
+      if (childId.startsWith("saved:")) {
+        void updateSavedIso(childId.slice("saved:".length), { parent_isochrone_id: null });
+      }
+    },
+    [updateSavedIso],
+  );
+
+  /**
    * Borra solo las isócronas de trabajo. Las guardadas se descargan desde su
    * propio árbol: barrerlas desde acá dejaría sus interruptores encendidos
    * apuntando a algo que ya no está en el mapa.
@@ -1338,6 +1388,7 @@ const Index = () => {
             visible: true,
             createdAt: new Date(s.created_at).getTime(),
             features: s.features,
+            parentId: s.parent_isochrone_id ? `saved:${s.parent_isochrone_id}` : null,
           },
         ];
       });
@@ -1346,6 +1397,13 @@ const Index = () => {
         next.add(s.id);
         return next;
       });
+      // Fusión: cargar junto a toda su familia (madre + hijas). Si solo se
+      // carga la hija, el análisis de la madre —si se abre después— queda
+      // corto de área; y si solo se carga la madre, sus hijas no aportan.
+      if (s.parent_isochrone_id) loadSavedIsoToMap(s.parent_isochrone_id);
+      for (const child of savedIsos) {
+        if (child.parent_isochrone_id === s.id) loadSavedIsoToMap(child.id);
+      }
       return mapId;
     },
     [savedIsos],
@@ -1407,6 +1465,48 @@ const Index = () => {
     [analysisIso, savedIsos],
   );
 
+  /** Hijas fusionadas de la isócrona en análisis, encendidas (las apagadas no suman). */
+  const analysisIsoChildren = useMemo(
+    () => (analysisIso ? isochrones.filter((i) => i.parentId === analysisIso.id && i.visible) : []),
+    [analysisIso, isochrones],
+  );
+
+  /**
+   * Geometría efectiva para el análisis territorial: si la isócrona en
+   * pantalla tiene hijas fusionadas encendidas, se analiza la UNIÓN de su
+   * banda mayor con la de cada hija, no la madre sola. Todo lo que consume
+   * esto (comunas, GSE, proyección de venta, canibalización) recibe el área
+   * ya sumada sin saber que viene de varias isócronas — nada más abajo en el
+   * pipeline necesita enterarse de la fusión.
+   *
+   * Si no hay hijas, es literalmente `analysisIso` (misma identidad): no
+   * fuerza un recálculo de todo el análisis para el caso normal, que es la
+   * inmensa mayoría de las isócronas.
+   */
+  const analysisIsoEffective = useMemo(() => {
+    if (!analysisIso || analysisIsoChildren.length === 0) return analysisIso;
+    const motherBand = pickBandFeature(analysisIso.features);
+    if (!motherBand) return analysisIso;
+    const childBands = analysisIsoChildren
+      .map((c) => pickBandFeature(c.features))
+      .filter((f): f is NonNullable<typeof f> => !!f);
+    if (childBands.length === 0) return analysisIso;
+    let merged;
+    try {
+      merged = turfUnion(turfFeatureCollection([motherBand, ...childBands] as never));
+    } catch {
+      merged = null;
+    }
+    if (!merged) {
+      toast.error("No se pudo fusionar el área de las hijas (geometría inválida) — se analiza solo la madre.");
+      return analysisIso;
+    }
+    return {
+      ...analysisIso,
+      features: [{ ...merged, properties: motherBand.properties } as typeof motherBand],
+    };
+  }, [analysisIso, analysisIsoChildren]);
+
   /**
    * Proyección calculada sobre una isócrona que TODAVÍA no está guardada.
    *
@@ -1447,25 +1547,52 @@ const Index = () => {
   const handleSaveIsochronePayload = useCallback(
     async (payload: import("@/types/savedIsochrones").SaveIsochronePayload) => {
       try {
+        const workingId = saveIsoDialogId;
+        const workingIso = workingId ? isochrones.find((i) => i.id === workingId) : undefined;
         const inserted = await saveIsochrone(payload);
         // Si esta isócrona ya tenía una proyección calculada mientras era de
         // trabajo, se persiste ahora: es la cifra que el usuario vio y sobre la
         // que puede haber decidido algo.
-        const pendiente = saveIsoDialogId
-          ? pendingProjectionRef.current.get(saveIsoDialogId)
+        const pendiente = workingId
+          ? pendingProjectionRef.current.get(workingId)
           : undefined;
         if (inserted && pendiente) {
           await updateSavedIso(inserted.id, { projection_settings: pendiente });
-          if (saveIsoDialogId) pendingProjectionRef.current.delete(saveIsoDialogId);
-          toast.success("Isócrona y proyección guardadas");
-        } else {
-          toast.success("Isócrona guardada");
+          if (workingId) pendingProjectionRef.current.delete(workingId);
         }
+
+        if (inserted && workingId) {
+          // Fusión: si esta es una MADRE de trabajo, sus hijas de trabajo
+          // apuntaban a su id local (todavía no existía el real). Ahora que
+          // lo tiene, se reconcilian con el id nuevo y se persiste el vínculo
+          // en las hijas que ya estén guardadas.
+          const newMotherMapId = `saved:${inserted.id}`;
+          const localChildren = isochrones.filter((i) => i.parentId === workingId);
+          if (localChildren.length) {
+            setIsochrones((prev) =>
+              prev.map((i) => (i.parentId === workingId ? { ...i, parentId: newMotherMapId } : i)),
+            );
+            for (const child of localChildren) {
+              if (child.id.startsWith("saved:")) {
+                await updateSavedIso(child.id.slice("saved:".length), {
+                  parent_isochrone_id: inserted.id,
+                });
+              }
+            }
+          }
+          // Fusión: si esta es una HIJA de trabajo cuya madre todavía no
+          // estaba guardada, el vínculo no se pudo escribir en el insert.
+          if (workingIso?.parentId && !workingIso.parentId.startsWith("saved:")) {
+            toast.message("Guarda también la isócrona madre para conservar la fusión.");
+          }
+        }
+
+        toast.success(pendiente ? "Isócrona y proyección guardadas" : "Isócrona guardada");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Error al guardar");
       }
     },
-    [saveIsochrone, saveIsoDialogId, updateSavedIso],
+    [saveIsochrone, saveIsoDialogId, updateSavedIso, isochrones],
   );
 
   const handleMapClick = useCallback(
@@ -1795,6 +1922,7 @@ const Index = () => {
           onAnalyzeIsochrone={(id) => { setSelectedIsoId(id); userOpenPanel(); }}
           onSaveIsochrone={(id) => setSaveIsoDialogId(id)}
           onReportIsochrone={(id) => setReportIsoDialogId(id)}
+          onMergeIsochrone={handleMergeIsochrone}
           savedIsochrones={savedIsos}
           isoFolders={isoFolders}
           loadedSavedIsoIds={loadedSavedIsoIds}
@@ -2089,7 +2217,7 @@ const Index = () => {
           <AnalysisPanel
             open={panelOpen}
             onClose={userClosePanel}
-            isochrone={analysisIso}
+            isochrone={analysisIsoEffective}
             manzanas={manzanaData ?? densityData ?? null}
             width={panelWidth}
             onWidthChange={handlePanelWidthChange}

@@ -28,6 +28,7 @@ const rowToIso = (r: Row): SavedIsochrone => ({
   notes: (r.notes as string | null) ?? null,
   projection_settings:
     (r.projection_settings as SavedIsochrone["projection_settings"]) ?? null,
+  parent_isochrone_id: (r.parent_isochrone_id as string | null) ?? null,
   created_at: r.created_at as string,
   updated_at: r.updated_at as string,
   deleted_at: (r.deleted_at as string | null) ?? null,
@@ -100,6 +101,7 @@ export const useSavedIsochrones = () => {
           source_lat: payload.source_lat ?? null,
           source_lng: payload.source_lng ?? null,
           notes: payload.notes ?? null,
+          parent_isochrone_id: payload.parent_isochrone_id ?? null,
         })
         .select()
         .single();
@@ -123,7 +125,7 @@ export const useSavedIsochrones = () => {
     async (
       id: string,
       patch: Partial<
-        Pick<SavedIsochrone, "name" | "folder_id" | "color" | "notes" | "projection_settings">
+        Pick<SavedIsochrone, "name" | "folder_id" | "color" | "notes" | "projection_settings" | "parent_isochrone_id">
       >,
     ) => {
       const { error } = await supabase

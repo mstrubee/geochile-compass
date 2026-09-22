@@ -110,6 +110,12 @@ export const SaveIsochroneDialog = ({
         features: isochrone.features,
         source_lat: isochrone.center.lat,
         source_lng: isochrone.center.lng,
+        // Solo se puede persistir el vínculo si la madre YA tiene id real
+        // (está guardada). Si es una madre de trabajo, se reconcilia después
+        // del insert — ver handleSaveIsochronePayload en Index.tsx.
+        parent_isochrone_id: isochrone.parentId?.startsWith("saved:")
+          ? isochrone.parentId.slice("saved:".length)
+          : null,
       });
       onClose();
     } finally {

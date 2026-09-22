@@ -79,6 +79,13 @@ export interface SavedIsochrone {
   notes: string | null;
   /** Ajustes de la proyección de venta para esta ubicación. */
   projection_settings: ProjectionSettings | null;
+  /**
+   * Isócrona "madre" a la que esta se fusionó (null = independiente, o es
+   * ella misma una madre). El análisis, la proyección y los informes de la
+   * madre corren sobre la UNIÓN con todas sus hijas — ver `parentId` en
+   * `Isochrone` para el equivalente en el set de trabajo (sin guardar).
+   */
+  parent_isochrone_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -97,4 +104,5 @@ export interface SaveIsochronePayload {
   source_lat?: number | null;
   source_lng?: number | null;
   notes?: string | null;
+  parent_isochrone_id?: string | null;
 }

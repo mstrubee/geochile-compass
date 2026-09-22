@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText, Car, TrendingUp, Sheet, FileDown, Target } from "lucide-react";
+import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText, Car, TrendingUp, Sheet, FileDown, Target, GitMerge } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -112,6 +112,8 @@ interface SidebarProps {
   onAnalyzeIsochrone?: (id: string) => void;
   onSaveIsochrone?: (id: string) => void;
   onReportIsochrone?: (id: string) => void;
+  /** Fusiona `childId` como hija de `motherId`: su área se suma al análisis de la madre. */
+  onMergeIsochrone?: (childId: string, motherId: string) => void;
   // Saved isochrones
   savedIsochrones?: import("@/types/savedIsochrones").SavedIsochrone[];
   isoFolders?: import("@/types/savedIsochrones").IsochroneFolder[];
@@ -675,6 +677,7 @@ export const Sidebar = ({
   onAnalyzeIsochrone,
   onSaveIsochrone,
   onReportIsochrone,
+  onMergeIsochrone,
   savedIsochrones = [],
   isoFolders = [],
   loadedSavedIsoIds,
@@ -846,6 +849,29 @@ export const Sidebar = ({
     () => isochrones.filter((i) => !i.id.startsWith("saved:")),
     [isochrones],
   );
+  /**
+   * Fusión: madres en el nivel superior, hijas anidadas debajo — colapsadas
+   * por defecto, como pidió el análisis. Una hija cuya madre no está en ESTA
+   * lista (p.ej. la madre ya está guardada) se muestra suelta: es un caso
+   * mixto que no se resuelve acá todavía.
+   */
+  const workingMothers = useMemo(
+    () => workingIsochrones.filter((i) => !i.parentId || !workingIsochrones.some((m) => m.id === i.parentId)),
+    [workingIsochrones],
+  );
+  const workingChildrenOf = useCallback(
+    (motherId: string) => workingIsochrones.filter((i) => i.parentId === motherId),
+    [workingIsochrones],
+  );
+  const [expandedMothers, setExpandedMothers] = useState<Set<string>>(new Set());
+  const toggleExpandedMother = (id: string) =>
+    setExpandedMothers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  /** Id de la isócrona para la que está abierto el selector "Fusionar con…". */
+  const [mergePickerFor, setMergePickerFor] = useState<string | null>(null);
 
   // Indexación jerárquica
   const poiChildrenMap = useMemo(() => {
@@ -1621,77 +1647,141 @@ export const Sidebar = ({
           */}
           {workingIsochrones.length > 0 && (
             <div className="space-y-0.5">
-              {workingIsochrones.map((iso) => (
-                <div
-                  key={iso.id}
-                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2/60"
-                >
-                  <button
-                    onClick={() => onToggleIsochrone(iso.id)}
-                    className="flex flex-1 items-center gap-2 text-left"
-                    aria-pressed={iso.visible}
+              {workingMothers.map((iso) => {
+                const children = workingChildrenOf(iso.id);
+                const hasChildren = children.length > 0;
+                const expanded = expandedMothers.has(iso.id);
+                const mergeCandidates = workingMothers.filter((m) => m.id !== iso.id);
+                const renderRow = (row: typeof iso, isChild: boolean) => (
+                  <div
+                    key={row.id}
+                    className={[
+                      "flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2/60",
+                      isChild ? "ml-5 border-l border-border/40 pl-2" : "",
+                    ].join(" ")}
                   >
-                    <span
-                      className="h-2 w-2 flex-shrink-0 rounded-full"
-                      style={{ backgroundColor: iso.color }}
-                    />
-                    <span
-                      className={[
-                        "flex-1 truncate text-[12px]",
-                        iso.visible ? "text-foreground" : "text-muted-foreground",
-                      ].join(" ")}
-                      title={`${ISO_MODE_LABEL[iso.mode]} · ${iso.minutes.join("/")} min`}
-                    >
-                      {ISO_MODE_LABEL[iso.mode]} · {iso.minutes.join("/")}′
-                    </span>
-                    <IOSSwitch on={iso.visible} />
-                  </button>
-                  {onAnalyzeIsochrone && (
+                    {!isChild && (
+                      <button
+                        onClick={() => hasChildren && toggleExpandedMother(row.id)}
+                        className={[
+                          "flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-text-muted",
+                          hasChildren ? "hover:bg-surface-3 hover:text-foreground" : "invisible",
+                        ].join(" ")}
+                        aria-label={expanded ? "Colapsar hijas" : "Expandir hijas"}
+                      >
+                        {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                      </button>
+                    )}
                     <button
-                      onClick={() => onAnalyzeIsochrone(iso.id)}
+                      onClick={() => onToggleIsochrone(row.id)}
+                      className="flex flex-1 items-center gap-2 text-left"
+                      aria-pressed={row.visible}
+                    >
+                      <span
+                        className="h-2 w-2 flex-shrink-0 rounded-full"
+                        style={{ backgroundColor: row.color }}
+                      />
+                      <span
+                        className={[
+                          "flex-1 truncate text-[12px]",
+                          row.visible ? "text-foreground" : "text-muted-foreground",
+                        ].join(" ")}
+                        title={`${ISO_MODE_LABEL[row.mode]} · ${row.minutes.join("/")} min`}
+                      >
+                        {ISO_MODE_LABEL[row.mode]} · {row.minutes.join("/")}′
+                        {isChild && <span className="ml-1 text-[9px] text-brand-purple">hija</span>}
+                        {!isChild && hasChildren && (
+                          <span className="ml-1 text-[9px] text-brand-purple">
+                            +{children.length} {children.length === 1 ? "hija" : "hijas"}
+                          </span>
+                        )}
+                      </span>
+                      <IOSSwitch on={row.visible} />
+                    </button>
+                    {onMergeIsochrone && !isChild && mergeCandidates.length > 0 && (
+                      mergePickerFor === row.id ? (
+                        <select
+                          autoFocus
+                          defaultValue=""
+                          onChange={(e) => {
+                            const motherId = e.target.value;
+                            setMergePickerFor(null);
+                            if (motherId) onMergeIsochrone(row.id, motherId);
+                          }}
+                          onBlur={() => setMergePickerFor(null)}
+                          className="h-6 max-w-[92px] rounded-md border border-border/50 bg-surface-3 text-[10px]"
+                        >
+                          <option value="" disabled>Fusionar con…</option>
+                          {mergeCandidates.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {ISO_MODE_LABEL[m.mode]} · {m.minutes.join("/")}′
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <button
+                          onClick={() => setMergePickerFor(row.id)}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-brand-purple/15 hover:text-brand-purple"
+                          aria-label="Fusionar"
+                          title="Fusionar con otra isócrona (queda como hija)"
+                        >
+                          <GitMerge className="h-3.5 w-3.5" />
+                        </button>
+                      )
+                    )}
+                    {onAnalyzeIsochrone && (
+                      <button
+                        onClick={() => onAnalyzeIsochrone(row.id)}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-primary/15 hover:text-primary"
+                        aria-label="Análisis"
+                        title="Análisis de isócrona"
+                      >
+                        <BarChart3 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {onReportIsochrone && (
+                      <button
+                        onClick={() => onReportIsochrone(row.id)}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-primary/15 hover:text-primary"
+                        aria-label="Informe"
+                        title="Generar informe (Excel/PDF)"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {onSaveIsochrone && (
+                      <button
+                        onClick={() => onSaveIsochrone(row.id)}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-brand-green/15 hover:text-brand-green"
+                        aria-label="Guardar"
+                        title="Guardar isócrona"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => onFocusIsochrone(row.id)}
                       className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-primary/15 hover:text-primary"
-                      aria-label="Análisis"
-                      title="Análisis de isócrona"
+                      aria-label="Centrar"
                     >
-                      <BarChart3 className="h-3.5 w-3.5" />
+                      <Crosshair className="h-3.5 w-3.5" />
                     </button>
-                  )}
-                  {onReportIsochrone && (
                     <button
-                      onClick={() => onReportIsochrone(iso.id)}
-                      className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-primary/15 hover:text-primary"
-                      aria-label="Informe"
-                      title="Generar informe (Excel/PDF)"
+                      onClick={() => onRemoveIsochrone(row.id)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
+                      aria-label="Eliminar"
                     >
-                      <FileText className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
-                  )}
-                  {onSaveIsochrone && (
-                    <button
-                      onClick={() => onSaveIsochrone(iso.id)}
-                      className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-brand-green/15 hover:text-brand-green"
-                      aria-label="Guardar"
-                      title="Guardar isócrona"
-                    >
-                      <Save className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => onFocusIsochrone(iso.id)}
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-primary/15 hover:text-primary"
-                    aria-label="Centrar"
-                  >
-                    <Crosshair className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => onRemoveIsochrone(iso.id)}
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-destructive/15 hover:text-destructive"
-                    aria-label="Eliminar"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
+                  </div>
+                );
+                return (
+                  <div key={iso.id}>
+                    {renderRow(iso, false)}
+                    {hasChildren && expanded && children.map((c) => renderRow(c, true))}
+                  </div>
+                );
+              })}
               <button
                 onClick={onClearIsochrones}
                 className="mt-1 w-full rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"

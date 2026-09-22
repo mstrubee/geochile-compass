@@ -23,4 +23,12 @@ export interface Isochrone {
   visible: boolean;
   createdAt: number;
   features: Feature<Polygon | MultiPolygon, { value: number }>[];
+  /**
+   * Id (en el mismo espacio de ids del mapa, ej. `saved:<uuid>`) de la
+   * isócrona "madre" a la que esta se fusionó. Una isócrona con `parentId`
+   * es una "hija": su área se suma a la de la madre para el análisis, y no
+   * se analiza por separado. `visible=false` en una hija la excluye de esa
+   * suma sin necesidad de borrarla (equivale a "apagarla").
+   */
+  parentId?: string | null;
 }
