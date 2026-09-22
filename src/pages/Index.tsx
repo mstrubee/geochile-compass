@@ -1725,16 +1725,20 @@ const Index = () => {
         toast.error("Polígono inválido");
         return prev;
       }
-      addMicrozone("polygon", geom, `Polígono ${microzones.length + 1}`);
+      const mzId = addMicrozone("polygon", geom, `Polígono ${microzones.length + 1}`);
 
       // Además de quedar como microzona (vista rápida en la barra lateral,
       // con área/población al toque), se agrega como isócrona: mismo
       // tratamiento que cualquier otra —aparece en "Isócronas creadas" y se
       // puede analizar/guardar con el mismo pipeline (comunas, GSE,
       // proyección de venta, etc.), que la microzona no tiene.
+      //
+      // El id se deriva del de la microzona (mzoi-<mzId>) a propósito: así
+      // eliminar/apagar la microzona puede encontrar y quitar su isócrona
+      // "sombra" sin necesitar guardar un mapeo aparte.
       const centerLat = prev.reduce((s, v) => s + v.lat, 0) / prev.length;
       const centerLng = prev.reduce((s, v) => s + v.lng, 0) / prev.length;
-      const isoId = `mzoi-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const isoId = `mzoi-${mzId}`;
       const color = isoColorPalette[isochrones.length % isoColorPalette.length];
       const newIso: Isochrone = {
         id: isoId,
@@ -1813,18 +1817,27 @@ const Index = () => {
 
   const removeMicrozone = useCallback((id: string) => {
     setMicrozones((prev) => prev.filter((m) => m.id !== id));
+    // Se lleva puesta su isócrona "sombra" (ver handleMicroClosePolygon):
+    // si no, quedaba en el mapa y en "Isócronas creadas" aunque la
+    // microzona ya no existiera.
+    setIsochrones((prev) => prev.filter((i) => i.id !== `mzoi-${id}`));
   }, []);
 
   const toggleMicrozone = useCallback((id: string) => {
     setMicrozones((prev) =>
       prev.map((m) => (m.id === id ? { ...m, visible: !m.visible } : m)),
     );
+    setIsochrones((prev) =>
+      prev.map((i) => (i.id === `mzoi-${id}` ? { ...i, visible: !i.visible } : i)),
+    );
   }, []);
 
   const clearMicrozones = useCallback(() => {
+    const shadowIds = new Set(microzones.map((m) => `mzoi-${m.id}`));
+    setIsochrones((prev) => prev.filter((i) => !shadowIds.has(i.id)));
     setMicrozones([]);
     setMicroDraft([]);
-  }, []);
+  }, [microzones]);
 
   // Recalcular stats cuando cambia manzanaData
   useEffect(() => {
