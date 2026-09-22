@@ -1359,6 +1359,43 @@ const Index = () => {
   );
 
   /**
+   * Variantes de fusión para el árbol de isócronas GUARDADAS (ids reales de
+   * `saved_isochrones`, no ids de mapa). Persisten directo — ambas ya tienen
+   * id real — y de paso reflejan el cambio en el mapa si alguna está cargada,
+   * para no esperar un refetch.
+   */
+  const handleMergeSavedIsochrone = useCallback(
+    (childId: string, motherId: string) => {
+      if (childId === motherId) return;
+      const mother = savedIsos.find((s) => s.id === motherId);
+      if (mother?.parent_isochrone_id) {
+        toast.error("Esa isócrona ya es hija de otra — fusiónala con su madre en vez de con ella.");
+        return;
+      }
+      if (savedIsos.some((s) => s.parent_isochrone_id === childId)) {
+        toast.error("Esa isócrona ya tiene hijas propias: no puede fusionarse como hija de otra.");
+        return;
+      }
+      void updateSavedIso(childId, { parent_isochrone_id: motherId });
+      setIsochrones((prev) =>
+        prev.map((i) => (i.id === `saved:${childId}` ? { ...i, parentId: `saved:${motherId}` } : i)),
+      );
+      toast.success("Isócronas fusionadas: el análisis de la madre ahora suma esta área.");
+    },
+    [savedIsos, updateSavedIso],
+  );
+
+  const handleUnmergeSavedIsochrone = useCallback(
+    (childId: string) => {
+      void updateSavedIso(childId, { parent_isochrone_id: null });
+      setIsochrones((prev) =>
+        prev.map((i) => (i.id === `saved:${childId}` ? { ...i, parentId: null } : i)),
+      );
+    },
+    [updateSavedIso],
+  );
+
+  /**
    * Borra solo las isócronas de trabajo. Las guardadas se descargan desde su
    * propio árbol: barrerlas desde acá dejaría sus interruptores encendidos
    * apuntando a algo que ya no está en el mapa.
@@ -1980,6 +2017,8 @@ const Index = () => {
           onRenameSavedIsochrone={(id, name) => updateSavedIso(id, { name })}
           onMoveSavedIsochrone={(id, folder_id) => updateSavedIso(id, { folder_id })}
           onDeleteSavedIsochrone={removeSavedIso}
+          onMergeSavedIsochrone={handleMergeSavedIsochrone}
+          onUnmergeSavedIsochrone={handleUnmergeSavedIsochrone}
           onCreateIsoFolder={(name, parentId) => createIsoFolder(name, parentId)}
           onRenameIsoFolder={renameIsoFolder}
           onDeleteIsoFolder={deleteIsoFolder}

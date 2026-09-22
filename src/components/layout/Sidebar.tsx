@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { Search, Building2, Wifi, FolderOpen, Trash2, Loader2, Crosshair, BookmarkPlus, MapPin, Settings2, ChevronRight, ChevronDown, Folder, Scissors, ClipboardPaste, X, CheckSquare, Square, MinusSquare, CornerLeftUp, Upload, FolderPlus, Pencil, Copy, Download, Plus, BarChart3, Save, FileText, Car, TrendingUp, Sheet, FileDown, Target, GitMerge } from "lucide-react";
 import { toast } from "sonner";
@@ -126,6 +126,8 @@ interface SidebarProps {
   onRenameSavedIsochrone?: (id: string, name: string) => Promise<void> | void;
   onMoveSavedIsochrone?: (id: string, folderId: string | null) => Promise<void> | void;
   onDeleteSavedIsochrone?: (id: string) => Promise<void> | void;
+  onMergeSavedIsochrone?: (childId: string, motherId: string) => void;
+  onUnmergeSavedIsochrone?: (id: string) => void;
   onCreateIsoFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | null | void> | void;
   onRenameIsoFolder?: (id: string, name: string) => Promise<void> | void;
   onDeleteIsoFolder?: (id: string) => Promise<void> | void;
@@ -319,6 +321,10 @@ interface SavedIsoSubProps {
   onCreateFolder?: (name: string, parentId: string | null) => Promise<{ id: string } | null | void> | void;
   onRenameFolder?: (id: string, name: string) => Promise<void> | void;
   onDeleteFolder?: (id: string) => Promise<void> | void;
+  /** Fusiona `childId` como hija de `motherId`: su área se suma al análisis de la madre. */
+  onMerge?: (childId: string, motherId: string) => void;
+  /** Desfusiona: la isócrona vuelve a ser independiente. */
+  onUnmerge?: (childId: string) => void;
 }
 
 const SavedIsochronesSubsection = ({
@@ -336,6 +342,8 @@ const SavedIsochronesSubsection = ({
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
+  onMerge,
+  onUnmerge,
 }: SavedIsoSubProps) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [creatingRoot, setCreatingRoot] = useState(false);
@@ -401,13 +409,35 @@ const SavedIsochronesSubsection = ({
 
   const renderIso = (s: typeof savedIsos[number], depth: number) => {
     const visible = loadedIds?.has(s.id) ?? false;
+    const isChild = !!s.parent_isochrone_id;
+    const children = savedIsos.filter((c) => c.parent_isochrone_id === s.id);
+    const hasChildren = children.length > 0;
+    const expandKey = `iso:${s.id}`;
+    const isExpanded = expanded.has(expandKey);
+    // Candidatas a madre: cualquier otra guardada que no sea ya hija de otra
+    // ni sea descendiente de ESTA (solo 2 niveles, sin cadenas).
+    const mergeCandidates = savedIsos.filter(
+      (m) => m.id !== s.id && !m.parent_isochrone_id && m.parent_isochrone_id !== s.id,
+    );
     return (
-      <ContextMenu key={s.id}>
+      <Fragment key={s.id}>
+      <ContextMenu>
         <ContextMenuTrigger asChild>
           <div
             className="flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-surface-2/60"
             style={{ paddingLeft: `${8 + depth * 14}px` }}
           >
+            {hasChildren ? (
+              <button
+                onClick={() => toggleExpand(expandKey)}
+                className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-text-muted hover:bg-surface-3 hover:text-foreground"
+                aria-label={isExpanded ? "Colapsar hijas" : "Expandir hijas"}
+              >
+                {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              </button>
+            ) : (
+              !isChild && <span className="w-5 flex-shrink-0" />
+            )}
             <button
               onClick={() => onToggle?.(s.id)}
               className="flex flex-1 items-center gap-2 text-left"
@@ -421,6 +451,12 @@ const SavedIsochronesSubsection = ({
                 title={s.name}
               >
                 {s.name}
+                {isChild && <span className="ml-1 text-[9px] text-brand-purple">hija</span>}
+                {hasChildren && (
+                  <span className="ml-1 text-[9px] text-brand-purple">
+                    +{children.length} {children.length === 1 ? "hija" : "hijas"}
+                  </span>
+                )}
               </span>
               <span className="font-mono text-[10px] text-text-muted">
                 {s.minutes.join("/")}′
@@ -496,6 +532,27 @@ const SavedIsochronesSubsection = ({
               <FolderOpen className="mr-2 h-3.5 w-3.5" /> Mover a carpeta
             </ContextMenuItem>
           )}
+          {onMerge && !isChild && mergeCandidates.length > 0 && (
+            <ContextMenuItem
+              onClick={() => {
+                const choice = window.prompt(
+                  `Fusionar con (queda como hija, su área se suma). Escribe el número:\n${mergeCandidates.map((m, i) => `${i}: ${m.name}`).join("\n")}`,
+                  "0",
+                );
+                const idx = choice == null ? -1 : parseInt(choice, 10);
+                if (Number.isFinite(idx) && mergeCandidates[idx]) {
+                  onMerge(s.id, mergeCandidates[idx].id);
+                }
+              }}
+            >
+              <GitMerge className="mr-2 h-3.5 w-3.5" /> Fusionar con…
+            </ContextMenuItem>
+          )}
+          {onUnmerge && isChild && (
+            <ContextMenuItem onClick={() => onUnmerge(s.id)}>
+              <GitMerge className="mr-2 h-3.5 w-3.5" /> Desfusionar
+            </ContextMenuItem>
+          )}
           <ContextMenuSeparator />
           {onDelete && (
             <ContextMenuItem
@@ -509,6 +566,8 @@ const SavedIsochronesSubsection = ({
           )}
         </ContextMenuContent>
       </ContextMenu>
+      {hasChildren && isExpanded && children.map((c) => renderIso(c, depth + 1))}
+      </Fragment>
     );
   };
 
@@ -578,7 +637,8 @@ const SavedIsochronesSubsection = ({
         {isOpen && (
           <div>
             {childFolders.map((cf) => renderFolder(cf, depth + 1))}
-            {childIsos.map((s) => renderIso(s, depth + 1))}
+            {/* Las hijas fusionadas se renderizan anidadas bajo su madre, no acá. */}
+            {childIsos.filter((s) => !s.parent_isochrone_id).map((s) => renderIso(s, depth + 1))}
           </div>
         )}
       </div>
@@ -625,7 +685,7 @@ const SavedIsochronesSubsection = ({
       )}
       <div className="space-y-0.5">
         {rootFolders.map((f) => renderFolder(f, 0))}
-        {rootIsos.map((s) => renderIso(s, 0))}
+        {rootIsos.filter((s) => !s.parent_isochrone_id).map((s) => renderIso(s, 0))}
       </div>
     </div>
   );
@@ -689,6 +749,8 @@ export const Sidebar = ({
   onRenameSavedIsochrone,
   onMoveSavedIsochrone,
   onDeleteSavedIsochrone,
+  onMergeSavedIsochrone,
+  onUnmergeSavedIsochrone,
   onCreateIsoFolder,
   onRenameIsoFolder,
   onDeleteIsoFolder,
@@ -1804,6 +1866,8 @@ export const Sidebar = ({
               onRename={onRenameSavedIsochrone}
               onMove={onMoveSavedIsochrone}
               onDelete={onDeleteSavedIsochrone}
+              onMerge={onMergeSavedIsochrone}
+              onUnmerge={onUnmergeSavedIsochrone}
               onCreateFolder={onCreateIsoFolder}
               onRenameFolder={onRenameIsoFolder}
               onDeleteFolder={onDeleteIsoFolder}
