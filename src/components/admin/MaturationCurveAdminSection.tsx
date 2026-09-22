@@ -79,6 +79,20 @@ export const MaturationCurveAdminSection = () => {
     // deja de ser "fracción del régimen" y los números pierden sentido.
     const ramp = draft.map((p) => p / 100);
     ramp[ramp.length - 1] = 1;
+    // La curva tiene que ser CRECIENTE: cada año acumula más régimen que el
+    // anterior. Sin esto, un valor fuera de orden (p.ej. escribir "cuánto le
+    // falta" en vez de "cuánto alcanza") se guardaba tal cual y el año a año
+    // de la proyección salía con tasas sin sentido (-50%, +700%…) — no porque
+    // la curva se ignorara, sino porque se aplicaba literal.
+    for (let i = 1; i < ramp.length; i++) {
+      if (ramp[i] < ramp[i - 1]) {
+        toast.error(
+          `El año ${i + 1} (${draft[i]}%) es menor que el anterior (${draft[i - 1]}%). ` +
+          "La curva debe ser creciente: cada año alcanza más régimen que el anterior, hasta el 100% final.",
+        );
+        return;
+      }
+    }
     setSaving(true);
     try {
       await saveCustomRamp(folderId, ramp);
