@@ -1293,9 +1293,22 @@ const Index = () => {
     [mapViewport, userLayers.length, addUserLayer],
   );
 
-  const toggleIsochrone = useCallback((id: string) => {
-    setIsochrones((prev) => prev.map((i) => (i.id === id ? { ...i, visible: !i.visible } : i)));
-  }, []);
+  const toggleIsochrone = useCallback(
+    (id: string) => {
+      const current = isochrones.find((i) => i.id === id);
+      const turningOn = !!current && !current.visible;
+      setIsochrones((prev) => prev.map((i) => (i.id === id ? { ...i, visible: !i.visible } : i)));
+      // Prender una madre prende también sus hijas fusionadas — si no, el
+      // análisis vuelve a mostrarse "encendido" pero sin el área que se
+      // había sumado, porque una hija apagada queda fuera de la unión.
+      if (turningOn) {
+        setIsochrones((prev) =>
+          prev.map((i) => (i.parentId === id ? { ...i, visible: true } : i)),
+        );
+      }
+    },
+    [isochrones],
+  );
   const removeIsochrone = useCallback((id: string) => {
     setIsochrones((prev) => prev.filter((i) => i.id !== id));
     // Si era una guardada cargada al mapa, su interruptor en el árbol debe
@@ -1458,6 +1471,12 @@ const Index = () => {
         });
       } else {
         loadSavedIsoToMap(id);
+        // `loadSavedIsoToMap` ya carga (visible=true) a las hijas que
+        // todavía no estaban en el mapa. Esto cubre el caso que se le escapa:
+        // una hija que ya estaba cargada pero se había apagado a mano.
+        setIsochrones((prev) =>
+          prev.map((i) => (i.parentId === mapId ? { ...i, visible: true } : i)),
+        );
       }
     },
     [loadedSavedIsoIds, loadSavedIsoToMap],
@@ -1616,21 +1635,77 @@ const Index = () => {
         }
 
         if (inserted && workingId) {
-          // Fusión: si esta es una MADRE de trabajo, sus hijas de trabajo
-          // apuntaban a su id local (todavía no existía el real). Ahora que
-          // lo tiene, se reconcilian con el id nuevo y se persiste el vínculo
-          // en las hijas que ya estén guardadas.
+          // Fusión: esta isócrona pasa a tener id real. Se "promueve" en el
+          // propio array de trabajo (mismo objeto, id nuevo) en vez de dejar
+          // un duplicado — así lo que se está viendo en pantalla (análisis
+          // seleccionado, hijas fusionadas) sigue apuntando a algo que existe,
+          // sin esperar a recargar desde el árbol de guardadas.
           const newMotherMapId = `saved:${inserted.id}`;
           const localChildren = isochrones.filter((i) => i.parentId === workingId);
+
+          setIsochrones((prev) =>
+            prev.map((i) => (i.id === workingId ? { ...i, id: newMotherMapId } : i)),
+          );
+          setLoadedSavedIsoIds((prev) => {
+            const next = new Set(prev);
+            next.add(inserted.id);
+            return next;
+          });
+          if (selectedIsoId === workingId) setSelectedIsoId(newMotherMapId);
+
           if (localChildren.length) {
-            setIsochrones((prev) =>
-              prev.map((i) => (i.parentId === workingId ? { ...i, parentId: newMotherMapId } : i)),
-            );
+            let n = 0;
             for (const child of localChildren) {
+              n += 1;
               if (child.id.startsWith("saved:")) {
+                // Ya guardada de antes: solo falta escribir el vínculo.
                 await updateSavedIso(child.id.slice("saved:".length), {
                   parent_isochrone_id: inserted.id,
                 });
+                setIsochrones((prev) =>
+                  prev.map((i) => (i.id === child.id ? { ...i, parentId: newMotherMapId } : i)),
+                );
+                continue;
+              }
+              // Hija de trabajo, todavía sin guardar: se guarda AHORA junto
+              // con la madre — antes se perdía apenas se cerraba la sesión,
+              // porque solo se vinculaban hijas que ya existían en la base.
+              const suggestedName = window.prompt(
+                `Nombre de la zona aledaña ${n} (fusionada con "${payload.name}"):`,
+                `Zona aledaña ${n}`,
+              );
+              const childName = suggestedName?.trim() || `Zona aledaña ${n}`;
+              try {
+                const childInserted = await saveIsochrone({
+                  name: childName,
+                  folder_id: payload.folder_id,
+                  mode: child.mode,
+                  minutes: child.minutes,
+                  center_lat: child.center.lat,
+                  center_lng: child.center.lng,
+                  color: child.color,
+                  features: child.features,
+                  source_lat: child.center.lat,
+                  source_lng: child.center.lng,
+                  parent_isochrone_id: inserted.id,
+                });
+                if (childInserted) {
+                  const newChildMapId = `saved:${childInserted.id}`;
+                  setIsochrones((prev) =>
+                    prev.map((i) =>
+                      i.id === child.id ? { ...i, id: newChildMapId, parentId: newMotherMapId } : i,
+                    ),
+                  );
+                  setLoadedSavedIsoIds((prev) => {
+                    const next = new Set(prev);
+                    next.add(childInserted.id);
+                    return next;
+                  });
+                }
+              } catch (childErr) {
+                toast.error(
+                  `No se pudo guardar "${childName}": ${childErr instanceof Error ? childErr.message : String(childErr)}`,
+                );
               }
             }
           }
@@ -1646,7 +1721,7 @@ const Index = () => {
         toast.error(err instanceof Error ? err.message : "Error al guardar");
       }
     },
-    [saveIsochrone, saveIsoDialogId, updateSavedIso, isochrones],
+    [saveIsochrone, saveIsoDialogId, updateSavedIso, isochrones, selectedIsoId],
   );
 
   const handleMapClick = useCallback(
