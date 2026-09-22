@@ -594,6 +594,9 @@ const Index = () => {
     "foot-walking": "walking",
     "driving-car": "vehicle",
     "cycling-regular": "bike",
+    // Nunca se crea desde el selector de modo (no tiene minutos que
+    // recordar), pero el Record necesita cubrir todas las claves de IsoMode.
+    "custom-zone": "vehicle",
   };
   const FALLBACK_MINUTES: [number, number, number] = [5, 7, 10];
 
@@ -1596,9 +1599,35 @@ const Index = () => {
         return prev;
       }
       addMicrozone("polygon", geom, `Polígono ${microzones.length + 1}`);
+
+      // Además de quedar como microzona (vista rápida en la barra lateral,
+      // con área/población al toque), se agrega como isócrona: mismo
+      // tratamiento que cualquier otra —aparece en "Isócronas creadas" y se
+      // puede analizar/guardar con el mismo pipeline (comunas, GSE,
+      // proyección de venta, etc.), que la microzona no tiene.
+      const centerLat = prev.reduce((s, v) => s + v.lat, 0) / prev.length;
+      const centerLng = prev.reduce((s, v) => s + v.lng, 0) / prev.length;
+      const isoId = `mzoi-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const color = isoColorPalette[isochrones.length % isoColorPalette.length];
+      const newIso: Isochrone = {
+        id: isoId,
+        mode: "custom-zone",
+        minutes: [0],
+        center: { lat: centerLat, lng: centerLng },
+        color,
+        visible: true,
+        createdAt: Date.now(),
+        features: [{ ...geom, properties: { value: 0 } }],
+      };
+      setIsochrones((iprev) => [...iprev, newIso]);
+      setFitIsoId(isoId);
+      setSelectedIsoId(isoId);
+      userOpenPanel();
+
       return [];
     });
-  }, [addMicrozone, microzones.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addMicrozone, microzones.length, isochrones.length, userOpenPanel]);
 
   /** Clic derecho: deshace el último vértice sin cancelar todo el borrador. */
   const handleMicroUndoVertex = useCallback(() => {
