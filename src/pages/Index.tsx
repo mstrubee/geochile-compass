@@ -1600,6 +1600,11 @@ const Index = () => {
     });
   }, [addMicrozone, microzones.length]);
 
+  /** Clic derecho: deshace el último vértice sin cancelar todo el borrador. */
+  const handleMicroUndoVertex = useCallback(() => {
+    setMicroDraft((prev) => prev.slice(0, -1));
+  }, []);
+
   const handleMicroBufferClick = useCallback(
     (c: { lat: number; lng: number }) => {
       const geom = bufferAroundPoint(c, microBufferRadius);
@@ -1679,15 +1684,21 @@ const Index = () => {
     if (mode !== "microzone") setMicroDraft([]);
   }, [mode]);
 
-  // ESC para cancelar borrador en modo polígono
+  // ESC cancela el borrador; Enter cierra el polígono (antes solo se podía
+  // con doble clic, que en zonas angostas quedaba difícil de acertar sin
+  // agregar un vértice de más por error).
   useEffect(() => {
     if (mode !== "microzone") return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMicroDraft([]);
+      else if (e.key === "Enter" && microSubmode === "polygon") {
+        e.preventDefault();
+        handleMicroClosePolygon();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode]);
+  }, [mode, microSubmode, handleMicroClosePolygon]);
 
   const toggleLayer = (key: keyof LayerState) => {
     setLayers((l) => ({ ...l, [key]: !l[key] }));
@@ -1929,6 +1940,7 @@ const Index = () => {
             microDraftVertices={microDraft}
             onMicroAddVertex={handleMicroAddVertex}
             onMicroClosePolygon={handleMicroClosePolygon}
+            onMicroUndoVertex={handleMicroUndoVertex}
             onMicroBufferClick={handleMicroBufferClick}
             fitMicrozoneId={fitMicrozoneId}
             onFitMicrozoneDone={() => setFitMicrozoneId(null)}

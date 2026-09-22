@@ -13,6 +13,8 @@ interface Props {
   draftVertices: Array<{ lat: number; lng: number }>;
   onAddVertex: (c: { lat: number; lng: number }) => void;
   onClosePolygon: () => void;
+  /** Clic derecho: deshace el último vértice del borrador. */
+  onUndoVertex: () => void;
   onBufferClick: (c: { lat: number; lng: number }) => void;
   fitId: string | null;
   onFitDone: () => void;
@@ -33,6 +35,7 @@ export const MicrozoneLayer = ({
   draftVertices,
   onAddVertex,
   onClosePolygon,
+  onUndoVertex,
   onBufferClick,
   fitId,
   onFitDone,
@@ -130,6 +133,13 @@ export const MicrozoneLayer = ({
       if (!active || submode !== "polygon") return;
       L.DomEvent.preventDefault(e.originalEvent);
       onClosePolygon();
+    },
+    contextmenu: (e) => {
+      if (!active || submode !== "polygon") return;
+      // Evita el menú contextual del navegador: acá el clic derecho es
+      // "deshacer último vértice", no un menú.
+      L.DomEvent.preventDefault(e.originalEvent);
+      onUndoVertex();
     },
   });
 

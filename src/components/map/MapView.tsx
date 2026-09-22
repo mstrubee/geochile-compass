@@ -228,6 +228,7 @@ interface MapViewProps {
   microDraftVertices: Array<{ lat: number; lng: number }>;
   onMicroAddVertex: (c: { lat: number; lng: number }) => void;
   onMicroClosePolygon: () => void;
+  onMicroUndoVertex: () => void;
   onMicroBufferClick: (c: { lat: number; lng: number }) => void;
   fitMicrozoneId: string | null;
   onFitMicrozoneDone: () => void;
@@ -312,6 +313,7 @@ export const MapView = ({
   microDraftVertices,
   onMicroAddVertex,
   onMicroClosePolygon,
+  onMicroUndoVertex,
   onMicroBufferClick,
   fitMicrozoneId,
   onFitMicrozoneDone,
@@ -489,6 +491,7 @@ export const MapView = ({
         draftVertices={microDraftVertices}
         onAddVertex={onMicroAddVertex}
         onClosePolygon={onMicroClosePolygon}
+        onUndoVertex={onMicroUndoVertex}
         onBufferClick={onMicroBufferClick}
         fitId={fitMicrozoneId}
         onFitDone={onFitMicrozoneDone}
