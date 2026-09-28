@@ -184,7 +184,7 @@ export const MapCapturePreviewDialog = ({
               return (
                 <div key={key}>
                   <div className="mb-1 text-[11px] font-medium text-brand-red">{titulo}</div>
-                  <div className="relative aspect-[4/3] overflow-hidden rounded-md border border-border/40 bg-surface-2/50">
+                  <div className="relative aspect-square overflow-hidden rounded-md border border-border/40 bg-surface-2/50">
                     {capturing || (heatBusy && key === "atractores") ? (
                       <div className="flex h-full items-center justify-center">
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />

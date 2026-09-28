@@ -142,8 +142,10 @@ export const drawTerritorySlide = (
       (zonas.length > 0 ? ` + ${zonas.length} zona${zonas.length === 1 ? "" : "s"} aledaña${zonas.length === 1 ? "" : "s"}` : ""),
   );
 
-  // Columna izquierda angosta para los datos; el resto, la grilla de mapas.
-  const DATA_W = 3.1;
+  // Columna izquierda para los datos; el resto, la grilla de mapas. Con fotos
+  // cuadradas la grilla ocupa menos ancho que cuando eran apaisadas, así que
+  // ese ancho se le da a las tablas en vez de dejarlo en blanco.
+  const DATA_W = 4.2;
   /** Aire entre tablas de la columna de datos. */
   const GAP_TABLA = 0.14;
   const GRID_X = ML + DATA_W + 0.26;

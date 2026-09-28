@@ -104,7 +104,18 @@ export const fitMapToBounds = (
     [bounds.south, bounds.west],
     [bounds.north, bounds.east],
   ];
-  map.fitBounds(latLng, { animate: false, padding: [24, 24] });
+  // La foto se recorta al cuadrado central (ver composeMapSnapshot), así que
+  // el encuadre tiene que caber en ESE cuadrado y no en el contenedor entero:
+  // si no, la isócrona se sale por los lados justo en el recorte.
+  const tam = map.getSize();
+  const lado = Math.min(tam.x, tam.y);
+  map.fitBounds(latLng, {
+    animate: false,
+    padding: [
+      24 + Math.max(0, (tam.x - lado) / 2),
+      24 + Math.max(0, (tam.y - lado) / 2),
+    ],
+  });
   if (zoomOffset !== 0) {
     map.setZoom(map.getZoom() + zoomOffset, { animate: false });
   }
@@ -202,12 +213,22 @@ const composeMapSnapshot = (map: L.Map): string | null => {
   const cRect = container.getBoundingClientRect();
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
+  // Foto cuadrada: el contenedor del mapa es apaisado y su proporción cambia
+  // con el ancho del panel, así que la lámina recibía rectángulos distintos
+  // según la pantalla. Se recorta el cuadrado central —el encuadre ya dejó la
+  // isócrona dentro de él— en vez de deformar.
+  const lado = Math.min(cRect.width, cRect.height);
+  const offX = (cRect.width - lado) / 2;
+  const offY = (cRect.height - lado) / 2;
+
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(cRect.width * dpr);
-  canvas.height = Math.round(cRect.height * dpr);
+  canvas.width = Math.round(lado * dpr);
+  canvas.height = Math.round(lado * dpr);
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   ctx.scale(dpr, dpr);
+  // Todo se dibuja en coordenadas del contenedor; el traslado hace el recorte.
+  ctx.translate(-offX, -offY);
 
   const bg = getComputedStyle(container).backgroundColor;
   ctx.fillStyle = bg && bg !== "rgba(0, 0, 0, 0)" ? bg : "#0b1120";

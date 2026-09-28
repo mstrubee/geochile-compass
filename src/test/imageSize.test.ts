@@ -72,6 +72,7 @@ describe("lámina 1 · fotos", () => {
     [2102, 1488], // panel abierto
     [1600, 1400], // panel angosto: contenedor casi cuadrado
     [2400, 1000], // ventana ancha y baja
+    [1488, 1488], // foto cuadrada, que es como salen desde el recorte
   ])("dibuja la foto de %ix%i con su propia proporción", (w, h) => {
     const r = new Regla();
     const foto = pngDe(w, h);
@@ -89,9 +90,10 @@ describe("lámina 1 · fotos", () => {
       expect(img.y + img.h).toBeLessThanOrEqual(5.625 - 0.32 + 1e-9);
       expect(img.x + img.w).toBeLessThanOrEqual(10 - 0.5 + 1e-9);
     }
-    // La grilla queda centrada en el espacio disponible.
-    const izq = Math.min(...r.imagenes.map((i) => i.x));
-    const der = Math.max(...r.imagenes.map((i) => i.x + i.w));
-    expect(izq - 3.86).toBeCloseTo(9.5 - der, 6);
+    // La grilla queda centrada verticalmente en el cuerpo de la lámina.
+    const arriba = Math.min(...r.imagenes.map((i) => i.y));
+    const abajo = Math.max(...r.imagenes.map((i) => i.y + i.h));
+    // El título de cada foto ocupa 0,17" sobre ella, también dentro del cuerpo.
+    expect(arriba - 0.17 - 1.12).toBeCloseTo(5.625 - 0.32 - abajo, 6);
   });
 });
