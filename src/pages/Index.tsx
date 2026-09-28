@@ -305,6 +305,20 @@ const Index = () => {
   const [heatOverride, setHeatOverride] =
     useState<Partial<import("@/hooks/useHeatmapSettings").HeatmapSettings> | null>(null);
   /**
+   * Isócronas que deben verse en las fotos del informe: la analizada y sus
+   * zonas aledañas encendidas. El análisis se corre sobre la UNIÓN de todas
+   * ellas, así que dibujar solo la madre mostraba un área menor que la que
+   * describen los números de la lámina.
+   */
+  const isoIdsParaCaptura = useCallback((isoId: string): Set<string> => {
+    const ids = new Set<string>([isoId]);
+    for (const i of isochronesRef.current) {
+      if (i.parentId === isoId && i.visible) ids.add(i.id);
+    }
+    return ids;
+  }, []);
+
+  /**
    * Solo la foto de atractores, para afinar el heatmap sin rehacer las otras
    * tres: son idénticas entre intentos y cada tanda completa toma varios
    * segundos.
@@ -336,12 +350,15 @@ const Index = () => {
       const prevComercial = comercialLayers;
       const prevCenter = map.getCenter();
       const prevZoom = map.getZoom();
+      const prevVisibility = new Map(isochronesRef.current.map((i) => [i.id, i.visible]));
+      const visibles = isoIdsParaCaptura(iso.id);
       try {
         flushSync(() => {
           setLayers({ ...ALL_LAYERS_OFF, commercial: true });
           setComercialLayers(ALL_COMERCIAL_OFF);
           setIsoOutlineCapture(true);
           setHeatOverride(heat ?? null);
+          setIsochrones((prev) => prev.map((i) => ({ ...i, visible: visibles.has(i.id) })));
         });
         await fitMapToBounds(map, boundsBox, zoomOffset, panOffset);
         return await captureAfterSettle(map);
@@ -351,11 +368,18 @@ const Index = () => {
           setComercialLayers(prevComercial);
           setIsoOutlineCapture(false);
           setHeatOverride(null);
+          setIsochrones((prev) =>
+            prev.map((i) => {
+              const orig = prevVisibility.get(i.id);
+              return orig === undefined || orig === i.visible ? i : { ...i, visible: orig };
+            }),
+          );
         });
         map.setView(prevCenter, prevZoom, { animate: false });
       }
     },
-    [layers, comercialLayers],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `isochronesRef`/`setIsochrones` se leen vía ref/setState estable
+    [layers, comercialLayers, isoIdsParaCaptura],
   );
 
   const captureIsochroneMapImages = useCallback(
@@ -390,13 +414,14 @@ const Index = () => {
       // global (p.ej. si el usuario la ocultó antes) — guardamos el estado
       // real para restaurarlo, y forzamos que SOLO ella se vea durante la captura.
       const prevVisibility = new Map(isochronesRef.current.map((i) => [i.id, i.visible]));
+      const visibles = isoIdsParaCaptura(iso.id);
 
       try {
         flushSync(() => {
           setLayers(ALL_LAYERS_OFF);
           setComercialLayers(ALL_COMERCIAL_OFF);
           setIsoOutlineCapture(true);
-          setIsochrones((prev) => prev.map((i) => ({ ...i, visible: i.id === iso.id })));
+          setIsochrones((prev) => prev.map((i) => ({ ...i, visible: visibles.has(i.id) })));
         });
         await fitMapToBounds(map, boundsBox, zoomOffset, panOffset);
         const isoOnly = await captureAfterSettle(map);
@@ -444,7 +469,7 @@ const Index = () => {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `isochronesRef`/`setIsochrones` se leen vía ref/setState estable, no necesitan estar en deps
-    [layers, comercialLayers, gastoView],
+    [layers, comercialLayers, gastoView, isoIdsParaCaptura],
   );
 
   // Isócronas
