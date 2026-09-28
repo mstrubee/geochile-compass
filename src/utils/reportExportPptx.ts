@@ -1,6 +1,7 @@
 import { formatAdjustmentLabel, type IsochroneReport, type ReportProjection } from "./reportData";
 import type { MapCaptureImages } from "./mapCapture";
 import { fitContain, pngSize } from "./imageSize";
+import { ventaMM, VENTA_MM_LABEL } from "./formatVenta";
 import type { Cell, SlideSurface } from "./slideSurface";
 import { PptxSlideSurface } from "./slideSurfacePptx";
 
@@ -287,19 +288,16 @@ export const drawTerritorySlide = (
     if (caben > 0) {
       addTableBand(slide, "LOCALES DE LA RED EN EL ENTORNO", ML, y, DATA_W);
       y += 0.2;
-      // La venta va en UF y no en pesos: es la unidad con la que el resto del
-      // informe habla de venta, y promediar doce meses en pesos mezcla
-      // inflación con desempeño.
       slide.table(
         [
-          headerRow(["Local", "Dist.", "Tiempo", "UF/mes"]),
+          headerRow(["Local", "Dist.", "Tiempo", VENTA_MM_LABEL]),
           ...cercanos.slice(0, caben).map((s, i) =>
             row(
               [
                 s.name,
                 `${s.km.toFixed(1)} km`,
                 `${s.minutes} min`,
-                s.sales?.avgUf ? fmt(s.sales.avgUf) : "—",
+                ventaMM(s.sales?.avgClp),
               ],
               { fill: i % 2 ? C.rowAlt : undefined },
             ),
@@ -310,7 +308,7 @@ export const drawTerritorySlide = (
           border: { color: C.grid, pt: 0.5 } },
       );
       y += (caben + 1) * ROW_H;
-      const conVenta = cercanos.slice(0, caben).filter((s) => s.sales?.avgUf);
+      const conVenta = cercanos.slice(0, caben).filter((s) => s.sales?.avgClp);
       const notas: string[] = [];
       if (conVenta.length > 0) {
         const meses = Math.max(...conVenta.map((s) => s.sales!.months));
@@ -318,7 +316,9 @@ export const drawTerritorySlide = (
           .map((s) => s.sales!.lastPeriod)
           .sort()
           .at(-1);
-        notas.push(`UF/mes: promedio de los últimos ${meses} meses con venta (hasta ${hasta})`);
+        notas.push(
+          `${VENTA_MM_LABEL}: millones de pesos, promedio de los últimos ${meses} meses con venta (hasta ${hasta})`,
+        );
       }
       if (caben < cercanos.length) {
         notas.push(`+${cercanos.length - caben} local(es) no listado(s) por espacio`);

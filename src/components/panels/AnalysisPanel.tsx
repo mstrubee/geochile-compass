@@ -21,6 +21,7 @@ import {
   type NearbyStore,
 } from "@/services/nearbyStoresService";
 import { NearbyStoresDialog } from "./NearbyStoresDialog";
+import { ventaMM, VENTA_MM_LABEL } from "@/utils/formatVenta";
 import { useComunasGeoIndex } from "@/hooks/useComunasGeoIndex";
 import { formatAdjustmentLabel, type ReportProjection } from "@/utils/reportData";
 import type { ProjectionSettings } from "@/types/savedIsochrones";
@@ -1097,8 +1098,8 @@ export const AnalysisPanel = ({
               <p className="mb-2 text-[10px] leading-relaxed text-muted-foreground">
                 Distancia y tiempo en auto desde la isócrona hasta los locales
                 a {MAX_MINUTOS_ISO} minutos o menos, o en sus mismas comunas.
-                La venta es el promedio de sus últimos {MESES_VENTA} meses con
-                venta registrada.
+                La venta va en millones de pesos: promedio de sus últimos
+                {" "}{MESES_VENTA} meses con venta registrada.
                 {zonasAledanas.length > 0 && (
                   <> Desde cada zona aledaña se buscan además los que estén en {RADIO_ALEDANA_KM} km a la redonda.</>
                 )}
@@ -1116,7 +1117,7 @@ export const AnalysisPanel = ({
                     <div className="px-2 py-1.5">Local</div>
                     <div className="px-2 py-1.5 text-right">Distancia</div>
                     <div className="px-2 py-1.5 text-right">Tiempo</div>
-                    <div className="px-2 py-1.5 text-right">UF/mes</div>
+                    <div className="px-2 py-1.5 text-right">{VENTA_MM_LABEL}</div>
                   </div>
                   {nearby.map((s) => (
                     <div
@@ -1142,9 +1143,9 @@ export const AnalysisPanel = ({
                       </div>
                       <div
                         className="px-2 py-1.5 text-right font-mono text-foreground"
-                        title={s.sales ? `${fmtCLP(s.sales.avgClp)}/mes · ${s.sales.months} meses con venta hasta ${s.sales.lastPeriod}` : "Sin ventas registradas"}
+                        title={s.sales ? `${fmtCLP(s.sales.avgClp)}/mes · ${fmt(s.sales.avgUf)} UF/mes · ${s.sales.months} meses con venta hasta ${s.sales.lastPeriod}` : "Sin ventas registradas"}
                       >
-                        {s.sales?.avgUf ? fmt(s.sales.avgUf) : "—"}
+                        {ventaMM(s.sales?.avgClp)}
                       </div>
                     </div>
                   ))}

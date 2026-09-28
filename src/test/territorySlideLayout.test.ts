@@ -63,6 +63,7 @@ const informe = (opts: {
     name: `AP00${i + 10}-Local con nombre largo`,
     from: i === 0 ? "iso" : "aledana", fromName: i === 0 ? null : "Machali",
     km: 3.4 + i, minutes: 9 + i,
+    sales: { avgClp: 94_045_442, avgUf: 2360, months: 12, lastPeriod: "2026-07" },
   })),
 } as unknown as IsochroneReport);
 
@@ -78,7 +79,9 @@ describe("lámina 1 · reparto de alto", () => {
     expect(r.contiene("no listada(s) por espacio")).toBe(false);
 
     // encabezado + 3 locales.
-    expect(r.filas("Local/Dist./Tiempo")).toHaveLength(4);
+    expect(r.filas("Local/Dist./Tiempo/mm$/mes")).toHaveLength(4);
+    // La venta sale en millones de pesos, sin decimales.
+    expect(r.contiene("/94")).toBe(true);
     expect(r.contiene("no listado(s) por espacio")).toBe(false);
 
     // Las seis clases GSE siguen estando, ahora de a dos por fila.
