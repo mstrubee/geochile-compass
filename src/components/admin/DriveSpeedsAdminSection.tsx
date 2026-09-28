@@ -3,7 +3,7 @@ import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { NumberField } from "./NumberField";
 import {
   DEFAULT_DRIVE_SPEEDS,
   defaultCommercialFolder,
@@ -57,7 +57,13 @@ export const DriveSpeedsAdminSection = () => {
     if (!folderId) return;
     setSaving(true);
     try {
-      await saveDriveSpeeds(folderId, draft);
+      // Red de seguridad: el rango se aplica al salir del campo, y guardar
+      // sin pasar por ahí no debe escribir un valor fuera de rango.
+      const acotar = (n: number) => Math.max(5, Math.min(140, n));
+      await saveDriveSpeeds(folderId, {
+        urbanKmh: acotar(draft.urbanKmh),
+        highwayKmh: acotar(draft.highwayKmh),
+      });
       toast.success("Velocidades guardadas");
       await load();
     } catch (e) {
@@ -67,30 +73,16 @@ export const DriveSpeedsAdminSection = () => {
     }
   };
 
-  const campo = (
-    key: keyof DriveSpeeds,
-    label: string,
-  ) => (
-    <div className="w-32">
-      <div className="mb-1 text-[10px] text-muted-foreground">{label}</div>
-      <div className="flex items-center gap-1">
-        <Input
-          type="number"
-          min={5}
-          max={140}
-          step={1}
-          value={draft[key]}
-          onChange={(e) =>
-            setDraft((d) => ({
-              ...d,
-              [key]: Math.max(5, Math.min(140, parseFloat(e.target.value) || 0)),
-            }))
-          }
-          className="h-8 text-right text-xs font-mono"
-        />
-        <span className="text-[11px] text-muted-foreground">km/h</span>
-      </div>
-    </div>
+  const campo = (key: keyof DriveSpeeds, label: string) => (
+    <NumberField
+      className="w-32"
+      label={label}
+      suffix="km/h"
+      min={5}
+      max={140}
+      value={draft[key]}
+      onChange={(n) => setDraft((d) => ({ ...d, [key]: n }))}
+    />
   );
 
   return (

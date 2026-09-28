@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { defaultCommercialFolder } from "@/services/commercialSettingsService";
-import { Input } from "@/components/ui/input";
+import { NumberField } from "./NumberField";
 import {
   fetchMaturationCurve,
   saveCustomRamp,
@@ -151,25 +151,17 @@ export const MaturationCurveAdminSection = () => {
 
       <div className="flex flex-wrap items-end gap-2">
         {draft.map((pct, i) => (
-          <div key={i} className="w-24">
-            <div className="mb-1 text-[10px] text-muted-foreground">
-              {i === 0 ? "Apertura" : `Año ${i + 1}`}
-              {i === draft.length - 1 ? " · régimen" : ""}
-            </div>
-            <div className="flex items-center gap-1">
-              <Input
-                type="number"
-                min={1}
-                max={200}
-                step={1}
-                value={pct}
-                disabled={i === draft.length - 1}
-                onChange={(e) => setYear(i, Math.max(1, Math.min(200, parseFloat(e.target.value) || 1)))}
-                className="h-8 text-right text-xs font-mono"
-              />
-              <span className="text-[11px] text-muted-foreground">%</span>
-            </div>
-          </div>
+          <NumberField
+            key={i}
+            className="w-24"
+            label={`${i === 0 ? "Apertura" : `Año ${i + 1}`}${i === draft.length - 1 ? " · régimen" : ""}`}
+            suffix="%"
+            min={1}
+            max={200}
+            value={pct}
+            disabled={i === draft.length - 1}
+            onChange={(n) => setYear(i, n)}
+          />
         ))}
 
         <div className="flex gap-1">

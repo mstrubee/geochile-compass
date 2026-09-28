@@ -3,7 +3,7 @@ import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { NumberField } from "./NumberField";
 import {
   DEFAULT_EXPRESS_ADJUST_PCT,
   defaultCommercialFolder,
@@ -62,7 +62,7 @@ export const ExpressAdjustAdminSection = () => {
     if (!folderId) return;
     setSaving(true);
     try {
-      await saveExpressAdjustPct(folderId, pct);
+      await saveExpressAdjustPct(folderId, Math.max(-90, Math.min(90, pct)));
       toast.success("Ajuste guardado");
       await load();
     } catch (e) {
@@ -94,23 +94,15 @@ export const ExpressAdjustAdminSection = () => {
       </p>
 
       <div className="flex flex-wrap items-end gap-2">
-        <div className="w-28">
-          <div className="mb-1 text-[10px] text-muted-foreground">Ajuste Express</div>
-          <div className="flex items-center gap-1">
-            <Input
-              type="number"
-              min={-90}
-              max={90}
-              step={1}
-              value={draft}
-              onChange={(e) =>
-                setDraft(Math.max(-90, Math.min(90, parseFloat(e.target.value) || 0)))
-              }
-              className="h-8 text-right text-xs font-mono"
-            />
-            <span className="text-[11px] text-muted-foreground">%</span>
-          </div>
-        </div>
+        <NumberField
+          className="w-28"
+          label="Ajuste Express"
+          suffix="%"
+          min={-90}
+          max={90}
+          value={draft}
+          onChange={setDraft}
+        />
 
         <Button size="sm" onClick={() => void persist(draft)} disabled={saving || !folderId}>
           {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
