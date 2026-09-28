@@ -1,5 +1,6 @@
 import { formatAdjustmentLabel, type IsochroneReport, type ReportProjection } from "./reportData";
 import type { MapCaptureImages } from "./mapCapture";
+import { fitContain, pngSize } from "./imageSize";
 import type { Cell, SlideSurface } from "./slideSurface";
 import { PptxSlideSurface } from "./slideSurfacePptx";
 
@@ -312,19 +313,37 @@ export const drawTerritorySlide = (
   ];
   const CAP_H = 0.17;
   const GAP = 0.12;
-  const cellW = (GRID_W - GAP) / 2;
-  const cellH = (BODY_BOTTOM - BODY_TOP - GAP) / 2;
-  const imgH = cellH - CAP_H;
+  const maxW = (GRID_W - GAP) / 2;
+  const maxH = (BODY_BOTTOM - BODY_TOP - GAP) / 2 - CAP_H;
+
+  // La celda se ajusta a la proporción de las fotos en vez de al revés. El
+  // contenedor del mapa cambia de forma con el ancho del panel y de la
+  // ventana, así que un recuadro fijo o deformaba el mapa o dejaba franjas
+  // vacías. Con esto la grilla queda pareja y centrada, sin estirar nada.
+  const medida = mapas.map(([, d]) => pngSize(d)).find((s) => s) ?? null;
+  const proporcion = medida ? medida.w / medida.h : maxW / maxH;
+  const imgW = Math.min(maxW, maxH * proporcion);
+  const imgH = imgW / proporcion;
+  const cellW = imgW;
+  const cellH = imgH + CAP_H;
+  const gridX = GRID_X + (GRID_W - (2 * cellW + GAP)) / 2;
+  const gridY = BODY_TOP + (BODY_BOTTOM - BODY_TOP - (2 * cellH + GAP)) / 2;
 
   mapas.forEach(([titulo, data], i) => {
-    const cx = GRID_X + (i % 2) * (cellW + GAP);
-    const cy = BODY_TOP + Math.floor(i / 2) * (cellH + GAP);
+    const cx = gridX + (i % 2) * (cellW + GAP);
+    const cy = gridY + Math.floor(i / 2) * (cellH + GAP);
     slide.text(titulo, {
       x: cx, y: cy, w: cellW, h: CAP_H,
       fontSize: 7.5, bold: true, color: C.crimson,
     });
     if (data) {
-      slide.image({ data, x: cx, y: cy + CAP_H, w: cellW, h: imgH });
+      // La foto conserva su proporción: el recuadro de la grilla no tiene la
+      // misma que el contenedor del mapa —que además cambia con el ancho del
+      // panel— y estirarla para llenarlo deformaba el mapa.
+      slide.image({
+        data,
+        ...fitContain({ x: cx, y: cy + CAP_H, w: cellW, h: imgH }, pngSize(data)),
+      });
     } else {
       // Sin foto, se deja el marco: así se nota que falta y no queda un hueco.
       slide.rect({
