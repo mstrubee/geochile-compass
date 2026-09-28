@@ -211,6 +211,51 @@ const addCoverPage = (doc: jsPDF, report: IsochroneReport): void => {
     );
   }
 
+  // Locales de la red en el entorno: a pocos minutos, un local propio deja de
+  // ser contexto y pasa a ser canibalización sobre la venta que se proyecta.
+  // Va en la portada porque es de las primeras preguntas del directorio.
+  const cercanos = report.nearbyStores ?? [];
+  if (cercanos.length > 0) {
+    let ly = bandY + 8 + report.bands.length * 9 + 8;
+    if (report.zonasAledanas && report.zonasAledanas.length > 0) ly += 14;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...C.slate400);
+    doc.text("LOCALES DE LA RED EN EL ENTORNO", ML, ly);
+    doc.text("DISTANCIA", 130, ly);
+    doc.text("TIEMPO EN AUTO", 165, ly);
+
+    // Tope por el espacio que queda hasta la nota al pie: con varias bandas y
+    // zonas aledañas el bloque arranca más abajo. El detalle completo está en
+    // el panel y en la lámina del directorio.
+    const MAX = Math.max(0, Math.min(6, Math.floor((PH - 38 - ly) / 8)));
+    cercanos.slice(0, MAX).forEach((s, i) => {
+      const sy = ly + 8 + i * 8;
+      if (i % 2 === 0) {
+        doc.setFillColor(...C.slate100);
+        doc.rect(ML, sy - 5, PW - ML * 2, 8, "F");
+      }
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...C.navy);
+      doc.text(
+        s.from === "aledana" && s.fromName ? `${s.name}  (desde ${s.fromName})` : s.name,
+        ML + 2, sy, { maxWidth: 120 },
+      );
+      doc.text(`${s.km.toFixed(1)} km`, 130, sy);
+      doc.text(`${s.minutes} min`, 165, sy);
+    });
+    if (cercanos.length > MAX) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(...C.slate400);
+      doc.text(
+        `+${cercanos.length - MAX} local(es) más en el entorno`,
+        ML + 2, ly + 8 + MAX * 8,
+      );
+    }
+  }
+
   // Nota de confidencialidad
   const noteY = PH - 30;
   doc.setFillColor(254, 243, 199); // amber-100
@@ -630,37 +675,6 @@ const addBandPage = (
 
   // KPI cards
   y = drawKpiCards(doc, band, y) + 6;
-
-  // Locales de la red en el entorno: a pocos minutos, un local propio no es
-  // contexto sino canibalización sobre la venta proyectada.
-  const cercanos = report.nearbyStores ?? [];
-  if (cercanos.length > 0) {
-    if (y > PH - 60) {
-      doc.addPage();
-      addPageHeader(doc, report, band.bandMinutes);
-      addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-      y = BODY_TOP;
-    }
-    y = sectionTitle(doc, "Locales de la red en el entorno", y);
-    autoTable(doc, {
-      ...tableTheme,
-      startY: y,
-      head: [["Local", "Medido desde", "Distancia", "Tiempo en auto"]],
-      body: cercanos.map((s) => [
-        s.name,
-        s.from === "aledana" && s.fromName ? s.fromName : "Isócrona",
-        `${s.km.toFixed(1)} km`,
-        `${s.minutes} min`,
-      ]),
-      columnStyles: { 2: { halign: "right" }, 3: { halign: "right" } },
-      didDrawPage: (data) => {
-        addPageHeader(doc, report, band.bandMinutes);
-        addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
-        if (data.cursor) data.cursor.y = Math.max(data.cursor.y, BODY_TOP);
-      },
-    });
-    y = (lastY(doc) || y) + 8;
-  }
 
   // Comunas
   if (y > PH - 60) {

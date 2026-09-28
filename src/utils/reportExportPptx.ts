@@ -143,6 +143,8 @@ export const drawTerritorySlide = (
 
   // Columna izquierda angosta para los datos; el resto, la grilla de mapas.
   const DATA_W = 3.1;
+  /** Aire entre tablas de la columna de datos. */
+  const GAP_TABLA = 0.14;
   const GRID_X = ML + DATA_W + 0.26;
   const GRID_W = W - ML - GRID_X;
 
@@ -162,19 +164,17 @@ export const drawTerritorySlide = (
     { x: ML, y, w: DATA_W, colW: [DATA_W * 0.56, DATA_W * 0.44], rowH: ROW_H,
       border: { color: C.grid, pt: 0.5 } },
   );
-  y += resumen.length * ROW_H + 0.2;
+  y += resumen.length * ROW_H + GAP_TABLA;
 
   // Zonas aledañas: isócronas fusionadas como hijas. La demografía de arriba
   // YA las incluye (se analizó la unión) — esto solo identifica cuáles son.
+  // Va en una línea y no en una tabla: el alto de la columna lo necesitan los
+  // locales de la red, y el nombre de la zona se lee igual.
   if (zonas.length > 0) {
-    addTableBand(slide, "ZONAS ALEDAÑAS (área sumada)", ML, y, DATA_W);
+    slide.text(`Zonas aledañas sumadas: ${zonas.map((z) => z.name).join(" · ")}`, {
+      x: ML, y, w: DATA_W, h: 0.16, fontSize: 7, color: C.muted,
+    });
     y += 0.2;
-    slide.table(
-      zonas.map((z, i) => row([z.name], { fill: i % 2 ? C.rowAlt : undefined })),
-      { x: ML, y, w: DATA_W, colW: [DATA_W], rowH: ROW_H,
-        border: { color: C.grid, pt: 0.5 } },
-    );
-    y += zonas.length * ROW_H + 0.2;
   }
 
   const gseRows = band.nseDistribution.filter((n) => n.pct > 0);
@@ -186,7 +186,7 @@ export const drawTerritorySlide = (
       { x: ML, y, w: DATA_W, colW: [DATA_W * 0.6, DATA_W * 0.4], rowH: ROW_H,
         border: { color: C.grid, pt: 0.5 } },
     );
-    y += gseRows.length * ROW_H + 0.2;
+    y += gseRows.length * ROW_H + GAP_TABLA;
   }
 
   // Comunas del ÁREA TOTAL analizada: con zonas aledañas fusionadas, lo que
@@ -194,10 +194,18 @@ export const drawTerritorySlide = (
   // isócrona suelta. Encabezado y fila de total para que el lector no tenga
   // que deducir qué significa cada columna.
   const comunasTotal = band.communes.length;
+  // Los locales de la red se reservan primero: son el dato que decide si la
+  // ubicación canibaliza la red propia, y sin reserva la tabla de comunas se
+  // queda con todo el alto y ya no caben.
+  const cercanos = report.nearbyStores ?? [];
+  const localesFilas = Math.min(cercanos.length, 3);
+  const localesReserva = localesFilas > 0
+    ? Math.ceil((GAP_TABLA + 0.2) / ROW_H) + 1 + localesFilas
+    : 0;
   // Dos filas del presupuesto se van en el encabezado y el total. Si solo
   // alcanza para esas dos, la tabla igual se imprime: el total es justamente
   // lo que no puede faltar.
-  const presupuesto = rowsThatFit(y + 0.2);
+  const presupuesto = rowsThatFit(y + 0.2) - localesReserva;
   const comunasFit = Math.min(comunasTotal, Math.max(0, presupuesto - 2));
   if (comunasTotal > 0 && presupuesto >= 2) {
     const popComuna = (c: (typeof band.communes)[number]) => c.popMeasured ?? c.popInIso;
@@ -231,6 +239,37 @@ export const drawTerritorySlide = (
         `+${comunasTotal - comunasFit} comuna(s) no listada(s) por espacio, incluidas en el total`,
         { x: ML, y: y + 0.02, w: DATA_W, h: 0.16, fontSize: 6.5, color: C.muted },
       );
+      y += 0.16;
+    }
+    y += GAP_TABLA;
+  }
+
+  // ── Locales de la red en el entorno ────────────────────────────────────────
+  // A pocos minutos, un local propio deja de ser contexto y pasa a ser
+  // canibalización sobre la venta que se proyecta en la lámina siguiente.
+  if (cercanos.length > 0) {
+    const caben = Math.min(cercanos.length, Math.max(0, rowsThatFit(y + 0.2) - 1));
+    if (caben > 0) {
+      addTableBand(slide, "LOCALES DE LA RED EN EL ENTORNO", ML, y, DATA_W);
+      y += 0.2;
+      slide.table(
+        [
+          headerRow(["Local", "Dist.", "Tiempo"]),
+          ...cercanos.slice(0, caben).map((s, i) =>
+            row([s.name, `${s.km.toFixed(1)} km`, `${s.minutes} min`], {
+              fill: i % 2 ? C.rowAlt : undefined,
+            }),
+          ),
+        ],
+        { x: ML, y, w: DATA_W, colW: [DATA_W * 0.5, DATA_W * 0.25, DATA_W * 0.25], rowH: ROW_H,
+          border: { color: C.grid, pt: 0.5 } },
+      );
+      y += (caben + 1) * ROW_H;
+      if (caben < cercanos.length) {
+        slide.text(`+${cercanos.length - caben} local(es) no listado(s) por espacio`, {
+          x: ML, y: y + 0.02, w: DATA_W, h: 0.16, fontSize: 6.5, color: C.muted,
+        });
+      }
     }
   }
 
@@ -357,33 +396,6 @@ export const drawProjectionSlide = (
       );
       y += (marcasFit + 1) * ROW_H + 0.16;
     }
-  }
-
-  // Locales propios del entorno: a 10 minutos en auto un local de la red no es
-  // un dato de contexto, es canibalización sobre la venta que se proyecta.
-  const cercanos = report.nearbyStores ?? [];
-  if (cercanos.length > 0 && rowsThatFit(y + 0.2) > 2) {
-    addTableBand(slide, "LOCALES DE LA RED EN EL ENTORNO", ML, y);
-    y += 0.2;
-    const caben = Math.min(cercanos.length, rowsThatFit(y) - 1);
-    slide.table(
-      [
-        headerRow(["Local", "Distancia", "Tiempo"]),
-        ...cercanos.slice(0, caben).map((s, i) =>
-          row(
-            [
-              s.from === "aledana" && s.fromName ? `${s.name} (desde ${s.fromName})` : s.name,
-              `${s.km.toFixed(1)} km`,
-              `${s.minutes} min`,
-            ],
-            { fill: i % 2 ? C.rowAlt : undefined },
-          ),
-        ),
-      ],
-      { x: ML, y, w: COL_W, colW: [COL_W * 0.52, COL_W * 0.24, COL_W * 0.24], rowH: ROW_H,
-        border: { color: C.grid, pt: 0.5 } },
-    );
-    y += (caben + 1) * ROW_H + 0.12;
   }
 
   // ── Columna derecha: proyección ────────────────────────────────────────────
