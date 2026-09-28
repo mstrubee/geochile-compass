@@ -16,6 +16,7 @@ import {
   fetchNetworkStores,
   reapplySpeeds,
   MAX_MINUTOS_ISO,
+  MESES_VENTA,
   RADIO_ALEDANA_KM,
   type NearbyStore,
 } from "@/services/nearbyStoresService";
@@ -523,7 +524,7 @@ export const AnalysisPanel = ({
         .filter((s) => s.selected)
         .map((s) => ({
           name: s.name, from: s.from, fromName: s.fromName,
-          km: s.km, minutes: s.minutes,
+          km: s.km, minutes: s.minutes, sales: s.sales ?? null,
         })),
     [nearby],
   );
@@ -1096,6 +1097,8 @@ export const AnalysisPanel = ({
               <p className="mb-2 text-[10px] leading-relaxed text-muted-foreground">
                 Distancia y tiempo en auto desde la isócrona hasta los locales
                 a {MAX_MINUTOS_ISO} minutos o menos, o en sus mismas comunas.
+                La venta es el promedio de sus últimos {MESES_VENTA} meses con
+                venta registrada.
                 {zonasAledanas.length > 0 && (
                   <> Desde cada zona aledaña se buscan además los que estén en {RADIO_ALEDANA_KM} km a la redonda.</>
                 )}
@@ -1109,16 +1112,17 @@ export const AnalysisPanel = ({
 
               {nearby && nearby.length > 0 && (
                 <div className="mb-2 overflow-hidden rounded-xl bg-surface-2/60">
-                  <div className="grid grid-cols-[1fr_58px_46px] border-b border-border/40 text-[10px] font-medium text-muted-foreground">
+                  <div className="grid grid-cols-[1fr_54px_42px_62px] border-b border-border/40 text-[10px] font-medium text-muted-foreground">
                     <div className="px-2 py-1.5">Local</div>
                     <div className="px-2 py-1.5 text-right">Distancia</div>
                     <div className="px-2 py-1.5 text-right">Tiempo</div>
+                    <div className="px-2 py-1.5 text-right">UF/mes</div>
                   </div>
                   {nearby.map((s) => (
                     <div
                       key={`${s.from}:${s.fromName ?? ""}:${s.id}`}
                       className={[
-                        "grid grid-cols-[1fr_58px_46px] border-b border-border/30 text-[11px] last:border-b-0",
+                        "grid grid-cols-[1fr_54px_42px_62px] border-b border-border/30 text-[11px] last:border-b-0",
                         s.selected ? "" : "opacity-40",
                       ].join(" ")}
                     >
@@ -1135,6 +1139,12 @@ export const AnalysisPanel = ({
                       </div>
                       <div className="px-2 py-1.5 text-right font-mono text-foreground">
                         {s.minutes}′
+                      </div>
+                      <div
+                        className="px-2 py-1.5 text-right font-mono text-foreground"
+                        title={s.sales ? `${fmtCLP(s.sales.avgClp)}/mes · ${s.sales.months} meses con venta hasta ${s.sales.lastPeriod}` : "Sin ventas registradas"}
+                      >
+                        {s.sales?.avgUf ? fmt(s.sales.avgUf) : "—"}
                       </div>
                     </div>
                   ))}

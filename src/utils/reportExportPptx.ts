@@ -221,8 +221,9 @@ export const drawTerritorySlide = (
   // queda con todo el alto y ya no caben.
   const cercanos = report.nearbyStores ?? [];
   const localesFilas = Math.min(cercanos.length, 3);
+  // banda + encabezado + filas + la nota al pie (unidad de venta / recortes).
   const localesReserva = localesFilas > 0
-    ? Math.ceil((GAP_TABLA + 0.2) / ROW_H) + 1 + localesFilas
+    ? Math.ceil((GAP_TABLA + 0.2) / ROW_H) + 1 + localesFilas + 1
     : 0;
   // Dos filas del presupuesto se van en el encabezado y el total. Si solo
   // alcanza para esas dos, la tabla igual se imprime: el total es justamente
@@ -277,29 +278,53 @@ export const drawTerritorySlide = (
   // canibalización sobre la venta que se proyecta en la lámina siguiente.
   if (cercanos.length > 0) {
     const disponibles = rowsThatFit(y + 0.2);
-    const cabenTodos = cercanos.length <= disponibles - 1;
+    // encabezado + nota al pie, siempre; una fila más si hay que avisar recorte.
+    const cabenTodos = cercanos.length <= disponibles - 2;
     const caben = Math.min(
       cercanos.length,
-      Math.max(0, disponibles - (cabenTodos ? 1 : 2)),
+      Math.max(0, disponibles - (cabenTodos ? 2 : 3)),
     );
     if (caben > 0) {
       addTableBand(slide, "LOCALES DE LA RED EN EL ENTORNO", ML, y, DATA_W);
       y += 0.2;
+      // La venta va en UF y no en pesos: es la unidad con la que el resto del
+      // informe habla de venta, y promediar doce meses en pesos mezcla
+      // inflación con desempeño.
       slide.table(
         [
-          headerRow(["Local", "Dist.", "Tiempo"]),
+          headerRow(["Local", "Dist.", "Tiempo", "UF/mes"]),
           ...cercanos.slice(0, caben).map((s, i) =>
-            row([s.name, `${s.km.toFixed(1)} km`, `${s.minutes} min`], {
-              fill: i % 2 ? C.rowAlt : undefined,
-            }),
+            row(
+              [
+                s.name,
+                `${s.km.toFixed(1)} km`,
+                `${s.minutes} min`,
+                s.sales?.avgUf ? fmt(s.sales.avgUf) : "—",
+              ],
+              { fill: i % 2 ? C.rowAlt : undefined },
+            ),
           ),
         ],
-        { x: ML, y, w: DATA_W, colW: [DATA_W * 0.5, DATA_W * 0.25, DATA_W * 0.25], rowH: ROW_H,
+        { x: ML, y, w: DATA_W,
+          colW: [DATA_W * 0.4, DATA_W * 0.2, DATA_W * 0.2, DATA_W * 0.2], rowH: ROW_H,
           border: { color: C.grid, pt: 0.5 } },
       );
       y += (caben + 1) * ROW_H;
+      const conVenta = cercanos.slice(0, caben).filter((s) => s.sales?.avgUf);
+      const notas: string[] = [];
+      if (conVenta.length > 0) {
+        const meses = Math.max(...conVenta.map((s) => s.sales!.months));
+        const hasta = conVenta
+          .map((s) => s.sales!.lastPeriod)
+          .sort()
+          .at(-1);
+        notas.push(`UF/mes: promedio de los últimos ${meses} meses con venta (hasta ${hasta})`);
+      }
       if (caben < cercanos.length) {
-        slide.text(`+${cercanos.length - caben} local(es) no listado(s) por espacio`, {
+        notas.push(`+${cercanos.length - caben} local(es) no listado(s) por espacio`);
+      }
+      if (notas.length > 0) {
+        slide.text(notas.join(" · "), {
           x: ML, y: y + 0.02, w: DATA_W, h: 0.16, fontSize: 6.5, color: C.muted,
         });
       }

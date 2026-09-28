@@ -111,6 +111,8 @@ export interface IsochroneReport {
     fromName: string | null;
     km: number;
     minutes: number;
+    /** Venta promedio de sus últimos meses con venta. null si no hay serie. */
+    sales: { avgClp: number; avgUf: number; months: number; lastPeriod: string } | null;
   }>;
 }
 

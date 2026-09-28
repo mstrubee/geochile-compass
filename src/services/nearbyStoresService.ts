@@ -36,6 +36,17 @@ export interface NetworkStore {
   status: string | null;
 }
 
+export interface RecentSales {
+  /** Promedio mensual en CLP de los meses considerados. */
+  avgClp: number;
+  /** El mismo promedio en UF, que no se mueve con la inflación. */
+  avgUf: number;
+  /** Cuántos meses entraron en el promedio (hasta 12). */
+  months: number;
+  /** Último mes con venta, "YYYY-MM". */
+  lastPeriod: string;
+}
+
 export interface NearbyStore {
   id: string;
   name: string;
@@ -50,9 +61,81 @@ export interface NearbyStore {
   routerMinutes: number | null;
   sameCommune: boolean;
   status: string | null;
+  /** Venta promedio de los últimos meses registrados. null si no hay serie. */
+  sales: RecentSales | null;
   /** Entra en el informe. Las aledañas se eligen en el diálogo. */
   selected: boolean;
 }
+
+/** Meses con venta que entran en el promedio. */
+export const MESES_VENTA = 12;
+
+/**
+ * Venta promedio reciente de cada local.
+ *
+ * Se toman los últimos {@link MESES_VENTA} meses CON VENTA, no los últimos 12
+ * del calendario: un local cerrado temporalmente registra ceros, y promediarlos
+ * haría parecer flojo a un local que simplemente no estuvo abierto — el mismo
+ * criterio con el que la red trata los cierres en el resto del análisis.
+ */
+export const fetchRecentSales = async (
+  poiIds: string[],
+): Promise<Map<string, RecentSales>> => {
+  const ids = [...new Set(poiIds)].filter(Boolean);
+  if (ids.length === 0) return new Map();
+
+  const filas: Array<{ poi_id: string; period: string; value: number }> = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("poi_metrics")
+      .select("poi_id, period, value")
+      .eq("metric_key", "ventas")
+      .in("poi_id", ids)
+      .order("period", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error || !data?.length) break;
+    filas.push(...(data as typeof filas));
+    if (data.length < PAGE) break;
+  }
+  if (filas.length === 0) return new Map();
+
+  const { data: ufRows } = await supabase.from("uf_values").select("period, value");
+  const uf = new Map<string, number>();
+  for (const r of ufRows ?? []) {
+    if (r.value) uf.set(String(r.period).slice(0, 10), Number(r.value));
+  }
+
+  const porPoi = new Map<string, Array<{ period: string; clp: number }>>();
+  for (const f of filas) {
+    const clp = Number(f.value ?? 0);
+    if (clp <= 0) continue;
+    const arr = porPoi.get(f.poi_id) ?? [];
+    arr.push({ period: String(f.period).slice(0, 10), clp });
+    porPoi.set(f.poi_id, arr);
+  }
+
+  const out = new Map<string, RecentSales>();
+  for (const [poiId, serie] of porPoi) {
+    const ultimos = serie
+      .sort((a, b) => b.period.localeCompare(a.period))
+      .slice(0, MESES_VENTA);
+    if (ultimos.length === 0) continue;
+    const sumaClp = ultimos.reduce((s, m) => s + m.clp, 0);
+    // En UF solo los meses con UF conocida; si no hay ninguna, queda en 0 y la
+    // columna muestra el peso, que es preferible a inventar una conversión.
+    const enUf = ultimos
+      .map((m) => (uf.get(m.period) ? m.clp / uf.get(m.period)! : null))
+      .filter((v): v is number => v != null);
+    out.set(poiId, {
+      avgClp: Math.round(sumaClp / ultimos.length),
+      avgUf: enUf.length > 0 ? Math.round(enUf.reduce((s, v) => s + v, 0) / enUf.length) : 0,
+      months: ultimos.length,
+      lastPeriod: ultimos[0].period.slice(0, 7),
+    });
+  }
+  return out;
+};
 
 /** Tiempo con las velocidades del admin sobre los kilómetros reales. */
 export const minutesFor = (
@@ -162,6 +245,9 @@ export const computeNearbyStores = async (
     communeAt(comunasFc, nombresPorCodigo, s.lat, s.lng);
 
   const salida: NearbyStore[] = [];
+  // Una sola consulta para toda la red candidata: el mismo local puede salir
+  // dos veces (desde la isócrona y desde una zona aledaña).
+  const ventas = await fetchRecentSales(stores.map((s) => s.id));
 
   // ── Desde la isócrona analizada ──────────────────────────────────────────
   const candidatos = stores
@@ -186,6 +272,7 @@ export const computeNearbyStores = async (
       id: s.id, name: s.name, from: "iso", fromName: null,
       km: r.km, highwayKm: r.highwayKm ?? 0, minutes,
       routerMinutes: r.routerMinutes, sameCommune, status: s.status,
+      sales: ventas.get(s.id) ?? null,
       selected: true,
     });
   }
@@ -215,6 +302,7 @@ export const computeNearbyStores = async (
         routerMinutes: r.routerMinutes,
         sameCommune: !!comuna && comunasIso.has(normalizeCommuneName(comuna)),
         status: s.status,
+        sales: ventas.get(s.id) ?? null,
         // Las de zonas aledañas se confirman en el diálogo antes de exportar.
         selected: true,
       });

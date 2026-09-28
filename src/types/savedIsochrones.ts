@@ -59,6 +59,12 @@ export interface ProjectionSettings {
     routerMinutes: number | null;
     sameCommune: boolean;
     status: string | null;
+    sales: {
+      avgClp: number;
+      avgUf: number;
+      months: number;
+      lastPeriod: string;
+    } | null;
     selected: boolean;
   }> | null;
   heatSettings?: { radius: number; blur: number; opacity: number } | null;

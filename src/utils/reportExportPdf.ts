@@ -222,8 +222,9 @@ const addCoverPage = (doc: jsPDF, report: IsochroneReport): void => {
     doc.setFontSize(8);
     doc.setTextColor(...C.slate400);
     doc.text("LOCALES DE LA RED EN EL ENTORNO", ML, ly);
-    doc.text("DISTANCIA", 130, ly);
-    doc.text("TIEMPO EN AUTO", 165, ly);
+    doc.text("DISTANCIA", 118, ly);
+    doc.text("TIEMPO", 146, ly);
+    doc.text("VENTA UF/MES", 170, ly);
 
     // Tope por el espacio que queda hasta la nota al pie: con varias bandas y
     // zonas aledañas el bloque arranca más abajo. El detalle completo está en
@@ -240,11 +241,26 @@ const addCoverPage = (doc: jsPDF, report: IsochroneReport): void => {
       doc.setTextColor(...C.navy);
       doc.text(
         s.from === "aledana" && s.fromName ? `${s.name}  (desde ${s.fromName})` : s.name,
-        ML + 2, sy, { maxWidth: 120 },
+        ML + 2, sy, { maxWidth: 100 },
       );
-      doc.text(`${s.km.toFixed(1)} km`, 130, sy);
-      doc.text(`${s.minutes} min`, 165, sy);
+      doc.text(`${s.km.toFixed(1)} km`, 118, sy);
+      doc.text(`${s.minutes} min`, 146, sy);
+      // En UF, igual que el resto del informe: promediar doce meses en pesos
+      // mezclaría inflación con desempeño.
+      doc.text(s.sales?.avgUf ? fmt(s.sales.avgUf) : "—", 170, sy);
     });
+    const conVenta = cercanos.slice(0, MAX).filter((s) => s.sales?.avgUf);
+    if (conVenta.length > 0) {
+      const meses = Math.max(...conVenta.map((s) => s.sales!.months));
+      const hasta = conVenta.map((s) => s.sales!.lastPeriod).sort().at(-1);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(...C.slate400);
+      doc.text(
+        `Venta UF/mes: promedio de los últimos ${meses} meses con venta (hasta ${hasta})`,
+        ML + 2, ly + 8 + Math.min(cercanos.length, MAX) * 8 - 2,
+      );
+    }
     if (cercanos.length > MAX) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
