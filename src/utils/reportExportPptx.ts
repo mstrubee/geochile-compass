@@ -189,27 +189,48 @@ export const drawTerritorySlide = (
     y += gseRows.length * ROW_H + 0.2;
   }
 
-  // Igual que con los comparables: si alguna comuna no cabe, se dice.
+  // Comunas del ÁREA TOTAL analizada: con zonas aledañas fusionadas, lo que
+  // se midió es la unión, así que cada fila reparte esa área y no la de una
+  // isócrona suelta. Encabezado y fila de total para que el lector no tenga
+  // que deducir qué significa cada columna.
   const comunasTotal = band.communes.length;
-  const comunasFit = Math.min(comunasTotal, rowsThatFit(y + 0.2));
-  if (comunasFit > 0) {
-    addTableBand(slide, "COMUNAS", ML, y, DATA_W);
+  // Dos filas del presupuesto se van en el encabezado y el total. Si solo
+  // alcanza para esas dos, la tabla igual se imprime: el total es justamente
+  // lo que no puede faltar.
+  const presupuesto = rowsThatFit(y + 0.2);
+  const comunasFit = Math.min(comunasTotal, Math.max(0, presupuesto - 2));
+  if (comunasTotal > 0 && presupuesto >= 2) {
+    const popComuna = (c: (typeof band.communes)[number]) => c.popMeasured ?? c.popInIso;
+    const visibles = band.communes.slice(0, comunasFit);
+    const sumaShare = band.communes.reduce((s, c) => s + c.areaShareInIso, 0);
+    const sumaPop = band.communes.reduce((s, c) => s + popComuna(c), 0);
+
+    addTableBand(
+      slide,
+      zonas.length > 0 ? "COMUNAS (ÁREA TOTAL FUSIONADA)" : "COMUNAS",
+      ML, y, DATA_W,
+    );
     y += 0.2;
     slide.table(
-      band.communes.slice(0, comunasFit).map((c, i) =>
-        row([c.name, `${(c.areaShareInIso * 100).toFixed(0)}%`, fmt(c.popInIso)], {
-          fill: i % 2 ? C.rowAlt : undefined,
-        }),
-      ),
+      [
+        headerRow(["Comuna", "% área", "Personas"]),
+        ...visibles.map((c, i) =>
+          row([c.name, `${(c.areaShareInIso * 100).toFixed(0)}%`, fmt(popComuna(c))], {
+            fill: i % 2 ? C.rowAlt : undefined,
+          }),
+        ),
+        // El total es el de TODAS las comunas, también las que no caben.
+        row(["Total", `${(sumaShare * 100).toFixed(0)}%`, fmt(sumaPop)], { accent: true }),
+      ],
       { x: ML, y, w: DATA_W, colW: [DATA_W * 0.46, DATA_W * 0.2, DATA_W * 0.34], rowH: ROW_H,
         border: { color: C.grid, pt: 0.5 } },
     );
-    y += comunasFit * ROW_H;
+    y += (visibles.length + 2) * ROW_H;
     if (comunasFit < comunasTotal) {
-      slide.text(`+${comunasTotal - comunasFit} comuna(s) no listada(s) por espacio`, {
-        x: ML, y: y + 0.02, w: DATA_W, h: 0.16,
-        fontSize: 6.5, color: C.muted,
-      });
+      slide.text(
+        `+${comunasTotal - comunasFit} comuna(s) no listada(s) por espacio, incluidas en el total`,
+        { x: ML, y: y + 0.02, w: DATA_W, h: 0.16, fontSize: 6.5, color: C.muted },
+      );
     }
   }
 

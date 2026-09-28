@@ -643,15 +643,26 @@ const addBandPage = (
     ...tableTheme,
     startY: y,
     head: [["Comuna", "% en iso", "% de comuna", "NSE", "Personas", "Hogares", "Ingreso (CLP)"]],
+    // Personas y hogares medidos manzana a manzana cuando hay datos GSE: es
+    // la misma fuente que el total del informe, así que las filas lo suman.
     body: band.communes.map((c) => [
       c.name,
       fmtPct(c.areaShareInIso),
       fmtPct(c.areaShareOfCommune),
       c.nse ?? "—",
-      fmt(c.popInIso),
-      fmt(c.hhInIso),
+      fmt(c.popMeasured ?? c.popInIso),
+      fmt(c.hhMeasured ?? c.hhInIso),
       fmtCLP(c.incomeInIso),
     ]),
+    foot: [[
+      "Total área analizada",
+      fmtPct(band.communes.reduce((s, c) => s + c.areaShareInIso, 0)),
+      "—",
+      "—",
+      fmt(band.communes.reduce((s, c) => s + (c.popMeasured ?? c.popInIso), 0)),
+      fmt(band.communes.reduce((s, c) => s + (c.hhMeasured ?? c.hhInIso), 0)),
+      "—",
+    ]],
     columnStyles: {
       1: { halign: "right" }, 2: { halign: "right" },
       4: { halign: "right" }, 5: { halign: "right" }, 6: { halign: "right" },

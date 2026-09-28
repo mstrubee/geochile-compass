@@ -139,7 +139,7 @@ const exportCsv = (a: IsochroneAnalysis) => {
   }
   for (const c of a.communes) {
     lines.push(
-      `comuna,${c.name},pob=${Math.round(c.popInIso)};hh=${Math.round(c.hhInIso)};ingreso=${Math.round(c.incomeInIso)};share=${(c.areaShareInIso * 100).toFixed(1)}%`,
+      `comuna,${c.name},pob=${Math.round(c.popMeasured ?? c.popInIso)};hh=${Math.round(c.hhMeasured ?? c.hhInIso)};ingreso=${Math.round(c.incomeInIso)};share=${(c.areaShareInIso * 100).toFixed(1)}%`,
     );
   }
   const blob = new Blob([lines.join("\n")], { type: "text/csv" });
@@ -964,7 +964,7 @@ export const AnalysisPanel = ({
                         {(c.areaShareInIso * 100).toFixed(0)}%
                       </div>
                       <div className="px-2 py-1.5 text-right font-mono text-foreground">
-                        {fmt(c.popInIso)}
+                        {fmt(c.popMeasured ?? c.popInIso)}
                       </div>
                       <div className="px-2 py-1.5 text-right text-muted-foreground">
                         {c.nse ?? "—"}

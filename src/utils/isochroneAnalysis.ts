@@ -36,6 +36,12 @@ export interface GseBreakdown {
   // Población real desde n_per / n_hog (Censo 2024) — disponible para 334 comunas
   pop: number;  // personas dentro de la isócrona
   hh:  number;  // hogares dentro de la isócrona
+  /**
+   * Las mismas personas y hogares, abiertos por comuna. Permite que la tabla
+   * de comunas del informe sume exactamente el total de arriba, en vez de
+   * repartir la población comunal por superficie.
+   */
+  byCommune: Array<{ key: string; name: string; pop: number; hh: number }>;
 }
 
 export interface DensityBreakdown {
@@ -83,6 +89,16 @@ export interface CommuneBreakdownRow {
   popInIso: number;
   hhInIso: number;
   incomeInIso: number; // CLP totales
+  /**
+   * Personas de esta comuna dentro del área, contadas manzana a manzana
+   * (Censo 2024). `popInIso` reparte la población comunal por superficie, que
+   * sobreestima donde hay cerros o paños industriales; esta es la misma
+   * fuente que el total de "Personas" del informe, así que las filas suman
+   * ese total. null cuando la comuna no tiene datos GSE.
+   */
+  popMeasured: number | null;
+  /** Hogares medidos por manzana, análogo a `popMeasured`. */
+  hhMeasured: number | null;
 }
 
 export interface ManzanaBreakdown {
@@ -370,6 +386,9 @@ export const communeBreakdown = (
       popInIso,
       hhInIso,
       incomeInIso,
+      // Las llena computeIsochroneAnalysis cruzando con las manzanas GSE.
+      popMeasured: null,
+      hhMeasured: null,
     });
   }
   return rows.sort((a, b) => b.areaShareInIso - a.areaShareInIso);
@@ -435,6 +454,7 @@ export const gseBreakdown = (
   let autoNum = 0, autoDen = 0;
   let totalPop = 0;
   let totalHh  = 0;
+  const byCommune = new Map<string, { key: string; name: string; pop: number; hh: number }>();
 
   for (const f of gse.features) {
     try {
@@ -469,6 +489,14 @@ export const gseBreakdown = (
     const mHh  = typeof nHog === "number" ? nHog * share : 0;
     totalPop += mPop;
     totalHh  += mHh;
+
+    if (p.commune && (mPop > 0 || mHh > 0)) {
+      const key = normalizeCommuneName(p.commune);
+      const acc = byCommune.get(key) ?? { key, name: p.commune, pop: 0, hh: 0 };
+      acc.pop += mPop;
+      acc.hh  += mHh;
+      byCommune.set(key, acc);
+    }
 
     // ── Distribución GSE ─────────────────────────────────────────────────────
     // classArea: siempre se acumula (fallback si no hay datos de hogares)
@@ -524,6 +552,7 @@ export const gseBreakdown = (
   }
   return {
     manzanaCount: count,
+    byCommune: [...byCommune.values()].sort((a, b) => b.pop - a.pop),
     classDistribution,
     classDistributionByPop,
     quintilDistribution,
@@ -623,9 +652,21 @@ export const computeIsochroneAnalysis = (params: {
     territorialLayers,
     territorialGroups,
   );
-  const communes = communeBreakdown(analysisIso, comunasFC, ineByName, nombresPorCodigo);
+  const communesRaw = communeBreakdown(analysisIso, comunasFC, ineByName, nombresPorCodigo);
   const manzanasBD = manzanaBreakdown(analysisIso, manzanas);
   const gseBD = gseBreakdown(analysisIso, gse);
+
+  // La población por comuna se toma del Censo 2024 cuando hay manzanas GSE:
+  // así las filas de la tabla suman el mismo total que se reporta arriba.
+  const gsePorComuna = new Map((gseBD?.byCommune ?? []).map((c) => [c.key, c]));
+  const communes: CommuneBreakdownRow[] = communesRaw.map((c) => {
+    const medida = gsePorComuna.get(normalizeCommuneName(c.name));
+    return {
+      ...c,
+      popMeasured: medida ? Math.round(medida.pop) : null,
+      hhMeasured:  medida ? Math.round(medida.hh)  : null,
+    };
+  });
 
   // ── Jerarquía de fuentes de población (mejor → peor) ────────────────────
   //
