@@ -359,6 +359,33 @@ export const drawProjectionSlide = (
     }
   }
 
+  // Locales propios del entorno: a 10 minutos en auto un local de la red no es
+  // un dato de contexto, es canibalización sobre la venta que se proyecta.
+  const cercanos = report.nearbyStores ?? [];
+  if (cercanos.length > 0 && rowsThatFit(y + 0.2) > 2) {
+    addTableBand(slide, "LOCALES DE LA RED EN EL ENTORNO", ML, y);
+    y += 0.2;
+    const caben = Math.min(cercanos.length, rowsThatFit(y) - 1);
+    slide.table(
+      [
+        headerRow(["Local", "Distancia", "Tiempo"]),
+        ...cercanos.slice(0, caben).map((s, i) =>
+          row(
+            [
+              s.from === "aledana" && s.fromName ? `${s.name} (desde ${s.fromName})` : s.name,
+              `${s.km.toFixed(1)} km`,
+              `${s.minutes} min`,
+            ],
+            { fill: i % 2 ? C.rowAlt : undefined },
+          ),
+        ),
+      ],
+      { x: ML, y, w: COL_W, colW: [COL_W * 0.52, COL_W * 0.24, COL_W * 0.24], rowH: ROW_H,
+        border: { color: C.grid, pt: 0.5 } },
+    );
+    y += (caben + 1) * ROW_H + 0.12;
+  }
+
   // ── Columna derecha: proyección ────────────────────────────────────────────
   let ry = BODY_TOP;
   slide.text("Potencial estimado", {

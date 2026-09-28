@@ -631,6 +631,37 @@ const addBandPage = (
   // KPI cards
   y = drawKpiCards(doc, band, y) + 6;
 
+  // Locales de la red en el entorno: a pocos minutos, un local propio no es
+  // contexto sino canibalización sobre la venta proyectada.
+  const cercanos = report.nearbyStores ?? [];
+  if (cercanos.length > 0) {
+    if (y > PH - 60) {
+      doc.addPage();
+      addPageHeader(doc, report, band.bandMinutes);
+      addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
+      y = BODY_TOP;
+    }
+    y = sectionTitle(doc, "Locales de la red en el entorno", y);
+    autoTable(doc, {
+      ...tableTheme,
+      startY: y,
+      head: [["Local", "Medido desde", "Distancia", "Tiempo en auto"]],
+      body: cercanos.map((s) => [
+        s.name,
+        s.from === "aledana" && s.fromName ? s.fromName : "Isócrona",
+        `${s.km.toFixed(1)} km`,
+        `${s.minutes} min`,
+      ]),
+      columnStyles: { 2: { halign: "right" }, 3: { halign: "right" } },
+      didDrawPage: (data) => {
+        addPageHeader(doc, report, band.bandMinutes);
+        addPageFooter(doc, doc.internal.pages.length - 1, totalPages);
+        if (data.cursor) data.cursor.y = Math.max(data.cursor.y, BODY_TOP);
+      },
+    });
+    y = (lastY(doc) || y) + 8;
+  }
+
   // Comunas
   if (y > PH - 60) {
     doc.addPage();

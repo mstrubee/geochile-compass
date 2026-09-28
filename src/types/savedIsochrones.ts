@@ -43,6 +43,24 @@ export interface ProjectionSettings {
    * Se calibran para la escala de la foto, no para la vista en vivo, así que
    * rehacerlos en cada informe es trabajo repetido.
    */
+  /**
+   * Locales de la red cercanos, ya ruteados, con la selección del usuario.
+   * Se guardan porque cada consulta de ruta gasta cuota del servicio: volver a
+   * abrir la isócrona no debe repetir el cálculo.
+   */
+  nearbyStores?: Array<{
+    id: string;
+    name: string;
+    from: "iso" | "aledana";
+    fromName: string | null;
+    km: number;
+    highwayKm: number;
+    minutes: number;
+    routerMinutes: number | null;
+    sameCommune: boolean;
+    status: string | null;
+    selected: boolean;
+  }> | null;
   heatSettings?: { radius: number; blur: number; opacity: number } | null;
   /**
    * Zoom relativo al encuadre automático usado en la última exportación.

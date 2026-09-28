@@ -1596,11 +1596,14 @@ const Index = () => {
   const analysisIsoChildrenNames = useMemo(
     () =>
       analysisIsoChildren.map((c, idx) => {
+        // El centro va junto al nombre: el informe mide desde cada zona
+        // aledaña hasta los locales de la red que tiene alrededor.
+        const base = { lat: c.center.lat, lng: c.center.lng };
         if (c.id.startsWith("saved:")) {
           const saved = savedIsos.find((s) => s.id === c.id.slice("saved:".length));
-          if (saved) return { name: saved.name };
+          if (saved) return { name: saved.name, ...base };
         }
-        return { name: `Zona aledaña ${idx + 1}` };
+        return { name: `Zona aledaña ${idx + 1}`, ...base };
       }),
     [analysisIsoChildren, savedIsos],
   );

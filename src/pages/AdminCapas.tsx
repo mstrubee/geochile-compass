@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound, MapPin, Download, TrendingUp, Store } from "lucide-react";
+import { Loader2, Upload, ArrowLeft, Trash2, Plus, ExternalLink, FileDown, RefreshCw, FileJson, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound, MapPin, Download, TrendingUp, Store, Car } from "lucide-react";
 import { GeminiKeysAdminSection } from "@/components/admin/GeminiKeysAdminSection";
 import { SecretsAdminSection } from "@/components/admin/SecretsAdminSection";
 import { StorageAdminSection } from "@/components/admin/StorageAdminSection";
 import { MaturationCurveAdminSection } from "@/components/admin/MaturationCurveAdminSection";
 import { ExpressAdjustAdminSection } from "@/components/admin/ExpressAdjustAdminSection";
+import { DriveSpeedsAdminSection } from "@/components/admin/DriveSpeedsAdminSection";
 import { htmlToGeoJson, downloadGeoJson } from "@/utils/htmlToGeoJson";
 import { parseFile, splitByFolderPath } from "@/utils/fileParsers";
 import { csvToGeoJSON } from "@/utils/parseGeoFile";
@@ -686,6 +687,15 @@ const AdminCapas = () => {
             description="Porcentaje que aplica el botón Express sobre la proyección. Por defecto -20%."
           >
             <ExpressAdjustAdminSection />
+          </AdminCollapsible>
+
+          <AdminCollapsible
+            id="drive-speeds"
+            title="Velocidades de desplazamiento"
+            icon={<Car className="h-4 w-4" />}
+            description="Ritmo supuesto en ciudad y en autopista para el tiempo en auto hasta los locales de la red."
+          >
+            <DriveSpeedsAdminSection />
           </AdminCollapsible>
         </AdminCollapsible>
 

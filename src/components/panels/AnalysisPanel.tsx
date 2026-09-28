@@ -3,7 +3,24 @@ import { GastoEndogenoSection } from "./GastoEndogenoSection";
 import { useCommercialCount } from "@/hooks/useCommercialCount";
 import { computeSalesProjection, type ProjectionResult } from "@/services/salesProjectionService";
 import { fetchMaturationCurve, type MaturationCurve } from "@/services/maturationCurveService";
-import { DEFAULT_EXPRESS_ADJUST_PCT, defaultCommercialFolder, fetchExpressAdjustPct } from "@/services/commercialSettingsService";
+import {
+  DEFAULT_DRIVE_SPEEDS,
+  DEFAULT_EXPRESS_ADJUST_PCT,
+  defaultCommercialFolder,
+  fetchDriveSpeeds,
+  fetchExpressAdjustPct,
+  type DriveSpeeds,
+} from "@/services/commercialSettingsService";
+import {
+  computeNearbyStores,
+  fetchNetworkStores,
+  reapplySpeeds,
+  MAX_MINUTOS_ISO,
+  RADIO_ALEDANA_KM,
+  type NearbyStore,
+} from "@/services/nearbyStoresService";
+import { NearbyStoresDialog } from "./NearbyStoresDialog";
+import { useComunasGeoIndex } from "@/hooks/useComunasGeoIndex";
 import { formatAdjustmentLabel, type ReportProjection } from "@/utils/reportData";
 import type { ProjectionSettings } from "@/types/savedIsochrones";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -46,7 +63,7 @@ interface AnalysisPanelProps {
   /** Nombre de la isócrona guardada que se está analizando (para el header). */
   isochroneName?: string | null;
   /** Isócronas fusionadas como hijas: se identifican en el informe, no aportan datos aparte (ya suman en `isochrone`). */
-  zonasAledanas?: Array<{ name: string }>;
+  zonasAledanas?: Array<{ name: string; lat?: number; lng?: number }>;
   /**
    * Id de la isócrona GUARDADA. Sin él no se pueden cachear las láminas para
    * leaseflow: la tabla las referencia por `saved_isochrones.id`, así que una
@@ -162,6 +179,7 @@ type SectionKey =
   | "capas"
   | "parque"
   | "comunas"
+  | "locales_red"
   | "exportar";
 
 const DEFAULT_SECTION_OPEN: Record<SectionKey, boolean> = {
@@ -175,6 +193,7 @@ const DEFAULT_SECTION_OPEN: Record<SectionKey, boolean> = {
   capas: false,
   parque: false,
   comunas: false,
+  locales_red: false,
   exportar: false,
 };
 
@@ -294,12 +313,30 @@ export const AnalysisPanel = ({
     });
     return () => { cancelled = true; };
   }, [projectionFolderId]);
+  // Velocidades con las que se convierte la distancia en tiempo de viaje.
+  const [speeds, setSpeeds] = useState<DriveSpeeds>(DEFAULT_DRIVE_SPEEDS);
+  useEffect(() => {
+    if (!projectionFolderId) { setSpeeds(DEFAULT_DRIVE_SPEEDS); return; }
+    let cancelled = false;
+    void fetchDriveSpeeds(projectionFolderId).then((s) => {
+      if (!cancelled) setSpeeds(s);
+    });
+    return () => { cancelled = true; };
+  }, [projectionFolderId]);
+
   const [projLoading, setProjLoading] = useState(false);
   const [projError,   setProjError]   = useState<string | null>(null);
 
   // Reset projection cuando cambia la isócrona
   // Ajustes que reporta la sección (ajuste manual, tasas, rampa).
   const [projAdjust, setProjAdjust] = useState<ProjectionSettings | null>(null);
+
+  // ── Locales de la red cercanos ───────────────────────────────────────────
+  const { fc: comunasFc, nombresPorCodigo } = useComunasGeoIndex(open);
+  const [nearby, setNearby] = useState<NearbyStore[] | null>(null);
+  const [nearbyBusy, setNearbyBusy] = useState(false);
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
+  const [nearbyDialogOpen, setNearbyDialogOpen] = useState(false);
 
   /**
    * Hidrata la proyección desde lo guardado.
@@ -334,6 +371,8 @@ export const AnalysisPanel = ({
     setProjResult((projectionSettings?.result as ProjectionResult | null) ?? null);
     setProjAdjust(projectionSettings ?? null);
     setProjError(null);
+    setNearby((projectionSettings?.nearbyStores as NearbyStore[] | null) ?? null);
+    setNearbyError(null);
   }, [isochrone?.id, projectionSettings]);
 
   /**
@@ -462,6 +501,8 @@ export const AnalysisPanel = ({
         // llamador que arme el objeto sin esta clave —hubo uno— borraría la
         // calibración guardada de esta ubicación en vez de dejarla como estaba.
         heatSettings: adjust?.heatSettings ?? projectionSettings?.heatSettings ?? null,
+        // Misma red de seguridad: rutear de nuevo gasta cuota del servicio.
+        nearbyStores: adjust?.nearbyStores ?? projectionSettings?.nearbyStores ?? null,
         // Misma red de seguridad que heatSettings: un llamador que omita la
         // clave no debe borrar el encuadre calibrado de esta ubicación.
         captureZoomOffset:
@@ -474,6 +515,78 @@ export const AnalysisPanel = ({
     },
     [onProjectionSettingsChange, projectionSettings],
   );
+
+  /** Solo los locales marcados entran en el informe. */
+  const nearbyForReport = useMemo(
+    () =>
+      (nearby ?? [])
+        .filter((s) => s.selected)
+        .map((s) => ({
+          name: s.name, from: s.from, fromName: s.fromName,
+          km: s.km, minutes: s.minutes,
+        })),
+    [nearby],
+  );
+
+  const persistNearby = useCallback(
+    (lista: NearbyStore[] | null) => {
+      setNearby(lista);
+      if (!onProjectionSettingsChange) return;
+      onProjectionSettingsChange({
+        ...(projAdjust ?? {
+          adjustPct: 0, rateOverrides: [], rampEnabled: true, isExpress: false,
+        }),
+        nearbyStores: lista,
+        result: projResult,
+      } as ProjectionSettings);
+    },
+    [onProjectionSettingsChange, projAdjust, projResult],
+  );
+
+  /**
+   * Distancia y tiempo en auto hasta los locales de la red.
+   *
+   * Cada ruta consume cuota del servicio, así que se calcula a pedido y el
+   * resultado queda guardado con la isócrona: reabrirla no vuelve a rutear.
+   */
+  const runNearby = useCallback(async () => {
+    if (!isochrone || !projectionFolderId) return;
+    setNearbyBusy(true);
+    setNearbyError(null);
+    try {
+      const stores = await fetchNetworkStores(projectionFolderId);
+      const lista = await computeNearbyStores({
+        origin: { lat: isochrone.center.lat, lng: isochrone.center.lng },
+        aledanas: zonasAledanas
+          .filter((z): z is { name: string; lat: number; lng: number } =>
+            typeof z.lat === "number" && typeof z.lng === "number")
+          .map((z) => ({ name: z.name, lat: z.lat, lng: z.lng })),
+        stores,
+        speeds,
+        isoCommunes: (analysis?.communes ?? []).map((c) => c.name),
+        comunasFc,
+        nombresPorCodigo,
+      });
+      persistNearby(lista);
+    } catch (e) {
+      setNearbyError(e instanceof Error ? e.message : "No se pudo calcular");
+    } finally {
+      setNearbyBusy(false);
+    }
+  }, [
+    isochrone, projectionFolderId, zonasAledanas, speeds, analysis,
+    comunasFc, nombresPorCodigo, persistNearby,
+  ]);
+
+  // Cambiar las velocidades en admin no obliga a rutear de nuevo: los
+  // kilómetros no cambian, solo el ritmo al que se recorren.
+  useEffect(() => {
+    setNearby((prev) => {
+      if (!prev?.length) return prev;
+      const next = reapplySpeeds(prev, speeds);
+      return next.some((s, i) => s.minutes !== prev[i].minutes) ? next : prev;
+    });
+  }, [speeds]);
 
   const runProjection = useCallback(async () => {
     if (!projectionFolderId || !analysis) return;
@@ -976,6 +1089,89 @@ export const AnalysisPanel = ({
             </Section>
 
             <Section
+              title="Locales de la red cercanos"
+              open={sectionOpen.locales_red}
+              onToggle={() => toggleSection("locales_red")}
+            >
+              <p className="mb-2 text-[10px] leading-relaxed text-muted-foreground">
+                Distancia y tiempo en auto desde la isócrona hasta los locales
+                a {MAX_MINUTOS_ISO} minutos o menos, o en sus mismas comunas.
+                {zonasAledanas.length > 0 && (
+                  <> Desde cada zona aledaña se buscan además los que estén en {RADIO_ALEDANA_KM} km a la redonda.</>
+                )}
+              </p>
+
+              {nearbyError && (
+                <div className="mb-2 rounded-lg bg-brand-red/10 px-2 py-1.5 text-[10px] text-brand-red">
+                  {nearbyError}
+                </div>
+              )}
+
+              {nearby && nearby.length > 0 && (
+                <div className="mb-2 overflow-hidden rounded-xl bg-surface-2/60">
+                  <div className="grid grid-cols-[1fr_58px_46px] border-b border-border/40 text-[10px] font-medium text-muted-foreground">
+                    <div className="px-2 py-1.5">Local</div>
+                    <div className="px-2 py-1.5 text-right">Distancia</div>
+                    <div className="px-2 py-1.5 text-right">Tiempo</div>
+                  </div>
+                  {nearby.map((s) => (
+                    <div
+                      key={`${s.from}:${s.fromName ?? ""}:${s.id}`}
+                      className={[
+                        "grid grid-cols-[1fr_58px_46px] border-b border-border/30 text-[11px] last:border-b-0",
+                        s.selected ? "" : "opacity-40",
+                      ].join(" ")}
+                    >
+                      <div className="truncate px-2 py-1.5 text-foreground">
+                        {s.name}
+                        {s.from === "aledana" && (
+                          <span className="ml-1 text-[9px] text-muted-foreground">
+                            · desde {s.fromName}
+                          </span>
+                        )}
+                      </div>
+                      <div className="px-2 py-1.5 text-right font-mono text-muted-foreground">
+                        {s.km.toFixed(1)} km
+                      </div>
+                      <div className="px-2 py-1.5 text-right font-mono text-foreground">
+                        {s.minutes}′
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {nearby && nearby.length === 0 && (
+                <div className="mb-2 rounded-lg bg-surface-2/40 px-2 py-3 text-center text-[10px] text-muted-foreground">
+                  Sin locales de la red en el entorno.
+                </div>
+              )}
+
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => void runNearby()}
+                  disabled={nearbyBusy || !isochrone || !projectionFolderId}
+                  className="flex-1 rounded-lg bg-surface-2/60 px-2 py-2 text-[11px] font-medium text-foreground transition-colors hover:bg-surface-3 disabled:opacity-40"
+                >
+                  {nearbyBusy ? (
+                    <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
+                  ) : (
+                    <Store className="mr-1 inline h-3 w-3" />
+                  )}
+                  {nearby ? "Recalcular" : "Calcular distancias"}
+                </button>
+                {nearby && nearby.length > 0 && (
+                  <button
+                    onClick={() => setNearbyDialogOpen(true)}
+                    className="flex-1 rounded-lg bg-surface-2/60 px-2 py-2 text-[11px] font-medium text-foreground transition-colors hover:bg-surface-3"
+                  >
+                    Elegir cuáles ({nearby.filter((s) => s.selected).length}/{nearby.length})
+                  </button>
+                )}
+              </div>
+            </Section>
+
+            <Section
               title="Exportar"
               open={sectionOpen.exportar}
               onToggle={() => toggleSection("exportar")}
@@ -1057,7 +1253,7 @@ export const AnalysisPanel = ({
               <button
                 onClick={() => {
                   if (!fullReport) return;
-                  exportReportToPdf({ ...fullReport, projection: projForReport, zonasAledanas });
+                  exportReportToPdf({ ...fullReport, projection: projForReport, zonasAledanas, nearbyStores: nearbyForReport });
                 }}
                 disabled={!fullReport}
                 className="mt-1.5 w-full rounded-lg bg-blue-600/10 px-2 py-2 text-[11px] font-medium text-blue-400 transition-colors hover:bg-blue-600/20 disabled:opacity-40"
@@ -1077,6 +1273,13 @@ export const AnalysisPanel = ({
           deleting={slidesBusy}
         />
       )}
+
+      <NearbyStoresDialog
+        open={nearbyDialogOpen}
+        onClose={() => setNearbyDialogOpen(false)}
+        stores={nearby ?? []}
+        onChange={persistNearby}
+      />
 
       <MapCapturePreviewDialog
         open={previewOpen}
@@ -1125,7 +1328,7 @@ export const AnalysisPanel = ({
                 return;
               }
               try {
-                const laminas = await exportReportToPng({ ...fullReport, zonasAledanas }, projForReport, imgs);
+                const laminas = await exportReportToPng({ ...fullReport, zonasAledanas, nearbyStores: nearbyForReport }, projForReport, imgs);
                 const saved = await saveReportSlides({
                   isochroneId: savedIsochroneId,
                   slide1: laminas[0]?.dataUrl ?? "",
@@ -1137,7 +1340,7 @@ export const AnalysisPanel = ({
                 alert(`No se pudo guardar el informe: ${e instanceof Error ? e.message : String(e)}`);
               }
             } else {
-              await exportReportToPptx({ ...fullReport, zonasAledanas }, projForReport, imgs);
+              await exportReportToPptx({ ...fullReport, zonasAledanas, nearbyStores: nearbyForReport }, projForReport, imgs);
             }
           } finally {
             setExportingPptx(false);

@@ -100,6 +100,18 @@ export interface IsochroneReport {
    * fuente adicional de datos.
    */
   zonasAledanas?: Array<{ name: string }>;
+  /**
+   * Locales de la red cercanos, ya elegidos por el analista. La distancia y
+   * los kilómetros de autopista son reales; el tiempo sale de las velocidades
+   * definidas en admin.
+   */
+  nearbyStores?: Array<{
+    name: string;
+    from: "iso" | "aledana";
+    fromName: string | null;
+    km: number;
+    minutes: number;
+  }>;
 }
 
 /**
