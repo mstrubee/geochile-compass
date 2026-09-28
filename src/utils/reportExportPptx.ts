@@ -181,12 +181,31 @@ export const drawTerritorySlide = (
   if (gseRows.length > 0) {
     addTableBand(slide, "COMPOSICIÓN GSE (% HOGARES)", ML, y, DATA_W);
     y += 0.2;
-    slide.table(
-      gseRows.map((n, i) => row([n.label, `${n.pct}%`], { fill: i % 2 ? C.rowAlt : undefined })),
-      { x: ML, y, w: DATA_W, colW: [DATA_W * 0.6, DATA_W * 0.4], rowH: ROW_H,
-        border: { color: C.grid, pt: 0.5 } },
-    );
-    y += gseRows.length * ROW_H + GAP_TABLA;
+    // Dos clases por fila: las seis en una lista vertical se comían el alto
+    // que necesitan las comunas y los locales de la red. Se leen igual.
+    const pares: Cell[][] = [];
+    for (let i = 0; i < gseRows.length; i += 2) {
+      const izq = gseRows[i];
+      const der = gseRows[i + 1];
+      const celda = (text: string, align: "left" | "right", fill?: string): Cell => ({
+        text,
+        options: { ...cellBase, align, fill },
+      });
+      const fondo = (i / 2) % 2 ? C.rowAlt : undefined;
+      pares.push([
+        celda(izq.label, "left", fondo),
+        celda(`${izq.pct}%`, "right", fondo),
+        celda(der?.label ?? "", "left", fondo),
+        celda(der ? `${der.pct}%` : "", "right", fondo),
+      ]);
+    }
+    slide.table(pares, {
+      x: ML, y, w: DATA_W,
+      colW: [DATA_W * 0.3, DATA_W * 0.2, DATA_W * 0.3, DATA_W * 0.2],
+      rowH: ROW_H,
+      border: { color: C.grid, pt: 0.5 },
+    });
+    y += pares.length * ROW_H + GAP_TABLA;
   }
 
   // Comunas del ÁREA TOTAL analizada: con zonas aledañas fusionadas, lo que
@@ -206,7 +225,13 @@ export const drawTerritorySlide = (
   // alcanza para esas dos, la tabla igual se imprime: el total es justamente
   // lo que no puede faltar.
   const presupuesto = rowsThatFit(y + 0.2) - localesReserva;
-  const comunasFit = Math.min(comunasTotal, Math.max(0, presupuesto - 2));
+  // Si se recorta, la nota de "+N no listadas" también ocupa su línea: sin
+  // contarla, el aviso terminaba por debajo del borde del cuerpo.
+  const cabeComplet = comunasTotal <= presupuesto - 2;
+  const comunasFit = Math.min(
+    comunasTotal,
+    Math.max(0, presupuesto - (cabeComplet ? 2 : 3)),
+  );
   if (comunasTotal > 0 && presupuesto >= 2) {
     const popComuna = (c: (typeof band.communes)[number]) => c.popMeasured ?? c.popInIso;
     const visibles = band.communes.slice(0, comunasFit);
@@ -248,7 +273,12 @@ export const drawTerritorySlide = (
   // A pocos minutos, un local propio deja de ser contexto y pasa a ser
   // canibalización sobre la venta que se proyecta en la lámina siguiente.
   if (cercanos.length > 0) {
-    const caben = Math.min(cercanos.length, Math.max(0, rowsThatFit(y + 0.2) - 1));
+    const disponibles = rowsThatFit(y + 0.2);
+    const cabenTodos = cercanos.length <= disponibles - 1;
+    const caben = Math.min(
+      cercanos.length,
+      Math.max(0, disponibles - (cabenTodos ? 1 : 2)),
+    );
     if (caben > 0) {
       addTableBand(slide, "LOCALES DE LA RED EN EL ENTORNO", ML, y, DATA_W);
       y += 0.2;
