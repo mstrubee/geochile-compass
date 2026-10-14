@@ -13,6 +13,7 @@ import {
   filterDestinations,
   groupIssues,
   includedLayerKeys,
+  newImportSummary,
   previewItems,
   sizeMessage,
 } from "@/utils/importWizard";
@@ -163,5 +164,16 @@ describe("sizeMessage", () => {
   it("avisa solo cuando no cabe", () => {
     expect(sizeMessage(5000, 5600)).toBeNull();
     expect(sizeMessage(25045, 5600)).toMatch(/25\.045 puntos.*5\.600/);
+  });
+});
+
+describe("newImportSummary", () => {
+  it("cuenta lo que se crearía y deja fuera las carpetas que quedan vacías", () => {
+    expect(newImportSummary(doc, new Set())).toEqual({ folders: 3, layers: 6, features: 10 });
+    // sin las dos capas de Norte, esa carpeta desaparece
+    expect(newImportSummary(doc, new Set(["0.0.0", "0.0.1"]))).toEqual({ folders: 2, layers: 4, features: 6 });
+    // sin nada incluido no queda ni la raíz
+    const all = new Set(includedLayerKeys(doc, new Set()));
+    expect(newImportSummary(doc, all)).toEqual({ folders: 0, layers: 0, features: 0 });
   });
 });

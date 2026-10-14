@@ -193,3 +193,25 @@ export const sizeMessage = (rows: number, max: number): string | null =>
   rows > max
     ? `Son ${rows.toLocaleString("es-CL")} puntos y el máximo por confirmación es ${max.toLocaleString("es-CL")}. Excluye partes del archivo o impórtalo por separado.`
     : null;
+
+// ── Resumen de una importación nueva (sin pasar por la base) ─────────────────
+
+/** Qué se crearía en modo "nueva": las carpetas que conservan alguna capa incluida, las capas y los puntos. */
+export const newImportSummary = (doc: ImportDocument, excludedLayers: ReadonlySet<string>): { folders: number; layers: number; features: number } => {
+  let folders = 0;
+  let layers = 0;
+  let features = 0;
+  const walk = (n: ImportNode): boolean => {
+    if (n.kind === "layer") {
+      if (excludedLayers.has(n.key)) return false;
+      layers++;
+      features += n.features?.length ?? 0;
+      return true;
+    }
+    const kept = (n.children ?? []).map(walk).some(Boolean);
+    if (kept) folders++;
+    return kept;
+  };
+  walk(doc.root);
+  return { folders, layers, features };
+};
