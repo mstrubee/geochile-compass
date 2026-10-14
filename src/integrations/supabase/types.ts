@@ -2210,6 +2210,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "territorial_layers_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layer_groups_active"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "territorial_layers_node_fk"
             columns: ["id"]
             isOneToOne: true
@@ -3222,6 +3229,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "territorial_layers_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layer_groups_active"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "territorial_layers_node_fk"
             columns: ["id"]
             isOneToOne: true
@@ -3258,11 +3272,33 @@ export type Database = {
         Args: { p_owner: string; p_scope: string }
         Returns: boolean
       }
+      _layer_nodes_copy_subtree: {
+        Args: {
+          p_name: string
+          p_parent: string
+          p_position: string
+          p_src: Database["public"]["Tables"]["layer_nodes"]["Row"]
+        }
+        Returns: string
+      }
+      _layer_nodes_ensure_legacy_group: {
+        Args: { n: Database["public"]["Tables"]["layer_nodes"]["Row"] }
+        Returns: undefined
+      }
       _layer_nodes_next_position: {
         Args: { p_parent: string }
         Returns: string
       }
       _layer_nodes_rebalance: { Args: { p_parent: string }; Returns: undefined }
+      _layer_nodes_resync_layer_groups: {
+        Args: { p_node: string }
+        Returns: undefined
+      }
+      _layer_nodes_root_of: { Args: { p_id: string }; Returns: string }
+      _layer_nodes_unique_layer_name: {
+        Args: { p_group: string; p_name: string }
+        Returns: string
+      }
       _legacy_group_style: {
         Args: {
           g: Database["public"]["Tables"]["territorial_layer_groups"]["Row"]
@@ -3273,6 +3309,7 @@ export type Database = {
         Args: { l: Database["public"]["Tables"]["territorial_layers"]["Row"] }
         Returns: Json
       }
+      _legacy_slug: { Args: { p_name: string }; Returns: string }
       _postgis_deprecate: {
         Args: { newname: string; oldname: string; version: string }
         Returns: undefined
