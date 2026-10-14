@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  documentToGeoJson,
   importFormatOf,
   includedCounts,
   isExcluded,
@@ -259,7 +260,59 @@ describe("parseImportFile", () => {
   it("reconoce las extensiones", () => {
     expect(importFormatOf("A.KMZ")).toBe("kmz");
     expect(importFormatOf("a.json")).toBe("geojson");
+    expect(importFormatOf("mapa.HTML")).toBe("html");
+    expect(importFormatOf("mapa.htm")).toBe("html");
     expect(importFormatOf("a.txt")).toBeNull();
+  });
+});
+
+describe("HTML de mapas", () => {
+  it("un HTML con KML incrustado trae sus carpetas como capas y se guarda como geojson", () => {
+    const doc = parseImportContent.html(text("mapa-incrustado.html"), "mapa-incrustado.html");
+    expect(doc.format).toBe("geojson");
+    expect(doc.counts).toMatchObject({ layers: 2, features: 3, invalid: 0 });
+    expect(names(doc.root)).toEqual(["Farmacias", "Clínicas"]);
+    const farmacias = layersOf(doc.root).find((l) => l.name === "Farmacias");
+    expect(farmacias?.features?.map((f) => f.name)).toEqual(["Farmacia Centro", "Farmacia Norte"]);
+    expect(farmacias?.features?.map((f) => f.externalId)).toEqual(["f1", "f2"]);
+    // la ruta interna de carpetas no se guarda como dato del punto
+    expect(farmacias?.features?.[0].properties).not.toHaveProperty("_folderPath");
+  });
+
+  it("un Leaflet sin grupos queda en una capa 'Markers'", () => {
+    const doc = parseImportContent.html(text("mapa-leaflet.html"), "mapa-leaflet.html");
+    expect(doc.counts).toMatchObject({ layers: 1, features: 3 });
+    expect(layersOf(doc.root)[0].name).toBe("Markers");
+  });
+
+  it("si no hay puntos, el error dice qué se reconoce y qué hacer", () => {
+    expect(() => parseImportContent.html(text("mapa-sin-puntos.html"), "x.html")).toThrow(/No se encontraron puntos en el HTML.*KML o GeoJSON/s);
+  });
+
+  it("parseImportFile lo lee por la extensión", async () => {
+    const content = text("mapa-incrustado.html");
+    const file = { name: "mapa.htm", size: content.length, text: async () => content } as unknown as File;
+    const doc = await parseImportFile(file);
+    expect(doc.counts.features).toBe(3);
+  });
+});
+
+describe("documentToGeoJson", () => {
+  it("aplana el árbol a puntos con su capa y su ruta de carpetas", () => {
+    const doc = parseImportContent.kml(text("locales.kml"), "locales.kml");
+    const fc = documentToGeoJson(doc);
+    expect(fc.type).toBe("FeatureCollection");
+    expect(fc.features).toHaveLength(doc.counts.features);
+    const one = fc.features.find((f) => f.properties.layer === "Antofagasta");
+    expect(one?.properties._folderPath).toEqual(["Norte"]);
+  });
+
+  it("respeta las capas excluidas", () => {
+    const doc = parseImportContent.html(text("mapa-incrustado.html"), "x.html");
+    const clinicas = layersOf(doc.root).find((l) => l.name === "Clínicas")!;
+    const fc = documentToGeoJson(doc, new Set([clinicas.key]));
+    expect(fc.features).toHaveLength(2);
+    expect(fc.features.every((f) => f.properties.layer === "Farmacias")).toBe(true);
   });
 });
 

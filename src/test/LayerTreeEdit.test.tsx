@@ -196,8 +196,14 @@ describe("LayerTree — administrador", () => {
 
 describe("LayerTree — archivos soltados y menú oculto", () => {
   const file = new File(["x"], "capa.kml", { type: "application/vnd.google-earth.kml+xml" });
-  const dropOn = (name: string, types: string[]) =>
-    act(async () => { fireEvent.drop(screen.getByText(name), { dataTransfer: { types, files: types.includes("Files") ? [file] : [], dropEffect: "" } }); });
+  // Como en un navegador real: se entra a la zona antes de soltar (sin el `dragenter`, react-dnd rechaza el drop).
+  const dropOn = async (name: string, types: string[]) => {
+    const target = screen.getByText(name);
+    const data = { dataTransfer: { types, files: types.includes("Files") ? [file] : [], dropEffect: "", getData: () => "" } };
+    await act(async () => { fireEvent.dragEnter(target, data); });
+    await act(async () => { fireEvent.dragOver(target, data); });
+    await act(async () => { fireEvent.drop(target, data); });
+  };
 
   it("soltar un archivo sobre una carpeta o una capa avisa cuál fila fue", async () => {
     const { onDropFile } = setup({ editable: true, drop: true, searchTerm: "" });
@@ -208,6 +214,21 @@ describe("LayerTree — archivos soltados y menú oculto", () => {
     // "Farmacias" parte abierta (initialOpenState): su capa ya está en pantalla
     await dropOn("Cruz Verde", ["Files"]);
     expect(onDropFile.mock.calls[1][1]).toMatchObject({ id: "L1", kind: "layer" });
+  });
+
+  it("el drop sigue hasta window: si no, react-dnd se queda 'arrastrando' y rechaza los arrastres internos siguientes", async () => {
+    setup({ editable: true, drop: true });
+    const seen: string[] = [];
+    const spy = (e: Event) => seen.push(e.type);
+    window.addEventListener("dragover", spy);
+    window.addEventListener("drop", spy);
+    try {
+      await dropOn("Farmacias", ["Files"]);
+    } finally {
+      window.removeEventListener("dragover", spy);
+      window.removeEventListener("drop", spy);
+    }
+    expect(seen).toEqual(expect.arrayContaining(["dragover", "drop"]));
   });
 
   it("arrastrar algo que no es un archivo (una fila del propio árbol) no cuenta", async () => {

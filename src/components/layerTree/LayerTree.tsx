@@ -36,6 +36,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { TriStateCheckbox } from "./TriStateCheckbox";
+import { hasFiles, markFileDropHandled } from "./fileDrop";
 import { matchesSearch, type TreeAnalysis, type TreeRow } from "@/utils/layerTree";
 
 export const ROW_HEIGHT = 28;
@@ -50,7 +51,6 @@ const isUrlLike = (s: string | null | undefined) =>
 const isNode = (r: TreeRow) => r.kind === "folder" || r.kind === "layer";
 
 /** ¿Lo que se está arrastrando son archivos del escritorio (y no filas del propio árbol)? */
-const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
 
 export type OpenMap = Record<string, boolean>;
 
@@ -175,7 +175,7 @@ const Row = ({ node, style, dragHandle, tree }: NodeRendererProps<TreeRow>) => {
         onDragOver: (e: React.DragEvent) => {
           if (!hasFiles(e)) return;
           e.preventDefault();
-          e.stopPropagation();
+          markFileDropHandled(e);
           e.dataTransfer.dropEffect = "copy";
           if (!fileOver) setFileOver(true);
         },
@@ -183,7 +183,7 @@ const Row = ({ node, style, dragHandle, tree }: NodeRendererProps<TreeRow>) => {
         onDrop: (e: React.DragEvent) => {
           if (!hasFiles(e)) return;
           e.preventDefault();
-          e.stopPropagation();
+          markFileDropHandled(e);
           setFileOver(false);
           const file = e.dataTransfer.files[0];
           if (file) onDropFile(file, row);

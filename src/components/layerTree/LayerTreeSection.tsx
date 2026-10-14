@@ -17,7 +17,7 @@ import { LAYER_TREE_QUERY_KEY, useLayerFeaturePreviews, useLayerTreeData } from 
 import { useLayerTreeEditor } from "@/hooks/useLayerTreeEditor";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
 import { TERRITORIAL_LAYERS_QUERY_KEY } from "@/hooks/useTerritorialLayers";
-import { importFormatOf } from "@/utils/importParser";
+import { IMPORT_ACCEPT, importFormatOf } from "@/utils/importParser";
 import type { ImportMode } from "@/services/layerImport";
 import { useLayerStyles } from "@/hooks/useLayerStyles";
 import { ImportWizard } from "@/components/layerImport/ImportWizard";
@@ -41,6 +41,7 @@ import { friendlyError, type TrashItem } from "@/utils/layerTreeEdit";
 import { LayerTree, type OpenMap, type TreeEditActions } from "./LayerTree";
 import { NodePropertiesDialog } from "./NodePropertiesDialog";
 import { TrashDialog } from "./TrashDialog";
+import { hasFiles, isFileDropHandled } from "./fileDrop";
 
 /** Encender de una vez más puntos que estos pide confirmación (hay 67 mil en total). */
 export const CONFIRM_ACTIVATION_POINTS = 50_000;
@@ -254,7 +255,7 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
   // ── Importar ───────────────────────────────────────────────────────────────
   const startImport = useCallback((file: File, mode: ImportMode = "new", targetId: string | null = null) => {
     if (!importFormatOf(file.name)) {
-      toast.error("Formato no soportado", { description: "Usa un archivo KMZ, KML, GeoJSON o CSV." });
+      toast.error("Formato no soportado", { description: "Usa un archivo KMZ, KML, GeoJSON, CSV o HTML." });
       return;
     }
     setImporting({ file, mode, targetId, nonce: Date.now() });
@@ -274,7 +275,6 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
     void queryClient.invalidateQueries({ queryKey: TERRITORIAL_LAYERS_QUERY_KEY });
   }, [queryClient]);
 
-  const isFileDrag = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
 
   const editingStyle: BrandStyle | null = editing
     ? (() => {
@@ -309,8 +309,14 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
     <div
       className="relative"
       onDragOver={(e) => {
-        if (!isAdmin || !isFileDrag(e)) return;
+        if (!isAdmin || !hasFiles(e)) return;
         e.preventDefault();
+        // Sobre una fila el aviso es el resaltado de la fila, no el del panel entero.
+        const onRow = isFileDropHandled(e);
+        if (onRow) {
+          if (fileOver) setFileOver(false);
+          return;
+        }
         e.dataTransfer.dropEffect = "copy";
         if (!fileOver) setFileOver(true);
       }}
@@ -319,9 +325,10 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFileOver(false);
       }}
       onDrop={(e) => {
-        if (!isAdmin || !isFileDrag(e)) return;
+        if (!isAdmin || !hasFiles(e)) return;
         e.preventDefault();
         setFileOver(false);
+        if (isFileDropHandled(e)) return; // ya lo atendió la fila sobre la que se soltó
         const file = e.dataTransfer.files[0];
         if (file) startImport(file);
       }}
@@ -384,13 +391,13 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
             <ToolButton label="Nueva carpeta" onClick={() => void handleNewFolder(null)}>
               <FolderPlus className="h-4 w-4" />
             </ToolButton>
-            <ToolButton label="Importar archivo (KMZ, KML, GeoJSON, CSV)" onClick={() => fileInput.current?.click()}>
+            <ToolButton label="Importar archivo (KMZ, KML, GeoJSON, CSV, HTML)" onClick={() => fileInput.current?.click()}>
               <Upload className="h-4 w-4" />
             </ToolButton>
             <input
               ref={fileInput}
               type="file"
-              accept=".kmz,.kml,.geojson,.json,.csv"
+              accept={IMPORT_ACCEPT}
               className="hidden"
               aria-label="Archivo a importar"
               onChange={(e) => {

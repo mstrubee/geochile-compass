@@ -2,9 +2,10 @@ import JSZip from "jszip";
 import type { Geometry, Position } from "geojson";
 import { parseCsvRows } from "@/utils/csv";
 import { MAX_FILE_SIZE } from "@/utils/fileParsers";
+import { htmlToGeoJson } from "@/utils/htmlToGeoJson";
 
 /**
- * Parser único del importador de capas (KMZ, KML, GeoJSON y CSV).
+ * Parser único del importador de capas (KMZ, KML, GeoJSON, CSV y HTML de mapas).
  *
  * Devuelve SIEMPRE el mismo modelo: un árbol de carpetas y capas con los puntos
  * ya validados (geometría 2D, coordenadas finitas, anillos cerrados). Lo que no se
@@ -15,7 +16,10 @@ import { MAX_FILE_SIZE } from "@/utils/fileParsers";
  * Placemarks directos van a una capa "Sin subcarpeta".
  */
 
+/** Formatos con los que se guarda un lote (los que acepta la base). */
 export type ImportFormat = "kmz" | "kml" | "geojson" | "csv";
+/** Lo que se puede soltar: el HTML de un mapa se convierte a GeoJSON al leerlo, así que el lote queda como `geojson`. */
+export type ImportSourceFormat = ImportFormat | "html";
 
 export interface ImportFeature {
   /** Único dentro del archivo: `<clave de la capa>#<n>`. */
@@ -60,12 +64,16 @@ export interface ImportDocument {
   counts: { folders: number; layers: number; features: number; invalid: number };
 }
 
-export const SUPPORTED_IMPORT_EXTENSIONS = ["kmz", "kml", "geojson", "json", "csv"] as const;
+export const SUPPORTED_IMPORT_EXTENSIONS = ["kmz", "kml", "geojson", "json", "csv", "html", "htm"] as const;
+/** Valor del atributo `accept` de los selectores de archivo del importador. */
+export const IMPORT_ACCEPT = SUPPORTED_IMPORT_EXTENSIONS.map((e) => `.${e}`).join(",");
 
-export const importFormatOf = (filename: string): ImportFormat | null => {
-  const m = filename.toLowerCase().match(/\.(kmz|kml|geojson|json|csv)$/);
+export const importFormatOf = (filename: string): ImportSourceFormat | null => {
+  const m = filename.toLowerCase().match(/\.(kmz|kml|geojson|json|csv|html|htm)$/);
   if (!m) return null;
-  return m[1] === "json" ? "geojson" : (m[1] as ImportFormat);
+  if (m[1] === "json") return "geojson";
+  if (m[1] === "htm") return "html";
+  return m[1] as ImportSourceFormat;
 };
 
 /** Íconos más grandes que esto (data URL) no se guardan en la capa: inflarían cada lectura del árbol. */
@@ -625,13 +633,19 @@ const pickString = (props: Record<string, unknown>, keys: string[]): string | nu
   return null;
 };
 
+type GeoJsonLike = { type?: string; features?: unknown[]; geometry?: unknown; name?: string; id?: unknown; properties?: unknown };
+
 const buildGeoJson = (textContent: string, filename: string): ImportDocument => {
-  let obj: { type?: string; features?: unknown[]; geometry?: unknown; name?: string; id?: unknown; properties?: unknown };
+  let obj: GeoJsonLike;
   try {
     obj = JSON.parse(textContent);
   } catch {
     throw new Error("GeoJSON inválido (no es JSON)");
   }
+  return buildGeoJsonObject(obj, filename);
+};
+
+const buildGeoJsonObject = (obj: GeoJsonLike, filename: string): ImportDocument => {
   let features: { type?: string; geometry?: unknown; properties?: unknown; id?: unknown }[];
   if (obj.type === "FeatureCollection" && Array.isArray(obj.features)) features = obj.features as typeof features;
   else if (obj.type === "Feature") features = [obj as (typeof features)[number]];
@@ -777,12 +791,33 @@ const buildCsv = (textContent: string, filename: string): ImportDocument => {
   return finish(filename, "csv", root, b);
 };
 
+// ── HTML de mapas (Leaflet/Folium, Google My Maps, KML embebido) ─────────────
+
+/**
+ * El HTML se convierte a GeoJSON en el navegador (misma lógica que ya usaba la carga antigua) y de
+ * ahí sigue el camino del GeoJSON: el `folder` que trae cada punto pasa a ser su carpeta.
+ */
+const buildHtml = (html: string, filename: string): ImportDocument => {
+  const fc = htmlToGeoJson(html);
+  if (!fc.features.length) {
+    throw new Error(
+      "No se encontraron puntos en el HTML. Se reconocen mapas exportados con Leaflet/Folium, Google My Maps o con un KML incrustado; " +
+        "si el mapa viene de otra herramienta, expórtalo como KML o GeoJSON desde su origen.",
+    );
+  }
+  const features = fc.features.map((f) => {
+    const folder = typeof f.properties?.folder === "string" ? f.properties.folder.trim() : "";
+    return folder ? { ...f, properties: { ...f.properties, _folderPath: [folder] } } : f;
+  });
+  return buildGeoJsonObject({ type: "FeatureCollection", features }, filename);
+};
+
 // ── Punto de entrada ─────────────────────────────────────────────────────────
 
-/** Lee un archivo (KMZ, KML, GeoJSON o CSV) y devuelve el árbol de capas listo para previsualizar. */
+/** Lee un archivo (KMZ, KML, GeoJSON, CSV o HTML de un mapa) y devuelve el árbol de capas listo para previsualizar. */
 export const parseImportFile = async (file: File): Promise<ImportDocument> => {
   const format = importFormatOf(file.name);
-  if (!format) throw new Error("Formato no soportado. Usa KMZ, KML, GeoJSON o CSV.");
+  if (!format) throw new Error("Formato no soportado. Usa KMZ, KML, GeoJSON, CSV o HTML.");
   if (file.size > MAX_FILE_SIZE) {
     throw new Error(`El archivo pesa ${(file.size / 1048576).toFixed(1)} MB y el máximo es ${MAX_FILE_SIZE / 1048576} MB`);
   }
@@ -790,6 +825,7 @@ export const parseImportFile = async (file: File): Promise<ImportDocument> => {
   const content = await file.text();
   if (format === "kml") return buildKml(content, file.name);
   if (format === "geojson") return buildGeoJson(content, file.name);
+  if (format === "html") return buildHtml(content, file.name);
   return buildCsv(content, file.name);
 };
 
@@ -798,6 +834,7 @@ export const parseImportContent = {
   kml: buildKml,
   geojson: buildGeoJson,
   csv: buildCsv,
+  html: buildHtml,
   kmz: parseKmz,
 };
 
@@ -834,3 +871,28 @@ export const structureOf = (n: ImportNode): Record<string, unknown> => ({
   icon: n.icon,
   ...(n.kind === "folder" ? { children: (n.children ?? []).map(structureOf) } : { count: n.features?.length ?? 0 }),
 });
+
+/**
+ * El documento como FeatureCollection plano (lo que se descarga o se da a otras herramientas):
+ * cada punto lleva el nombre de su capa y la ruta de carpetas.
+ */
+export const documentToGeoJson = (doc: ImportDocument, excluded: ReadonlySet<string> = new Set()) => {
+  const features: { type: "Feature"; geometry: Geometry; properties: Record<string, unknown> }[] = [];
+  const walk = (n: ImportNode, path: string[]) => {
+    if (isExcluded(n.key, excluded)) return;
+    if (n.kind === "folder") {
+      const next = n.key === doc.root.key ? path : [...path, n.name];
+      n.children?.forEach((c) => walk(c, next));
+      return;
+    }
+    for (const f of n.features ?? []) {
+      features.push({
+        type: "Feature",
+        geometry: f.geometry,
+        properties: { ...f.properties, ...(f.name ? { name: f.name } : {}), layer: n.name, _folderPath: path },
+      });
+    }
+  };
+  walk(doc.root, []);
+  return { type: "FeatureCollection" as const, features };
+};
