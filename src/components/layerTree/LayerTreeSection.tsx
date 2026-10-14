@@ -26,6 +26,7 @@ import { BrandStyleEditorDialog } from "@/components/panels/BrandStyleEditorDial
 import type { BrandStyle } from "@/hooks/useBrandStyles";
 import { buildKmzTree, fetchNodeBounds, type NodeBounds } from "@/services/layerTreeExport";
 import { exportLayerTreeAsKmz } from "@/utils/kmzExport";
+import { exportLayerTreeAsCsv } from "@/utils/layerCsvExport";
 import {
   activationWeight,
   analyzeTree,
@@ -206,6 +207,18 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
       const tree = await buildKmzTree(row, (done) => toast.loading(`Preparando “${row.name}”… (${done}/${total} capas)`, { id: toastId }));
       await exportLayerTreeAsKmz(tree);
       toast.success(`“${row.name}” exportada como KMZ`, { id: toastId });
+    } catch (e) {
+      toast.error("No se pudo exportar", { id: toastId, description: friendlyError(e) });
+    }
+  }, []);
+
+  const handleExportCsv = useCallback(async (row: TreeRow) => {
+    const total = collectLayerIds(row).length;
+    const toastId = toast.loading(`Preparando “${row.name}”…`);
+    try {
+      const tree = await buildKmzTree(row, (done) => toast.loading(`Preparando “${row.name}”… (${done}/${total} capas)`, { id: toastId }));
+      const n = exportLayerTreeAsCsv(tree);
+      toast.success(`“${row.name}” exportada como CSV`, { id: toastId, description: `${n.toLocaleString("es-CL")} puntos` });
     } catch (e) {
       toast.error("No se pudo exportar", { id: toastId, description: friendlyError(e) });
     }
@@ -432,6 +445,7 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
         onResetStyle={resetLayerStyle}
         onFlyTo={onFlyToBounds ? handleFlyTo : undefined}
         onExport={handleExport}
+        onExportCsv={handleExportCsv}
         onDropFile={isAdmin ? handleDropOnRow : undefined}
         onMatchCountChange={setMatchCount}
         edit={edit}

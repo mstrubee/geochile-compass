@@ -76,6 +76,7 @@ interface RowActions {
   onResetStyle: (layerId: string) => void;
   onFlyTo?: (row: TreeRow) => void;
   onExport?: (row: TreeRow) => void;
+  onExportCsv?: (row: TreeRow) => void;
   /** Se soltó un archivo sobre una carpeta o capa del árbol (importar ahí). */
   onDropFile?: (file: File, row: TreeRow) => void;
   /** Sin menú contextual (cuando el árbol solo muestra el contenido de un archivo). */
@@ -162,7 +163,7 @@ const RenameInput = ({ node }: { node: NodeApi<TreeRow> }) => {
 };
 
 const Row = ({ node, style, dragHandle, tree }: NodeRendererProps<TreeRow>) => {
-  const { analysis, getStyle, edit, onToggleCheck, onOpenPoi, onLoadMore, onEditStyle, onResetStyle, onFlyTo, onExport, onDropFile, hideMenu } =
+  const { analysis, getStyle, edit, onToggleCheck, onOpenPoi, onLoadMore, onEditStyle, onResetStyle, onFlyTo, onExport, onExportCsv, onDropFile, hideMenu } =
     useRowActions();
   const [fileOver, setFileOver] = useState(false);
   const row = node.data;
@@ -348,6 +349,11 @@ const Row = ({ node, style, dragHandle, tree }: NodeRendererProps<TreeRow>) => {
             <Download className="mr-2 h-3.5 w-3.5" /> Exportar como KMZ
           </ContextMenuItem>
         )}
+        {onExportCsv && (
+          <ContextMenuItem onSelect={() => onExportCsv(row)}>
+            <Download className="mr-2 h-3.5 w-3.5" /> Exportar como CSV
+          </ContextMenuItem>
+        )}
         {!isFolder && (
           <>
             <ContextMenuSeparator />
@@ -387,6 +393,7 @@ interface LayerTreeProps {
   onResetStyle: (layerId: string) => void;
   onFlyTo?: (row: TreeRow) => void;
   onExport?: (row: TreeRow) => void;
+  onExportCsv?: (row: TreeRow) => void;
   onDropFile?: (file: File, row: TreeRow) => void;
   hideMenu?: boolean;
   /** Cuántas filas coinciden con la búsqueda (0 sin búsqueda). */
@@ -411,6 +418,7 @@ export const LayerTree = ({
   onResetStyle,
   onFlyTo,
   onExport,
+  onExportCsv,
   onDropFile,
   hideMenu,
   onMatchCountChange,
@@ -447,10 +455,11 @@ export const LayerTree = ({
       onResetStyle,
       onFlyTo,
       onExport,
+      onExportCsv,
       onDropFile,
       hideMenu,
     }),
-    [analysis, getStyle, canEdit, edit, onToggleCheck, onOpenPoi, onLoadMore, onEditStyle, onResetStyle, onFlyTo, onExport, onDropFile, hideMenu],
+    [analysis, getStyle, canEdit, edit, onToggleCheck, onOpenPoi, onLoadMore, onEditStyle, onResetStyle, onFlyTo, onExport, onExportCsv, onDropFile, hideMenu],
   );
 
   const handleToggle = useCallback(

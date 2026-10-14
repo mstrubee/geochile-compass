@@ -34,7 +34,7 @@ const setup = (opts: { editable?: boolean; searchTerm?: string; fly?: boolean; d
   } satisfies TreeEditActions;
   const props = {
     onToggleCheck: vi.fn(), onOpenPoi: vi.fn(), onLoadMore: vi.fn(), onEditStyle: vi.fn(), onResetStyle: vi.fn(),
-    onFlyTo: vi.fn(), onExport: vi.fn(), onDropFile: vi.fn<(file: File, row: TreeRow) => void>(),
+    onFlyTo: vi.fn(), onExport: vi.fn(), onExportCsv: vi.fn(), onDropFile: vi.fn<(file: File, row: TreeRow) => void>(),
   };
   const utils = render(
     <LayerTree
@@ -62,13 +62,13 @@ describe("LayerTree — solo lectura", () => {
   it("el menú contextual ofrece volar a y exportar, pero no editar", async () => {
     setup();
     const items = await menuItems("Farmacias");
-    expect(items).toEqual(["Volar a", "Exportar como KMZ"]);
+    expect(items).toEqual(["Volar a", "Exportar como KMZ", "Exportar como CSV"]);
   });
 
   it("una capa suma las opciones de estilo personal", async () => {
     setup();
     const items = await menuItems("Cruz Verde");
-    expect(items).toEqual(["Volar a", "Exportar como KMZ", "✏️ Mi estilo en este equipo…", "↩ Restaurar mi estilo"]);
+    expect(items).toEqual(["Volar a", "Exportar como KMZ", "Exportar como CSV", "✏️ Mi estilo en este equipo…", "↩ Restaurar mi estilo"]);
   });
 
   it("el doble clic no abre el renombrado y los atajos de edición no hacen nada", async () => {
@@ -87,7 +87,7 @@ describe("LayerTree — administrador", () => {
   it("el menú contextual de una carpeta trae todas las acciones", async () => {
     setup({ editable: true });
     expect(await menuItems("Farmacias")).toEqual([
-      "Nueva carpeta aquí", "Renombrar", "Propiedades…", "Duplicar", "Volar a", "Exportar como KMZ", "Eliminar",
+      "Nueva carpeta aquí", "Renombrar", "Propiedades…", "Duplicar", "Volar a", "Exportar como KMZ", "Exportar como CSV", "Eliminar",
     ]);
   });
 
@@ -99,7 +99,7 @@ describe("LayerTree — administrador", () => {
   });
 
   it("cada acción del menú llama a su manejador con la fila correcta", async () => {
-    const { edit, onFlyTo, onExport } = setup({ editable: true });
+    const { edit, onFlyTo, onExport, onExportCsv } = setup({ editable: true });
     const click = async (label: string, target = "Farmacias") => {
       await menuItems(target);
       await act(async () => { fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(label) })); });
@@ -115,6 +115,8 @@ describe("LayerTree — administrador", () => {
     expect(onFlyTo.mock.calls[0][0].id).toBe("F1");
     await click("Exportar como KMZ");
     expect(onExport.mock.calls[0][0].id).toBe("F1");
+    await click("Exportar como CSV");
+    expect(onExportCsv.mock.calls[0][0].id).toBe("F1");
     await click("Eliminar", "Retail");
     expect(edit.onDelete.mock.calls[0][0].map((r) => r.id)).toEqual(["F2"]);
   });
