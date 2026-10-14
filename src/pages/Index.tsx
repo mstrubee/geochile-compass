@@ -2169,6 +2169,7 @@ const Index = () => {
           onGenerateVoronoi={generateVoronoi}
           onLoadOverpass={loadOverpass}
           onFlyToCommune={handleFlyToCommune}
+          onFlyToPoint={(lat, lng) => setFlyTarget({ id: Date.now(), lat, lng, bbox: null })}
           onOpenCommuneRangeResults={handleOpenCommuneRangeResults}
           compareCommunes={compareCommunes}
           onCompareCommunesChange={setCompareCommunes}
