@@ -42,6 +42,14 @@ vi.mock("@/integrations/supabase/client", () => ({
 // Diálogos pesados que esta prueba no ejerce.
 vi.mock("@/components/panels/TerritorialLayerManagerDialog", () => ({ TerritorialLayerManagerDialog: () => null }));
 vi.mock("@/components/panels/BrandStyleEditorDialog", () => ({ BrandStyleEditorDialog: () => null }));
+// El asistente de importación tiene sus propias pruebas; acá solo importa cómo se abre.
+vi.mock("@/components/layerImport/ImportWizard", () => ({
+  ImportWizard: (p: { file: File; initialMode: string; initialTargetId: string | null; onClose: () => void }) => (
+    <div data-testid="wizard" data-file={p.file.name} data-mode={p.initialMode} data-target={p.initialTargetId ?? ""}>
+      <button type="button" onClick={p.onClose}>cerrar asistente</button>
+    </div>
+  ),
+}));
 
 // ── Datos ─────────────────────────────────────────────────────────────────────
 const nodeRow = (id: string, kind: "folder" | "layer", name: string, parent_id: string | null, position: string) => ({
@@ -81,7 +89,7 @@ const wrapper = ({ children }: { children: ReactNode }) => {
   );
 };
 
-const mount = async (props: { onFlyToPoint?: (lat: number, lng: number) => void } = {}) => {
+const mount = async (props: { onFlyToPoint?: (lat: number, lng: number) => void; isAdmin?: boolean } = {}) => {
   const utils = render(<LayerTreeSection {...props} />, { wrapper });
   await screen.findByText("Farmacias");
   return utils;
@@ -247,5 +255,70 @@ describe("LayerTreeSection", () => {
     db.failNodes = false;
     await click(retry);
     await screen.findByText("Farmacias");
+  });
+});
+
+describe("importar archivos", () => {
+  const kml = () => new File(["<kml/>"], "locales.kml");
+  const filesDrag = (file: File) => ({ dataTransfer: { types: ["Files"], files: [file], dropEffect: "" } });
+
+  it("solo los administradores ven el botón de importar", async () => {
+    await mount();
+    expect(screen.queryByRole("button", { name: /Importar archivo/ })).toBeNull();
+  });
+
+  it("elegir un archivo con el botón abre el asistente", async () => {
+    await mount({ isAdmin: true });
+    expect(screen.getByRole("button", { name: /Importar archivo/ })).toBeInTheDocument();
+    const input = screen.getByLabelText("Archivo a importar") as HTMLInputElement;
+    expect(input).toHaveAttribute("accept", ".kmz,.kml,.geojson,.json,.csv");
+    await act(async () => { fireEvent.change(input, { target: { files: [kml()] } }); });
+    const w = await screen.findByTestId("wizard");
+    expect(w).toHaveAttribute("data-file", "locales.kml");
+    expect(w).toHaveAttribute("data-mode", "new");
+    expect(w).toHaveAttribute("data-target", "");
+    await click(screen.getByRole("button", { name: "cerrar asistente" }));
+    expect(screen.queryByTestId("wizard")).toBeNull();
+  });
+
+  it("soltar un archivo sobre el panel abre el asistente (con el aviso mientras se arrastra)", async () => {
+    const { container } = await mount({ isAdmin: true });
+    const panel = container.firstElementChild as HTMLElement;
+    await act(async () => { fireEvent.dragOver(panel, filesDrag(kml())); });
+    expect(screen.getByText("Suelta el archivo para importarlo")).toBeInTheDocument();
+    await act(async () => { fireEvent.drop(panel, filesDrag(kml())); });
+    expect(screen.queryByText("Suelta el archivo para importarlo")).toBeNull();
+    expect(await screen.findByTestId("wizard")).toHaveAttribute("data-file", "locales.kml");
+  });
+
+  it("soltar sobre una carpeta importa dentro de ella", async () => {
+    await mount({ isAdmin: true });
+    await act(async () => { fireEvent.drop(screen.getByText("Farmacias"), filesDrag(kml())); });
+    const w = await screen.findByTestId("wizard");
+    expect(w).toHaveAttribute("data-mode", "new");
+    expect(w).toHaveAttribute("data-target", "F1");
+  });
+
+  it("soltar sobre una capa abre el asistente para reemplazarla", async () => {
+    await mount({ isAdmin: true });
+    await click(screen.getByText("Farmacias"));
+    await act(async () => { fireEvent.drop(screen.getByText("Cruz Verde"), filesDrag(kml())); });
+    const w = await screen.findByTestId("wizard");
+    expect(w).toHaveAttribute("data-mode", "replace");
+    expect(w).toHaveAttribute("data-target", "L1");
+  });
+
+  it("un formato no soportado no abre el asistente", async () => {
+    await mount({ isAdmin: true });
+    const panel = screen.getByLabelText("Buscar capas").closest("div.relative")!.parentElement!.parentElement as HTMLElement;
+    await act(async () => { fireEvent.drop(panel, filesDrag(new File(["x"], "mapa.shp"))); });
+    expect(screen.queryByTestId("wizard")).toBeNull();
+  });
+
+  it("quien no es administrador no puede soltar archivos", async () => {
+    const { container } = await mount();
+    await act(async () => { fireEvent.drop(container.firstElementChild as HTMLElement, filesDrag(kml())); });
+    await act(async () => { fireEvent.drop(screen.getByText("Farmacias"), filesDrag(kml())); });
+    expect(screen.queryByTestId("wizard")).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FolderPlus, Search, Settings2, Trash2, Undo2, X } from "lucide-react";
+import { FolderPlus, Search, Settings2, Trash2, Undo2, Upload, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
@@ -16,7 +16,11 @@ import {
 import { LAYER_TREE_QUERY_KEY, useLayerFeaturePreviews, useLayerTreeData } from "@/hooks/useLayerTree";
 import { useLayerTreeEditor } from "@/hooks/useLayerTreeEditor";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
+import { TERRITORIAL_LAYERS_QUERY_KEY } from "@/hooks/useTerritorialLayers";
+import { importFormatOf } from "@/utils/importParser";
+import type { ImportMode } from "@/services/layerImport";
 import { useLayerStyles } from "@/hooks/useLayerStyles";
+import { ImportWizard } from "@/components/layerImport/ImportWizard";
 import { TerritorialLayerManagerDialog } from "@/components/panels/TerritorialLayerManagerDialog";
 import { BrandStyleEditorDialog } from "@/components/panels/BrandStyleEditorDialog";
 import type { BrandStyle } from "@/hooks/useBrandStyles";
@@ -122,6 +126,10 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
   const [trashOpen, setTrashOpen] = useState(false);
   const [editRequest, setEditRequest] = useState<{ id: string; nonce: number } | null>(null);
   const [managerOpen, setManagerOpen] = useState(false);
+  // Importación en curso: archivo elegido o soltado, y dónde (si se soltó sobre una carpeta o capa).
+  const [importing, setImporting] = useState<{ file: File; mode: ImportMode; targetId: string | null; nonce: number } | null>(null);
+  const [fileOver, setFileOver] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const baseRoots = useMemo(
     () => (data ? applyLegacyRootRules(buildLayerTree(data.nodes, data.featureCounts).roots) : []),
@@ -243,6 +251,31 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
     [restore],
   );
 
+  // ── Importar ───────────────────────────────────────────────────────────────
+  const startImport = useCallback((file: File, mode: ImportMode = "new", targetId: string | null = null) => {
+    if (!importFormatOf(file.name)) {
+      toast.error("Formato no soportado", { description: "Usa un archivo KMZ, KML, GeoJSON o CSV." });
+      return;
+    }
+    setImporting({ file, mode, targetId, nonce: Date.now() });
+  }, []);
+
+  const handleDropOnRow = useCallback(
+    (file: File, row: TreeRow) => {
+      // Sobre una carpeta se importa adentro; sobre una capa, para actualizarla (reemplazar).
+      if (row.kind === "folder") startImport(file, "new", row.id);
+      else if (row.kind === "layer") startImport(file, "replace", row.id);
+    },
+    [startImport],
+  );
+
+  const handleImported = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: LAYER_TREE_QUERY_KEY });
+    void queryClient.invalidateQueries({ queryKey: TERRITORIAL_LAYERS_QUERY_KEY });
+  }, [queryClient]);
+
+  const isFileDrag = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+
   const editingStyle: BrandStyle | null = editing
     ? (() => {
         const s = getStyle(editing.id, editing.node?.style.color ?? null, editing.node?.style.icon ?? null);
@@ -273,7 +306,31 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
   const searching = search.trim().length > 0;
 
   return (
-    <>
+    <div
+      className="relative"
+      onDragOver={(e) => {
+        if (!isAdmin || !isFileDrag(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        if (!fileOver) setFileOver(true);
+      }}
+      onDragLeave={(e) => {
+        // Solo cuando se sale del panel (no al pasar por encima de sus hijos).
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFileOver(false);
+      }}
+      onDrop={(e) => {
+        if (!isAdmin || !isFileDrag(e)) return;
+        e.preventDefault();
+        setFileOver(false);
+        const file = e.dataTransfer.files[0];
+        if (file) startImport(file);
+      }}
+    >
+      {fileOver && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-[12px] font-medium text-primary">
+          Suelta el archivo para importarlo
+        </div>
+      )}
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -327,6 +384,21 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
             <ToolButton label="Nueva carpeta" onClick={() => void handleNewFolder(null)}>
               <FolderPlus className="h-4 w-4" />
             </ToolButton>
+            <ToolButton label="Importar archivo (KMZ, KML, GeoJSON, CSV)" onClick={() => fileInput.current?.click()}>
+              <Upload className="h-4 w-4" />
+            </ToolButton>
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".kmz,.kml,.geojson,.json,.csv"
+              className="hidden"
+              aria-label="Archivo a importar"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = ""; // permite elegir el mismo archivo otra vez
+                if (f) startImport(f);
+              }}
+            />
             <ToolButton label={undoLabel ? `Deshacer: ${undoLabel} (Ctrl+Z)` : "Nada que deshacer"} onClick={() => void undo()} disabled={!undoLabel}>
               <Undo2 className="h-4 w-4" />
             </ToolButton>
@@ -353,6 +425,7 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
         onResetStyle={resetLayerStyle}
         onFlyTo={onFlyToBounds ? handleFlyTo : undefined}
         onExport={handleExport}
+        onDropFile={isAdmin ? handleDropOnRow : undefined}
         onMatchCountChange={setMatchCount}
         edit={edit}
         editRequest={editRequest}
@@ -402,8 +475,19 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
           <NodePropertiesDialog row={propertiesRow} onClose={() => setPropertiesRow(null)} onSave={(id, patch) => void updateStyle(id, patch)} />
           <TrashDialog open={trashOpen} onClose={() => setTrashOpen(false)} onRestore={handleRestore} />
           <TerritorialLayerManagerDialog open={managerOpen} onClose={closeManager} />
+          {importing && (
+            <ImportWizard
+              key={importing.nonce}
+              file={importing.file}
+              initialMode={importing.mode}
+              initialTargetId={importing.targetId}
+              nodes={data.nodes}
+              onClose={() => setImporting(null)}
+              onImported={handleImported}
+            />
+          )}
         </>
       )}
-    </>
+    </div>
   );
 };
