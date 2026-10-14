@@ -1172,6 +1172,121 @@ export type Database = {
           },
         ]
       }
+      layer_node_purge_log: {
+        Row: {
+          archived_at: string
+          descendants: number
+          features: number
+          id: number
+          kind: string
+          name: string
+          node_id: string
+          purged_at: string
+          scope: string
+        }
+        Insert: {
+          archived_at: string
+          descendants: number
+          features: number
+          id?: number
+          kind: string
+          name: string
+          node_id: string
+          purged_at?: string
+          scope: string
+        }
+        Update: {
+          archived_at?: string
+          descendants?: number
+          features?: number
+          id?: number
+          kind?: string
+          name?: string
+          node_id?: string
+          purged_at?: string
+          scope?: string
+        }
+        Relationships: []
+      }
+      layer_node_visibility: {
+        Row: {
+          node_id: string
+          updated_at: string
+          user_id: string
+          visible: boolean
+        }
+        Insert: {
+          node_id: string
+          updated_at?: string
+          user_id: string
+          visible: boolean
+        }
+        Update: {
+          node_id?: string
+          updated_at?: string
+          user_id?: string
+          visible?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "layer_node_visibility_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "layer_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      layer_nodes: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          scope: string
+          style: Json
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          name: string
+          owner_id?: string | null
+          parent_id?: string | null
+          position: string
+          scope?: string
+          style?: Json
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          name?: string
+          owner_id?: string | null
+          parent_id?: string | null
+          position?: string
+          scope?: string
+          style?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "layer_nodes_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "layer_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       poi_address_aliases: {
         Row: {
           created_at: string
@@ -1840,6 +1955,7 @@ export type Database = {
         Row: {
           created_at: string
           external_id: string | null
+          geom: unknown
           geometry: Json
           id: string
           lat: number | null
@@ -1851,6 +1967,7 @@ export type Database = {
         Insert: {
           created_at?: string
           external_id?: string | null
+          geom?: unknown
           geometry: Json
           id?: string
           lat?: number | null
@@ -1862,6 +1979,7 @@ export type Database = {
         Update: {
           created_at?: string
           external_id?: string | null
+          geom?: unknown
           geometry?: Json
           id?: string
           lat?: number | null
@@ -1978,6 +2096,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "territorial_layers_node_fk"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "layer_nodes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "territorial_layers_group_id_fkey"
             columns: ["group_id"]
@@ -2940,6 +3065,37 @@ export type Database = {
         }
         Relationships: []
       }
+      territorial_layers_active: {
+        Row: {
+          bbox: Json | null
+          color: string | null
+          created_at: string | null
+          feature_count: number | null
+          group_id: string | null
+          heatmap_aggregate_url: string | null
+          heatmap_enabled: boolean | null
+          icon: string | null
+          icon_render: string | null
+          id: string | null
+          last_dedup_strategy: string | null
+          name: string | null
+          order_index: number | null
+          parent_layer_id: string | null
+          render_mode: string | null
+          source_file_id: string | null
+          source_name: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "territorial_layers_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layer_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       _postgis_deprecate: {
@@ -3078,6 +3234,7 @@ export type Database = {
           user_id: string
         }[]
       }
+      archive_node: { Args: { p_node_id: string }; Returns: Database["public"]["Tables"]["layer_nodes"]["Row"] }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
         | {
@@ -3259,6 +3416,15 @@ export type Database = {
         }[]
       }
       longtransactionsenabled: { Args: never; Returns: boolean }
+      move_node: {
+        Args: {
+          p_after_id?: string
+          p_before_id?: string
+          p_new_parent_id: string
+          p_node_id: string
+        }
+        Returns: Database["public"]["Tables"]["layer_nodes"]["Row"]
+      }
       poi_counts_by_folder: {
         Args: never
         Returns: {
@@ -3315,6 +3481,12 @@ export type Database = {
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
       purge_deleted_pois: { Args: never; Returns: undefined }
+      rename_node: { Args: { p_name: string; p_node_id: string }; Returns: Database["public"]["Tables"]["layer_nodes"]["Row"] }
+      restore_node: { Args: { p_node_id: string }; Returns: Database["public"]["Tables"]["layer_nodes"]["Row"] }
+      set_node_visibility: {
+        Args: { p_node_id: string; p_visible: boolean }
+        Returns: number
+      }
       set_poi_folder_kpi_order: {
         Args: { _folder_id: string; _order: Json }
         Returns: undefined
@@ -3902,6 +4074,7 @@ export type Database = {
         Args: { geom: unknown; move: number; wrap: number }
         Returns: unknown
       }
+      sync_layer_nodes_from_legacy: { Args: { p_reorder?: boolean }; Returns: Json }
       territorial_role_default_weight: {
         Args: { role_name: string }
         Returns: number
