@@ -812,7 +812,7 @@ def save_output(df: pd.DataFrame) -> Path:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 9B — Generar SQL para Lovable (INSERT + migración)
+# PASO 9B — Generar SQL para Supabase (INSERT + migración)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def generate_sql(df: pd.DataFrame) -> None:
@@ -821,11 +821,11 @@ def generate_sql(df: pd.DataFrame) -> None:
       output/migrate_v2.sql     → ALTER TABLE para nuevas columnas
       output/insert_v2_p1.sql … output/insert_v2_p4.sql  → INSERT batches
     """
-    log.info("PASO 9B — Generando SQL para Lovable …")
+    log.info("PASO 9B — Generando SQL para Supabase …")
 
     # ── Migración de schema ────────────────────────────────────────────────────
     migrate_sql = """\
--- AGROPLANET v2.0 — Migración schema (pegar en Lovable SQL editor)
+-- AGROPLANET v2.0 — Migración schema (pegar en SQL editor de Supabase)
 -- Agrega columnas nuevas al esquema v1.1 existente
 
 ALTER TABLE agroplanet_comunas
@@ -881,7 +881,7 @@ WHERE  active = true;
         content = (
             f"-- AGROPLANET v2.0 — INSERT parte {i+1}/{n_parts} "
             f"({len(batch)} filas)\n"
-            f"-- Pegar en Lovable SQL editor\n\n"
+            f"-- Pegar en SQL editor de Supabase\n\n"
             f"INSERT INTO agroplanet_comunas\n  ({col_list})\nVALUES\n"
             + ",\n".join(batch)
             + "\nON CONFLICT (cut) DO UPDATE SET\n  "
@@ -907,7 +907,7 @@ def upload_supabase(df: pd.DataFrame) -> None:
             "PASO 10 — Supabase: sin credenciales. Para cargar directo:\n"
             "  VITE_SUPABASE_URL=https://xxx.supabase.co "
             "SUPABASE_SERVICE_KEY=eyJ... python agroplanet_etl.py\n"
-            "  (alternativa: pegar los SQL generados en Lovable SQL editor)"
+            "  (alternativa: pegar los SQL generados en SQL editor de Supabase)"
         )
         return
 
