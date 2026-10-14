@@ -1,29 +1,53 @@
 import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { LruCache } from "@/utils/lruCache";
 import { supabase } from "@/integrations/supabase/client";
 import type { TerritorialGroup, TerritorialLayer, TerritorialFeature } from "@/types/territorial";
 
-export const useTerritorialLayers = () => {
-  const [groups, setGroups] = useState<TerritorialGroup[]>([]);
-  const [layers, setLayers] = useState<TerritorialLayer[]>([]);
-  const [loading, setLoading] = useState(true);
+export const TERRITORIAL_LAYERS_QUERY_KEY = ["territorial-layers"] as const;
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const [g, l] = await Promise.all([
+interface TerritorialData {
+  groups: TerritorialGroup[];
+  layers: TerritorialLayer[];
+}
+
+const EMPTY_GROUPS: TerritorialGroup[] = [];
+const EMPTY_LAYERS: TerritorialLayer[] = [];
+
+const fetchTerritorialData = async (): Promise<TerritorialData> => {
+  // Solo lo activo: lo que está en la papelera del árbol no debe verlo el análisis ni el mapa.
+  const [g, l] = await Promise.all([
+    supabase.from("territorial_layer_groups_active").select("*").order("order_index", { ascending: true }),
+    supabase.from("territorial_layers_active").select("*").order("order_index", { ascending: true }),
+  ]);
+  if (g.error || l.error) {
+    // Si las vistas aún no existen (el código llegó antes que la migración) se leen las tablas.
+    const [g2, l2] = await Promise.all([
       supabase.from("territorial_layer_groups").select("*").order("order_index", { ascending: true }),
       supabase.from("territorial_layers").select("*").order("order_index", { ascending: true }),
     ]);
-    if (!g.error) setGroups((g.data ?? []) as unknown as TerritorialGroup[]);
-    if (!l.error) setLayers((l.data ?? []) as unknown as TerritorialLayer[]);
-    setLoading(false);
-  }, []);
+    if (g2.error) throw g2.error;
+    if (l2.error) throw l2.error;
+    return { groups: (g2.data ?? []) as unknown as TerritorialGroup[], layers: (l2.data ?? []) as unknown as TerritorialLayer[] };
+  }
+  return { groups: (g.data ?? []) as unknown as TerritorialGroup[], layers: (l.data ?? []) as unknown as TerritorialLayer[] };
+};
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  return { groups, layers, loading, refresh };
+/**
+ * Grupos y capas territoriales activas. Es una consulta compartida: lo que edite
+ * el panel de capas (renombrar, mover, estilo, papelera) la invalida y el mapa y el
+ * análisis se enteran sin recargar.
+ */
+export const useTerritorialLayers = () => {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: TERRITORIAL_LAYERS_QUERY_KEY,
+    queryFn: fetchTerritorialData,
+    staleTime: 60_000,
+  });
+  const refresh = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
+  return { groups: data?.groups ?? EMPTY_GROUPS, layers: data?.layers ?? EMPTY_LAYERS, loading: isLoading, refresh };
 };
 
 /** [oeste, sur, este, norte] */
