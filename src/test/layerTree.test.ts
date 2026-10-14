@@ -221,12 +221,12 @@ describe("búsqueda", () => {
 describe("applyLegacyRootRules", () => {
   const root = (name: string, id = name): TreeRow => ({ id, kind: "folder", name, children: [] });
 
-  it("oculta Parque Automotriz y deja SERV. AUTOMOTRICES primero, sin alterar el resto", () => {
-    const out = applyLegacyRootRules([root("Parque Automotriz"), root("Farmacias"), root("Retail"), root("SERV. AUTOMOTRICES"), root("Otros")]);
-    expect(out.map((r) => r.name)).toEqual(["SERV. AUTOMOTRICES", "Farmacias", "Retail", "Otros"]);
+  it("oculta Parque Automotriz y deja el resto en el orden del árbol", () => {
+    const out = applyLegacyRootRules([root("Parque Automotriz"), root("Farmacias"), root("SERV. AUTOMOTRICES"), root("Otros")]);
+    expect(out.map((r) => r.name)).toEqual(["Farmacias", "SERV. AUTOMOTRICES", "Otros"]);
   });
 
-  it("no toca el orden si no hay nada que fijar", () => {
+  it("no toca el orden (desde la Fase 3 lo decide el árbol)", () => {
     const out = applyLegacyRootRules([root("B"), root("A")]);
     expect(out.map((r) => r.name)).toEqual(["B", "A"]);
   });

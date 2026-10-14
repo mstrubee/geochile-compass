@@ -166,20 +166,17 @@ export const matchesSearch = (names: readonly string[], term: string): boolean =
   return words.every((w) => haystack.includes(w));
 };
 
-// ── Orden y filtros heredados de la UI anterior ───────────────────────────────
+// ── Filtros heredados de la UI anterior ───────────────────────────────────────
 
 /** Se ocultan: ya tienen su propio interruptor ("Parque automotor") en la barra lateral. */
 const HIDDEN_ROOTS = ["parque automotriz"];
-/** Iban primero en la lista anterior. Se retira cuando el orden sea editable (Fase 3). */
-const PINNED_FIRST = ["serv. automotrices", "serv automotrices", "servautomotrices", "automotrices"];
 
-/** Mantiene lo que la lista anterior mostraba: sin "Parque Automotriz" y con SERV. AUTOMOTRICES primero. */
-export const applyLegacyRootRules = (roots: readonly TreeRow[]): TreeRow[] => {
-  const visibleRoots = roots.filter((r) => !HIDDEN_ROOTS.includes(r.name.trim().toLowerCase()));
-  const isPinned = (r: TreeRow) => PINNED_FIRST.some((k) => r.name.toLowerCase().includes(k));
-  // sort() es estable: lo que no está fijado conserva el orden del árbol.
-  return visibleRoots.slice().sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)));
-};
+/**
+ * Mantiene lo que la lista anterior ocultaba. El orden ya no se toca: desde la
+ * Fase 3 lo decide el árbol (se reordena arrastrando).
+ */
+export const applyLegacyRootRules = (roots: readonly TreeRow[]): TreeRow[] =>
+  roots.filter((r) => !HIDDEN_ROOTS.includes(r.name.trim().toLowerCase()));
 
 // ── Vista previa perezosa de los puntos de una capa ────────────────────────
 
