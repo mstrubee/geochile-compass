@@ -3,7 +3,7 @@ sync.py — Sincronización incremental POIs OSM → Supabase via Edge Function.
 
 Estrategia idéntica a la versión psycopg2, pero las escrituras van a través
 de la Edge Function `sync-comercio-osm` autenticada con SYNC_API_TOKEN.
-La Edge Function usa internamente el service_role key (gestionado por Lovable).
+La Edge Function usa internamente el service_role key (gestionado por Supabase).
 
 Flujo:
   1. Carga osm_id+version existentes por categoría (via Edge Function).

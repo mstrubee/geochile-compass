@@ -20,7 +20,7 @@ Valores por defecto:
 
 SALIDA:
   etl/output/gap_analysis.csv          ← ranking completo 346 comunas
-  etl/output/update_oportunidad.sql    ← UPDATE para Lovable SQL editor
+  etl/output/update_oportunidad.sql    ← UPDATE para SQL editor de Supabase
 
 USO:
   python3 etl/gap_analysis.py
@@ -258,7 +258,7 @@ ALTER TABLE agroplanet_comunas
 
     content = (
         "-- AGROPLANET Gap Analysis — UPDATE oportunidad_score (346 comunas)\n"
-        "-- Pegar en Lovable SQL editor en DOS pasos:\n"
+        "-- Pegar en SQL editor de Supabase en DOS pasos:\n"
         "-- PASO A: primero el ALTER TABLE de abajo\n"
         "-- PASO B: luego el bloque de UPDATEs\n\n"
         + migrate_sql + "\n"
@@ -293,7 +293,7 @@ def main():
     save_outputs(df)
 
     log.info("═" * 65)
-    log.info("  Listo. Siguiente: pegar update_oportunidad.sql en Lovable")
+    log.info("  Listo. Siguiente: pegar update_oportunidad.sql en el SQL editor de Supabase")
     log.info("═" * 65)
 
 

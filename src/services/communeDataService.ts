@@ -11,7 +11,7 @@
 import * as XLSX from "xlsx";
 import { COMMUNES, type Commune, type NSE } from "@/data/communes";
 
-const STORAGE_KEY = "lovable.communeOverrides.v1";
+const STORAGE_KEY = "geochile.communeOverrides.v1";
 
 type Overrides = Record<string, Partial<Commune>>;
 
