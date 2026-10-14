@@ -13,11 +13,12 @@
  */
 import { get, set } from "idb-keyval";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
+import { ensureIdbMigrated } from "@/utils/storageMigration";
 
-const POIS_KEY = (uid: string) => `lovable.cache.pois.${uid}`;
-const TRASH_KEY = (uid: string) => `lovable.cache.trashed.${uid}`;
-const SYNC_KEY = (uid: string) => `lovable.cache.pois.lastSyncAt.${uid}`;
-const FOLDERS_KEY = (uid: string) => `lovable.cache.folders.${uid}`;
+const POIS_KEY = (uid: string) => `geochile.cache.pois.${uid}`;
+const TRASH_KEY = (uid: string) => `geochile.cache.trashed.${uid}`;
+const SYNC_KEY = (uid: string) => `geochile.cache.pois.lastSyncAt.${uid}`;
+const FOLDERS_KEY = (uid: string) => `geochile.cache.folders.${uid}`;
 
 export interface PoiCacheSnapshot {
   pois: SavedPoi[];
@@ -35,6 +36,7 @@ export const loadPoiCache = async (
   userId: string,
 ): Promise<PoiCacheSnapshot | null> => {
   try {
+    await ensureIdbMigrated();
     const [pois, trashed, lastSyncAt] = await Promise.all([
       get<{ rows: SavedPoi[]; at: number }>(POIS_KEY(userId)),
       get<{ rows: SavedPoi[]; at: number }>(TRASH_KEY(userId)),
@@ -60,6 +62,7 @@ export const savePoiCache = async (
   lastSyncAt?: string | null,
 ): Promise<void> => {
   try {
+    await ensureIdbMigrated();
     const at = Date.now();
     const writes: Promise<unknown>[] = [
       set(POIS_KEY(userId), { rows: pois, at }),
@@ -79,6 +82,7 @@ export const setLastSyncAt = async (
   iso: string | null,
 ): Promise<void> => {
   try {
+    await ensureIdbMigrated();
     await set(SYNC_KEY(userId), iso);
   } catch (err) {
     console.warn("[poiCache] no se pudo escribir lastSyncAt", err);
@@ -98,6 +102,7 @@ export const loadFoldersCache = async (
   userId: string,
 ): Promise<FoldersCacheSnapshot | null> => {
   try {
+    await ensureIdbMigrated();
     const data = await get<{ rows: PoiFolder[]; at: number }>(
       FOLDERS_KEY(userId),
     );
@@ -114,6 +119,7 @@ export const saveFoldersCache = async (
   folders: PoiFolder[],
 ): Promise<void> => {
   try {
+    await ensureIdbMigrated();
     await set(FOLDERS_KEY(userId), { rows: folders, at: Date.now() });
   } catch (err) {
     console.warn("[poiCache] no se pudo escribir caché de carpetas", err);

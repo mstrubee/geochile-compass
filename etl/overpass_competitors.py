@@ -7,7 +7,7 @@ Extrae dealers y tiendas de maquinaria agrícola en Chile desde OpenStreetMap
 
 SALIDA:
   etl/output/competitors_raw.csv          ← todos los puntos crudos
-  etl/output/insert_competitors.sql       ← INSERT para Lovable SQL editor
+  etl/output/insert_competitors.sql       ← INSERT para SQL editor de Supabase
 
 USO:
   python3 etl/overpass_competitors.py
@@ -365,7 +365,7 @@ def generate_sql(df: pd.DataFrame) -> None:
         batch   = rows[i * batch_size: (i + 1) * batch_size]
         content = (
             f"-- AGROPLANET Competidores OSM — parte {i+1}/{n_parts} ({len(batch)} filas)\n"
-            f"-- Pegar en Lovable SQL editor\n\n"
+            f"-- Pegar en SQL editor de Supabase\n\n"
             f"INSERT INTO agroplanet_competitors\n  ({col_list})\nVALUES\n"
             + ",\n".join(batch)
             + f"\nON CONFLICT (id) DO UPDATE SET\n  {update_set};\n"
@@ -416,7 +416,7 @@ def main():
 
     log.info("═" * 65)
     log.info(f"  Listo. {len(df)} competidores → etl/output/")
-    log.info("  Siguiente: verificar CSV, luego pegar SQL en Lovable")
+    log.info("  Siguiente: verificar CSV, luego pegar SQL en el SQL editor de Supabase")
     log.info("═" * 65)
 
 

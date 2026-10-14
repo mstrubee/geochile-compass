@@ -5,7 +5,7 @@ Variables de entorno requeridas (.env en la raíz del repo):
   SUPABASE_URL      → URL del proyecto Supabase (https://xxx.supabase.co)
   SYNC_API_TOKEN    → Token secreto compartido con la Edge Function sync-comercio-osm
 
-La Edge Function (desplegada en Lovable/Supabase) gestiona internamente el
+La Edge Function (desplegada en Supabase) gestiona internamente el
 service_role key. El ETL nunca necesita acceso directo a la DB.
 """
 
