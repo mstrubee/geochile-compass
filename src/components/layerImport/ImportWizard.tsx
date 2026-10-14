@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, FileUp, Loader2, Undo2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ClipboardCopy, FileUp, Loader2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
@@ -11,6 +11,10 @@ import { analyzeTree, resolveToggle, type TreeRow } from "@/utils/layerTree";
 import { allFoldersOpen, destinationOptions, docToTreeRows, groupIssues, includedLayerKeys, previewItems } from "@/utils/importWizard";
 import { collectLayerIds } from "@/utils/layerTree";
 import { LayerTree } from "@/components/layerTree/LayerTree";
+import { copyText } from "@/utils/clipboard";
+import { buildErrorReport, issuesText } from "@/utils/importErrorReport";
+import { importFormatOf } from "@/utils/importParser";
+import { ImportErrorPanel } from "./ImportErrorPanel";
 import { DestinationPicker } from "./DestinationPicker";
 import { ImportDiffPanel } from "./ImportDiffPanel";
 import { ImportPreviewMap } from "./ImportPreviewMap";
@@ -56,6 +60,27 @@ export const ImportWizard = ({ file, initialMode = "new", initialTargetId = null
   const issueGroups = useMemo(() => (doc ? groupIssues(doc.issues) : []), [doc]);
   const options = useMemo(() => destinationOptions(nodes, w.mode === "new" ? "folder" : "layer"), [nodes, w.mode]);
   const targetName = options.find((o) => o.id === w.target)?.name;
+  const [issuesCopied, setIssuesCopied] = useState(false);
+
+  // Todo fallo se explica: paso, causa, solución y un mensaje listo para pegar en el chat.
+  const report = useMemo(
+    () =>
+      w.failure
+        ? buildErrorReport(w.failure.error, {
+            stage: w.failure.stage,
+            filename: file.name,
+            format: doc?.format ?? importFormatOf(file.name),
+            mode: w.failure.stage === "read" ? null : w.mode,
+            targetName,
+            counts: doc?.counts ?? null,
+            included: w.localSummary ? { layers: w.localSummary.layers, features: w.localSummary.features } : null,
+            maxRows: w.maxRows,
+            rowsToWrite: w.rowsToWrite,
+            batchId: w.batchId,
+          })
+        : null,
+    [w.failure, w.mode, w.localSummary, w.maxRows, w.rowsToWrite, w.batchId, doc, file, targetName],
+  );
 
   const onToggle = (row: TreeRow) => {
     const res = resolveToggle(row, analysis.states.get(row.id) ?? "unchecked", included);
@@ -92,8 +117,8 @@ export const ImportWizard = ({ file, initialMode = "new", initialTargetId = null
         )}
 
         {w.phase === "error" && !doc && (
-          <div className="space-y-3 py-6">
-            <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-[13px] text-destructive">{w.error}</p>
+          <div className="space-y-3 py-4">
+            {report && <ImportErrorPanel report={report} />}
             <Button variant="outline" onClick={onClose}>
               Cerrar
             </Button>
@@ -121,9 +146,9 @@ export const ImportWizard = ({ file, initialMode = "new", initialTargetId = null
                     </p>
                   </>
                 )}
-                {w.error && <p className="text-destructive">{w.error}</p>}
               </div>
             </div>
+            {report && <ImportErrorPanel report={report} />}
             <div className="flex gap-2">
               {!w.reverted &&
                 (confirmRevert ? (
@@ -173,7 +198,20 @@ export const ImportWizard = ({ file, initialMode = "new", initialTargetId = null
 
                 {issueGroups.length > 0 && (
                   <div className="space-y-1" data-testid="import-issues">
-                    <p className="text-[11px] uppercase tracking-wide text-text-muted">Avisos del archivo</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] uppercase tracking-wide text-text-muted">Avisos del archivo</p>
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+                        onClick={async () => {
+                          setIssuesCopied(await copyText(issuesText(doc.filename, doc.issues)));
+                          setTimeout(() => setIssuesCopied(false), 2500);
+                        }}
+                      >
+                        <ClipboardCopy className="h-3 w-3" />
+                        {issuesCopied ? "Copiado" : "Copiar avisos"}
+                      </button>
+                    </div>
                     {issueGroups.map((g) => (
                       <details key={g.kind} className="rounded-lg border border-border/60 px-2 py-1 text-[11px]" open={g.kind === "invalid-geometry"}>
                         <summary className={cn("flex cursor-pointer items-center gap-1", g.kind === "invalid-geometry" ? "text-amber-300" : "text-muted-foreground")}>
@@ -259,7 +297,8 @@ export const ImportWizard = ({ file, initialMode = "new", initialTargetId = null
                 </p>
               </div>
             )}
-            {w.error && <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">{w.error}</p>}
+            {w.limitsWarning && <p className="text-[11px] text-amber-300">{w.limitsWarning}</p>}
+            {report && <ImportErrorPanel report={report} />}
 
             <div className="flex items-center justify-end gap-2 border-t border-border/50 pt-3">
               <Button variant="ghost" onClick={onClose} disabled={busy}>

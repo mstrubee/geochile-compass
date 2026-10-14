@@ -14,9 +14,15 @@ import {
 } from "@/services/layerImport";
 import { parseImportFile, type ImportDocument } from "@/utils/importParser";
 import { applyInclusion, newImportSummary } from "@/utils/importWizard";
-import { friendlyError } from "@/utils/layerTreeEdit";
+import type { ImportStage } from "@/utils/importErrorReport";
 
 export type WizardPhase = "parsing" | "ready" | "working" | "done" | "error";
+
+/** Un fallo: en qué paso ocurrió y lo que se lanzó (el asistente lo convierte en un informe legible). */
+export interface WizardFailure {
+  stage: ImportStage;
+  error: unknown;
+}
 
 interface Args {
   /** Archivo elegido o soltado; `null` = asistente cerrado. */
@@ -41,7 +47,9 @@ const targetKind = (m: ImportMode) => (m === "new" ? "folder" : "layer");
 export const useImportWizard = ({ file, initialMode = "new", initialTargetId = null, onCommitted }: Args) => {
   const [phase, setPhase] = useState<WizardPhase>("parsing");
   const [doc, setDoc] = useState<ImportDocument | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<WizardFailure | null>(null);
+  /** El límite de la base no se pudo leer: no impide importar (lo valida la base al confirmar) pero no se calla. */
+  const [limitsWarning, setLimitsWarning] = useState<string | null>(null);
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
   const [mode, setModeState] = useState<ImportMode>(initialMode);
   const [target, setTarget] = useState<string | null>(initialTargetId);
@@ -69,7 +77,8 @@ export const useImportWizard = ({ file, initialMode = "new", initialTargetId = n
     committedRef.current = false;
     setBatchId(null);
     setPreview(null);
-    if (id && !committed) void discardImport(id).catch(() => undefined);
+    // Si no se puede descartar no hay nada que el usuario deba hacer: la limpieza horaria lo borra. Pero queda a la vista.
+    if (id && !committed) void discardImport(id).catch((e) => console.warn("[importador] no se pudo descartar el lote", id, e));
   }, []);
 
   // ── Abrir un archivo ──────────────────────────────────────────────────────
@@ -79,7 +88,8 @@ export const useImportWizard = ({ file, initialMode = "new", initialTargetId = n
     discard();
     setPhase("parsing");
     setDoc(null);
-    setError(null);
+    setFailure(null);
+    setLimitsWarning(null);
     setExcluded(new Set());
     setModeState(initialMode);
     setTarget(initialTargetId);
@@ -95,13 +105,17 @@ export const useImportWizard = ({ file, initialMode = "new", initialTargetId = n
         })
         .catch((e) => {
           if (cancelled) return;
-          setError(e instanceof Error ? e.message : String(e));
+          setFailure({ stage: "read", error: e });
           setPhase("error");
         });
     }, 30);
     fetchImportLimits()
       .then((l) => !cancelled && setLimits(l))
-      .catch(() => undefined); // sin el límite el asistente igual funciona: lo valida la base
+      .catch((e) => {
+        if (cancelled) return;
+        console.warn("[importador] no se pudo leer el límite de la base", e);
+        setLimitsWarning("No se pudo leer el límite de tamaño de la base; se validará recién al confirmar.");
+      });
     return () => {
       cancelled = true;
       clearTimeout(t);
@@ -127,7 +141,7 @@ export const useImportWizard = ({ file, initialMode = "new", initialTargetId = n
         await uploadStaging(id, doc, (done, total) => setProgress({ done, total }), ctrl.signal);
       } catch (e) {
         batchRef.current = null;
-        void discardImport(id).catch(() => undefined);
+        void discardImport(id).catch((err) => console.warn("[importador] no se pudo descartar el lote", id, err));
         throw e;
       } finally {
         setProgress(null);
@@ -154,15 +168,17 @@ export const useImportWizard = ({ file, initialMode = "new", initialTargetId = n
     const seq = ++previewSeq.current;
     const t = setTimeout(async () => {
       setPreviewing(true);
-      setError(null);
+      setFailure(null);
+      let step: ImportStage = "upload";
       try {
         const id = await stage();
+        step = "preview";
         const p = await previewImport(id, mode, target, excluded);
         if (seq === previewSeq.current) setPreview(p);
       } catch (e) {
         if (seq === previewSeq.current) {
           setPreview(null);
-          setError(friendlyError(e));
+          setFailure({ stage: step, error: e });
         }
       } finally {
         if (seq === previewSeq.current) setPreviewing(false);
@@ -178,7 +194,7 @@ export const useImportWizard = ({ file, initialMode = "new", initialTargetId = n
       if (targetKind(next) !== targetKind(mode)) setTarget(targetKind(next) === targetKind(initialMode) ? initialTargetId : null);
       setModeState(next);
       setPreview(null);
-      setError(null);
+      setFailure(null);
     },
     [mode, initialMode, initialTargetId],
   );
@@ -198,16 +214,18 @@ export const useImportWizard = ({ file, initialMode = "new", initialTargetId = n
   const confirm = useCallback(async () => {
     if (!doc) return;
     setPhase("working");
-    setError(null);
+    setFailure(null);
+    let step: ImportStage = "upload";
     try {
       const id = await stage();
+      step = "commit";
       const res = await commitImport(id, mode, target, excluded);
       committedRef.current = true;
       setResult(res);
       setPhase("done");
       onCommitted?.(res);
     } catch (e) {
-      setError(friendlyError(e));
+      setFailure({ stage: step, error: e });
       setPhase("ready");
     }
   }, [doc, stage, mode, target, excluded, onCommitted]);
@@ -220,13 +238,13 @@ export const useImportWizard = ({ file, initialMode = "new", initialTargetId = n
       setReverted(true);
       return true;
     } catch (e) {
-      setError(friendlyError(e));
+      setFailure({ stage: "undo", error: e });
       return false;
     }
   }, []);
 
   return {
-    phase, doc, error, excluded, mode, target, limits, batchId, progress, preview, previewing, result, reverted,
+    phase, doc, failure, limitsWarning, excluded, mode, target, limits, batchId, progress, preview, previewing, result, reverted,
     localSummary, rowsToWrite, maxRows, fits, canConfirm,
     setMode, setTarget, toggleLayers, confirm, undo, discard,
   };

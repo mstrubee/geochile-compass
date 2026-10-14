@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
+import { BASEMAPS } from "@/config/basemaps";
 import { boundsOf, type PreviewItem } from "@/utils/importWizard";
 
 const escapeHtml = (s: string) =>
@@ -52,8 +53,8 @@ const Layers = ({ items }: { items: readonly PreviewItem[] }) => {
 
 /** Mapa de vista previa del asistente: lo que se importará, con el mismo mapa base que la app. */
 export const ImportPreviewMap = ({ items }: { items: readonly PreviewItem[] }) => (
-  <MapContainer center={[-33.45, -70.65]} zoom={5} className="h-full w-full rounded-lg" style={{ background: "#1b1d22" }} attributionControl={false}>
-    <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" subdomains="abcd" maxZoom={19} />
+  <MapContainer center={[-33.45, -70.65]} zoom={5} className="h-full w-full rounded-lg" style={{ background: "#1b1d22" }}>
+    <TileLayer url={BASEMAPS.dark.url} attribution={BASEMAPS.dark.attribution} maxZoom={19} crossOrigin="anonymous" />
     <Layers items={items} />
   </MapContainer>
 );

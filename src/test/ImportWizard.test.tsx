@@ -86,10 +86,13 @@ describe("ImportWizard — leer el archivo", () => {
     expect(within(issues).getByText(/Contenido no soportado \(se ignora\) · 2/)).toBeInTheDocument();
   });
 
-  it("un archivo ilegible muestra el motivo y solo deja cerrar", async () => {
+  it("un archivo ilegible explica la causa y cómo corregirlo, y solo deja cerrar", async () => {
     h.parse.mockRejectedValueOnce(new Error("KML inválido (no es un XML bien formado)"));
     const { onClose } = await open();
-    expect(screen.getByText(/KML inválido/)).toBeInTheDocument();
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByText("No se pudo leer el archivo")).toBeInTheDocument();
+    expect(within(alert).getByText(/no es un XML bien formado: quizá está cortado/)).toBeInTheDocument();
+    expect(within(alert).getByText(/Ábrelo en Google Earth y vuelve a guardarlo como KMZ/)).toBeInTheDocument();
     await click(screen.getAllByRole("button", { name: "Cerrar" })[0]);
     expect(onClose).toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /Importar/ })).toBeNull();
@@ -156,7 +159,9 @@ describe("ImportWizard — importación nueva", () => {
     await open();
     await click(button(/^Importar$/));
     await settle(10);
-    expect(screen.getByText("No tienes permiso para hacer esto.")).toBeInTheDocument();
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByText("No se pudo confirmar la importación")).toBeInTheDocument();
+    expect(within(alert).getByText(/Tu usuario no tiene permiso de administrador/)).toBeInTheDocument();
     expect(button(/^Importar$/)).toBeEnabled();
   });
 });
@@ -242,7 +247,9 @@ describe("ImportWizard — deshacer", () => {
     h.svc.revertImport.mockRejectedValueOnce({ message: "importador: esa capa tiene una importación posterior; revierte primero la más reciente", code: "23514" });
     await click(button(/Deshacer importación/));
     await click(button(/Sí, deshacer la importación/));
-    expect(screen.getByText(/esa capa tiene una importación posterior/)).toBeInTheDocument();
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByText("No se pudo deshacer la importación")).toBeInTheDocument();
+    expect(within(alert).getByText(/Deshaz primero la importación más reciente/)).toBeInTheDocument();
   });
 });
 
@@ -254,5 +261,73 @@ describe("ImportWizard — cerrar", () => {
     expect(onClose).toHaveBeenCalled();
     unmount();
     expect(h.svc.discardImport).toHaveBeenCalledWith("batch-1");
+  });
+});
+
+describe("ImportWizard — mensaje copiable ante un fallo", () => {
+  const failCommit = () => h.svc.commitImport.mockRejectedValueOnce({ message: "importador: son 9.000 puntos y el máximo por confirmación es 5.600 (el rol authenticated corta a los 8s).", code: "23514" });
+  const writeText = vi.fn();
+
+  beforeEach(() => {
+    writeText.mockReset().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  });
+
+  it("el botón copia un mensaje con el paso, el archivo, lo que intentaba, el error, la causa y la solución", async () => {
+    failCommit();
+    await open({ initialTargetId: "F2" });
+    await click(button(/^Importar$/));
+    await settle(10);
+    await click(button(/Copiar mensaje para el chat/));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const text = writeText.mock.calls[0][0] as string;
+    expect(text).toContain("Paso que falló: Confirmar la importación");
+    expect(text).toContain("Archivo: locales.kml (KML) · 3 carpetas, 6 capas, 10 puntos (3 inválidos)");
+    expect(text).toContain("Lo que intentaba: crear capas y carpetas nuevas · destino: «Retail» · 10 puntos incluidos");
+    expect(text).toContain("Mensaje de error: importador: son 9.000 puntos y el máximo por confirmación es 5.600");
+    expect(text).toContain("(código 23514)");
+    expect(text).toContain("Causa probable: Esta importación escribe 9.000 puntos y el máximo que la base admite de una vez es 5.600");
+    expect(text).toContain("Cómo corregirlo: Desmarca partes del archivo");
+    expect(screen.getByText("Copiado: pégalo en el chat")).toBeInTheDocument();
+  });
+
+  it("muestra el detalle técnico sin ocultar el mensaje original", async () => {
+    failCommit();
+    await open();
+    await click(button(/^Importar$/));
+    await settle(10);
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByText("Detalle técnico")).toBeInTheDocument();
+    expect(alert.textContent).toContain("(código 23514)");
+  });
+
+  it("si el navegador no deja copiar, muestra el texto para copiarlo a mano", async () => {
+    writeText.mockRejectedValue(new Error("denied"));
+    const exec = vi.fn(() => false);
+    Object.defineProperty(document, "execCommand", { value: exec, configurable: true });
+    failCommit();
+    await open();
+    await click(button(/^Importar$/));
+    await settle(10);
+    await click(button(/Copiar mensaje para el chat/));
+    expect(screen.getByText(/El navegador no dejó copiar automáticamente/)).toBeInTheDocument();
+    expect((screen.getByLabelText("Mensaje para copiar") as HTMLTextAreaElement).value).toContain("[Importador de capas]");
+  });
+
+  it("también se pueden copiar los avisos del archivo", async () => {
+    await open();
+    await click(screen.getByRole("button", { name: /Copiar avisos/ }));
+    const text = writeText.mock.calls[0][0] as string;
+    expect(text).toContain("Avisos al leer «locales.kml»");
+    expect(text).toContain("«Latitud mala» — latitud fuera de rango (95)");
+    expect(screen.getByText("Copiado")).toBeInTheDocument();
+  });
+
+  it("si no se pudo leer el límite de la base, lo dice en pantalla", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    h.svc.fetchImportLimits.mockRejectedValueOnce(new Error("x"));
+    await open();
+    expect(screen.getByText(/No se pudo leer el límite de tamaño de la base/)).toBeInTheDocument();
+    warn.mockRestore();
   });
 });

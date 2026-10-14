@@ -20,6 +20,7 @@ vi.mock("@/utils/importParser", async (orig) => ({ ...(await orig<typeof import(
 
 import { useImportWizard } from "@/hooks/useImportWizard";
 import { parseImportContent, type ImportDocument } from "@/utils/importParser";
+import { describeError } from "@/utils/importErrorReport";
 
 const doc: ImportDocument = parseImportContent.kml(readFileSync(join(process.cwd(), "src/test/fixtures/import/locales.kml"), "utf-8"), "locales.kml");
 const file = new File(["x"], "locales.kml");
@@ -64,15 +65,20 @@ describe("abrir un archivo", () => {
     h.parse.mockRejectedValueOnce(new Error("KML inválido (no es un XML bien formado)"));
     const { result } = await open();
     expect(result.current.phase).toBe("error");
-    expect(result.current.error).toMatch(/KML inválido/);
+    expect(result.current.failure).toMatchObject({ stage: "read" });
+    expect(describeError(result.current.failure!.error).raw).toMatch(/KML inválido/);
   });
 
-  it("si no se puede leer el límite igual funciona", async () => {
+  it("si no se puede leer el límite igual funciona, pero lo avisa (no falla en silencio)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     h.svc.fetchImportLimits.mockRejectedValueOnce(new Error("x"));
     const { result } = await open();
     expect(result.current.phase).toBe("ready");
     expect(result.current.maxRows).toBeNull();
     expect(result.current.fits).toBe(true);
+    expect(result.current.limitsWarning).toMatch(/No se pudo leer el límite/);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 
@@ -110,7 +116,7 @@ describe("importación nueva", () => {
     const { result } = await open();
     await act(async () => { await result.current.confirm(); });
     expect(result.current.phase).toBe("ready");
-    expect(result.current.error).toBe("No tienes permiso para hacer esto.");
+    expect(result.current.failure).toMatchObject({ stage: "commit", error: { code: "42501" } });
     await act(async () => { await result.current.confirm(); });
     expect(result.current.phase).toBe("done");
     expect(h.svc.createImport).toHaveBeenCalledTimes(1); // el lote subido se reutiliza
@@ -121,7 +127,7 @@ describe("importación nueva", () => {
     const { result } = await open();
     await act(async () => { await result.current.confirm(); });
     expect(result.current.phase).toBe("ready");
-    expect(result.current.error).toBeTruthy();
+    expect(result.current.failure).toMatchObject({ stage: "upload", error: { message: "red" } });
     expect(h.svc.discardImport).toHaveBeenCalledWith("batch-1");
     expect(h.svc.commitImport).not.toHaveBeenCalled();
   });
@@ -175,7 +181,8 @@ describe("reemplazar y agregar (con diff)", () => {
     h.svc.previewImport.mockRejectedValueOnce({ message: "importador: el destino debe ser una capa existente", code: "23514" });
     const { result } = await open({ initialMode: "replace", initialTargetId: "carpeta" });
     await settle(400);
-    expect(result.current.error).toMatch(/el destino debe ser una capa existente/);
+    expect(result.current.failure).toMatchObject({ stage: "preview" });
+    expect(describeError(result.current.failure!.error).raw).toMatch(/el destino debe ser una capa existente/);
     expect(result.current.canConfirm).toBe(false);
   });
 });
@@ -238,6 +245,37 @@ describe("descartar y deshacer", () => {
     h.svc.revertImport.mockRejectedValueOnce({ message: "importador: esa capa tiene una importación posterior", code: "23514" });
     await act(async () => { expect(await result.current.undo()).toBe(false); });
     expect(result.current.reverted).toBe(false);
-    expect(result.current.error).toMatch(/importación posterior/);
+    expect(result.current.failure).toMatchObject({ stage: "undo" });
+    expect(describeError(result.current.failure!.error).raw).toMatch(/importación posterior/);
+  });
+});
+
+describe("nada falla en silencio", () => {
+  it("si falla la subida en la vista previa, el fallo dice que fue al SUBIR (no al calcular)", async () => {
+    h.svc.createImport.mockRejectedValueOnce({ message: "Failed to fetch" });
+    const { result } = await open({ initialMode: "replace", initialTargetId: "capa" });
+    await settle(400);
+    expect(result.current.failure).toMatchObject({ stage: "upload" });
+    expect(result.current.canConfirm).toBe(false);
+  });
+
+  it("si el descarte del lote falla al cerrar, queda registrado en la consola", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    h.svc.discardImport.mockRejectedValueOnce(new Error("sin red"));
+    const { unmount } = await open({ initialMode: "replace", initialTargetId: "capa" });
+    await settle(400);
+    unmount();
+    await settle(0);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("no se pudo descartar el lote"), "batch-1", expect.any(Error));
+    warn.mockRestore();
+  });
+
+  it("cambiar de modo limpia el fallo anterior (ya no corresponde)", async () => {
+    h.svc.previewImport.mockRejectedValueOnce({ message: "importador: el destino debe ser una capa existente", code: "23514" });
+    const { result } = await open({ initialMode: "replace", initialTargetId: "capa" });
+    await settle(400);
+    expect(result.current.failure).not.toBeNull();
+    act(() => result.current.setMode("append"));
+    expect(result.current.failure).toBeNull();
   });
 });
