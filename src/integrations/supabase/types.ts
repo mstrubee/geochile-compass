@@ -14,6 +14,105 @@ export type Database = {
   }
   public: {
     Tables: {
+      _backup_territorial_layer_groups_v1_20261014: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          icon: string | null
+          id: string | null
+          name: string | null
+          order_index: number | null
+          slug: string | null
+          updated_at: string | null
+          visible_default: boolean | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          icon?: string | null
+          id?: string | null
+          name?: string | null
+          order_index?: number | null
+          slug?: string | null
+          updated_at?: string | null
+          visible_default?: boolean | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          icon?: string | null
+          id?: string | null
+          name?: string | null
+          order_index?: number | null
+          slug?: string | null
+          updated_at?: string | null
+          visible_default?: boolean | null
+        }
+        Relationships: []
+      }
+      _backup_territorial_layers_v1_20261014: {
+        Row: {
+          bbox: Json | null
+          color: string | null
+          created_at: string | null
+          feature_count: number | null
+          group_id: string | null
+          heatmap_aggregate_url: string | null
+          heatmap_enabled: boolean | null
+          icon: string | null
+          icon_render: string | null
+          id: string | null
+          last_dedup_strategy: string | null
+          name: string | null
+          order_index: number | null
+          parent_layer_id: string | null
+          render_mode: string | null
+          source_file_id: string | null
+          source_name: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          bbox?: Json | null
+          color?: string | null
+          created_at?: string | null
+          feature_count?: number | null
+          group_id?: string | null
+          heatmap_aggregate_url?: string | null
+          heatmap_enabled?: boolean | null
+          icon?: string | null
+          icon_render?: string | null
+          id?: string | null
+          last_dedup_strategy?: string | null
+          name?: string | null
+          order_index?: number | null
+          parent_layer_id?: string | null
+          render_mode?: string | null
+          source_file_id?: string | null
+          source_name?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          bbox?: Json | null
+          color?: string | null
+          created_at?: string | null
+          feature_count?: number | null
+          group_id?: string | null
+          heatmap_aggregate_url?: string | null
+          heatmap_enabled?: boolean | null
+          icon?: string | null
+          icon_render?: string | null
+          id?: string | null
+          last_dedup_strategy?: string | null
+          name?: string | null
+          order_index?: number | null
+          parent_layer_id?: string | null
+          render_mode?: string | null
+          source_file_id?: string | null
+          source_name?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       _migration_log: {
         Row: {
           applied_at: string
@@ -1996,6 +2095,13 @@ export type Database = {
             referencedRelation: "territorial_layers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "territorial_features_layer_id_fkey"
+            columns: ["layer_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layers_active"
+            referencedColumns: ["id"]
+          },
         ]
       }
       territorial_layer_groups: {
@@ -2097,13 +2203,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "territorial_layers_node_fk"
-            columns: ["id"]
-            isOneToOne: true
-            referencedRelation: "layer_nodes"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "territorial_layers_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
@@ -2111,10 +2210,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "territorial_layers_node_fk"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "layer_nodes"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "territorial_layers_parent_layer_id_fkey"
             columns: ["parent_layer_id"]
             isOneToOne: false
             referencedRelation: "territorial_layers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "territorial_layers_parent_layer_id_fkey"
+            columns: ["parent_layer_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layers_active"
             referencedColumns: ["id"]
           },
         ]
@@ -3094,10 +3207,58 @@ export type Database = {
             referencedRelation: "territorial_layer_groups"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "territorial_layers_node_fk"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "layer_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "territorial_layers_parent_layer_id_fkey"
+            columns: ["parent_layer_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "territorial_layers_parent_layer_id_fkey"
+            columns: ["parent_layer_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layers_active"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
     Functions: {
+      _fi_decrement_integer: { Args: { x: string }; Returns: string }
+      _fi_increment_integer: { Args: { x: string }; Returns: string }
+      _fi_integer_length: { Args: { p_head: string }; Returns: number }
+      _fi_integer_part: { Args: { p_key: string }; Returns: string }
+      _fi_midpoint: { Args: { a: string; b: string }; Returns: string }
+      _fi_validate_integer: { Args: { p_int: string }; Returns: undefined }
+      _fi_validate_key: { Args: { p_key: string }; Returns: undefined }
+      _geojson_point_fast: { Args: { g: Json }; Returns: unknown }
+      _layer_nodes_can_edit: {
+        Args: { p_owner: string; p_scope: string }
+        Returns: boolean
+      }
+      _layer_nodes_next_position: {
+        Args: { p_parent: string }
+        Returns: string
+      }
+      _layer_nodes_rebalance: { Args: { p_parent: string }; Returns: undefined }
+      _legacy_group_style: {
+        Args: {
+          g: Database["public"]["Tables"]["territorial_layer_groups"]["Row"]
+        }
+        Returns: Json
+      }
+      _legacy_layer_style: {
+        Args: { l: Database["public"]["Tables"]["territorial_layers"]["Row"] }
+        Returns: Json
+      }
       _postgis_deprecate: {
         Args: { newname: string; oldname: string; version: string }
         Returns: undefined
@@ -3234,7 +3395,28 @@ export type Database = {
           user_id: string
         }[]
       }
-      archive_node: { Args: { p_node_id: string }; Returns: Database["public"]["Tables"]["layer_nodes"]["Row"] }
+      archive_node: {
+        Args: { p_node_id: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          scope: string
+          style: Json
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "layer_nodes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
         | {
@@ -3303,6 +3485,8 @@ export type Database = {
           nombre: string
         }[]
       }
+      generate_key_between: { Args: { a: string; b: string }; Returns: string }
+      geojson_to_geom: { Args: { g: Json }; Returns: unknown }
       geometry: { Args: { "": string }; Returns: unknown }
       geometry_above: {
         Args: { geom1: unknown; geom2: unknown }
@@ -3423,7 +3607,25 @@ export type Database = {
           p_new_parent_id: string
           p_node_id: string
         }
-        Returns: Database["public"]["Tables"]["layer_nodes"]["Row"]
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          scope: string
+          style: Json
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "layer_nodes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       poi_counts_by_folder: {
         Args: never
@@ -3480,9 +3682,55 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      purge_archived_layer_nodes: {
+        Args: { p_days?: number; p_max_roots?: number }
+        Returns: number
+      }
       purge_deleted_pois: { Args: never; Returns: undefined }
-      rename_node: { Args: { p_name: string; p_node_id: string }; Returns: Database["public"]["Tables"]["layer_nodes"]["Row"] }
-      restore_node: { Args: { p_node_id: string }; Returns: Database["public"]["Tables"]["layer_nodes"]["Row"] }
+      rename_node: {
+        Args: { p_name: string; p_node_id: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          scope: string
+          style: Json
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "layer_nodes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      restore_node: {
+        Args: { p_node_id: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          scope: string
+          style: Json
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "layer_nodes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_node_visibility: {
         Args: { p_node_id: string; p_visible: boolean }
         Returns: number
@@ -4074,7 +4322,10 @@ export type Database = {
         Args: { geom: unknown; move: number; wrap: number }
         Returns: unknown
       }
-      sync_layer_nodes_from_legacy: { Args: { p_reorder?: boolean }; Returns: Json }
+      sync_layer_nodes_from_legacy: {
+        Args: { p_reorder?: boolean }
+        Returns: Json
+      }
       territorial_role_default_weight: {
         Args: { role_name: string }
         Returns: number
