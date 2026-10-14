@@ -6,6 +6,7 @@ import {
   includedCounts,
   isExcluded,
   kmlColorToHex,
+  normalizeIconUrl,
   layersOf,
   normalizeGeometry,
   parseImportContent,
@@ -108,7 +109,7 @@ describe("KML estilo Google Earth (locales.kml)", () => {
     expect(anto.icon).toBe("https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png");
     const directo = find(doc.root, "0.1.0")!;
     expect(directo.color).toBe("#d62d1c");
-    expect(directo.icon).toBe("http://maps.google.com/mapfiles/kml/paddle/red-circle.png");
+    expect(directo.icon).toBe("https://maps.google.com/mapfiles/kml/paddle/red-circle.png"); // el fixture dice http://
   });
 
   it("MultiGeometry con tipos distintos queda como GeometryCollection", () => {
@@ -338,5 +339,63 @@ describe("utilidades", () => {
       expect(s.children.map((c) => c.name)).toEqual(["Norte", "Sur", "Zonas", "Con problemas"]);
       expect(s.children[2].count).toBe(2);
     });
+  });
+});
+
+/**
+ * Exportaciones REALES de Google Earth Pro 7.3.7 (un punto cada una): un Document con el nombre del
+ * archivo, StyleMap con pares normal/highlight, ícono `http://maps.google.com/...`, `LookAt`,
+ * `gx:drawOrder` y `atom:link` dentro del Placemark.
+ */
+describe("KMZ reales de Google Earth Pro (ge-test-1.kmz, ge-test-2.kmz)", () => {
+  const load = async (name: string) => {
+    const JSZip = (await import("jszip")).default;
+    const zip = await JSZip.loadAsync(fixture(name).toString("base64"), { base64: true });
+    return parseImportContent.kmz(await zip.generateAsync({ type: "arraybuffer" }), name);
+  };
+
+  it("un Document sin carpetas es una sola capa, sin la extensión del archivo en el nombre", async () => {
+    const doc = await load("ge-test-1.kmz");
+    expect(doc.root).toMatchObject({ kind: "layer", name: "Test 1", key: "0" });
+    expect(doc.counts).toEqual({ folders: 0, layers: 1, features: 1, invalid: 0 });
+    expect(doc.format).toBe("kmz");
+  });
+
+  it("lee el punto con sus coordenadas exactas e ignora LookAt, drawOrder y atom:link", async () => {
+    const [f] = (await load("ge-test-1.kmz")).root.features!;
+    expect(f.name).toBe("Test 1");
+    expect(f.geometry).toEqual({ type: "Point", coordinates: [-69.25916296027727, -32.15907684812149] });
+    expect(f.properties).toEqual({});
+    const [g] = (await load("ge-test-2.kmz")).root.features!;
+    expect(g.geometry).toEqual({ type: "Point", coordinates: [-69.26578491000906, -33.72223999533109] });
+  });
+
+  it("resuelve el StyleMap (par 'normal') y deja el ícono por https", async () => {
+    const doc = await load("ge-test-1.kmz");
+    expect(doc.root.icon).toBe("https://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png");
+    expect(doc.root.features![0].icon).toBe(doc.root.icon);
+    expect(doc.root.color).toBeNull(); // el estilo no trae color
+  });
+
+  it("no hay avisos: ni geometrías inválidas ni contenido no soportado", async () => {
+    expect((await load("ge-test-1.kmz")).issues).toEqual([]);
+    expect((await load("ge-test-2.kmz")).issues).toEqual([]);
+  });
+
+  it("los dos archivos son del mismo formato pero con puntos distintos (sirven para probar agregar)", async () => {
+    const a = (await load("ge-test-1.kmz")).root.features![0];
+    const b = (await load("ge-test-2.kmz")).root.features![0];
+    expect(a.geometry).not.toEqual(b.geometry);
+    expect(a.name).not.toBe(b.name);
+  });
+});
+
+describe("normalizeIconUrl", () => {
+  it("sube a https los íconos de Google y deja el resto", () => {
+    expect(normalizeIconUrl("http://maps.google.com/mapfiles/kml/paddle/red-circle.png")).toBe("https://maps.google.com/mapfiles/kml/paddle/red-circle.png");
+    expect(normalizeIconUrl("http://www.gstatic.com/mapspro/x.png")).toBe("https://www.gstatic.com/mapspro/x.png");
+    expect(normalizeIconUrl("http://example.com/pin.png")).toBe("http://example.com/pin.png");
+    expect(normalizeIconUrl("https://maps.google.com/a.png")).toBe("https://maps.google.com/a.png");
+    expect(normalizeIconUrl("data:image/png;base64,AAAA")).toBe("data:image/png;base64,AAAA");
   });
 });

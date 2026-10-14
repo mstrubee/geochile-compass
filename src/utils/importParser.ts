@@ -73,6 +73,16 @@ export const MAX_ICON_CHARS = 6000;
 
 const stripExt = (name: string) => name.replace(/\.[^./\\]+$/, "");
 
+/** Google Earth nombra el Document como el archivo, con extensión ("Test 1.kmz"): se quita. */
+const cleanDocName = (name: string) => name.replace(/\.(kmz|kml)$/i, "").trim();
+
+/**
+ * Los íconos de Google (`http://maps.google.com/mapfiles/...`) vienen por http y la app va por https:
+ * el navegador los bloquea o avisa de contenido mixto. Esos hosts sirven los mismos archivos por https.
+ */
+export const normalizeIconUrl = (href: string): string =>
+  href.replace(/^http:\/\/((?:maps|www|earth|mt\d?)\.google\.com|(?:[a-z0-9-]+\.)*gstatic\.com)\//i, "https://$1/");
+
 // ── Geometría ────────────────────────────────────────────────────────────────
 
 const isNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
@@ -236,7 +246,7 @@ const styleInfoOf = (style: Element): StyleInfo => {
     kmlColorToHex(text(iconStyle && first(iconStyle, "color"))) ??
     kmlColorToHex(text(first(style, "LineStyle") && first(first(style, "LineStyle")!, "color"))) ??
     kmlColorToHex(text(first(style, "PolyStyle") && first(first(style, "PolyStyle")!, "color")));
-  return { icon: href || null, color };
+  return { icon: href ? normalizeIconUrl(href) : null, color };
 };
 
 const collectStyles = (root: Element) => {
@@ -426,6 +436,7 @@ const buildKml = (xml: string, filename: string): ImportDocument => {
   };
   const top = kmlRoot.localName === "kml" ? first(kmlRoot, "Document") ?? first(kmlRoot, "Folder") ?? kmlRoot : kmlRoot;
   const rootContainer = container(top, []);
+  rootContainer.name = cleanDocName(rootContainer.name);
   if (!rootContainer.name || rootContainer.name === "Sin nombre") rootContainer.name = stripExt(filename);
 
   // 2) Placemark → feature validado.
@@ -646,7 +657,7 @@ const buildGeoJson = (textContent: string, filename: string): ImportDocument => 
     }
     if (r.problems.length) b.add("warning", folderPath, name, `se importó parcialmente: ${r.problems[0]}`);
     const hex = typeof props.color === "string" && /^#[0-9a-f]{6}$/i.test(props.color) ? props.color.toLowerCase() : null;
-    const icon = typeof props.icon === "string" && /^(https?:|data:)/i.test(props.icon) ? props.icon : null;
+    const icon = typeof props.icon === "string" && /^(https?:|data:)/i.test(props.icon) ? normalizeIconUrl(props.icon) : null;
     const feature = {
       externalId: f.id != null ? String(f.id) : pickString(props, ID_KEYS),
       name,
