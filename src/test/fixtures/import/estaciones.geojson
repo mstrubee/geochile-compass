@@ -1,0 +1,133 @@
+{
+  "type": "FeatureCollection",
+  "name": "Estaciones",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "e-1",
+      "properties": {
+        "name": "Copec Centro",
+        "_folderPath": [
+          "Norte"
+        ],
+        "color": "#10B981"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -70.65,
+          -33.45,
+          540
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "Nombre": "Shell Arica",
+        "id": "e-2",
+        "_folderPath": [
+          "Norte",
+          "Arica"
+        ]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -70.3,
+          -18.48
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Sin carpeta"
+      },
+      "geometry": {
+        "type": "MultiPoint",
+        "coordinates": [
+          [
+            -71,
+            -33
+          ],
+          [
+            -71.1,
+            -33.1
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Terreno",
+        "_folderPath": [
+          "Norte"
+        ]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -70,
+              -33,
+              5
+            ],
+            [
+              -70,
+              -33.1,
+              5
+            ],
+            [
+              -70.1,
+              -33.1,
+              5
+            ],
+            [
+              -70.1,
+              -33,
+              5
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Latitud imposible"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -70,
+          120
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Sin geometría"
+      },
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Línea corta"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -70,
+            -33
+          ]
+        ]
+      }
+    }
+  ]
+}

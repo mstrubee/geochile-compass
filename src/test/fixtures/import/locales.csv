@@ -1,0 +1,8 @@
+﻿Nombre;Latitud;Longitud;Capa;Código;Comuna
+Farmacia Uno;-33,4489;-70,6693;Farmacias;F-1;Santiago
+Farmacia Dos;-33,4372;-70,6506;Farmacias;F-2;Providencia
+Bencinera Norte;-18,4783;-70,3126;Bencineras;B-1;Arica
+Bencinera Sur;-53,1638;-70,9171;Bencineras;;Punta Arenas
+Fila sin coordenadas;;;Farmacias;F-9;Nunoa
+Fila rota;abc;-70,6;Farmacias;F-10;Nunoa
+Fila fuera de rango;-133,4;-70,6;Bencineras;B-9;Nunoa
