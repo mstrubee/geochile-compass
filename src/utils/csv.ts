@@ -2,7 +2,7 @@
  * csv.ts
  * ───────
  * Parser CSV genérico de bajo nivel (detecta separador `,`/`;`, respeta
- * comillas, maneja BOM). Usado por parseGeoFile.ts (csvToGeoJSON) y por
+ * comillas, maneja BOM). Usado por importParser.ts (CSV del importador) y por
  * herramientas admin que necesitan leer un CSV como filas de texto plano.
  */
 

@@ -91,7 +91,6 @@ import { useNavigate } from "react-router-dom";
 import { TerritorialLayerFloatingPanel } from "@/components/map/TerritorialLayerFloatingPanel";
 import type { ComercialLayerState, ComercialCategoria } from "@/types/comercial";
 import { useBrandLogos } from "@/hooks/useComercialPOI";
-import { useCustomLayers } from "@/hooks/useCustomLayers";
 import { FootTrafficPanel } from "@/components/map/FootTrafficPanel";
 import type { FootTrafficTarget } from "@/hooks/useFootTraffic";
 
@@ -179,7 +178,6 @@ const Index = () => {
   });
   // ── Red Comercial Nacional (POIs OSM) ────────────────────────────────────
   const brandLogos = useBrandLogos();
-  const { asUserLayers: customMapLayers, reload: reloadCustomLayers } = useCustomLayers();
   // ── Panel de afluencia BestTime ──────────────────────────────────────────
   const [footTrafficTarget, setFootTrafficTarget] = useState<FootTrafficTarget | null>(null);
   useEffect(() => {
@@ -2309,7 +2307,6 @@ const Index = () => {
             comercialManagedBrands={comercialManagedBrands}
             comercialBrandLogos={brandLogos}
             onComercialCountChange={handleComercialCountChange}
-            customLayers={customMapLayers}
           />
 
           <SearchBar

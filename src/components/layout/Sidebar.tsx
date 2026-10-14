@@ -32,9 +32,7 @@ import { exportFolderReportToXlsx } from "@/utils/poiFolderReportXlsx";
 import { exportFolderReportToPdf } from "@/utils/poiFolderReportPdf";
 import { CommuneSearch } from "./CommuneSearch";
 import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
-import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
 import { LayerTreeSection } from "@/components/layerTree/LayerTreeSection";
-import { useLegacyLayerList } from "@/components/layerTree/useLegacyLayerList";
 import { AnalyticsDataSection } from "./AnalyticsDataSection";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 
@@ -2969,7 +2967,6 @@ const CollapsibleCustomLayers = ({
   onFlyToBounds?: (bounds: { west: number; south: number; east: number; north: number }) => void;
 }) => {
   const [open, setOpen] = useState(false); // colapsado por defecto
-  const legacyList = useLegacyLayerList();
 
   return (
     <div className="mt-3 border-t border-border/40 pt-2">
@@ -2991,12 +2988,8 @@ const CollapsibleCustomLayers = ({
         <>
           {/* 1º: Parque Automotor */}
           <ParqueLayerToggle />
-          {/* 2º: árbol de carpetas y capas territoriales (`?capas=clasico` vuelve a la lista anterior) */}
-          {legacyList ? (
-            <TerritorialGroupsSection isAdmin={isAdmin} />
-          ) : (
-            <LayerTreeSection isAdmin={isAdmin} onFlyToPoint={onFlyToPoint} onFlyToBounds={onFlyToBounds} />
-          )}
+          {/* 2º: árbol de carpetas y capas territoriales */}
+          <LayerTreeSection isAdmin={isAdmin} onFlyToPoint={onFlyToPoint} onFlyToBounds={onFlyToBounds} />
         </>
       )}
 

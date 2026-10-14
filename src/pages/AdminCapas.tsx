@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, Upload, ArrowLeft, Trash2, ExternalLink, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound, MapPin, TrendingUp, Store, Car } from "lucide-react";
 import { GeminiKeysAdminSection } from "@/components/admin/GeminiKeysAdminSection";
@@ -9,30 +8,22 @@ import { StorageAdminSection } from "@/components/admin/StorageAdminSection";
 import { MaturationCurveAdminSection } from "@/components/admin/MaturationCurveAdminSection";
 import { ExpressAdjustAdminSection } from "@/components/admin/ExpressAdjustAdminSection";
 import { DriveSpeedsAdminSection } from "@/components/admin/DriveSpeedsAdminSection";
-import { IMPORT_ACCEPT, importFormatOf } from "@/utils/importParser";
 import { UsersAdminSection } from "@/components/admin/UsersAdminSection";
 import { Button } from "@/components/ui/button";
 import { GeocodeAddressesDialog } from "@/components/admin/GeocodeAddressesDialog";
 import { ConfirmDeleteDialog } from "@/components/admin/ConfirmDeleteDialog";
-import { ImportWizard } from "@/components/layerImport/ImportWizard";
+import { ImportFileButton } from "@/components/layerImport/ImportFileButton";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
-import { LAYER_TREE_QUERY_KEY, useLayerTreeData } from "@/hooks/useLayerTree";
-import { TERRITORIAL_LAYERS_QUERY_KEY } from "@/hooks/useTerritorialLayers";
 import type { TerritorialSourceFile } from "@/types/territorial";
 import { injectParqueFeatures } from "@/scripts/inject-parque-features";
 
 const AdminCapas = () => {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: roleLoading } = useUserRole();
-  // Los nodos del árbol sirven para elegir el destino dentro del asistente.
-  const { data: tree } = useLayerTreeData();
   const [files, setFiles] = useState<TerritorialSourceFile[]>([]);
-  const [importing, setImporting] = useState<{ file: File; nonce: number } | null>(null);
-  const importInput = useRef<HTMLInputElement>(null);
   const [geocodeOpen, setGeocodeOpen] = useState(false);
   const [geocodeTarget, setGeocodeTarget] = useState<TerritorialSourceFile | null>(null);
   const [deleteFileTarget, setDeleteFileTarget] = useState<TerritorialSourceFile | null>(null);
@@ -117,26 +108,9 @@ const AdminCapas = () => {
           description="Carga archivos al árbol de capas y revisa el historial de archivos."
         >
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            ref={importInput}
-            type="file"
-            accept={IMPORT_ACCEPT}
-            aria-label="Archivo a importar"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (!f) return;
-              if (!importFormatOf(f.name)) {
-                toast.error("Formato no soportado", { description: "Usa un archivo KMZ, KML, GeoJSON, CSV o HTML." });
-                return;
-              }
-              setImporting({ file: f, nonce: Date.now() });
-            }}
-          />
-          <Button onClick={() => importInput.current?.click()}>
+          <ImportFileButton>
             <Upload className="h-4 w-4" /> Cargar capa
-          </Button>
+          </ImportFileButton>
           <Button variant="outline" onClick={() => setGeocodeOpen(true)}>
             <MapPin className="h-4 w-4" /> Georreferenciar direcciones
           </Button>
@@ -337,18 +311,6 @@ const AdminCapas = () => {
         }}
       />
 
-      {importing && (
-        <ImportWizard
-          key={importing.nonce}
-          file={importing.file}
-          nodes={tree?.nodes ?? []}
-          onClose={() => setImporting(null)}
-          onImported={() => {
-            void queryClient.invalidateQueries({ queryKey: LAYER_TREE_QUERY_KEY });
-            void queryClient.invalidateQueries({ queryKey: TERRITORIAL_LAYERS_QUERY_KEY });
-          }}
-        />
-      )}
     </div>
   );
 };

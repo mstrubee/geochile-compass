@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FolderPlus, Search, Settings2, Trash2, Undo2, Upload, X } from "lucide-react";
+import { FolderPlus, Search, Trash2, Undo2, Upload, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
@@ -21,7 +21,6 @@ import { IMPORT_ACCEPT, importFormatOf } from "@/utils/importParser";
 import type { ImportMode } from "@/services/layerImport";
 import { useLayerStyles } from "@/hooks/useLayerStyles";
 import { ImportWizard } from "@/components/layerImport/ImportWizard";
-import { TerritorialLayerManagerDialog } from "@/components/panels/TerritorialLayerManagerDialog";
 import { BrandStyleEditorDialog } from "@/components/panels/BrandStyleEditorDialog";
 import type { BrandStyle } from "@/hooks/useBrandStyles";
 import { buildKmzTree, fetchNodeBounds, type NodeBounds } from "@/services/layerTreeExport";
@@ -127,7 +126,6 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
   const [propertiesRow, setPropertiesRow] = useState<TreeRow | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
   const [editRequest, setEditRequest] = useState<{ id: string; nonce: number } | null>(null);
-  const [managerOpen, setManagerOpen] = useState(false);
   // Importación en curso: archivo elegido o soltado, y dónde (si se soltó sobre una carpeta o capa).
   const [importing, setImporting] = useState<{ file: File; mode: ImportMode; targetId: string | null; nonce: number } | null>(null);
   const [fileOver, setFileOver] = useState(false);
@@ -296,12 +294,6 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
       })()
     : null;
 
-  const closeManager = () => {
-    setManagerOpen(false);
-    // El administrador pudo crear, mover o borrar capas.
-    void queryClient.invalidateQueries({ queryKey: LAYER_TREE_QUERY_KEY });
-  };
-
   if (isLoading) return <p className="px-2 py-1 text-[11px] text-text-muted">Cargando capas…</p>;
   if (isError || !data) {
     return (
@@ -366,16 +358,6 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
           <span className="font-mono text-[10px] text-text-muted">{hasVisibleLayers ? "azul→rojo" : "—"}</span>
           <IOSSwitch on={heatOn} />
         </button>
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => setManagerOpen(true)}
-            className="mb-0.5 flex-shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
-            title="Gestionar capas territoriales (admin)"
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-          </button>
-        )}
       </div>
 
       <div className="mb-1 flex items-center gap-0.5">
@@ -495,7 +477,6 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
         <>
           <NodePropertiesDialog row={propertiesRow} onClose={() => setPropertiesRow(null)} onSave={(id, patch) => void updateStyle(id, patch)} />
           <TrashDialog open={trashOpen} onClose={() => setTrashOpen(false)} onRestore={handleRestore} />
-          <TerritorialLayerManagerDialog open={managerOpen} onClose={closeManager} />
           {importing && (
             <ImportWizard
               key={importing.nonce}

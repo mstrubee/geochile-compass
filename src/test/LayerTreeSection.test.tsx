@@ -40,7 +40,6 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 // Diálogos pesados que esta prueba no ejerce.
-vi.mock("@/components/panels/TerritorialLayerManagerDialog", () => ({ TerritorialLayerManagerDialog: () => null }));
 vi.mock("@/components/panels/BrandStyleEditorDialog", () => ({ BrandStyleEditorDialog: () => null }));
 // El asistente de importación tiene sus propias pruebas; acá solo importa cómo se abre.
 vi.mock("@/components/layerImport/ImportWizard", () => ({
