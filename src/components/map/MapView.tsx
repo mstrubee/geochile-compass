@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { GoogleTileLayer } from "./GoogleTileLayer";
 import type { MapProvider } from "@/hooks/useMapProvider";
@@ -16,6 +16,7 @@ import { PoiIsochroneLayer, type ShownPoiIsochrone } from "./PoiIsochroneLayer";
 import { TerritorialLayersLayer } from "./TerritorialLayersLayer";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
+import { useLayerTreeData } from "@/hooks/useLayerTree";
 import { MicrozoneLayer } from "./MicrozoneLayer";
 import ParqueHeatmapLayer from "./ParqueHeatmapLayer";
 import { CrimeHeatLayer } from "./CrimeHeatLayer";
@@ -514,11 +515,19 @@ const ZoomControlTopRight = () => {
 
 const TerritorialLayersHost = () => {
   const { layers } = useTerritorialLayers();
+  const { data: tree } = useLayerTreeData();
   const { visibleLayerIds, ensureVisibleDefaults, heatmapEnabled } = useTerritorialVisibility();
   useEffect(() => {
     ensureVisibleDefaults(layers.map((l) => l.id));
   }, [layers, ensureVisibleDefaults]);
-  return <TerritorialLayersLayer layers={layers} visibleLayerIds={visibleLayerIds} heatmap={heatmapEnabled} />;
+  // El árbol manda: una capa archivada ahí deja de pintarse. Si el árbol no cargó,
+  // se pinta todo como antes en vez de dejar el mapa sin capas.
+  const activeLayers = useMemo(() => {
+    if (!tree) return layers;
+    const active = new Set(tree.nodes.filter((n) => n.kind === "layer").map((n) => n.id));
+    return layers.filter((l) => active.has(l.id));
+  }, [layers, tree]);
+  return <TerritorialLayersLayer layers={activeLayers} visibleLayerIds={visibleLayerIds} heatmap={heatmapEnabled} />;
 };
 
 const ParqueHeatmapHost = () => {

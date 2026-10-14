@@ -33,6 +33,8 @@ import { exportFolderReportToPdf } from "@/utils/poiFolderReportPdf";
 import { CommuneSearch } from "./CommuneSearch";
 import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { TerritorialGroupsSection } from "./TerritorialGroupsSection";
+import { LayerTreeSection } from "@/components/layerTree/LayerTreeSection";
+import { useLegacyLayerList } from "@/components/layerTree/useLegacyLayerList";
 import { AnalyticsDataSection } from "./AnalyticsDataSection";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
 
@@ -192,6 +194,8 @@ interface SidebarProps {
   ) => Promise<void>;
   // Búsqueda de comunas
   onFlyToCommune: (c: import("@/data/communes").Commune) => void;
+  /** Centra el mapa en un punto (p. ej. un punto de una capa del panel de capas). */
+  onFlyToPoint?: (lat: number, lng: number) => void;
   onOpenCommuneRangeResults: (
     results: import("@/data/communes").Commune[],
     min: number,
@@ -797,6 +801,7 @@ export const Sidebar = ({
   onHiddenPoiFoldersChange,
   onLoadOverpass,
   onFlyToCommune,
+  onFlyToPoint,
   onOpenCommuneRangeResults,
   compareCommunes,
   onCompareCommunesChange,
@@ -1596,7 +1601,7 @@ export const Sidebar = ({
           {/* Atractores comerciales, Gasto endógeno, Comunas, GSE → panel flotante */}
           {/* ── Capas Agronomía (colapsado por defecto) ─────────────────── */}
           <AgronomyGroupBlock layers={layers} onToggleLayer={onToggleLayer} />
-          <CollapsibleCustomLayers isAdmin={isAdmin} />
+          <CollapsibleCustomLayers isAdmin={isAdmin} onFlyToPoint={onFlyToPoint} />
           {comercialLayers && onComercialToggle && onComercialBrandToggle && onSetComercialHiddenBrands && (
             <ComercialPOISection
               layers={comercialLayers}
@@ -2951,8 +2956,15 @@ const AgronomyGroupBlock = ({ layers, onToggleLayer }: AgronomyGroupProps) => {
 };
 
 // ── Sección "Capas personalizadas" colapsable ─────────────────────────────────
-const CollapsibleCustomLayers = ({ isAdmin = false }: { isAdmin?: boolean }) => {
+const CollapsibleCustomLayers = ({
+  isAdmin = false,
+  onFlyToPoint,
+}: {
+  isAdmin?: boolean;
+  onFlyToPoint?: (lat: number, lng: number) => void;
+}) => {
   const [open, setOpen] = useState(false); // colapsado por defecto
+  const legacyList = useLegacyLayerList();
 
   return (
     <div className="mt-3 border-t border-border/40 pt-2">
@@ -2974,8 +2986,12 @@ const CollapsibleCustomLayers = ({ isAdmin = false }: { isAdmin?: boolean }) => 
         <>
           {/* 1º: Parque Automotor */}
           <ParqueLayerToggle />
-          {/* 2º: Serv. Automotrices + resto de grupos territoriales */}
-          <TerritorialGroupsSection isAdmin={isAdmin} />
+          {/* 2º: árbol de carpetas y capas territoriales (`?capas=clasico` vuelve a la lista anterior) */}
+          {legacyList ? (
+            <TerritorialGroupsSection isAdmin={isAdmin} />
+          ) : (
+            <LayerTreeSection isAdmin={isAdmin} onFlyToPoint={onFlyToPoint} />
+          )}
         </>
       )}
 
