@@ -2104,6 +2104,136 @@ export type Database = {
           },
         ]
       }
+      territorial_import_batches: {
+        Row: {
+          committed_at: string | null
+          created_at: string
+          created_by: string
+          feature_total: number
+          filename: string
+          format: string
+          id: string
+          mode: string | null
+          result: Json | null
+          staged_total: number
+          status: string
+          structure: Json
+          target_node_id: string | null
+        }
+        Insert: {
+          committed_at?: string | null
+          created_at?: string
+          created_by?: string
+          feature_total: number
+          filename: string
+          format: string
+          id?: string
+          mode?: string | null
+          result?: Json | null
+          staged_total?: number
+          status?: string
+          structure: Json
+          target_node_id?: string | null
+        }
+        Update: {
+          committed_at?: string | null
+          created_at?: string
+          created_by?: string
+          feature_total?: number
+          filename?: string
+          format?: string
+          id?: string
+          mode?: string | null
+          result?: Json | null
+          staged_total?: number
+          status?: string
+          structure?: Json
+          target_node_id?: string | null
+        }
+        Relationships: []
+      }
+      territorial_import_changes: {
+        Row: {
+          change: string
+          feature_id: string
+          id: number
+          import_id: string
+          layer_id: string
+          old_row: Json | null
+        }
+        Insert: {
+          change: string
+          feature_id: string
+          id?: never
+          import_id: string
+          layer_id: string
+          old_row?: Json | null
+        }
+        Update: {
+          change?: string
+          feature_id?: string
+          id?: never
+          import_id?: string
+          layer_id?: string
+          old_row?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "territorial_import_changes_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_import_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      territorial_import_staging: {
+        Row: {
+          external_id: string | null
+          geometry: Json
+          id: number
+          import_id: string
+          lat: number | null
+          layer_key: string
+          lng: number | null
+          name: string | null
+          properties: Json
+          seq: number
+        }
+        Insert: {
+          external_id?: string | null
+          geometry: Json
+          id?: never
+          import_id: string
+          lat?: number | null
+          layer_key: string
+          lng?: number | null
+          name?: string | null
+          properties?: Json
+          seq: number
+        }
+        Update: {
+          external_id?: string | null
+          geometry?: Json
+          id?: never
+          import_id?: string
+          lat?: number | null
+          layer_key?: string
+          lng?: number | null
+          name?: string | null
+          properties?: Json
+          seq?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "territorial_import_staging_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_import_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       territorial_layer_groups: {
         Row: {
           color: string | null
@@ -3468,6 +3598,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      commit_layer_import: {
+        Args: { p_excluded_keys?: string[]; p_import_id: string; p_mode: string; p_target_node_id?: string }
+        Returns: Json
+      }
       create_folder: {
         Args: { p_name: string; p_parent_id: string }
         Returns: {
@@ -3490,7 +3624,12 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_layer_import: {
+        Args: { p_feature_total: number; p_filename: string; p_format: string; p_structure: Json }
+        Returns: string
+      }
       disablelongtransactions: { Args: never; Returns: string }
+      discard_layer_import: { Args: { p_import_id: string }; Returns: undefined }
       dropgeometrycolumn:
         | {
             Args: {
@@ -3545,6 +3684,7 @@ export type Database = {
       }
       enablelongtransactions: { Args: never; Returns: string }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      finish_layer_import_staging: { Args: { p_import_id: string }; Returns: number }
       fn_marcas_categoria: {
         Args: { p_categoria: string }
         Returns: {
@@ -3689,6 +3829,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      layer_import_limits: { Args: never; Returns: Json }
       list_public_tables: {
         Args: never
         Returns: {
@@ -3778,6 +3919,10 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      preview_layer_import: {
+        Args: { p_excluded_keys?: string[]; p_import_id: string; p_mode: string; p_target_node_id?: string }
+        Returns: Json
+      }
       purge_archived_layer_nodes: {
         Args: { p_days?: number; p_max_roots?: number }
         Returns: number
@@ -3827,6 +3972,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      revert_layer_import: { Args: { p_import_id: string }; Returns: Json }
       set_node_visibility: {
         Args: { p_node_id: string; p_visible: boolean }
         Returns: number
