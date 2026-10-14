@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { GoogleTileLayer } from "./GoogleTileLayer";
+import { BASEMAPS } from "@/config/basemaps";
 import type { MapProvider } from "@/hooks/useMapProvider";
 import L from "leaflet";
 import { CommuneLayer } from "./CommuneLayer";
@@ -43,30 +44,6 @@ L.Icon.Default.mergeOptions({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
-
-const BASEMAPS = {
-  dark: {
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attribution: "© OpenStreetMap · © CARTO",
-    overlay: null as string | null,
-  },
-  light: {
-    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    attribution: "© OpenStreetMap · © CARTO",
-    overlay: null as string | null,
-  },
-  satellite: {
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: "Tiles © Esri — World Imagery",
-    overlay: null as string | null,
-  },
-  hybrid: {
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: "Tiles © Esri — World Imagery & Transportation",
-    // Overlay con calles (jerarquía vial) + etiquetas
-    overlay: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
-  },
-};
 
 /** Cada cuántos ms se refresca la lectura de coordenadas del puntero. */
 const COORDS_REFRESH_MS = 100;
