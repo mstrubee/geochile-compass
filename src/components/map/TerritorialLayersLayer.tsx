@@ -10,12 +10,14 @@ interface Props {
   layers: TerritorialLayer[];
   visibleLayerIds: Set<string>;
   heatmap?: boolean;
+  /** Opacidad (0 a 1) que un administrador fijó para una capa en el panel; sin entrada = 1. */
+  opacityByLayer?: ReadonlyMap<string, number>;
 }
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = false }: Props) => {
+export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = false, opacityByLayer }: Props) => {
   const map = useMap();
   const canvasRenderer = useMemo(() => L.canvas({ padding: 0.5 }), []);
   const { getStyle, version: layerStylesVersion } = useLayerStyles();
@@ -27,7 +29,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
   const showHeatmap = heatmap && visibleIds.length > 0;
   const features = useTerritorialFeatures(visibleIds);
   // __count y __styleVersion evitan re-render si no cambió nada
-  const groupsRef = useRef<Map<string, L.LayerGroup & { __count?: number; __styleVersion?: number }>>(new Map());
+  const groupsRef = useRef<Map<string, L.LayerGroup & { __count?: number; __styleVersion?: number; __sig?: string }>>(new Map());
   const heatLayerRef = useRef<L.Layer | null>(null);
 
   // Nota: deliberadamente NO se hace fitBounds al activar capas, para preservar
@@ -135,22 +137,28 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
 
     byLayer.forEach((feats, layerId) => {
       const existing = groupsRef.current.get(layerId);
-      // Saltar si ya está pintado con mismas features Y mismo versión de estilos
+      const eff       = layerStyleMap.get(layerId);
+      const opacity   = Math.max(0, Math.min(1, opacityByLayer?.get(layerId) ?? 1));
+      // Lo que se ve de la capa: si el color, el ícono, el tamaño o la opacidad cambian
+      // (p. ej. un administrador los edita en el panel) hay que volver a pintarla.
+      const sig = `${eff?.color ?? ""}|${eff?.icon ?? ""}|${eff?.iconSize ?? ""}|${opacity}`;
+      // Saltar si ya está pintado con mismas features, misma versión de estilos y mismo aspecto
       if (
         existing &&
         existing.__count        === feats.length &&
-        existing.__styleVersion === layerStylesVersion
+        existing.__styleVersion === layerStylesVersion &&
+        existing.__sig          === sig
       ) {
         return;
       }
       if (existing) existing.remove();
 
-      const group = L.layerGroup().addTo(map) as L.LayerGroup & { __count?: number; __styleVersion?: number };
+      const group = L.layerGroup().addTo(map) as L.LayerGroup & { __count?: number; __styleVersion?: number; __sig?: string };
       group.__count        = feats.length;
       group.__styleVersion = layerStylesVersion;
+      group.__sig          = sig;
       groupsRef.current.set(layerId, group);
 
-      const eff       = layerStyleMap.get(layerId);
       const color     = eff?.color    ?? "#F59E0B";
       const layerIcon = eff?.icon     ?? null;
       const iconSize  = Math.max(12, Math.min(40, eff?.iconSize ?? 22));
@@ -167,6 +175,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
             if (layerIcon && isUrl(layerIcon)) {
               // URL / data-URI → ícono imagen con tamaño configurable
               marker = L.marker([f.lat, f.lng], {
+                opacity,
                 icon: L.icon({
                   iconUrl:     layerIcon,
                   iconSize:    [iconSize, iconSize],
@@ -178,6 +187,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
               // Emoji / texto → divIcon con tamaño configurable
               const fontSize = Math.max(9, Math.round(iconSize * 0.55));
               marker = L.marker([f.lat, f.lng], {
+                opacity,
                 icon: L.divIcon({
                   className: "",
                   html: `<div style="display:flex;align-items:center;justify-content:center;width:${iconSize}px;height:${iconSize}px;border-radius:50%;background:${escapeHtml(color)};border:2px solid rgba(255,255,255,0.8);font-size:${fontSize}px;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.35)">${escapeHtml(layerIcon)}</div>`,
@@ -194,8 +204,9 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
                 radius,
                 color:       "#fff",
                 weight:      1.5,
+                opacity,
                 fillColor:   color,
-                fillOpacity: 0.95,
+                fillOpacity: 0.95 * opacity,
               });
             }
 
@@ -205,7 +216,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
             marker.addTo(group);
           } else {
             const gj = L.geoJSON(geom as GeoJSON.Geometry, {
-              style: { renderer: canvasRenderer, color, weight: 2, fillColor: color, fillOpacity: 0.25 },
+              style: { renderer: canvasRenderer, color, weight: 2, opacity, fillColor: color, fillOpacity: 0.25 * opacity },
             });
             gj.bindPopup(
               `<div style="font-size:12px"><b>${escapeHtml(f.name || layerName)}</b></div>`,
@@ -217,7 +228,7 @@ export const TerritorialLayersLayer = ({ layers, visibleLayerIds, heatmap = fals
         }
       });
     });
-  }, [features, layers, visibleLayerIds, map, canvasRenderer, showHeatmap, getStyle, layerStylesVersion]);
+  }, [features, layers, visibleLayerIds, map, canvasRenderer, showHeatmap, getStyle, layerStylesVersion, opacityByLayer]);
 
   useEffect(() => {
     return () => {

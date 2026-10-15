@@ -244,12 +244,14 @@ begin
   v_state := pg_temp.try_sql(format('select public.move_node(%L, %L, p_before_id := %L, p_after_id := %L)', s1, f1, s2, f2));
   perform pg_temp.assert_that('T4 anclas fuera de orden', v_state = '23514', v_state);
 
-  -- a la raíz: queda al final de la raíz
-  perform public.move_node(s1, null);
-  select * into r from layer_nodes where id = s1;
+  -- a la raíz: una carpeta queda al final de la raíz (una capa no puede ir ahí: Fase 3)
+  v_state := pg_temp.try_sql(format('select public.move_node(%L, null)', s1));
+  perform pg_temp.assert_that('T4 una capa no puede ir a la raíz', v_state = '23514', v_state);
+  perform public.move_node(f2, null);
+  select * into r from layer_nodes where id = f2;
   select max(position) into v_last_root from layer_nodes where parent_id is null and archived_at is null;
   perform pg_temp.assert_that('T4 a la raíz queda última', r.parent_id is null and r.position = v_last_root, r.position || ' vs ' || v_last_root);
-  perform pg_temp.assert_that('T4 la carpeta origen conserva el resto', pg_temp.children(f1) = array[s2, s3, f2]);
+  perform pg_temp.assert_that('T4 la carpeta origen conserva el resto', pg_temp.children(f1) = array[s2, s1, s3]);
 
   -- a otra carpeta
   perform public.move_node(s1, f3);
@@ -307,7 +309,7 @@ begin
   -- Restaurar un hijo cuya carpeta sigue en la papelera lo manda a la raíz.
   a1 := pg_temp.mk_node('folder', 'T5 A1', null);
   a2 := pg_temp.mk_node('folder', 'T5 A2', a1);
-  a3 := pg_temp.mk_node('layer',  'T5 A3', a2);
+  a3 := pg_temp.mk_node('folder', 'T5 A3', a2);   -- carpeta: una capa no puede volver sola a la raíz (Fase 3)
   perform pg_temp.set_user(v_admin);
   perform archive_node(a1);
   perform restore_node(a3);

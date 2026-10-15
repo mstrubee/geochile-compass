@@ -2170,6 +2170,15 @@ const Index = () => {
           onLoadOverpass={loadOverpass}
           onFlyToCommune={handleFlyToCommune}
           onFlyToPoint={(lat, lng) => setFlyTarget({ id: Date.now(), lat, lng, bbox: null })}
+          onFlyToBounds={(b) =>
+            // FlyToTarget espera el rectángulo como [sur, norte, oeste, este]
+            setFlyTarget({
+              id: Date.now(),
+              lat: (b.south + b.north) / 2,
+              lng: (b.west + b.east) / 2,
+              bbox: [b.south, b.north, b.west, b.east],
+            })
+          }
           onOpenCommuneRangeResults={handleOpenCommuneRangeResults}
           compareCommunes={compareCommunes}
           onCompareCommunesChange={setCompareCommunes}

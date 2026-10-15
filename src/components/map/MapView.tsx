@@ -527,7 +527,22 @@ const TerritorialLayersHost = () => {
     const active = new Set(tree.nodes.filter((n) => n.kind === "layer").map((n) => n.id));
     return layers.filter((l) => active.has(l.id));
   }, [layers, tree]);
-  return <TerritorialLayersLayer layers={activeLayers} visibleLayerIds={visibleLayerIds} heatmap={heatmapEnabled} />;
+  // Opacidad fijada por un administrador en las propiedades de cada capa.
+  const opacityByLayer = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const n of tree?.nodes ?? []) {
+      if (n.kind === "layer" && typeof n.style.opacity === "number") m.set(n.id, n.style.opacity);
+    }
+    return m;
+  }, [tree]);
+  return (
+    <TerritorialLayersLayer
+      layers={activeLayers}
+      visibleLayerIds={visibleLayerIds}
+      heatmap={heatmapEnabled}
+      opacityByLayer={opacityByLayer}
+    />
+  );
 };
 
 const ParqueHeatmapHost = () => {

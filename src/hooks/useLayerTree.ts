@@ -3,6 +3,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toLayerNode, type LayerNode } from "@/types/layerNodes";
 import { POI_PAGE_SIZE, type FeaturePreview, type FeaturePreviewItem } from "@/utils/layerTree";
+import { buildTrashItems, type TrashItem } from "@/utils/layerTreeEdit";
 
 export const LAYER_TREE_QUERY_KEY = ["layer-tree"] as const;
 
@@ -116,3 +117,28 @@ export const useLayerFeaturePreviews = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [specs, signature, featureCounts]);
 };
+
+/**
+ * Lo que hay en la papelera (solo lo ven los administradores: la política de
+ * lectura oculta lo archivado a los demás). Se consulta recién al abrirla.
+ */
+export const useTrash = (enabled: boolean) =>
+  useQuery({
+    queryKey: [...LAYER_TREE_QUERY_KEY, "trash"],
+    enabled,
+    staleTime: 15_000,
+    queryFn: async (): Promise<TrashItem[]> => {
+      const rows = await fetchAll((from, to) =>
+        supabase.from("layer_nodes").select("*").not("archived_at", "is", null).order("id").range(from, to),
+      );
+      const archived = rows.map(toLayerNode);
+      // Nombre de la carpeta de origen (puede seguir activa).
+      const parents = [...new Set(archived.map((n) => n.parent_id).filter((id): id is string => !!id))];
+      const names = new Map<string, string>();
+      for (let i = 0; i < parents.length; i += 200) {
+        const { data } = await supabase.from("layer_nodes").select("id,name").in("id", parents.slice(i, i + 200)).is("archived_at", null);
+        for (const r of data ?? []) names.set(r.id, r.name);
+      }
+      return buildTrashItems(archived, names);
+    },
+  });

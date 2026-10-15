@@ -196,6 +196,8 @@ interface SidebarProps {
   onFlyToCommune: (c: import("@/data/communes").Commune) => void;
   /** Centra el mapa en un punto (p. ej. un punto de una capa del panel de capas). */
   onFlyToPoint?: (lat: number, lng: number) => void;
+  /** Encuadra el mapa en un rectángulo (p. ej. "Volar a" una carpeta del panel de capas). */
+  onFlyToBounds?: (bounds: { west: number; south: number; east: number; north: number }) => void;
   onOpenCommuneRangeResults: (
     results: import("@/data/communes").Commune[],
     min: number,
@@ -802,6 +804,7 @@ export const Sidebar = ({
   onLoadOverpass,
   onFlyToCommune,
   onFlyToPoint,
+  onFlyToBounds,
   onOpenCommuneRangeResults,
   compareCommunes,
   onCompareCommunesChange,
@@ -1601,7 +1604,7 @@ export const Sidebar = ({
           {/* Atractores comerciales, Gasto endógeno, Comunas, GSE → panel flotante */}
           {/* ── Capas Agronomía (colapsado por defecto) ─────────────────── */}
           <AgronomyGroupBlock layers={layers} onToggleLayer={onToggleLayer} />
-          <CollapsibleCustomLayers isAdmin={isAdmin} onFlyToPoint={onFlyToPoint} />
+          <CollapsibleCustomLayers isAdmin={isAdmin} onFlyToPoint={onFlyToPoint} onFlyToBounds={onFlyToBounds} />
           {comercialLayers && onComercialToggle && onComercialBrandToggle && onSetComercialHiddenBrands && (
             <ComercialPOISection
               layers={comercialLayers}
@@ -2959,9 +2962,11 @@ const AgronomyGroupBlock = ({ layers, onToggleLayer }: AgronomyGroupProps) => {
 const CollapsibleCustomLayers = ({
   isAdmin = false,
   onFlyToPoint,
+  onFlyToBounds,
 }: {
   isAdmin?: boolean;
   onFlyToPoint?: (lat: number, lng: number) => void;
+  onFlyToBounds?: (bounds: { west: number; south: number; east: number; north: number }) => void;
 }) => {
   const [open, setOpen] = useState(false); // colapsado por defecto
   const legacyList = useLegacyLayerList();
@@ -2990,7 +2995,7 @@ const CollapsibleCustomLayers = ({
           {legacyList ? (
             <TerritorialGroupsSection isAdmin={isAdmin} />
           ) : (
-            <LayerTreeSection isAdmin={isAdmin} onFlyToPoint={onFlyToPoint} />
+            <LayerTreeSection isAdmin={isAdmin} onFlyToPoint={onFlyToPoint} onFlyToBounds={onFlyToBounds} />
           )}
         </>
       )}

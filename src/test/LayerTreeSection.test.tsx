@@ -226,7 +226,7 @@ describe("LayerTreeSection", () => {
     expect(screen.queryByText("Salcobrand")).toBeNull(); // la carpeta sigue cerrada
   });
 
-  it("oculta 'Parque Automotriz' y pone SERV. AUTOMOTRICES primero, como la lista anterior", async () => {
+  it("oculta 'Parque Automotriz' y respeta el orden del árbol", async () => {
     db.nodes = [
       nodeRow("P", "folder", "Parque Automotriz", null, "a0"),
       nodeRow("A", "folder", "Farmacias", null, "a1"),
@@ -235,8 +235,8 @@ describe("LayerTreeSection", () => {
     await mount();
     expect(screen.queryByText("Parque Automotriz")).toBeNull();
     const order = screen.getAllByRole("treeitem").map((el) => el.textContent);
-    expect(order[0]).toContain("SERV. AUTOMOTRICES");
-    expect(order[1]).toContain("Farmacias");
+    expect(order[0]).toContain("Farmacias");
+    expect(order[1]).toContain("SERV. AUTOMOTRICES");
   });
 
   it("si el árbol no carga, avisa y deja reintentar", async () => {
