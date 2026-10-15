@@ -1,5 +1,5 @@
 -- =============================================================================
--- PROPUESTA — NO EJECUTADA. ROLLBACK de 20261015000000_retire_legacy_layer_tables.sql
+-- ROLLBACK de 20261015000000_retire_legacy_layer_tables.sql
 -- =============================================================================
 -- Recrea territorial_layer_groups y custom_layers desde los backups
 -- (_backup_*_retire_20261015), reapunta las 3 FK a la tabla de grupos y restaura las
@@ -19,6 +19,12 @@ begin
 end $$;
 
 insert into public._migration_log (sprint, notes) values ('retire_legacy_layer_tables_v1_down', 'start');
+
+-- El guardián de group_id sobra cuando vuelve la FK a la tabla de grupos.
+drop trigger if exists trg_group_is_root on public.territorial_layers;
+drop trigger if exists trg_group_is_root on public.folder_layer_roles;
+drop trigger if exists trg_group_is_root on public.territorial_source_files;
+drop function if exists public._assert_group_is_root();
 
 -- -----------------------------------------------------------------------------
 -- 1. territorial_layer_groups

@@ -1,15 +1,13 @@
 -- =============================================================================
--- PROPUESTA — NO EJECUTADA. Fase 5: retirar territorial_layer_groups y custom_layers
+-- Fase 5: retirar territorial_layer_groups y custom_layers
 -- =============================================================================
--- Esta carpeta (supabase/proposals) NO la lee `supabase db push`: para aplicarla hay que
--- moverla a supabase/migrations con una versión posterior a la última aplicada, y solo
--- después de que el usuario la apruebe. Léase primero supabase/proposals/README.md.
---
--- Qué hace (todo en una transacción, idempotente):
+-- Todo en una transacción e idempotente:
 --   1. Auditoría previa: aborta si algo no calza (ver los `raise exception 'Guardrail: ...'`).
 --   2. Backups versionados de lo que se va a borrar (RLS activa, sin acceso por la API).
 --   3. Copia el `slug` de cada grupo al estilo de su carpeta raíz (si faltaba), para no perder ese dato.
---   4. Reapunta las 3 FK que miraban a territorial_layer_groups hacia layer_nodes (mismo uuid).
+--   4. Reapunta las 3 FK que miraban a territorial_layer_groups hacia layer_nodes (mismo uuid) y agrega un
+--      trigger que sigue exigiendo que ese group_id sea una carpeta RAÍZ (la FK antigua lo garantizaba sola;
+--      una FK a layer_nodes aceptaría cualquier nodo).
 --   5. Reescribe trg_layer_nodes_to_legacy sin la parte que espejaba carpetas raíz a grupos.
 --   6. Borra la tabla de grupos y todo lo que existía solo para ella (SIN CASCADE: si algo
 --      inesperado depende de ella, el DROP falla y se deshace todo).
@@ -18,12 +16,15 @@
 --
 -- NO toca: territorial_layers, territorial_features, layer_nodes (salvo el paso 3, que solo agrega
 -- la clave `slug` donde faltaba), folder_layer_roles ni territorial_source_files (solo cambia a
--- dónde apunta su FK). Los triggers legacy de territorial_layers (trg_legacy_layer_*) siguen:
--- retirarlos es otra decisión (ver README).
+-- dónde apunta su FK). Los triggers legacy de territorial_layers (trg_legacy_layer_*) siguen.
 --
--- PRECONDICIÓN DE DESPLIEGUE: la app ya NO debe leer ni escribir estas tablas. Desde el PR de la
--- Fase 5 los "grupos" salen de las carpetas raíz de layer_nodes (src/utils/territorialGroups.ts) y
--- nada usa custom_layers. Despliega ese código ANTES de aplicar esta migración.
+-- ORDEN DE APLICACIÓN: aplicarla DESPUÉS de desplegar el código de la Fase 5. Antes de ese despliegue
+-- el sitio publicado todavía lee territorial_layer_groups_active (mapa, análisis y reglas de rol).
+-- Desde la Fase 5 los "grupos" salen de las carpetas raíz de layer_nodes (src/utils/territorialGroups.ts)
+-- y nada usa custom_layers.
+--
+-- Probada con rollback sobre producción junto con supabase/tests/legacy_retired.sql (35 aserciones),
+-- ejecutándola dos veces seguidas. Rollback: supabase/rollbacks/20261015000000_retire_legacy_layer_tables_down.sql
 -- =============================================================================
 
 select pg_advisory_xact_lock(hashtext('layer_nodes_v1'));
@@ -191,6 +192,32 @@ begin
   end if;
 end $$;
 
+-- group_id debe seguir siendo una carpeta raíz: antes lo garantizaba la FK a la tabla de grupos.
+create or replace function public._assert_group_is_root()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.group_id is not null
+     and not exists (select 1 from public.layer_nodes n where n.id = new.group_id and n.kind = 'folder' and n.parent_id is null) then
+    raise exception '%.group_id debe ser una carpeta raíz del árbol de capas (recibido %)', tg_table_name, new.group_id
+      using errcode = 'foreign_key_violation';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_group_is_root on public.territorial_layers;
+create trigger trg_group_is_root before insert or update of group_id on public.territorial_layers
+  for each row execute function public._assert_group_is_root();
+drop trigger if exists trg_group_is_root on public.folder_layer_roles;
+create trigger trg_group_is_root before insert or update of group_id on public.folder_layer_roles
+  for each row execute function public._assert_group_is_root();
+drop trigger if exists trg_group_is_root on public.territorial_source_files;
+create trigger trg_group_is_root before insert or update of group_id on public.territorial_source_files
+  for each row execute function public._assert_group_is_root();
+
 -- -----------------------------------------------------------------------------
 -- 5. El espejo nodos → tablas antiguas ya no espeja carpetas raíz (no hay tabla de grupos)
 -- -----------------------------------------------------------------------------
@@ -305,6 +332,9 @@ begin
    where conname in ('folder_layer_roles_group_id_fkey', 'territorial_source_files_group_id_fkey', 'territorial_layers_group_id_fkey')
      and confrelid = 'public.layer_nodes'::regclass;
   if v_bad <> 3 then raise exception 'Guardrail: esperaba 3 FK hacia layer_nodes y hay %', v_bad; end if;
+
+  select count(*) into v_bad from pg_trigger where tgname = 'trg_group_is_root' and not tgisinternal;
+  if v_bad <> 3 then raise exception 'Guardrail: esperaba 3 triggers trg_group_is_root y hay %', v_bad; end if;
 
   -- Las vistas que usa la app siguen leyéndose.
   perform count(*) from public.territorial_layers_active;

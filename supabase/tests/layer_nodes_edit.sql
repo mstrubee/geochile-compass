@@ -1,6 +1,8 @@
 -- =============================================================================
 -- Pruebas de la Fase 3 (edición del árbol). NO es una migración.
 -- =============================================================================
+-- NOTA (Fase 5): esta suite comprueba el espejo hacia `territorial_layer_groups` y se corre ANTES de
+-- 20261015000000_retire_legacy_layer_tables.sql. Después del retiro, la que vale es legacy_retired.sql.
 -- Se corre DESPUÉS de las migraciones de las Fases 1 y 3, en la MISMA
 -- transacción y terminando en error para que nada quede aplicado:
 --
