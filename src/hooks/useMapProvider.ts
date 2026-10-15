@@ -34,12 +34,10 @@ export const useMapProvider = () => {
     } catch { /* ignore */ }
     return "osm";
   });
-
-  // Si el usuario había elegido Google pero aún no hay clave (todavía cargando o
-  // no configurada), cae a OSM hasta que la clave esté disponible.
-  useEffect(() => {
-    if (provider === "google" && !hasGoogleKey) setProviderState("osm");
-  }, [provider, hasGoogleKey]);
+  // Nota: NO forzamos OSM mientras la clave carga async. Si la preferencia es
+  // "google" y aún no hay clave, GoogleTileLayer muestra OSM como fallback y el
+  // botón Google queda deshabilitado; al llegar la clave (build o panel) Google
+  // se activa solo, preservando la preferencia del usuario.
 
   const [usage, setUsage] = useState<UsageData>(loadUsage);
 
