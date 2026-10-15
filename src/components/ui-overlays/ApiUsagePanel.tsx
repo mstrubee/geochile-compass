@@ -126,7 +126,7 @@ export const ApiUsagePanel = ({
               onClick={() => onProviderChange("google")}
               title={
                 !hasGoogleKey
-                  ? "Configura VITE_GOOGLE_MAPS_KEY para activar Google Maps"
+                  ? "Registra GOOGLE_MAPS_API_KEY en Admin → API Keys y Secrets para activar Google Maps"
                   : sessionLimitReached
                     ? "Límite mensual alcanzado"
                     : undefined

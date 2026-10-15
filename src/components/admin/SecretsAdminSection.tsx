@@ -12,18 +12,20 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Copy, Eye, EyeOff, Trash2, Pencil, CheckCircle2, AlertTriangle } from "lucide-react";
 import {
-  AppSecret, deleteSecret, listSecrets, maskSecret, upsertSecret,
+  AppSecret, deleteSecret, listSecrets, maskSecret, upsertSecret, KNOWN_SECRETS,
 } from "@/services/appSecretsService";
+import { resetGoogleMapsKeyCache } from "@/services/runtimeConfig";
 
 const fmtDate = (s: string | null) =>
   s ? new Date(s).toLocaleString("es-CL", { dateStyle: "short", timeStyle: "short" }) : "—";
 
 const SecretRow = ({
-  s, onEdit, onAskDelete,
+  s, onEdit, onAskDelete, canDelete = true,
 }: {
   s: AppSecret;
   onEdit: (s: AppSecret) => void;
   onAskDelete: (s: AppSecret) => void;
+  canDelete?: boolean;
 }) => {
   const [revealed, setRevealed] = useState(false);
   const hasValue = !!s.value && s.value.trim().length > 0;
@@ -69,9 +71,11 @@ const SecretRow = ({
           <Button variant="outline" size="sm" onClick={() => onEdit(s)}>
             <Pencil className="mr-1 h-3.5 w-3.5" /> {hasValue ? "Cambiar" : "Configurar"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => onAskDelete(s)} className="text-destructive hover:text-destructive">
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          {canDelete && (
+            <Button variant="ghost" size="sm" onClick={() => onAskDelete(s)} className="text-destructive hover:text-destructive">
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -105,6 +109,7 @@ const SecretDialog = ({
     setSaving(true);
     try {
       await upsertSecret({ key: key.trim(), value, description: description.trim() || null });
+      resetGoogleMapsKeyCache(); // si fue GOOGLE_MAPS_API_KEY, el mapa la re-lee sin redeploy
       toast.success("Secret guardado. Las funciones lo tomarán de inmediato.");
       onSaved();
       onOpenChange(false);
@@ -163,6 +168,20 @@ export const SecretsAdminSection = () => {
 
   useEffect(() => { refresh(); }, []);
 
+  // Muestra siempre los secrets "conocidos" (aunque no tengan fila en la DB),
+  // seguidos de cualquier otro secret existente que no esté en la lista conocida.
+  const byKey = new Map(secrets.map((s) => [s.key, s]));
+  const merged: AppSecret[] = [
+    ...KNOWN_SECRETS.map((k) => {
+      const existing = byKey.get(k.key);
+      return existing
+        ? { ...existing, description: existing.description || k.description }
+        : { key: k.key, value: "", description: k.description, updated_at: "" };
+    }),
+    ...secrets.filter((s) => !KNOWN_SECRETS.some((k) => k.key === s.key)),
+  ];
+  const knownKeys = new Set(KNOWN_SECRETS.map((k) => k.key));
+
   if (loading) return <div className="p-4 text-sm text-muted-foreground">Cargando…</div>;
 
   return (
@@ -179,19 +198,15 @@ export const SecretsAdminSection = () => {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {secrets.map((s) => (
+        {merged.map((s) => (
           <SecretRow
             key={s.key}
             s={s}
+            canDelete={!knownKeys.has(s.key)}
             onEdit={(ss) => { setEditing(ss); setDialogOpen(true); }}
             onAskDelete={(ss) => setToDelete(ss)}
           />
         ))}
-        {secrets.length === 0 && (
-          <div className="col-span-full rounded-xl border border-dashed border-border/60 p-8 text-center text-sm text-muted-foreground">
-            No hay secrets aún. Agrega uno con el botón de arriba.
-          </div>
-        )}
       </div>
 
       <SecretDialog open={dialogOpen} onOpenChange={setDialogOpen} initial={editing} onSaved={refresh} />

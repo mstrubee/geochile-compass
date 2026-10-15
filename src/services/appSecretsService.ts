@@ -9,6 +9,28 @@ export interface AppSecret {
 
 const TABLE = "app_secrets" as const;
 
+/**
+ * Secrets "conocidos" por el sistema: aparecen siempre en el panel (aunque aún
+ * no tengan valor) para que el admin sepa exactamente qué registrar.
+ */
+export const KNOWN_SECRETS: { key: string; description: string }[] = [
+  {
+    key: "GOOGLE_MAPS_API_KEY",
+    description:
+      "API Key de Google Maps. Activa el selector Google del mapa (teselas, búsqueda y geocodificación). " +
+      "En Google Cloud habilita 'Map Tiles API', 'Places API (New)' y 'Geocoding API', y restringe la clave " +
+      "por referrer a https://geoplanet.vercel.app/*",
+  },
+  {
+    key: "OPENROUTESERVICE_API_KEY",
+    description: "Clave de OpenRouteService para el cálculo de isócronas.",
+  },
+  {
+    key: "MAPBOX_ACCESS_TOKEN",
+    description: "Token de Mapbox para georreferenciar direcciones (geocodificación masiva en el admin).",
+  },
+];
+
 export const maskSecret = (v: string): string => {
   if (!v) return "—";
   if (v.length <= 8) return "••••";

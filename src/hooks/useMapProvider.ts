@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { loadUsage, incrementUsage as _inc, type UsageData } from "@/services/googleMapsService";
+import { useGoogleMapsKey } from "@/hooks/useGoogleMapsKey";
 
 export type MapProvider = "google" | "osm";
 
@@ -22,16 +23,23 @@ export const THRESHOLD_CRITICAL = 0.9;
 const PROVIDER_STORAGE_KEY = "geoplanet_map_provider_v1";
 
 export const useMapProvider = () => {
-  const hasGoogleKey = !!(import.meta.env.VITE_GOOGLE_MAPS_KEY as string);
+  // Clave cargada en runtime desde app_secrets (panel admin), con fallback a build.
+  const googleKey = useGoogleMapsKey();
+  const hasGoogleKey = !!googleKey;
 
   const [provider, setProviderState] = useState<MapProvider>(() => {
-    if (!hasGoogleKey) return "osm";
     try {
       const s = localStorage.getItem(PROVIDER_STORAGE_KEY) as MapProvider;
       if (s === "google" || s === "osm") return s;
     } catch { /* ignore */ }
     return "osm";
   });
+
+  // Si el usuario había elegido Google pero aún no hay clave (todavía cargando o
+  // no configurada), cae a OSM hasta que la clave esté disponible.
+  useEffect(() => {
+    if (provider === "google" && !hasGoogleKey) setProviderState("osm");
+  }, [provider, hasGoogleKey]);
 
   const [usage, setUsage] = useState<UsageData>(loadUsage);
 

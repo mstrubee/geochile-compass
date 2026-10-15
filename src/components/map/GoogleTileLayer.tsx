@@ -10,6 +10,7 @@ import {
   buildGoogleTileUrl,
   incrementUsage,
 } from "@/services/googleMapsService";
+import { useGoogleMapsKey } from "@/hooks/useGoogleMapsKey";
 
 const OSM_FALLBACK = {
   url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
@@ -22,7 +23,7 @@ interface Props {
 }
 
 export const GoogleTileLayer = ({ basemap, onSessionCreated }: Props) => {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
+  const apiKey = useGoogleMapsKey();
   const [tileUrl, setTileUrl] = useState<string | null>(null);
   const mapType = basemapToGoogleMapType(basemap);
 

@@ -10,6 +10,7 @@ import {
   addressTokens,
   tokenJaccard,
 } from "@/utils/addressNormalize";
+import { getGoogleMapsKeySync } from "@/services/runtimeConfig";
 import { geocodeWithGoogle } from "@/services/googleMapsService";
 
 export interface GeocodeResult {
@@ -105,10 +106,9 @@ export const geocodeAddress = async (
   }
 
   // 2. Google Geocoding (cuando el proveedor activo es Google o se solicita explícitamente)
-  // `import.meta.env` solo existe bajo Vite; en Node (sincronización automática
-  // desde Drive) es undefined, así que se accede de forma opcional para no
-  // romper. Sin key, este paso se salta y queda Nominatim.
-  const googleKey = (import.meta as { env?: Record<string, string> }).env?.VITE_GOOGLE_MAPS_KEY;
+  // Clave cargada en runtime desde app_secrets (panel admin), con fallback a build.
+  // Si no hay clave (o el cache aún no se pobló), este paso se salta y queda Nominatim.
+  const googleKey = getGoogleMapsKeySync();
   if (googleKey && options?.preferGoogle) {
     const fullAddress = comuna ? `${address}, ${comuna}, Chile` : `${address}, Chile`;
     const googleResult = await geocodeWithGoogle(fullAddress, googleKey);
