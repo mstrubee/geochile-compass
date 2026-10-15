@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Search, Loader2, MapPin, X } from "lucide-react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
@@ -26,6 +27,29 @@ const VIEWBOX = "-71.7,-33.0,-70.0,-34.2"; // Región Metropolitana aprox. (lon_
 
 /** UUID v4 como session token (≤36 chars, URL-safe) para Places API (New). */
 const newSessionToken = () => crypto.randomUUID();
+
+/** Resuelve un texto a coordenadas con Nominatim (fallback sin costo ni cuota). */
+const resolveWithNominatim = async (
+  label: string,
+): Promise<{ lat: number; lng: number; bbox: SearchResult["bbox"] } | null> => {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=cl&q=${encodeURIComponent(label)}`,
+      { headers: { "Accept-Language": "es" } },
+    );
+    if (!res.ok) return null;
+    const [r] = (await res.json()) as Array<{ lat: string; lon: string; boundingbox?: string[] }>;
+    if (!r) return null;
+    const b = r.boundingbox?.map(parseFloat);
+    return {
+      lat: parseFloat(r.lat),
+      lng: parseFloat(r.lon),
+      bbox: b && b.length === 4 ? [b[0], b[1], b[2], b[3]] : null,
+    };
+  } catch {
+    return null;
+  }
+};
 
 export const SearchBar = ({ onSelect, provider = "osm" }: Props) => {
   const [q, setQ] = useState("");
@@ -67,13 +91,11 @@ export const SearchBar = ({ onSelect, provider = "osm" }: Props) => {
       const ctrl = new AbortController();
       abortRef.current = ctrl;
       try {
-        if (useGoogle) {
-          // Google Places Autocomplete
-          const predictions: PlacesPrediction[] = await placesAutocomplete(
-            term,
-            googleKey,
-            sessionTokenRef.current,
-          );
+        // Google Places Autocomplete; devuelve null si la cuota del mes se agotó → cae a Nominatim.
+        const predictions: PlacesPrediction[] | null = useGoogle
+          ? await placesAutocomplete(term, googleKey, sessionTokenRef.current)
+          : null;
+        if (predictions) {
           if (ctrl.signal.aborted) return;
           const mapped: SearchResult[] = predictions.map((p) => ({
             id: p.placeId,
@@ -146,6 +168,17 @@ export const SearchBar = ({ onSelect, provider = "osm" }: Props) => {
         setQ(details.displayName.split(",").slice(0, 2).join(","));
         return;
       }
+      // Sin detalle (cuota de Places agotada o error): se resuelve con Nominatim en vez de
+      // mandar el mapa a (0,0).
+      const fallback = await resolveWithNominatim(r.label);
+      if (!fallback) {
+        toast.error("No se pudo ubicar ese lugar. Intenta con otra búsqueda.");
+        return;
+      }
+      onSelect({ ...r, ...fallback });
+      setOpen(false);
+      setQ(r.label.split(",").slice(0, 2).join(","));
+      return;
     }
     onSelect(r);
     setOpen(false);

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Loader2, Upload, ArrowLeft, Trash2, ExternalLink, FileUp, Layers as LayersIcon, ChevronDown, Users as UsersIcon, Map as MapIcon, KeyRound, MapPin, TrendingUp, Store, Car } from "lucide-react";
 import { GeminiKeysAdminSection } from "@/components/admin/GeminiKeysAdminSection";
 import { SecretsAdminSection } from "@/components/admin/SecretsAdminSection";
+import { ApiQuotaAdminSection } from "@/components/admin/ApiQuotaAdminSection";
 import { StorageAdminSection } from "@/components/admin/StorageAdminSection";
 import { MaturationCurveAdminSection } from "@/components/admin/MaturationCurveAdminSection";
 import { ExpressAdjustAdminSection } from "@/components/admin/ExpressAdjustAdminSection";
@@ -285,9 +286,18 @@ const AdminCapas = () => {
           id="secrets"
           title="API Keys y Secrets"
           icon={<KeyRound className="h-4 w-4" />}
-          description="Claves de servicios externos (OpenRouteService, GitHub, Google Drive) que usan las funciones del sistema. Pega aquí los valores."
+          description="Claves de servicios externos (Google Maps, OpenRouteService, GitHub, Google Drive) y límite de uso de cada API de Google. Pega aquí los valores."
         >
-          <SecretsAdminSection />
+          <div className="space-y-6">
+            <div>
+              <h3 className="mb-2 text-sm font-semibold">Uso y límites de las APIs de Google</h3>
+              <ApiQuotaAdminSection />
+            </div>
+            <div>
+              <h3 className="mb-2 text-sm font-semibold">Claves y secrets</h3>
+              <SecretsAdminSection />
+            </div>
+          </div>
         </AdminCollapsible>
 
         <AdminCollapsible
