@@ -26,7 +26,7 @@ const counts = new Map([["L1", 10], ["L2", 5]]);
 
 const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
-const setup = (opts: { editable?: boolean; searchTerm?: string; fly?: boolean } = {}) => {
+const setup = (opts: { editable?: boolean; searchTerm?: string; fly?: boolean; drop?: boolean; hideMenu?: boolean } = {}) => {
   const base = buildLayerTree(nodes, counts).roots;
   const edit = {
     onMove: vi.fn(), onRename: vi.fn(), onDelete: vi.fn<(rows: TreeRow[]) => void>(), onNewFolder: vi.fn<(r: TreeRow) => void>(),
@@ -34,7 +34,7 @@ const setup = (opts: { editable?: boolean; searchTerm?: string; fly?: boolean } 
   } satisfies TreeEditActions;
   const props = {
     onToggleCheck: vi.fn(), onOpenPoi: vi.fn(), onLoadMore: vi.fn(), onEditStyle: vi.fn(), onResetStyle: vi.fn(),
-    onFlyTo: vi.fn(), onExport: vi.fn(),
+    onFlyTo: vi.fn(), onExport: vi.fn(), onDropFile: vi.fn<(file: File, row: TreeRow) => void>(),
   };
   const utils = render(
     <LayerTree
@@ -44,6 +44,8 @@ const setup = (opts: { editable?: boolean; searchTerm?: string; fly?: boolean } 
       initialOpenState={{ F1: true }}
       edit={opts.editable ? edit : undefined}
       {...props}
+      onDropFile={opts.drop ? props.onDropFile : undefined}
+      hideMenu={opts.hideMenu}
     />,
   );
   return { ...utils, edit, ...props };
@@ -189,5 +191,49 @@ describe("LayerTree — administrador", () => {
     expect(edit.onUndo).not.toHaveBeenCalled();
     expect(edit.onDelete).not.toHaveBeenCalled();
     expect(await menuItems("Cruz Verde")).not.toContain("Eliminar");
+  });
+});
+
+describe("LayerTree — archivos soltados y menú oculto", () => {
+  const file = new File(["x"], "capa.kml", { type: "application/vnd.google-earth.kml+xml" });
+  const dropOn = (name: string, types: string[]) =>
+    act(async () => { fireEvent.drop(screen.getByText(name), { dataTransfer: { types, files: types.includes("Files") ? [file] : [], dropEffect: "" } }); });
+
+  it("soltar un archivo sobre una carpeta o una capa avisa cuál fila fue", async () => {
+    const { onDropFile } = setup({ editable: true, drop: true, searchTerm: "" });
+    await dropOn("Farmacias", ["Files"]);
+    expect(onDropFile).toHaveBeenCalledTimes(1);
+    expect(onDropFile.mock.calls[0][0]).toBe(file);
+    expect(onDropFile.mock.calls[0][1]).toMatchObject({ id: "F1", kind: "folder" });
+    // "Farmacias" parte abierta (initialOpenState): su capa ya está en pantalla
+    await dropOn("Cruz Verde", ["Files"]);
+    expect(onDropFile.mock.calls[1][1]).toMatchObject({ id: "L1", kind: "layer" });
+  });
+
+  it("arrastrar algo que no es un archivo (una fila del propio árbol) no cuenta", async () => {
+    const { onDropFile } = setup({ editable: true, drop: true });
+    await dropOn("Farmacias", ["text/plain"]);
+    expect(onDropFile).not.toHaveBeenCalled();
+  });
+
+  it("sin onDropFile no hace nada", async () => {
+    const { onDropFile } = setup({ editable: true });
+    await dropOn("Farmacias", ["Files"]);
+    expect(onDropFile).not.toHaveBeenCalled();
+  });
+
+  it("al arrastrar un archivo encima, la fila se resalta y al salir se apaga", async () => {
+    setup({ editable: true, drop: true });
+    const row = screen.getByText("Retail");
+    await act(async () => { fireEvent.dragOver(row, { dataTransfer: { types: ["Files"], dropEffect: "" } }); });
+    expect(row.closest("div")!.className).toMatch(/ring-primary/);
+    await act(async () => { fireEvent.dragLeave(row); });
+    expect(row.closest("div")!.className).not.toMatch(/ring-primary/);
+  });
+
+  it("con hideMenu el clic derecho no abre ningún menú", async () => {
+    setup({ editable: true, hideMenu: true });
+    await act(async () => { fireEvent.contextMenu(screen.getByText("Farmacias")); });
+    expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
   });
 });

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+  <name>Red de locales</name>
+  <Style id="pin-azul"><IconStyle><color>ffd18802</color><scale>1.1</scale><Icon><href>https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png</href></Icon></IconStyle></Style>
+  <Style id="pin-rojo-normal"><IconStyle><color>ff1c2dd6</color><Icon><href>http://maps.google.com/mapfiles/kml/paddle/red-circle.png</href></Icon></IconStyle></Style>
+  <Style id="pin-rojo-hl"><IconStyle><color>ff1c2dd6</color><scale>1.4</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/red-circle.png</href></Icon></IconStyle></Style>
+  <StyleMap id="pin-rojo"><Pair><key>highlight</key><styleUrl>#pin-rojo-hl</styleUrl></Pair><Pair><key>normal</key><styleUrl>#pin-rojo-normal</styleUrl></Pair></StyleMap>
+  <Schema name="locales" id="locales"><SimpleField type="string" name="comuna"/></Schema>
+  <Folder>
+    <name>Norte</name>
+    <Folder>
+      <name>Antofagasta</name>
+      <Placemark id="loc-001"><name>Local Centro</name><styleUrl>#pin-azul</styleUrl>
+        <ExtendedData><Data name="comuna"><value>Antofagasta</value></Data><Data name="m2"><value>120</value></Data></ExtendedData>
+        <Point><coordinates>-70.4,-23.65,0</coordinates></Point></Placemark>
+      <Placemark id="loc-001"><name>Local con id repetido</name><styleUrl>#pin-azul</styleUrl>
+        <Point><coordinates>-70.41,-23.66,12.5</coordinates></Point></Placemark>
+      <Placemark><name>Local sin id</name><description>Frente a la plaza</description><styleUrl>#pin-azul</styleUrl>
+        <Point><coordinates>-70.39, -23.64</coordinates></Point></Placemark>
+    </Folder>
+    <Folder>
+      <name>Calama</name>
+      <Placemark id="loc-010"><name>Local Calama</name><styleUrl>#pin-azul</styleUrl>
+        <ExtendedData><SchemaData schemaUrl="#locales"><SimpleData name="comuna">Calama</SimpleData></SchemaData></ExtendedData>
+        <Point><coordinates>-68.93,-22.46,0</coordinates></Point></Placemark>
+    </Folder>
+  </Folder>
+  <Folder>
+    <name>Sur</name>
+    <Placemark id="loc-020"><name>Local directo</name><styleUrl>#pin-rojo</styleUrl><Point><coordinates>-72.0,-41.0,0</coordinates></Point></Placemark>
+    <Folder>
+      <name>Punta Arenas</name>
+      <Placemark id="loc-030"><name>Local PA</name><styleUrl>#pin-rojo</styleUrl><Point><coordinates>-70.9,-53.16,0</coordinates></Point></Placemark>
+      <Placemark id="loc-031"><name>Local mixto</name>
+        <MultiGeometry>
+          <Point><coordinates>-70.91,-53.17,0</coordinates></Point>
+          <LineString><coordinates>-70.91,-53.17,0 -70.92,-53.18,0</coordinates></LineString>
+        </MultiGeometry></Placemark>
+    </Folder>
+  </Folder>
+  <Folder>
+    <name>Zonas</name>
+    <Placemark id="zona-a"><name>Zona A</name><styleUrl>#pin-rojo</styleUrl>
+      <Polygon><tessellate>1</tessellate>
+        <outerBoundaryIs><LinearRing><coordinates>-70.0,-33.0,100 -70.0,-33.2,100 -70.2,-33.2,100 -70.2,-33.0,100 -70.0,-33.0,100</coordinates></LinearRing></outerBoundaryIs>
+        <innerBoundaryIs><LinearRing><coordinates>-70.05,-33.05,0 -70.05,-33.1,0 -70.1,-33.1,0 -70.05,-33.05,0</coordinates></LinearRing></innerBoundaryIs>
+      </Polygon></Placemark>
+    <Placemark id="zona-b"><name>Zona con anillo abierto</name>
+      <Polygon><outerBoundaryIs><LinearRing><coordinates>-71.0,-34.0 -71.0,-34.2 -71.2,-34.2 -71.2,-34.0</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>
+  </Folder>
+  <Folder>
+    <name>Con problemas</name>
+    <Placemark><name>Latitud mala</name><Point><coordinates>-70,95,0</coordinates></Point></Placemark>
+    <Placemark><name>Sin geometría</name><description>solo texto</description></Placemark>
+    <Placemark><name>Texto roto</name><Point><coordinates>abc,def</coordinates></Point></Placemark>
+    <Placemark><name>Sin ubicar</name><Point><coordinates>0,0,0</coordinates></Point></Placemark>
+    <Placemark id="ok-1"><name>Este sí</name><Point><coordinates>-70.5,-33.4,0</coordinates></Point></Placemark>
+    <Placemark><name>Pista GPS</name><gx:Track><when>2024-01-01T00:00:00Z</when><gx:coord>-70.1 -33.1 0</gx:coord></gx:Track></Placemark>
+  </Folder>
+  <Folder><name>Vacía</name></Folder>
+  <NetworkLink><name>Enlace remoto</name><Link><href>http://example.com/otro.kml</href></Link></NetworkLink>
+</Document>
+</kml>

@@ -49,6 +49,9 @@ const isUrlLike = (s: string | null | undefined) =>
 
 const isNode = (r: TreeRow) => r.kind === "folder" || r.kind === "layer";
 
+/** ¿Lo que se está arrastrando son archivos del escritorio (y no filas del propio árbol)? */
+const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+
 export type OpenMap = Record<string, boolean>;
 
 /** Qué se puede hacer con el árbol. Sin `editable`, solo lectura (y volar a / exportar). */
@@ -73,6 +76,10 @@ interface RowActions {
   onResetStyle: (layerId: string) => void;
   onFlyTo?: (row: TreeRow) => void;
   onExport?: (row: TreeRow) => void;
+  /** Se soltó un archivo sobre una carpeta o capa del árbol (importar ahí). */
+  onDropFile?: (file: File, row: TreeRow) => void;
+  /** Sin menú contextual (cuando el árbol solo muestra el contenido de un archivo). */
+  hideMenu?: boolean;
 }
 
 const RowActionsContext = createContext<RowActions | null>(null);
@@ -155,12 +162,34 @@ const RenameInput = ({ node }: { node: NodeApi<TreeRow> }) => {
 };
 
 const Row = ({ node, style, dragHandle, tree }: NodeRendererProps<TreeRow>) => {
-  const { analysis, getStyle, edit, onToggleCheck, onOpenPoi, onLoadMore, onEditStyle, onResetStyle, onFlyTo, onExport } =
+  const { analysis, getStyle, edit, onToggleCheck, onOpenPoi, onLoadMore, onEditStyle, onResetStyle, onFlyTo, onExport, onDropFile, hideMenu } =
     useRowActions();
+  const [fileOver, setFileOver] = useState(false);
   const row = node.data;
   const base = "flex h-full items-center gap-1.5 pr-2 text-[13px] leading-tight transition-colors";
   const hover = "cursor-pointer hover:bg-surface-2/60";
-  const dropping = node.willReceiveDrop && "bg-primary/15 ring-1 ring-inset ring-primary";
+  const dropping = (node.willReceiveDrop || fileOver) && "bg-primary/15 ring-1 ring-inset ring-primary";
+  // Soltar un archivo del escritorio sobre una carpeta o capa: importar ahí.
+  const fileDrop = onDropFile
+    ? {
+        onDragOver: (e: React.DragEvent) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = "copy";
+          if (!fileOver) setFileOver(true);
+        },
+        onDragLeave: () => setFileOver(false),
+        onDrop: (e: React.DragEvent) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setFileOver(false);
+          const file = e.dataTransfer.files[0];
+          if (file) onDropFile(file, row);
+        },
+      }
+    : {};
   const dragging = node.isDragging && "opacity-40";
 
   if (row.kind === "status") {
@@ -228,6 +257,7 @@ const Row = ({ node, style, dragHandle, tree }: NodeRendererProps<TreeRow>) => {
         className={cn(base, hover, node.isSelected && "bg-surface-2", dropping, dragging)}
         onClick={onRowClick}
         onDoubleClick={() => edit && node.isEditable && node.edit()}
+        {...fileDrop}
       >
         <Chevron node={node} expandable={!!row.children?.length} />
         <TriStateCheckbox
@@ -260,6 +290,7 @@ const Row = ({ node, style, dragHandle, tree }: NodeRendererProps<TreeRow>) => {
         aria-pressed={on}
         onClick={onRowClick}
         onDoubleClick={() => edit && node.isEditable && node.edit()}
+        {...fileDrop}
       >
         <Chevron node={node} expandable={!!row.children} />
         <TriStateCheckbox state={state} onToggle={() => onToggleCheck(row)} label={`Mostrar u ocultar ${row.name}`} />
@@ -277,6 +308,8 @@ const Row = ({ node, style, dragHandle, tree }: NodeRendererProps<TreeRow>) => {
   // Un clic derecho sobre algo fuera de la selección la reemplaza; sobre algo seleccionado, actúa sobre toda la selección.
   const targets = (): TreeRow[] =>
     node.isSelected ? tree.selectedNodes.map((n) => n.data).filter(isNode) : [row];
+
+  if (hideMenu) return content;
 
   return (
     <ContextMenu>
@@ -354,6 +387,8 @@ interface LayerTreeProps {
   onResetStyle: (layerId: string) => void;
   onFlyTo?: (row: TreeRow) => void;
   onExport?: (row: TreeRow) => void;
+  onDropFile?: (file: File, row: TreeRow) => void;
+  hideMenu?: boolean;
   /** Cuántas filas coinciden con la búsqueda (0 sin búsqueda). */
   onMatchCountChange?: (count: number) => void;
   /** Si viene, el árbol es editable (arrastrar, renombrar, eliminar…). */
@@ -376,6 +411,8 @@ export const LayerTree = ({
   onResetStyle,
   onFlyTo,
   onExport,
+  onDropFile,
+  hideMenu,
   onMatchCountChange,
   edit,
   editRequest,
@@ -410,8 +447,10 @@ export const LayerTree = ({
       onResetStyle,
       onFlyTo,
       onExport,
+      onDropFile,
+      hideMenu,
     }),
-    [analysis, getStyle, canEdit, edit, onToggleCheck, onOpenPoi, onLoadMore, onEditStyle, onResetStyle, onFlyTo, onExport],
+    [analysis, getStyle, canEdit, edit, onToggleCheck, onOpenPoi, onLoadMore, onEditStyle, onResetStyle, onFlyTo, onExport, onDropFile, hideMenu],
   );
 
   const handleToggle = useCallback(
