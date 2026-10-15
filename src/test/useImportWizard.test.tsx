@@ -5,6 +5,7 @@ import { act, renderHook } from "@testing-library/react";
 
 const h = vi.hoisted(() => ({
   parse: vi.fn(),
+  clearCache: vi.fn(),
   svc: {
     commitImport: vi.fn(),
     createImport: vi.fn(),
@@ -16,6 +17,7 @@ const h = vi.hoisted(() => ({
   },
 }));
 vi.mock("@/services/layerImport", () => h.svc);
+vi.mock("@/hooks/useTerritorialLayers", () => ({ clearTerritorialFeaturesCache: h.clearCache }));
 vi.mock("@/utils/importParser", async (orig) => ({ ...(await orig<typeof import("@/utils/importParser")>()), parseImportFile: h.parse }));
 
 import { useImportWizard } from "@/hooks/useImportWizard";
@@ -205,6 +207,32 @@ describe("cambiar de modo", () => {
     expect(result.current.target).toBe("capa");
     act(() => result.current.setMode("new"));
     expect(result.current.target).toBeNull();
+  });
+});
+
+describe("el mapa se entera de que cambió el contenido de las capas", () => {
+  it("al confirmar se invalida el caché de puntos (si no, el mapa muestra los viejos hasta recargar)", async () => {
+    const { result } = await open();
+    expect(h.clearCache).not.toHaveBeenCalled();
+    await act(async () => { await result.current.confirm(); });
+    expect(h.clearCache).toHaveBeenCalledTimes(1);
+  });
+
+  it("si la base rechaza la confirmación no se toca el caché: no cambió nada", async () => {
+    h.svc.commitImport.mockRejectedValueOnce({ message: "boom" });
+    const { result } = await open();
+    await act(async () => { await result.current.confirm(); });
+    expect(h.clearCache).not.toHaveBeenCalled();
+  });
+
+  it("al deshacer se invalida otra vez, y si deshacer falla no", async () => {
+    const { result } = await open();
+    await act(async () => { await result.current.confirm(); });
+    h.svc.revertImport.mockRejectedValueOnce({ message: "no se pudo" });
+    await act(async () => { await result.current.undo(); });
+    expect(h.clearCache).toHaveBeenCalledTimes(1);
+    await act(async () => { await result.current.undo(); });
+    expect(h.clearCache).toHaveBeenCalledTimes(2);
   });
 });
 

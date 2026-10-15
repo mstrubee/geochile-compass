@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LruCache } from "@/utils/lruCache";
 import { supabase } from "@/integrations/supabase/client";
@@ -76,6 +76,20 @@ const inflightCache = new Map<string, Promise<TerritorialFeature[]>>();
 const cacheKeyFor = (layerId: string, bbox?: FeatureBbox | null) =>
   bbox ? `${layerId}|${bbox.map((v) => v.toFixed(4)).join(",")}` : layerId;
 
+// Cada vez que se invalida el caché se avisa a los `useTerritorialFeatures` montados: sin esto
+// seguirían mostrando los puntos viejos aunque el caché ya esté vacío (su efecto solo depende de las capas pedidas).
+let featuresVersion = 0;
+const versionListeners = new Set<() => void>();
+const subscribeVersion = (l: () => void) => {
+  versionListeners.add(l);
+  return () => versionListeners.delete(l);
+};
+const getVersion = () => featuresVersion;
+
+/**
+ * Olvida los puntos en caché de una capa (o de todas) y hace que el mapa y el análisis los vuelvan a pedir.
+ * Hay que llamarla cuando cambia el CONTENIDO de una capa (importar, reemplazar, agregar, deshacer una importación).
+ */
 export const clearTerritorialFeaturesCache = (layerId?: string) => {
   if (layerId) {
     // Cae también cualquier variante recortada por bbox de esa capa.
@@ -89,6 +103,10 @@ export const clearTerritorialFeaturesCache = (layerId?: string) => {
     featuresCache.clear();
     inflightCache.clear();
   }
+  // Los lotes en vuelo pueden traer datos anteriores al cambio: no se reutilizan.
+  inflightBatchCache.clear();
+  featuresVersion++;
+  versionListeners.forEach((l) => l());
 };
 
 const PAGE = 1000;
@@ -320,7 +338,8 @@ export const useTerritorialFeatures = (
 ) => {
   const [features, setFeatures] = useState<TerritorialFeature[]>([]);
   const bboxKey = bbox ? bbox.map((v) => v.toFixed(4)).join(",") : "";
-  const key = `${layerIds.slice().sort().join(",")}#${bboxKey}`;
+  const version = useSyncExternalStore(subscribeVersion, getVersion);
+  const key = `${layerIds.slice().sort().join(",")}#${bboxKey}#${version}`;
 
   useEffect(() => {
     let cancel = false;

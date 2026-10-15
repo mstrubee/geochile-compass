@@ -12,6 +12,7 @@ import {
   type ImportPreview,
   type ImportResult,
 } from "@/services/layerImport";
+import { clearTerritorialFeaturesCache } from "@/hooks/useTerritorialLayers";
 import { parseImportFile, type ImportDocument } from "@/utils/importParser";
 import { applyInclusion, newImportSummary } from "@/utils/importWizard";
 import type { ImportStage } from "@/utils/importErrorReport";
@@ -221,6 +222,8 @@ export const useImportWizard = ({ file, initialMode = "new", initialTargetId = n
       step = "commit";
       const res = await commitImport(id, mode, target, excluded);
       committedRef.current = true;
+      // El mapa guarda en memoria los puntos de cada capa: si cambió su contenido hay que volver a pedirlos.
+      clearTerritorialFeaturesCache();
       setResult(res);
       setPhase("done");
       onCommitted?.(res);
@@ -235,6 +238,7 @@ export const useImportWizard = ({ file, initialMode = "new", initialTargetId = n
     if (!id) return false;
     try {
       await revertImport(id);
+      clearTerritorialFeaturesCache();
       setReverted(true);
       return true;
     } catch (e) {
