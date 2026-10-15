@@ -23,6 +23,8 @@ interface TileSession {
 }
 
 const sessionCache = new Map<GoogleMapType, TileSession>();
+/** true tras descontar la carga de mapa de esta apertura de la página. */
+let mapLoadCounted = false;
 
 /** Maps basemap style to Google map type. */
 export const basemapToGoogleMapType = (basemap: string): GoogleMapType => {
@@ -33,7 +35,8 @@ export const basemapToGoogleMapType = (basemap: string): GoogleMapType => {
 
 /**
  * Creates or returns a cached session token for the given map type.
- * Counts one session per creation toward the monthly quota.
+ * La cuota "maps_js" se mide en CARGAS DE MAPA: se descuenta una sola vez por apertura de la
+ * página (la primera sesión de Google); cambiar de mapa base (claro/satélite/híbrido) NO suma.
  */
 export const createGoogleTileSession = async (
   apiKey: string,
@@ -41,8 +44,10 @@ export const createGoogleTileSession = async (
 ): Promise<TileSession | null> => {
   const cached = sessionCache.get(mapType);
   if (cached && cached.expiry > Date.now() + 60_000) return cached;
-  // Una sesión de teselas = una carga de mapa de Google.
-  if (!(await consumeApiQuota("maps_js"))) return null;
+  if (!mapLoadCounted) {
+    if (!(await consumeApiQuota("maps_js"))) return null;
+    mapLoadCounted = true;
+  }
 
   const body: Record<string, unknown> = {
     mapType: mapType === "hybrid" ? "satellite" : mapType,

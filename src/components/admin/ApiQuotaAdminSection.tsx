@@ -22,11 +22,14 @@ const fmtDate = (s: string) =>
 
 /** Qué hace cada API dentro de Geoplanet (se muestra bajo el título de cada módulo). */
 const API_HELP: Record<string, string> = {
-  maps_js: "Cada vez que se carga el mapa base de Google. Al agotarse, el mapa vuelve a OpenStreetMap.",
+  maps_js: "Se mide en CARGAS DE MAPA (una por cada vez que se abre el mapa de Google; cambiar de mapa base no cuenta). Al agotarse, el mapa vuelve a OpenStreetMap.",
   places: "Detalle de un lugar elegido (coordenadas) y, más adelante, búsqueda de comercios.",
   autocomplete: "Sugerencias mientras se escribe en el buscador del mapa. Al agotarse, el buscador usa OpenStreetMap.",
   geocoding: "Conversión de una dirección escrita a coordenadas. Al agotarse, se geocodifica con OpenStreetMap.",
 };
+
+/** Unidad de cada API: el mapa se mide en cargas de mapa; el resto, en llamadas. */
+const unitOf = (api: string) => (api === "maps_js" ? "cargas" : "llamadas");
 
 const barColor = (pct: number) =>
   pct >= 1 ? "bg-destructive" : pct >= THRESHOLD_CRITICAL ? "bg-destructive/80"
@@ -104,6 +107,7 @@ const ApiCard = ({
   hasPassword: boolean;
   onChanged: () => void;
 }) => {
+  const unit = unitOf(a.api);
   const limitId = useId();
   const [limitInput, setLimitInput] = useState(String(a.free_limit));
   const [extendOpen, setExtendOpen] = useState(false);
@@ -152,7 +156,7 @@ const ApiCard = ({
       <div className="space-y-1">
         <div className="flex items-baseline justify-between text-xs">
           <span className={blocked ? "font-semibold text-destructive" : "text-foreground"}>
-            {fmt(a.used)} / {fmt(a.limit)} llamadas
+            {fmt(a.used)} / {fmt(a.limit)} {unit}
           </span>
           <span className="text-muted-foreground">{Math.round(pct * 100)}%</span>
         </div>
@@ -165,7 +169,7 @@ const ApiCard = ({
         </div>
         {blocked && (
           <div className="flex items-center gap-1 text-[11px] text-destructive">
-            <Lock className="h-3 w-3" /> Bloqueada: no se harán más llamadas a Google hasta que se autorice más.
+            <Lock className="h-3 w-3" /> Bloqueada: no se harán más {unit} de Google hasta que se autorice más.
           </div>
         )}
       </div>
@@ -189,24 +193,24 @@ const ApiCard = ({
         title={hasPassword ? undefined : "Define primero la contraseña de ampliaciones"}
         onClick={() => setExtendOpen(true)}
       >
-        <PlusCircle className="mr-1 h-3.5 w-3.5" /> Autorizar +{fmt(QUOTA_EXTENSION_STEP)} llamadas
+        <PlusCircle className="mr-1 h-3.5 w-3.5" /> Autorizar +{fmt(QUOTA_EXTENSION_STEP)} {unit}
       </Button>
 
       <PasswordDialog
         open={extendOpen} onOpenChange={setExtendOpen}
-        title={`Autorizar +${fmt(QUOTA_EXTENSION_STEP)} llamadas`}
-        description={`${a.label}. Las llamadas adicionales pueden generar costo en Google Cloud. Vale solo para este mes.`}
+        title={`Autorizar +${fmt(QUOTA_EXTENSION_STEP)} ${unit}`}
+        description={`${a.label}. Las ${unit} adicionales pueden generar costo en Google Cloud. Vale solo para este mes.`}
         confirmLabel="Autorizar"
         onConfirm={async (pw) => {
           const r = await extendApiQuota(a.api, pw);
-          if (r.ok) { toast.success(`+${fmt(QUOTA_EXTENSION_STEP)} llamadas autorizadas`); onChanged(); }
+          if (r.ok) { toast.success(`+${fmt(QUOTA_EXTENSION_STEP)} ${unit} autorizadas`); onChanged(); }
           return r;
         }}
       />
       <PasswordDialog
         open={raiseOpen} onOpenChange={setRaiseOpen}
         title="Subir el límite gratuito"
-        description={`Pasar de ${fmt(a.free_limit)} a ${fmt(parsed)} llamadas por mes. Confirma con la contraseña.`}
+        description={`Pasar de ${fmt(a.free_limit)} a ${fmt(parsed)} ${unit} por mes. Confirma con la contraseña.`}
         confirmLabel="Subir límite"
         onConfirm={saveLimit}
       />
@@ -253,7 +257,7 @@ const PasswordCard = ({ hasPassword, onChanged }: { hasPassword: boolean; onChan
         </span>
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Se pide para autorizar +{fmt(QUOTA_EXTENSION_STEP)} llamadas o para subir un límite gratuito.
+        Se pide para autorizar +{fmt(QUOTA_EXTENSION_STEP)} unidades (cargas o llamadas) o para subir un límite gratuito.
         Solo la guarda el servidor (cifrada); nadie, ni los administradores, puede verla. Tras 5 intentos
         fallidos se bloquea 15 minutos.
       </p>
@@ -316,7 +320,7 @@ export const ApiQuotaAdminSection = () => {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="max-w-3xl text-xs text-muted-foreground">
           Geoplanet no llama a Google si una API agotó su límite gratuito del mes. Para seguir usándola, un
-          administrador debe autorizar más llamadas de a +{fmt(QUOTA_EXTENSION_STEP)} con la contraseña de
+          administrador debe autorizar más de a +{fmt(QUOTA_EXTENSION_STEP)} con la contraseña de
           ampliaciones. El consumo se cuenta en el servidor (todos los usuarios suman) y se reinicia el{" "}
           <b>{periodEnd.toLocaleDateString("es-CL", { day: "numeric", month: "long" })}</b> (ciclo mensual de
           Google, hora del Pacífico).
