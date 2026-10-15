@@ -68,7 +68,7 @@ describe("ApiQuotaAdminSection", () => {
     expect(await screen.findByText("Google Maps JavaScript API (cargas de mapa)")).toBeTruthy();
     expect(screen.getByText("Autocomplete (sugerencias del buscador)")).toBeTruthy();
     expect(screen.getByText("Geocoding API (dirección → coordenadas)")).toBeTruthy();
-    expect(screen.getByText(/250 \/ 10\.000 llamadas/)).toBeTruthy();
+    expect(screen.getByText(/250 \/ 10\.000 cargas/)).toBeTruthy();
     expect(screen.getAllByText(/Bloqueada/)).toHaveLength(1); // solo Places (6.000/6.000)
     expect(screen.getAllByRole("button", { name: /Autorizar \+1\.000/ })).toHaveLength(4);
   });
