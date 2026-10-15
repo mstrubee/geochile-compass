@@ -585,17 +585,3 @@ export const htmlToGeoJson = (html: string): GeoJsonFC => {
 
   return { type: "FeatureCollection", features };
 };
-
-export const downloadGeoJson = (fc: GeoJsonFC, filename: string) => {
-  const blob = new Blob([JSON.stringify(fc, null, 2)], {
-    type: "application/geo+json",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-};

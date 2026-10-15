@@ -34,7 +34,7 @@ const setup = (opts: { editable?: boolean; searchTerm?: string; fly?: boolean; d
   } satisfies TreeEditActions;
   const props = {
     onToggleCheck: vi.fn(), onOpenPoi: vi.fn(), onLoadMore: vi.fn(), onEditStyle: vi.fn(), onResetStyle: vi.fn(),
-    onFlyTo: vi.fn(), onExport: vi.fn(), onDropFile: vi.fn<(file: File, row: TreeRow) => void>(),
+    onFlyTo: vi.fn(), onExport: vi.fn(), onExportCsv: vi.fn(), onDropFile: vi.fn<(file: File, row: TreeRow) => void>(),
   };
   const utils = render(
     <LayerTree
@@ -62,13 +62,13 @@ describe("LayerTree — solo lectura", () => {
   it("el menú contextual ofrece volar a y exportar, pero no editar", async () => {
     setup();
     const items = await menuItems("Farmacias");
-    expect(items).toEqual(["Volar a", "Exportar como KMZ"]);
+    expect(items).toEqual(["Volar a", "Exportar como KMZ", "Exportar como CSV"]);
   });
 
   it("una capa suma las opciones de estilo personal", async () => {
     setup();
     const items = await menuItems("Cruz Verde");
-    expect(items).toEqual(["Volar a", "Exportar como KMZ", "✏️ Mi estilo en este equipo…", "↩ Restaurar mi estilo"]);
+    expect(items).toEqual(["Volar a", "Exportar como KMZ", "Exportar como CSV", "✏️ Mi estilo en este equipo…", "↩ Restaurar mi estilo"]);
   });
 
   it("el doble clic no abre el renombrado y los atajos de edición no hacen nada", async () => {
@@ -87,7 +87,7 @@ describe("LayerTree — administrador", () => {
   it("el menú contextual de una carpeta trae todas las acciones", async () => {
     setup({ editable: true });
     expect(await menuItems("Farmacias")).toEqual([
-      "Nueva carpeta aquí", "Renombrar", "Propiedades…", "Duplicar", "Volar a", "Exportar como KMZ", "Eliminar",
+      "Nueva carpeta aquí", "Renombrar", "Propiedades…", "Duplicar", "Volar a", "Exportar como KMZ", "Exportar como CSV", "Eliminar",
     ]);
   });
 
@@ -99,7 +99,7 @@ describe("LayerTree — administrador", () => {
   });
 
   it("cada acción del menú llama a su manejador con la fila correcta", async () => {
-    const { edit, onFlyTo, onExport } = setup({ editable: true });
+    const { edit, onFlyTo, onExport, onExportCsv } = setup({ editable: true });
     const click = async (label: string, target = "Farmacias") => {
       await menuItems(target);
       await act(async () => { fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(label) })); });
@@ -115,6 +115,8 @@ describe("LayerTree — administrador", () => {
     expect(onFlyTo.mock.calls[0][0].id).toBe("F1");
     await click("Exportar como KMZ");
     expect(onExport.mock.calls[0][0].id).toBe("F1");
+    await click("Exportar como CSV");
+    expect(onExportCsv.mock.calls[0][0].id).toBe("F1");
     await click("Eliminar", "Retail");
     expect(edit.onDelete.mock.calls[0][0].map((r) => r.id)).toEqual(["F2"]);
   });
@@ -196,8 +198,14 @@ describe("LayerTree — administrador", () => {
 
 describe("LayerTree — archivos soltados y menú oculto", () => {
   const file = new File(["x"], "capa.kml", { type: "application/vnd.google-earth.kml+xml" });
-  const dropOn = (name: string, types: string[]) =>
-    act(async () => { fireEvent.drop(screen.getByText(name), { dataTransfer: { types, files: types.includes("Files") ? [file] : [], dropEffect: "" } }); });
+  // Como en un navegador real: se entra a la zona antes de soltar (sin el `dragenter`, react-dnd rechaza el drop).
+  const dropOn = async (name: string, types: string[]) => {
+    const target = screen.getByText(name);
+    const data = { dataTransfer: { types, files: types.includes("Files") ? [file] : [], dropEffect: "", getData: () => "" } };
+    await act(async () => { fireEvent.dragEnter(target, data); });
+    await act(async () => { fireEvent.dragOver(target, data); });
+    await act(async () => { fireEvent.drop(target, data); });
+  };
 
   it("soltar un archivo sobre una carpeta o una capa avisa cuál fila fue", async () => {
     const { onDropFile } = setup({ editable: true, drop: true, searchTerm: "" });
@@ -208,6 +216,21 @@ describe("LayerTree — archivos soltados y menú oculto", () => {
     // "Farmacias" parte abierta (initialOpenState): su capa ya está en pantalla
     await dropOn("Cruz Verde", ["Files"]);
     expect(onDropFile.mock.calls[1][1]).toMatchObject({ id: "L1", kind: "layer" });
+  });
+
+  it("el drop sigue hasta window: si no, react-dnd se queda 'arrastrando' y rechaza los arrastres internos siguientes", async () => {
+    setup({ editable: true, drop: true });
+    const seen: string[] = [];
+    const spy = (e: Event) => seen.push(e.type);
+    window.addEventListener("dragover", spy);
+    window.addEventListener("drop", spy);
+    try {
+      await dropOn("Farmacias", ["Files"]);
+    } finally {
+      window.removeEventListener("dragover", spy);
+      window.removeEventListener("drop", spy);
+    }
+    expect(seen).toEqual(expect.arrayContaining(["dragover", "drop"]));
   });
 
   it("arrastrar algo que no es un archivo (una fila del propio árbol) no cuenta", async () => {

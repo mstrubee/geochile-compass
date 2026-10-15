@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Mapa de farmacias</title></head>
+<body>
+<div id="map"></div>
+<script>
+  // KML incrustado, como lo dejan algunas herramientas de mapas al exportar a HTML.
+  var kmlText = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Mapa de farmacias</name>
+  <Folder><name>Farmacias</name>
+    <Placemark id="f1"><name>Farmacia Centro</name><Point><coordinates>-70.6483,-33.4372,0</coordinates></Point></Placemark>
+    <Placemark id="f2"><name><![CDATA[Farmacia Norte]]></name><Point><coordinates>-70.6601,-33.3900,0</coordinates></Point></Placemark>
+  </Folder>
+  <Folder><name>Clínicas</name>
+    <Placemark id="c1"><name>Clínica Sur</name><Point><coordinates>-70.6700,-33.5200,0</coordinates></Point></Placemark>
+  </Folder>
+</Document></kml>`;
+</script>
+</body>
+</html>

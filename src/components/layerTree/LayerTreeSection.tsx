@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FolderPlus, Search, Settings2, Trash2, Undo2, Upload, X } from "lucide-react";
+import { FolderPlus, Search, Trash2, Undo2, Upload, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
@@ -17,15 +17,15 @@ import { LAYER_TREE_QUERY_KEY, useLayerFeaturePreviews, useLayerTreeData } from 
 import { useLayerTreeEditor } from "@/hooks/useLayerTreeEditor";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
 import { TERRITORIAL_LAYERS_QUERY_KEY } from "@/hooks/useTerritorialLayers";
-import { importFormatOf } from "@/utils/importParser";
+import { IMPORT_ACCEPT, importFormatOf } from "@/utils/importParser";
 import type { ImportMode } from "@/services/layerImport";
 import { useLayerStyles } from "@/hooks/useLayerStyles";
 import { ImportWizard } from "@/components/layerImport/ImportWizard";
-import { TerritorialLayerManagerDialog } from "@/components/panels/TerritorialLayerManagerDialog";
 import { BrandStyleEditorDialog } from "@/components/panels/BrandStyleEditorDialog";
 import type { BrandStyle } from "@/hooks/useBrandStyles";
 import { buildKmzTree, fetchNodeBounds, type NodeBounds } from "@/services/layerTreeExport";
 import { exportLayerTreeAsKmz } from "@/utils/kmzExport";
+import { exportLayerTreeAsCsv } from "@/utils/layerCsvExport";
 import {
   activationWeight,
   analyzeTree,
@@ -41,6 +41,7 @@ import { friendlyError, type TrashItem } from "@/utils/layerTreeEdit";
 import { LayerTree, type OpenMap, type TreeEditActions } from "./LayerTree";
 import { NodePropertiesDialog } from "./NodePropertiesDialog";
 import { TrashDialog } from "./TrashDialog";
+import { hasFiles, isFileDropHandled } from "./fileDrop";
 
 /** Encender de una vez más puntos que estos pide confirmación (hay 67 mil en total). */
 export const CONFIRM_ACTIVATION_POINTS = 50_000;
@@ -125,7 +126,6 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
   const [propertiesRow, setPropertiesRow] = useState<TreeRow | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
   const [editRequest, setEditRequest] = useState<{ id: string; nonce: number } | null>(null);
-  const [managerOpen, setManagerOpen] = useState(false);
   // Importación en curso: archivo elegido o soltado, y dónde (si se soltó sobre una carpeta o capa).
   const [importing, setImporting] = useState<{ file: File; mode: ImportMode; targetId: string | null; nonce: number } | null>(null);
   const [fileOver, setFileOver] = useState(false);
@@ -210,6 +210,18 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
     }
   }, []);
 
+  const handleExportCsv = useCallback(async (row: TreeRow) => {
+    const total = collectLayerIds(row).length;
+    const toastId = toast.loading(`Preparando “${row.name}”…`);
+    try {
+      const tree = await buildKmzTree(row, (done) => toast.loading(`Preparando “${row.name}”… (${done}/${total} capas)`, { id: toastId }));
+      const n = exportLayerTreeAsCsv(tree);
+      toast.success(`“${row.name}” exportada como CSV`, { id: toastId, description: `${n.toLocaleString("es-CL")} puntos` });
+    } catch (e) {
+      toast.error("No se pudo exportar", { id: toastId, description: friendlyError(e) });
+    }
+  }, []);
+
   // ── Edición (administradores) ──────────────────────────────────────────────
   const handleNewFolder = useCallback(
     async (parent: TreeRow | null) => {
@@ -254,7 +266,7 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
   // ── Importar ───────────────────────────────────────────────────────────────
   const startImport = useCallback((file: File, mode: ImportMode = "new", targetId: string | null = null) => {
     if (!importFormatOf(file.name)) {
-      toast.error("Formato no soportado", { description: "Usa un archivo KMZ, KML, GeoJSON o CSV." });
+      toast.error("Formato no soportado", { description: "Usa un archivo KMZ, KML, GeoJSON, CSV o HTML." });
       return;
     }
     setImporting({ file, mode, targetId, nonce: Date.now() });
@@ -274,7 +286,6 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
     void queryClient.invalidateQueries({ queryKey: TERRITORIAL_LAYERS_QUERY_KEY });
   }, [queryClient]);
 
-  const isFileDrag = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
 
   const editingStyle: BrandStyle | null = editing
     ? (() => {
@@ -282,12 +293,6 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
         return { color: s.color ?? "#F59E0B", icon: s.icon, iconSize: s.iconSize, visible: true };
       })()
     : null;
-
-  const closeManager = () => {
-    setManagerOpen(false);
-    // El administrador pudo crear, mover o borrar capas.
-    void queryClient.invalidateQueries({ queryKey: LAYER_TREE_QUERY_KEY });
-  };
 
   if (isLoading) return <p className="px-2 py-1 text-[11px] text-text-muted">Cargando capas…</p>;
   if (isError || !data) {
@@ -309,8 +314,14 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
     <div
       className="relative"
       onDragOver={(e) => {
-        if (!isAdmin || !isFileDrag(e)) return;
+        if (!isAdmin || !hasFiles(e)) return;
         e.preventDefault();
+        // Sobre una fila el aviso es el resaltado de la fila, no el del panel entero.
+        const onRow = isFileDropHandled(e);
+        if (onRow) {
+          if (fileOver) setFileOver(false);
+          return;
+        }
         e.dataTransfer.dropEffect = "copy";
         if (!fileOver) setFileOver(true);
       }}
@@ -319,9 +330,10 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFileOver(false);
       }}
       onDrop={(e) => {
-        if (!isAdmin || !isFileDrag(e)) return;
+        if (!isAdmin || !hasFiles(e)) return;
         e.preventDefault();
         setFileOver(false);
+        if (isFileDropHandled(e)) return; // ya lo atendió la fila sobre la que se soltó
         const file = e.dataTransfer.files[0];
         if (file) startImport(file);
       }}
@@ -346,16 +358,6 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
           <span className="font-mono text-[10px] text-text-muted">{hasVisibleLayers ? "azul→rojo" : "—"}</span>
           <IOSSwitch on={heatOn} />
         </button>
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => setManagerOpen(true)}
-            className="mb-0.5 flex-shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
-            title="Gestionar capas territoriales (admin)"
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-          </button>
-        )}
       </div>
 
       <div className="mb-1 flex items-center gap-0.5">
@@ -384,13 +386,13 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
             <ToolButton label="Nueva carpeta" onClick={() => void handleNewFolder(null)}>
               <FolderPlus className="h-4 w-4" />
             </ToolButton>
-            <ToolButton label="Importar archivo (KMZ, KML, GeoJSON, CSV)" onClick={() => fileInput.current?.click()}>
+            <ToolButton label="Importar archivo (KMZ, KML, GeoJSON, CSV, HTML)" onClick={() => fileInput.current?.click()}>
               <Upload className="h-4 w-4" />
             </ToolButton>
             <input
               ref={fileInput}
               type="file"
-              accept=".kmz,.kml,.geojson,.json,.csv"
+              accept={IMPORT_ACCEPT}
               className="hidden"
               aria-label="Archivo a importar"
               onChange={(e) => {
@@ -425,6 +427,7 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
         onResetStyle={resetLayerStyle}
         onFlyTo={onFlyToBounds ? handleFlyTo : undefined}
         onExport={handleExport}
+        onExportCsv={handleExportCsv}
         onDropFile={isAdmin ? handleDropOnRow : undefined}
         onMatchCountChange={setMatchCount}
         edit={edit}
@@ -474,7 +477,6 @@ export const LayerTreeSection = ({ isAdmin = false, onFlyToPoint, onFlyToBounds 
         <>
           <NodePropertiesDialog row={propertiesRow} onClose={() => setPropertiesRow(null)} onSave={(id, patch) => void updateStyle(id, patch)} />
           <TrashDialog open={trashOpen} onClose={() => setTrashOpen(false)} onRestore={handleRestore} />
-          <TerritorialLayerManagerDialog open={managerOpen} onClose={closeManager} />
           {importing && (
             <ImportWizard
               key={importing.nonce}

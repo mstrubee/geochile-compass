@@ -115,12 +115,17 @@ exportación, etc.) viven en los secrets de Supabase, no en el repo.
 | Función | Para qué |
 |---|---|
 | `export-sales-projection`, `export-report-slides`, `list-saved-isochrones` | API para LeaseFlow (protegida con `x-api-key`) |
-| `scan-territorial-html`, `ingest-territorial-html` | Escaneo e ingesta de archivos de capas territoriales |
 | `isochrone`, `isochrone-insights` | Cálculo de isócronas y sus insights |
 | `poi-insights`, `compute-poi-features`, `compute-performance-batch` | Análisis y features de la red de locales |
 | `geocode-addresses` | Geocodificación de direcciones (normalizador y resolvedor en `_shared/`) |
 | `sync-uf-values`, `sync-comercio-osm`, `trigger-sync` | Sincronizaciones programadas |
 | `drive-distance`, `sign-urls`, `export-backup`, `gemini-key-test` | Utilidades |
+
+> Las capas territoriales **no** pasan por una función: el asistente de importación (KMZ, KML, GeoJSON, CSV y
+> HTML de mapas) lee el archivo en el navegador y lo escribe con las RPC `create_layer_import` →
+> `commit_layer_import` (ver `supabase/migrations/20261014190000_layer_import.sql`). Las funciones
+> `scan-territorial-html` e `ingest-territorial-html` se retiraron del repo en la Fase 5; si siguen desplegadas,
+> bórralas con `supabase functions delete <nombre> --project-ref fmynxmxrtponfuqxmjli`.
 
 ## Tests y calidad
 

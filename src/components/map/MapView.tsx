@@ -247,8 +247,6 @@ interface MapViewProps {
   comercialBrandLogos?: Map<string, string>;
   /** Callback para actualizar el conteo de POIs cargados por categoría. */
   onComercialCountChange?: (cat: ComercialCategoria, n: number) => void;
-  /** Capas personalizadas subidas por el admin (se renderizan junto a userLayers). */
-  customLayers?: import("@/types/userLayers").UserLayer[];
   /** Expone la instancia de Leaflet (para captura de imágenes, fit programático, etc.). */
   onMapReady?: (map: L.Map) => void;
 }
@@ -317,7 +315,6 @@ export const MapView = ({
   comercialManagedBrands,
   comercialBrandLogos,
   onComercialCountChange,
-  customLayers,
   onMapReady,
   isoOutlineOnly,
   commercialHeatOverride = null,
@@ -399,7 +396,7 @@ export const MapView = ({
       />
       <TrafficLayer visible={layers.traffic} nseFilter={nseFilter} trafficFilter={trafficFilter} />
       <UserLayersLayer
-        layers={[...userLayers, ...(customLayers ?? [])]}
+        layers={userLayers}
         fitId={fitUserLayerId}
         onFitDone={onFitUserLayerDone}
       />

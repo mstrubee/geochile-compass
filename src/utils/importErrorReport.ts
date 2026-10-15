@@ -146,7 +146,12 @@ const RULES: Rule[] = [
   {
     test: (raw) => /Formato no soportado/i.test(raw),
     cause: () => "La extensión del archivo no es una de las admitidas.",
-    solution: () => "Usa un archivo KMZ, KML, GeoJSON o CSV.",
+    solution: () => "Usa un archivo KMZ, KML, GeoJSON, CSV o HTML.",
+  },
+  {
+    test: (raw) => /No se encontraron puntos en el HTML/i.test(raw),
+    cause: () => "El HTML no trae un mapa que se pueda leer: no tiene KML incrustado, marcadores de Leaflet/Folium ni un GeoJSON dentro.",
+    solution: () => "Exporta el mapa como KML o GeoJSON desde la herramienta de origen y vuelve a importarlo; si es un HTML que sí debería funcionar, pega este mensaje en el chat.",
   },
   {
     test: (raw) => /el máximo es \d+ MB/i.test(raw),

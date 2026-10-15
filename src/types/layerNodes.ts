@@ -4,9 +4,10 @@ import type { Database } from "@/integrations/supabase/types";
  * Árbol de capas estilo Google Earth (tabla `layer_nodes`).
  *
  * Una carpeta puede contener carpetas y capas a cualquier profundidad; una capa
- * es siempre una hoja. Las carpetas raíz y las capas reutilizan el uuid de
- * `territorial_layer_groups` / `territorial_layers`, que sigue siendo la tabla
- * de detalle de cada capa (fuente, modo de render, bbox, features…).
+ * es siempre una hoja. Las carpetas raíz y las capas reutilizan el uuid de los grupos y capas
+ * antiguos; `territorial_layers` sigue siendo la tabla de detalle de cada capa (fuente, modo de
+ * render, bbox, features…). Los "grupos" del análisis son las carpetas raíz (ver
+ * `groupsFromNodes`); `territorial_layer_groups` queda solo hasta que se aplique su retiro.
  */
 export type LayerNodeRow = Database["public"]["Tables"]["layer_nodes"]["Row"];
 

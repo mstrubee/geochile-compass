@@ -40,7 +40,6 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 // Diálogos pesados que esta prueba no ejerce.
-vi.mock("@/components/panels/TerritorialLayerManagerDialog", () => ({ TerritorialLayerManagerDialog: () => null }));
 vi.mock("@/components/panels/BrandStyleEditorDialog", () => ({ BrandStyleEditorDialog: () => null }));
 // El asistente de importación tiene sus propias pruebas; acá solo importa cómo se abre.
 vi.mock("@/components/layerImport/ImportWizard", () => ({
@@ -261,6 +260,12 @@ describe("LayerTreeSection", () => {
 describe("importar archivos", () => {
   const kml = () => new File(["<kml/>"], "locales.kml");
   const filesDrag = (file: File) => ({ dataTransfer: { types: ["Files"], files: [file], dropEffect: "" } });
+  /** Como en un navegador real: entrar, pasar por encima y soltar (sin el `dragenter` previo react-dnd rechaza el drop). */
+  const dropFile = async (target: Element, file: File) => {
+    await act(async () => { fireEvent.dragEnter(target, filesDrag(file)); });
+    await act(async () => { fireEvent.dragOver(target, filesDrag(file)); });
+    await act(async () => { fireEvent.drop(target, filesDrag(file)); });
+  };
 
   it("solo los administradores ven el botón de importar", async () => {
     await mount();
@@ -271,7 +276,7 @@ describe("importar archivos", () => {
     await mount({ isAdmin: true });
     expect(screen.getByRole("button", { name: /Importar archivo/ })).toBeInTheDocument();
     const input = screen.getByLabelText("Archivo a importar") as HTMLInputElement;
-    expect(input).toHaveAttribute("accept", ".kmz,.kml,.geojson,.json,.csv");
+    expect(input).toHaveAttribute("accept", ".kmz,.kml,.geojson,.json,.csv,.html,.htm");
     await act(async () => { fireEvent.change(input, { target: { files: [kml()] } }); });
     const w = await screen.findByTestId("wizard");
     expect(w).toHaveAttribute("data-file", "locales.kml");
@@ -286,14 +291,14 @@ describe("importar archivos", () => {
     const panel = container.firstElementChild as HTMLElement;
     await act(async () => { fireEvent.dragOver(panel, filesDrag(kml())); });
     expect(screen.getByText("Suelta el archivo para importarlo")).toBeInTheDocument();
-    await act(async () => { fireEvent.drop(panel, filesDrag(kml())); });
+    await dropFile(panel, kml());
     expect(screen.queryByText("Suelta el archivo para importarlo")).toBeNull();
     expect(await screen.findByTestId("wizard")).toHaveAttribute("data-file", "locales.kml");
   });
 
   it("soltar sobre una carpeta importa dentro de ella", async () => {
     await mount({ isAdmin: true });
-    await act(async () => { fireEvent.drop(screen.getByText("Farmacias"), filesDrag(kml())); });
+    await dropFile(screen.getByText("Farmacias"), kml());
     const w = await screen.findByTestId("wizard");
     expect(w).toHaveAttribute("data-mode", "new");
     expect(w).toHaveAttribute("data-target", "F1");
@@ -302,7 +307,7 @@ describe("importar archivos", () => {
   it("soltar sobre una capa abre el asistente para reemplazarla", async () => {
     await mount({ isAdmin: true });
     await click(screen.getByText("Farmacias"));
-    await act(async () => { fireEvent.drop(screen.getByText("Cruz Verde"), filesDrag(kml())); });
+    await dropFile(screen.getByText("Cruz Verde"), kml());
     const w = await screen.findByTestId("wizard");
     expect(w).toHaveAttribute("data-mode", "replace");
     expect(w).toHaveAttribute("data-target", "L1");
@@ -311,14 +316,14 @@ describe("importar archivos", () => {
   it("un formato no soportado no abre el asistente", async () => {
     await mount({ isAdmin: true });
     const panel = screen.getByLabelText("Buscar capas").closest("div.relative")!.parentElement!.parentElement as HTMLElement;
-    await act(async () => { fireEvent.drop(panel, filesDrag(new File(["x"], "mapa.shp"))); });
+    await dropFile(panel, new File(["x"], "mapa.shp"));
     expect(screen.queryByTestId("wizard")).toBeNull();
   });
 
   it("quien no es administrador no puede soltar archivos", async () => {
     const { container } = await mount();
-    await act(async () => { fireEvent.drop(container.firstElementChild as HTMLElement, filesDrag(kml())); });
-    await act(async () => { fireEvent.drop(screen.getByText("Farmacias"), filesDrag(kml())); });
+    await dropFile(container.firstElementChild as HTMLElement, kml());
+    await dropFile(screen.getByText("Farmacias"), kml());
     expect(screen.queryByTestId("wizard")).toBeNull();
   });
 });

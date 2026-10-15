@@ -110,7 +110,7 @@ ${innerBody}
 /**
  * Dispara la descarga de un Blob como archivo en el navegador.
  */
-const triggerDownload = (blob: Blob, filename: string) => {
+export const triggerDownload = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -129,7 +129,7 @@ const buildKmzBlob = async (kml: string): Promise<Blob> => {
   return zip.generateAsync({ type: "blob", compression: "DEFLATE" });
 };
 
-const safeFilename = (name: string): string =>
+export const safeFilename = (name: string): string =>
   name
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")

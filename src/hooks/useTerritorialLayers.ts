@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LruCache } from "@/utils/lruCache";
 import { supabase } from "@/integrations/supabase/client";
+import { toLayerNode } from "@/types/layerNodes";
 import type { TerritorialGroup, TerritorialLayer, TerritorialFeature } from "@/types/territorial";
+import { groupsFromNodes } from "@/utils/territorialGroups";
 
 export const TERRITORIAL_LAYERS_QUERY_KEY = ["territorial-layers"] as const;
 
@@ -16,21 +18,20 @@ const EMPTY_LAYERS: TerritorialLayer[] = [];
 
 const fetchTerritorialData = async (): Promise<TerritorialData> => {
   // Solo lo activo: lo que está en la papelera del árbol no debe verlo el análisis ni el mapa.
-  const [g, l] = await Promise.all([
-    supabase.from("territorial_layer_groups_active").select("*").order("order_index", { ascending: true }),
+  // Los grupos son las carpetas raíz del árbol de capas (la tabla `territorial_layer_groups` ya no se lee).
+  const [roots, l] = await Promise.all([
+    supabase.from("layer_nodes").select("*").eq("kind", "folder").is("parent_id", null).is("archived_at", null).eq("scope", "shared"),
     supabase.from("territorial_layers_active").select("*").order("order_index", { ascending: true }),
   ]);
-  if (g.error || l.error) {
-    // Si las vistas aún no existen (el código llegó antes que la migración) se leen las tablas.
-    const [g2, l2] = await Promise.all([
-      supabase.from("territorial_layer_groups").select("*").order("order_index", { ascending: true }),
-      supabase.from("territorial_layers").select("*").order("order_index", { ascending: true }),
-    ]);
-    if (g2.error) throw g2.error;
+  if (roots.error) throw roots.error;
+  const groups = groupsFromNodes((roots.data ?? []).map(toLayerNode));
+  if (l.error) {
+    // Si la vista aún no existe (el código llegó antes que la migración) se lee la tabla.
+    const l2 = await supabase.from("territorial_layers").select("*").order("order_index", { ascending: true });
     if (l2.error) throw l2.error;
-    return { groups: (g2.data ?? []) as unknown as TerritorialGroup[], layers: (l2.data ?? []) as unknown as TerritorialLayer[] };
+    return { groups, layers: (l2.data ?? []) as unknown as TerritorialLayer[] };
   }
-  return { groups: (g.data ?? []) as unknown as TerritorialGroup[], layers: (l.data ?? []) as unknown as TerritorialLayer[] };
+  return { groups, layers: (l.data ?? []) as unknown as TerritorialLayer[] };
 };
 
 /**
@@ -76,6 +77,20 @@ const inflightCache = new Map<string, Promise<TerritorialFeature[]>>();
 const cacheKeyFor = (layerId: string, bbox?: FeatureBbox | null) =>
   bbox ? `${layerId}|${bbox.map((v) => v.toFixed(4)).join(",")}` : layerId;
 
+// Cada vez que se invalida el caché se avisa a los `useTerritorialFeatures` montados: sin esto
+// seguirían mostrando los puntos viejos aunque el caché ya esté vacío (su efecto solo depende de las capas pedidas).
+let featuresVersion = 0;
+const versionListeners = new Set<() => void>();
+const subscribeVersion = (l: () => void) => {
+  versionListeners.add(l);
+  return () => versionListeners.delete(l);
+};
+const getVersion = () => featuresVersion;
+
+/**
+ * Olvida los puntos en caché de una capa (o de todas) y hace que el mapa y el análisis los vuelvan a pedir.
+ * Hay que llamarla cuando cambia el CONTENIDO de una capa (importar, reemplazar, agregar, deshacer una importación).
+ */
 export const clearTerritorialFeaturesCache = (layerId?: string) => {
   if (layerId) {
     // Cae también cualquier variante recortada por bbox de esa capa.
@@ -89,6 +104,10 @@ export const clearTerritorialFeaturesCache = (layerId?: string) => {
     featuresCache.clear();
     inflightCache.clear();
   }
+  // Los lotes en vuelo pueden traer datos anteriores al cambio: no se reutilizan.
+  inflightBatchCache.clear();
+  featuresVersion++;
+  versionListeners.forEach((l) => l());
 };
 
 const PAGE = 1000;
@@ -320,7 +339,8 @@ export const useTerritorialFeatures = (
 ) => {
   const [features, setFeatures] = useState<TerritorialFeature[]>([]);
   const bboxKey = bbox ? bbox.map((v) => v.toFixed(4)).join(",") : "";
-  const key = `${layerIds.slice().sort().join(",")}#${bboxKey}`;
+  const version = useSyncExternalStore(subscribeVersion, getVersion);
+  const key = `${layerIds.slice().sort().join(",")}#${bboxKey}#${version}`;
 
   useEffect(() => {
     let cancel = false;
