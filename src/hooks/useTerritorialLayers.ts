@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LruCache } from "@/utils/lruCache";
 import { supabase } from "@/integrations/supabase/client";
+import { toLayerNode } from "@/types/layerNodes";
 import type { TerritorialGroup, TerritorialLayer, TerritorialFeature } from "@/types/territorial";
+import { groupsFromNodes } from "@/utils/territorialGroups";
 
 export const TERRITORIAL_LAYERS_QUERY_KEY = ["territorial-layers"] as const;
 
@@ -16,21 +18,20 @@ const EMPTY_LAYERS: TerritorialLayer[] = [];
 
 const fetchTerritorialData = async (): Promise<TerritorialData> => {
   // Solo lo activo: lo que está en la papelera del árbol no debe verlo el análisis ni el mapa.
-  const [g, l] = await Promise.all([
-    supabase.from("territorial_layer_groups_active").select("*").order("order_index", { ascending: true }),
+  // Los grupos son las carpetas raíz del árbol de capas (la tabla `territorial_layer_groups` ya no se lee).
+  const [roots, l] = await Promise.all([
+    supabase.from("layer_nodes").select("*").eq("kind", "folder").is("parent_id", null).is("archived_at", null).eq("scope", "shared"),
     supabase.from("territorial_layers_active").select("*").order("order_index", { ascending: true }),
   ]);
-  if (g.error || l.error) {
-    // Si las vistas aún no existen (el código llegó antes que la migración) se leen las tablas.
-    const [g2, l2] = await Promise.all([
-      supabase.from("territorial_layer_groups").select("*").order("order_index", { ascending: true }),
-      supabase.from("territorial_layers").select("*").order("order_index", { ascending: true }),
-    ]);
-    if (g2.error) throw g2.error;
+  if (roots.error) throw roots.error;
+  const groups = groupsFromNodes((roots.data ?? []).map(toLayerNode));
+  if (l.error) {
+    // Si la vista aún no existe (el código llegó antes que la migración) se lee la tabla.
+    const l2 = await supabase.from("territorial_layers").select("*").order("order_index", { ascending: true });
     if (l2.error) throw l2.error;
-    return { groups: (g2.data ?? []) as unknown as TerritorialGroup[], layers: (l2.data ?? []) as unknown as TerritorialLayer[] };
+    return { groups, layers: (l2.data ?? []) as unknown as TerritorialLayer[] };
   }
-  return { groups: (g.data ?? []) as unknown as TerritorialGroup[], layers: (l.data ?? []) as unknown as TerritorialLayer[] };
+  return { groups, layers: (l.data ?? []) as unknown as TerritorialLayer[] };
 };
 
 /**
