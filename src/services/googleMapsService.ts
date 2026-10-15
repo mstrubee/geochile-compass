@@ -23,8 +23,34 @@ interface TileSession {
 }
 
 const sessionCache = new Map<GoogleMapType, TileSession>();
-/** true tras descontar la carga de mapa de esta apertura de la página. */
-let mapLoadCounted = false;
+
+// Las sesiones de Google duran ~2 semanas: se guardan en el navegador para que abrir o recargar
+// el mapa las reutilice SIN crear otra sesión ni gastar cuota. Van atadas a la API key (si se
+// cambia la key, no se reutilizan).
+const SESSION_STORE_KEY = "geoplanet_google_tile_sessions_v1";
+const SESSION_MARGIN_MS = 5 * 60_000;
+const keyTag = (apiKey: string) => apiKey.slice(-8);
+
+type StoredSessions = Partial<Record<GoogleMapType, TileSession & { key: string }>>;
+
+const readStored = (): StoredSessions => {
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_STORE_KEY) ?? "{}") as StoredSessions;
+  } catch {
+    return {};
+  }
+};
+
+const writeStored = (apiKey: string, session: TileSession) => {
+  try {
+    const all = readStored();
+    all[session.mapType] = { ...session, key: keyTag(apiKey) };
+    localStorage.setItem(SESSION_STORE_KEY, JSON.stringify(all));
+  } catch { /* storage lleno o bloqueado: solo se pierde el ahorro */ }
+};
+
+const isFresh = (s: TileSession | undefined): s is TileSession =>
+  !!s && s.expiry > Date.now() + SESSION_MARGIN_MS;
 
 /** Maps basemap style to Google map type. */
 export const basemapToGoogleMapType = (basemap: string): GoogleMapType => {
@@ -34,20 +60,24 @@ export const basemapToGoogleMapType = (basemap: string): GoogleMapType => {
 };
 
 /**
- * Creates or returns a cached session token for the given map type.
- * La cuota "maps_js" se mide en CARGAS DE MAPA: se descuenta una sola vez por apertura de la
- * página (la primera sesión de Google); cambiar de mapa base (claro/satélite/híbrido) NO suma.
+ * Devuelve la sesión de teselas del tipo de mapa: de la memoria, o del navegador si sigue
+ * vigente (sin gastar cuota), o creando una nueva en Google.
+ * La cuota "maps_js" se mide en CARGAS DE MAPA y se descuenta SOLO cuando hay que crear una
+ * sesión nueva en Google; reutilizar una guardada es gratis.
  */
 export const createGoogleTileSession = async (
   apiKey: string,
   mapType: GoogleMapType,
 ): Promise<TileSession | null> => {
   const cached = sessionCache.get(mapType);
-  if (cached && cached.expiry > Date.now() + 60_000) return cached;
-  if (!mapLoadCounted) {
-    if (!(await consumeApiQuota("maps_js"))) return null;
-    mapLoadCounted = true;
+  if (isFresh(cached)) return cached;
+  const stored = readStored()[mapType];
+  if (stored && stored.key === keyTag(apiKey) && isFresh(stored)) {
+    const { key: _k, ...session } = stored;
+    sessionCache.set(mapType, session);
+    return session;
   }
+  if (!(await consumeApiQuota("maps_js"))) return null;
 
   const body: Record<string, unknown> = {
     mapType: mapType === "hybrid" ? "satellite" : mapType,
@@ -75,6 +105,7 @@ export const createGoogleTileSession = async (
       mapType,
     };
     sessionCache.set(mapType, session);
+    writeStored(apiKey, session);
     return session;
   } catch (e) {
     console.warn("[Google Maps] createSession error:", e);
@@ -147,6 +178,18 @@ export interface PlacesPrediction {
   secondaryText: string;
 }
 
+// Caché en memoria: repetir la misma búsqueda o elegir de nuevo el mismo lugar no vuelve a
+// llamar a Google (ni gasta cuota). Tope de tamaño para no crecer sin límite.
+const SEARCH_TTL_MS = 10 * 60_000;
+const SEARCH_CACHE_MAX = 200;
+const autocompleteCache = new Map<string, { at: number; value: PlacesPrediction[] }>();
+const placeCoordsCache = new Map<string, { lat: number; lng: number; displayName: string }>();
+
+const remember = <V,>(map: Map<string, V>, key: string, value: V) => {
+  if (map.size >= SEARCH_CACHE_MAX) map.delete(map.keys().next().value as string);
+  map.set(key, value);
+};
+
 /** Devuelve `null` si la cuota de Autocomplete está agotada (el caller debe usar otra fuente). */
 export const placesAutocomplete = async (
   input: string,
@@ -154,6 +197,9 @@ export const placesAutocomplete = async (
   sessionToken: string,
 ): Promise<PlacesPrediction[] | null> => {
   if (input.length < 3) return [];
+  const cacheKey = input.trim().toLowerCase();
+  const hit = autocompleteCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < SEARCH_TTL_MS) return hit.value;
   if (!(await consumeApiQuota("autocomplete"))) return null;
   try {
     // API key va en la URL para evitar CORS preflight por header X-Goog-Api-Key
@@ -184,12 +230,14 @@ export const placesAutocomplete = async (
         };
       }>;
     };
-    return (data.suggestions ?? []).map((s) => ({
+    const predictions = (data.suggestions ?? []).map((s) => ({
       placeId: s.placePrediction.placeId,
       description: s.placePrediction.text.text,
       mainText: s.placePrediction.structuredFormat.mainText.text,
       secondaryText: s.placePrediction.structuredFormat.secondaryText?.text ?? "",
     }));
+    remember(autocompleteCache, cacheKey, { at: Date.now(), value: predictions });
+    return predictions;
   } catch (e) {
     console.error("[Places] fetch threw:", e);
     return [];
@@ -205,6 +253,8 @@ export const getPlaceCoords = async (
   apiKey: string,
   sessionToken: string,
 ): Promise<{ lat: number; lng: number; displayName: string } | null> => {
+  const cachedCoords = placeCoordsCache.get(placeId);
+  if (cachedCoords) return cachedCoords;
   if (!(await consumeApiQuota("places"))) return null;
   try {
     // $fields evita el header X-Goog-FieldMask (que dispara CORS preflight)
@@ -220,11 +270,13 @@ export const getPlaceCoords = async (
       displayName?: { text: string; languageCode?: string };
     };
     if (!data.location) return null;
-    return {
+    const coords = {
       lat: data.location.latitude,
       lng: data.location.longitude,
       displayName: data.formattedAddress ?? data.displayName?.text ?? "",
     };
+    remember(placeCoordsCache, placeId, coords);
+    return coords;
   } catch (e) {
     console.warn("[Places API New] place details fetch error:", e);
     return null;

@@ -22,7 +22,7 @@ const fmtDate = (s: string) =>
 
 /** Qué hace cada API dentro de Geoplanet (se muestra bajo el título de cada módulo). */
 const API_HELP: Record<string, string> = {
-  maps_js: "Se mide en CARGAS DE MAPA (una por cada vez que se abre el mapa de Google; cambiar de mapa base no cuenta). Al agotarse, el mapa vuelve a OpenStreetMap.",
+  maps_js: "Se mide en CARGAS DE MAPA: una por cada sesión nueva de Google. La sesión se guarda en el navegador unas 2 semanas, así que reabrir el mapa no suma. Al agotarse, el mapa vuelve a OpenStreetMap.",
   places: "Detalle de un lugar elegido (coordenadas) y, más adelante, búsqueda de comercios.",
   autocomplete: "Sugerencias mientras se escribe en el buscador del mapa. Al agotarse, el buscador usa OpenStreetMap.",
   geocoding: "Conversión de una dirección escrita a coordenadas. Al agotarse, se geocodifica con OpenStreetMap.",
