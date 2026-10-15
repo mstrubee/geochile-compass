@@ -4,28 +4,29 @@
  */
 import { useState } from "react";
 import { Activity, ChevronLeft, ChevronRight, Map, TriangleAlert } from "lucide-react";
-import type { MapProvider } from "@/hooks/useMapProvider";
-import { PROVIDER_LIMITS, THRESHOLD_WARN, THRESHOLD_CRITICAL } from "@/hooks/useMapProvider";
-
-interface UsageStat {
-  count: number;
-  limit: number;
-  pct: number;
-}
+import type { MapProvider, UsageStat } from "@/hooks/useMapProvider";
+import { THRESHOLD_WARN, THRESHOLD_CRITICAL } from "@/hooks/useMapProvider";
+import type { QuotaApi } from "@/services/apiQuotaService";
 
 interface Props {
   provider: MapProvider;
   onProviderChange: (p: MapProvider) => void;
   usage: {
-    sessions: UsageStat;
-    tiles: UsageStat;
-    geocoding: UsageStat;
-    places: UsageStat;
+    apis: UsageStat[];
     cycleStart: Date;
+    cycleEnd: Date;
   };
   hasGoogleKey: boolean;
-  isLimitReached: (s: keyof typeof PROVIDER_LIMITS) => boolean;
+  isLimitReached: (api: QuotaApi) => boolean;
 }
+
+/** Etiqueta corta de cada API para el panel del mapa. */
+const SHORT_LABEL: Record<QuotaApi, string> = {
+  maps_js: "Mapa (Maps JavaScript)",
+  places: "Places",
+  autocomplete: "Autocomplete",
+  geocoding: "Geocoding",
+};
 
 const fmt = (n: number) => n.toLocaleString("es-CL");
 
@@ -78,15 +79,15 @@ export const ApiUsagePanel = ({
     });
   };
 
-  const cycleEnd = new Date(usage.cycleStart);
-  cycleEnd.setMonth(cycleEnd.getMonth() + 1);
   const daysLeft = Math.max(
     0,
-    Math.ceil((cycleEnd.getTime() - Date.now()) / 86_400_000),
+    Math.ceil((usage.cycleEnd.getTime() - Date.now()) / 86_400_000),
   );
 
-  const sessionLimitReached = isLimitReached("sessions");
-  const anyWarning = usage.sessions.pct >= THRESHOLD_WARN;
+  const sessionLimitReached = isLimitReached("maps_js");
+  const mapStat = usage.apis.find((a) => a.api === "maps_js");
+  const mapPct = mapStat?.pct ?? 0;
+  const anyWarning = usage.apis.some((a) => a.pct >= THRESHOLD_WARN);
 
   return (
     <div className="pointer-events-none absolute left-0 top-[120px] z-[500] flex items-start">
@@ -172,10 +173,9 @@ export const ApiUsagePanel = ({
           {provider === "google" && (
             <>
               <div className="mb-2 space-y-2">
-                <UsageBar label="Sesiones de mapa" stat={usage.sessions} />
-                <UsageBar label="Tiles cargados" stat={usage.tiles} />
-                <UsageBar label="Geocodificación" stat={usage.geocoding} />
-                <UsageBar label="Places / Autocomplete" stat={usage.places} />
+                {usage.apis.map((a) => (
+                  <UsageBar key={a.api} label={SHORT_LABEL[a.api]} stat={a} />
+                ))}
               </div>
 
               {/* Cycle info */}
@@ -195,18 +195,18 @@ export const ApiUsagePanel = ({
               {/* Alerts */}
               {sessionLimitReached && (
                 <div className="mt-2 rounded-lg bg-destructive/10 px-2 py-1.5 text-[10px] text-destructive">
-                  Límite de sesiones alcanzado. Cambiando a OpenStreetMap automáticamente.
+                  Límite de cargas de mapa alcanzado. Un administrador puede autorizar más en Admin → API Keys y Secrets.
                 </div>
               )}
-              {!sessionLimitReached && usage.sessions.pct >= THRESHOLD_CRITICAL && (
+              {!sessionLimitReached && mapPct >= THRESHOLD_CRITICAL && (
                 <div className="mt-2 rounded-lg bg-brand-yellow/10 px-2 py-1.5 text-[10px] text-brand-yellow">
                   El consumo de Google Maps ha alcanzado el{" "}
-                  {Math.round(usage.sessions.pct * 100)}% del límite mensual.
+                  {Math.round(mapPct * 100)}% del límite mensual.
                 </div>
               )}
-              {!sessionLimitReached && usage.sessions.pct >= THRESHOLD_WARN && usage.sessions.pct < THRESHOLD_CRITICAL && (
+              {!sessionLimitReached && mapPct >= THRESHOLD_WARN && mapPct < THRESHOLD_CRITICAL && (
                 <div className="mt-2 rounded-lg bg-primary/10 px-2 py-1.5 text-[10px] text-primary">
-                  Consumo de Google Maps al {Math.round(usage.sessions.pct * 100)}% del límite.
+                  Consumo de Google Maps al {Math.round(mapPct * 100)}% del límite.
                 </div>
               )}
             </>

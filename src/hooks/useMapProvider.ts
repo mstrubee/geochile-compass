@@ -1,31 +1,41 @@
 /**
- * Manages the active cartographic provider (Google Maps / OSM),
- * usage tracking, auto-switch on quota exhaustion, and alert thresholds.
+ * Manages the active cartographic provider (Google Maps / OSM), the server-side API quota
+ * status (see apiQuotaService) and the auto-switch to OSM when the Google map quota is exhausted.
  */
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { loadUsage, incrementUsage as _inc, type UsageData } from "@/services/googleMapsService";
 import { useGoogleMapsKey } from "@/hooks/useGoogleMapsKey";
+import { useApiQuotaStatus } from "@/hooks/useApiQuotaStatus";
+import type { QuotaApi, QuotaApiStatus } from "@/services/apiQuotaService";
 
 export type MapProvider = "google" | "osm";
-
-/** Monthly limits (configurable). */
-export const PROVIDER_LIMITS = {
-  sessions: 25_000,   // ~$175/mo at $7/1000 — within $200 free credit
-  tiles: 200_000,     // informational (not billed separately)
-  geocoding: 35_000,  // ~$175/mo at $5/1000
-  places: 60_000,     // ~$170/mo at $2.83/1000
-} as const;
 
 export const THRESHOLD_WARN = 0.7;
 export const THRESHOLD_CRITICAL = 0.9;
 
 const PROVIDER_STORAGE_KEY = "geoplanet_map_provider_v1";
 
+export interface UsageStat {
+  api: QuotaApi;
+  label: string;
+  count: number;
+  limit: number;
+  pct: number;
+}
+
+const toStat = (a: QuotaApiStatus): UsageStat => ({
+  api: a.api,
+  label: a.label,
+  count: a.used,
+  limit: a.limit,
+  pct: a.limit > 0 ? Math.min(1, a.used / a.limit) : 1,
+});
+
 export const useMapProvider = () => {
   // Clave cargada en runtime desde app_secrets (panel admin), con fallback a build.
   const googleKey = useGoogleMapsKey();
   const hasGoogleKey = !!googleKey;
+  const { status } = useApiQuotaStatus();
 
   const [provider, setProviderState] = useState<MapProvider>(() => {
     try {
@@ -39,18 +49,10 @@ export const useMapProvider = () => {
   // botón Google queda deshabilitado; al llegar la clave (build o panel) Google
   // se activa solo, preservando la preferencia del usuario.
 
-  const [usage, setUsage] = useState<UsageData>(loadUsage);
-
-  const refreshUsage = useCallback(() => setUsage(loadUsage()), []);
-
-  /** Increment a usage counter and refresh the local state. */
-  const trackUsage = useCallback(
-    (service: keyof Omit<UsageData, "cycleStart">, count = 1) => {
-      _inc(service, count);
-      refreshUsage();
-    },
-    [refreshUsage],
-  );
+  const stats = (status?.apis ?? []).map(toStat);
+  const mapStat = stats.find((s) => s.api === "maps_js");
+  // Sin estado cargado aún no bloqueamos nada (el servidor igual rechaza cada llamada).
+  const mapLimitReached = !!mapStat && mapStat.count >= mapStat.limit;
 
   /** Change the active provider with guard checks. */
   const setProvider = useCallback(
@@ -60,8 +62,7 @@ export const useMapProvider = () => {
           toast.error("No se ha configurado una API Key de Google Maps.");
           return;
         }
-        const sessionPct = usage.sessions / PROVIDER_LIMITS.sessions;
-        if (sessionPct >= 1) {
+        if (mapLimitReached) {
           toast.error(
             "El límite mensual de Google Maps ha sido alcanzado. Usando OpenStreetMap.",
           );
@@ -71,56 +72,33 @@ export const useMapProvider = () => {
       setProviderState(p);
       try { localStorage.setItem(PROVIDER_STORAGE_KEY, p); } catch { /* ignore */ }
     },
-    [hasGoogleKey, usage.sessions],
+    [hasGoogleKey, mapLimitReached],
   );
 
-  // Auto-switch to OSM when session quota exhausted
+  // Auto-switch to OSM when the map quota is exhausted
   useEffect(() => {
-    if (provider !== "google") return;
-    if (usage.sessions / PROVIDER_LIMITS.sessions >= 1) {
-      setProviderState("osm");
-      try { localStorage.setItem(PROVIDER_STORAGE_KEY, "osm"); } catch { /* ignore */ }
-      toast.warning(
-        "Se ha alcanzado el límite de consumo de Google Maps. Actualmente se está utilizando OpenStreetMap.",
-        { duration: 8000 },
-      );
-    }
-  }, [usage.sessions, provider]);
+    if (provider !== "google" || !mapLimitReached) return;
+    setProviderState("osm");
+    try { localStorage.setItem(PROVIDER_STORAGE_KEY, "osm"); } catch { /* ignore */ }
+    toast.warning(
+      "Se ha alcanzado el límite de consumo de Google Maps. Actualmente se está utilizando OpenStreetMap.",
+      { duration: 8000 },
+    );
+  }, [mapLimitReached, provider]);
 
-  // Enriched usage with percentages
-  const enriched = {
-    sessions: {
-      count: usage.sessions,
-      limit: PROVIDER_LIMITS.sessions,
-      pct: Math.min(1, usage.sessions / PROVIDER_LIMITS.sessions),
-    },
-    tiles: {
-      count: usage.tiles,
-      limit: PROVIDER_LIMITS.tiles,
-      pct: Math.min(1, usage.tiles / PROVIDER_LIMITS.tiles),
-    },
-    geocoding: {
-      count: usage.geocoding,
-      limit: PROVIDER_LIMITS.geocoding,
-      pct: Math.min(1, usage.geocoding / PROVIDER_LIMITS.geocoding),
-    },
-    places: {
-      count: usage.places,
-      limit: PROVIDER_LIMITS.places,
-      pct: Math.min(1, usage.places / PROVIDER_LIMITS.places),
-    },
-    cycleStart: new Date(usage.cycleStart + "T00:00:00"),
+  const isLimitReached = (api: QuotaApi) => {
+    const s = stats.find((x) => x.api === api);
+    return !!s && s.count >= s.limit;
   };
-
-  const isLimitReached = (service: keyof typeof PROVIDER_LIMITS) =>
-    usage[service as keyof Omit<UsageData, "cycleStart">] >= PROVIDER_LIMITS[service];
 
   return {
     provider,
     setProvider,
-    usage: enriched,
-    trackUsage,
-    refreshUsage,
+    usage: {
+      apis: stats,
+      cycleStart: status ? new Date(status.period + "T00:00:00") : new Date(),
+      cycleEnd: status ? new Date(status.period_end + "T00:00:00") : new Date(),
+    },
     isLimitReached,
     hasGoogleKey,
   };

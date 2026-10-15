@@ -17,9 +17,9 @@ export const KNOWN_SECRETS: { key: string; description: string }[] = [
   {
     key: "GOOGLE_MAPS_API_KEY",
     description:
-      "API Key de Google Maps. Activa el selector Google del mapa (teselas, búsqueda y geocodificación). " +
-      "En Google Cloud habilita 'Map Tiles API', 'Places API (New)' y 'Geocoding API', y restringe la clave " +
-      "por referrer a https://geoplanet.vercel.app/*",
+      "API Key única de Google Maps Platform. En Google Cloud habilita: 'Map Tiles API' (el mapa de Google que usa hoy " +
+      "la app), 'Maps JavaScript API', 'Places API (New)' (incluye Autocomplete) y 'Geocoding API'. Restríngela por " +
+      "referrer a https://geoplanet.vercel.app/* y a esas APIs. El límite de uso de cada una se fija más arriba.",
   },
   {
     key: "OPENROUTESERVICE_API_KEY",

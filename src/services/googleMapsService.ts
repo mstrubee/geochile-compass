@@ -1,7 +1,10 @@
 /**
- * Google Maps Platform — session tokens, usage tracking, geocoding, places.
- * Toda la comunicación con las APIs de Google pasa por este módulo.
+ * Google Maps Platform — session tokens, geocoding, places.
+ * Toda la comunicación con las APIs de Google pasa por este módulo, y TODA llamada pide antes
+ * permiso a la cuota del servidor (apiQuotaService): si el límite gratuito mensual se agotó y
+ * un admin no autorizó más, la llamada no sale y el caller cae a OpenStreetMap.
  */
+import { consumeApiQuota } from "@/services/apiQuotaService";
 
 const TILES_BASE = "https://tile.googleapis.com/v1";
 const GEOCODE_BASE = "https://maps.googleapis.com/maps/api/geocode/json";
@@ -10,44 +13,6 @@ const GEOCODE_BASE = "https://maps.googleapis.com/maps/api/geocode/json";
 const PLACES_NEW_BASE = "https://places.googleapis.com/v1/places";
 
 export type GoogleMapType = "roadmap" | "satellite" | "hybrid";
-
-// ── Usage tracking ────────────────────────────────────────────────────────────
-
-const USAGE_KEY = "geoplanet_google_usage_v1";
-
-export interface UsageData {
-  cycleStart: string; // YYYY-MM-DD
-  sessions: number;
-  tiles: number;
-  geocoding: number;
-  places: number;
-}
-
-const currentCycleStart = (): string => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-};
-
-export const loadUsage = (): UsageData => {
-  try {
-    const raw = localStorage.getItem(USAGE_KEY);
-    if (raw) {
-      const data = JSON.parse(raw) as UsageData;
-      if (data.cycleStart === currentCycleStart()) return data;
-    }
-  } catch { /* ignore */ }
-  return { cycleStart: currentCycleStart(), sessions: 0, tiles: 0, geocoding: 0, places: 0 };
-};
-
-export const incrementUsage = (
-  service: keyof Omit<UsageData, "cycleStart">,
-  count = 1,
-): UsageData => {
-  const usage = loadUsage();
-  usage[service] += count;
-  try { localStorage.setItem(USAGE_KEY, JSON.stringify(usage)); } catch { /* ignore */ }
-  return usage;
-};
 
 // ── Tile session management ───────────────────────────────────────────────────
 
@@ -76,6 +41,8 @@ export const createGoogleTileSession = async (
 ): Promise<TileSession | null> => {
   const cached = sessionCache.get(mapType);
   if (cached && cached.expiry > Date.now() + 60_000) return cached;
+  // Una sesión de teselas = una carga de mapa de Google.
+  if (!(await consumeApiQuota("maps_js"))) return null;
 
   const body: Record<string, unknown> = {
     mapType: mapType === "hybrid" ? "satellite" : mapType,
@@ -103,7 +70,6 @@ export const createGoogleTileSession = async (
       mapType,
     };
     sessionCache.set(mapType, session);
-    incrementUsage("sessions");
     return session;
   } catch (e) {
     console.warn("[Google Maps] createSession error:", e);
@@ -133,6 +99,8 @@ export const geocodeWithGoogle = async (
   const key = address.toLowerCase().trim();
   if (geocodeCache.has(key)) return geocodeCache.get(key) ?? null;
 
+  if (!(await consumeApiQuota("geocoding"))) return null;
+
   try {
     const url = `${GEOCODE_BASE}?address=${encodeURIComponent(address)}&key=${apiKey}&region=cl&language=es&components=country:CL`;
     const res = await fetch(url);
@@ -144,7 +112,6 @@ export const geocodeWithGoogle = async (
         geometry: { location: { lat: number; lng: number }; location_type: string };
       }>;
     };
-    incrementUsage("geocoding");
 
     if (data.status !== "OK" || !data.results.length) {
       geocodeCache.set(key, null);
@@ -175,12 +142,14 @@ export interface PlacesPrediction {
   secondaryText: string;
 }
 
+/** Devuelve `null` si la cuota de Autocomplete está agotada (el caller debe usar otra fuente). */
 export const placesAutocomplete = async (
   input: string,
   apiKey: string,
   sessionToken: string,
-): Promise<PlacesPrediction[]> => {
+): Promise<PlacesPrediction[] | null> => {
   if (input.length < 3) return [];
+  if (!(await consumeApiQuota("autocomplete"))) return null;
   try {
     // API key va en la URL para evitar CORS preflight por header X-Goog-Api-Key
     const res = await fetch(`${PLACES_NEW_BASE}:autocomplete?key=${apiKey}`, {
@@ -210,7 +179,6 @@ export const placesAutocomplete = async (
         };
       }>;
     };
-    incrementUsage("places");
     return (data.suggestions ?? []).map((s) => ({
       placeId: s.placePrediction.placeId,
       description: s.placePrediction.text.text,
@@ -232,6 +200,7 @@ export const getPlaceCoords = async (
   apiKey: string,
   sessionToken: string,
 ): Promise<{ lat: number; lng: number; displayName: string } | null> => {
+  if (!(await consumeApiQuota("places"))) return null;
   try {
     // $fields evita el header X-Goog-FieldMask (que dispara CORS preflight)
     const url = `${PLACES_NEW_BASE}/${placeId}?key=${apiKey}&sessionToken=${sessionToken}&languageCode=es&$fields=location,formattedAddress,displayName`;

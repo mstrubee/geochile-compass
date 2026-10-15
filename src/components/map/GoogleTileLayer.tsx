@@ -8,7 +8,6 @@ import {
   createGoogleTileSession,
   basemapToGoogleMapType,
   buildGoogleTileUrl,
-  incrementUsage,
 } from "@/services/googleMapsService";
 import { useGoogleMapsKey } from "@/hooks/useGoogleMapsKey";
 
@@ -58,10 +57,6 @@ export const GoogleTileLayer = ({ basemap, onSessionCreated }: Props) => {
       attribution='© <a href="https://maps.google.com">Google</a>'
       maxZoom={20}
       crossOrigin="anonymous"
-      eventHandlers={{
-        // Contar tiles directo en localStorage — sin setState, sin re-renders
-        tileload: () => incrementUsage("tiles"),
-      }}
     />
   );
 };
