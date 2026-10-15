@@ -14,6 +14,111 @@ export type Database = {
   }
   public: {
     Tables: {
+      _backup_custom_layers_retire_20261015: {
+        Row: {
+          activo: boolean | null
+          color_hex: string | null
+          created_at: string | null
+          feature_count: number | null
+          geojson: Json | null
+          icon_emoji: string | null
+          id: string | null
+          name: string | null
+        }
+        Insert: {
+          activo?: boolean | null
+          color_hex?: string | null
+          created_at?: string | null
+          feature_count?: number | null
+          geojson?: Json | null
+          icon_emoji?: string | null
+          id?: string | null
+          name?: string | null
+        }
+        Update: {
+          activo?: boolean | null
+          color_hex?: string | null
+          created_at?: string | null
+          feature_count?: number | null
+          geojson?: Json | null
+          icon_emoji?: string | null
+          id?: string | null
+          name?: string | null
+        }
+        Relationships: []
+      }
+      _backup_folder_layer_roles_retire_20261015: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          folder_id: string | null
+          group_id: string | null
+          id: string | null
+          layer_id: string | null
+          role: string | null
+          updated_at: string | null
+          weight_override: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          folder_id?: string | null
+          group_id?: string | null
+          id?: string | null
+          layer_id?: string | null
+          role?: string | null
+          updated_at?: string | null
+          weight_override?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          folder_id?: string | null
+          group_id?: string | null
+          id?: string | null
+          layer_id?: string | null
+          role?: string | null
+          updated_at?: string | null
+          weight_override?: number | null
+        }
+        Relationships: []
+      }
+      _backup_territorial_layer_groups_retire_20261015: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          icon: string | null
+          id: string | null
+          name: string | null
+          order_index: number | null
+          slug: string | null
+          updated_at: string | null
+          visible_default: boolean | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          icon?: string | null
+          id?: string | null
+          name?: string | null
+          order_index?: number | null
+          slug?: string | null
+          updated_at?: string | null
+          visible_default?: boolean | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          icon?: string | null
+          id?: string | null
+          name?: string | null
+          order_index?: number | null
+          slug?: string | null
+          updated_at?: string | null
+          visible_default?: boolean | null
+        }
+        Relationships: []
+      }
       _backup_territorial_layer_groups_v1_20261014: {
         Row: {
           color: string | null
@@ -47,6 +152,21 @@ export type Database = {
           slug?: string | null
           updated_at?: string | null
           visible_default?: boolean | null
+        }
+        Relationships: []
+      }
+      _backup_territorial_layers_group_retire_20261015: {
+        Row: {
+          group_id: string | null
+          id: string | null
+        }
+        Insert: {
+          group_id?: string | null
+          id?: string | null
+        }
+        Update: {
+          group_id?: string | null
+          id?: string | null
         }
         Relationships: []
       }
@@ -110,6 +230,21 @@ export type Database = {
           source_file_id?: string | null
           source_name?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      _backup_territorial_source_files_retire_20261015: {
+        Row: {
+          group_id: string | null
+          id: string | null
+        }
+        Insert: {
+          group_id?: string | null
+          id?: string | null
+        }
+        Update: {
+          group_id?: string | null
+          id?: string | null
         }
         Relationships: []
       }
@@ -971,39 +1106,6 @@ export type Database = {
           },
         ]
       }
-      custom_layers: {
-        Row: {
-          activo: boolean | null
-          color_hex: string
-          created_at: string | null
-          feature_count: number | null
-          geojson: Json
-          icon_emoji: string | null
-          id: string
-          name: string
-        }
-        Insert: {
-          activo?: boolean | null
-          color_hex?: string
-          created_at?: string | null
-          feature_count?: number | null
-          geojson: Json
-          icon_emoji?: string | null
-          id?: string
-          name: string
-        }
-        Update: {
-          activo?: boolean | null
-          color_hex?: string
-          created_at?: string | null
-          feature_count?: number | null
-          geojson?: Json
-          icon_emoji?: string | null
-          id?: string
-          name?: string
-        }
-        Relationships: []
-      }
       custom_roles: {
         Row: {
           created_at: string
@@ -1113,7 +1215,7 @@ export type Database = {
             foreignKeyName: "folder_layer_roles_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
-            referencedRelation: "territorial_layer_groups"
+            referencedRelation: "layer_nodes"
             referencedColumns: ["id"]
           },
           {
@@ -1121,6 +1223,13 @@ export type Database = {
             columns: ["layer_id"]
             isOneToOne: false
             referencedRelation: "territorial_layers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folder_layer_roles_layer_id_fkey"
+            columns: ["layer_id"]
+            isOneToOne: false
+            referencedRelation: "territorial_layers_active"
             referencedColumns: ["id"]
           },
         ]
@@ -2234,42 +2343,6 @@ export type Database = {
           },
         ]
       }
-      territorial_layer_groups: {
-        Row: {
-          color: string | null
-          created_at: string
-          icon: string | null
-          id: string
-          name: string
-          order_index: number
-          slug: string
-          updated_at: string
-          visible_default: boolean
-        }
-        Insert: {
-          color?: string | null
-          created_at?: string
-          icon?: string | null
-          id?: string
-          name: string
-          order_index?: number
-          slug: string
-          updated_at?: string
-          visible_default?: boolean
-        }
-        Update: {
-          color?: string | null
-          created_at?: string
-          icon?: string | null
-          id?: string
-          name?: string
-          order_index?: number
-          slug?: string
-          updated_at?: string
-          visible_default?: boolean
-        }
-        Relationships: []
-      }
       territorial_layers: {
         Row: {
           bbox: Json | null
@@ -2336,14 +2409,7 @@ export type Database = {
             foreignKeyName: "territorial_layers_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
-            referencedRelation: "territorial_layer_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "territorial_layers_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "territorial_layer_groups_active"
+            referencedRelation: "layer_nodes"
             referencedColumns: ["id"]
           },
           {
@@ -2426,7 +2492,7 @@ export type Database = {
             foreignKeyName: "territorial_source_files_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
-            referencedRelation: "territorial_layer_groups"
+            referencedRelation: "layer_nodes"
             referencedColumns: ["id"]
           },
         ]
@@ -2603,20 +2669,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      territorial_layer_groups_active: {
-        Row: {
-          color: string | null
-          created_at: string | null
-          icon: string | null
-          id: string | null
-          name: string | null
-          order_index: number | null
-          slug: string | null
-          updated_at: string | null
-          visible_default: boolean | null
-        }
-        Relationships: []
       }
       v_bancos: {
         Row: {
@@ -3355,14 +3407,7 @@ export type Database = {
             foreignKeyName: "territorial_layers_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
-            referencedRelation: "territorial_layer_groups"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "territorial_layers_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "territorial_layer_groups_active"
+            referencedRelation: "layer_nodes"
             referencedColumns: ["id"]
           },
           {
@@ -3472,10 +3517,6 @@ export type Database = {
         }
         Returns: string
       }
-      _layer_nodes_ensure_legacy_group: {
-        Args: { n: Database["public"]["Tables"]["layer_nodes"]["Row"] }
-        Returns: undefined
-      }
       _layer_nodes_next_position: {
         Args: { p_parent: string }
         Returns: string
@@ -3490,17 +3531,10 @@ export type Database = {
         Args: { p_group: string; p_name: string }
         Returns: string
       }
-      _legacy_group_style: {
-        Args: {
-          g: Database["public"]["Tables"]["territorial_layer_groups"]["Row"]
-        }
-        Returns: Json
-      }
       _legacy_layer_style: {
         Args: { l: Database["public"]["Tables"]["territorial_layers"]["Row"] }
         Returns: Json
       }
-      _legacy_slug: { Args: { p_name: string }; Returns: string }
       _postgis_deprecate: {
         Args: { newname: string; oldname: string; version: string }
         Returns: undefined
@@ -4646,10 +4680,6 @@ export type Database = {
       st_wrapx: {
         Args: { geom: unknown; move: number; wrap: number }
         Returns: unknown
-      }
-      sync_layer_nodes_from_legacy: {
-        Args: { p_reorder?: boolean }
-        Returns: Json
       }
       territorial_role_default_weight: {
         Args: { role_name: string }
