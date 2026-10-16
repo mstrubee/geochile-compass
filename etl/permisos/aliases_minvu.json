@@ -1,0 +1,10 @@
+[
+  {"region_label": "Aysén", "name": "Coyhaique", "cut": "11101",
+   "reason": "Grafía del archivo MINVU; public/codigos_territoriales.csv escribe 'Coihaique'"},
+  {"region_label": "Aysén", "name": "Aysén", "cut": "11201",
+   "reason": "Grafía del archivo MINVU; public/codigos_territoriales.csv escribe 'Aisen'"},
+  {"region_label": "Aysén", "name": "O’Higgins", "cut": "11302",
+   "reason": "Grafía del archivo MINVU (apóstrofe tipográfico); public/codigos_territoriales.csv escribe 'OHiggins'"},
+  {"region_label": "Magallanes", "name": "Cabo de Hornos (Ex - Navarino)", "cut": "12201",
+   "reason": "El archivo MINVU agrega '(Ex - Navarino)'; public/codigos_territoriales.csv escribe 'Cabo de Hornos'"}
+]
