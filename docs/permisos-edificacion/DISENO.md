@@ -401,3 +401,154 @@ Estado: ✔ = comprobado en esta sesión (PostgreSQL local / vitest) · ◻ = pe
 8. **Normalización per cápita:** `public/ine_communes.csv` existe pero su año/fuente no están comprobados; no se usa.
 9. **Tablas existentes con comuna como nombre** (no CUT): migrarlas a `comuna_cut` con FK es trabajo futuro.
 10. **Nombres y timestamps** de las migraciones son provisorios; se renumeran al aplicarlas (deben ser posteriores a `20261015130000`).
+
+---
+
+## Parte 4 – SEIA (proyectos puntuales)
+
+**Fecha:** 2026-10-17 · **Rama:** `feat/proyectos-puntuales` · **Estado:** propuesta; **nada está aplicado** al proyecto Supabase real.
+Sustituye a §8 («Proyectos individuales: SEIA, fase 2»), a la migración `20261020120300_building_projects.sql` (que se elimina: nunca se aplicó)
+y a los criterios F1–F3 de §11. Cubre **solo el SEIA**; los datos del INE (permisos en puntos, recepciones finales) no se tocan aquí.
+Mismas etiquetas que el resto del documento: **[COMPROBADO]** · **[COMPROBADO·usuario]** · **[HIPÓTESIS]** · **[NO COMPROBADO]**.
+
+### P4.1 Resumen
+
+1. **Tablas propias del SEIA** (`seia_*`); no hay una tabla genérica de «proyectos» compartida con otra fuente. Una vista común, si hace falta, va en un PR aparte.
+2. **«Vigente» es un puntero por fuente** (`seia_current_snapshot`), no una columna por fila. El primer diseño (`is_current` en cada fila) reescribía ~56.000 filas por carga
+   y, sin purga, acumulaba una foto completa por semana: **494 MB con 3 cargas** medidas (§P4.6). Ahora publicar es un `upsert` de una fila y **84 MB** con las mismas 3 cargas.
+3. **La validación geográfica vive en una tabla angosta** (`seia_project_geo_checks`): `seia_projects` no se actualiza nunca (trigger). El punto original **jamás se mueve**;
+   una corrección es una fila de `seia_project_geo_reviews` (append-only, sobrevive a nuevas cargas y a la purga).
+4. **Cuadre exacto con el servicio**: el ETL pide el conteo (`returnCountOnly`) antes y después de paginar y exige recibidos = conteo = conteo final y cargables + rechazados = conteo.
+   Una paginación cortada, o un servicio que cambia mientras se pagina, **no se carga**. `seia_publish_snapshot()` lo vuelve a exigir en la base.
+5. **En el mapa**, la capa se monta por **dataset** (`ProyectosHost` + `proyectos/datasets/*.tsx`): otra fuente de puntos se agrega con **un archivo nuevo**, sin editar el anfitrión (§P4.7).
+6. **Nada se corrige en silencio**: lo que el ETL interpreta o no puede leer se cuenta en el reporte; una ubicación dudosa se **marca** (hueca y punteada), no se oculta ni se mueve.
+
+### P4.2 Qué está comprobado y qué no
+
+| Hecho | Estado | Cómo |
+|---|---|---|
+| El servicio ArcGIS del SEA: capa 1 = EIA (1.594), capa 2 = DIA (28.408), `maxRecordCount` 2000, paginación por `resultOffset` | **[COMPROBADO·usuario]** | §1.1 y el sondeo real del 2026-10-17 que corrió el usuario (documentado en `docs/proyectos-parte4/HALLAZGOS_SONDEO.md` de `feat/proyectos-parte4`; **no** está en esta rama) |
+| `COMUNAS` es el **nombre** y varias comunas van separadas por **guion** (`Pica-Pozo Almonte`); ninguna comuna oficial lleva guion | **[COMPROBADO·usuario]** | idem; el ETL de esta rama **partía** por coma/punto y coma y no por guion: el primer cruce contra datos reales dejó 27 de 270 expedientes con la comuna sin resolver. Corregido y con prueba |
+| Las fechas son epoch en ms a **medianoche UTC**; la geometría del servicio coincide con `NUEVO_X/NUEVO_Y` (`X/Y` vienen redondeados); `ID_EXPEDIENTE` supera 2³¹ | **[COMPROBADO·usuario]** | idem. El ETL toma la fecha UTC, usa solo la geometría del servicio (`X/Y` quedan en `raw`) y guarda el ID como **texto** |
+| El servicio entrega `URL_EXPEDIENTE` (`https://seia.sea.gob.cl/expediente/expediente.php?id_expediente=<id>`) y `USUARIO` (nombre de usuario del **funcionario** que editó el registro) | **[COMPROBADO·usuario]** | idem. La URL va a su columna; `USUARIO` **no se guarda** (dato personal innecesario; sigue en el original archivado en Storage). El enlace «construido» de respaldo usaba un patrón recordado de memoria y **distinto** del real: corregido |
+| El mismo código de tipología tiene nombres distintos según el año del reglamento; `h.1` incluye proyectos no residenciales | **[COMPROBADO·usuario]** | idem. Por eso el filtro es por **código exacto** y el panel avisa que «inmobiliario» no es vivienda |
+| El normalizador contra **270 expedientes reales** (130 EIA + 140 DIA, recortes de esa rama): 0 rechazados, 270/270 con punto, 270/270 comunas resueltas | **[COMPROBADO]** | corrida local contra los archivos de `feat/proyectos-parte4` **sin copiarlos** a esta rama; **no es una prueba versionada** (las pruebas de esta rama usan datos sintéticos) |
+| Migraciones: 130 aserciones SQL, idempotencia (cada una 3 veces), rollback en cadena 3→2→1 (y se niega en el orden inverso), reaplicar | **[COMPROBADO]** | PostgreSQL 16 + PostGIS 3.4 local, esquema mínimo que imita al del repo y las 346 comunas reales; mutaciones: 8 de 9 detectadas (la 9.ª es equivalente: una fila vigente siempre está en el snapshot más nuevo, que siempre cae en la ventana) |
+| ETL: 73 pruebas (63 de mecánica con un servidor ArcGIS **falso local** + 10 extremo a extremo contra Postgres); 13 de 13 mutaciones detectadas | **[COMPROBADO]** | `etl/seia/tests` |
+| Front: 80 pruebas nuevas (477 en total); la capa de puntos en canvas se vio dibujar y responder al clic en Chromium con un arnés aislado (ya borrado) | **[COMPROBADO]** | vitest + jsdom; el arnés mostró estilos por calidad de ubicación, la corrección propuesta aparte y el clic sobre el punto original y sobre el propuesto |
+| El servicio **real** desde esta sesión; la carga a Supabase/Storage reales; la app completa en un navegador; las migraciones contra el proyecto real (P10) | **[NO COMPROBADO]** | el proxy bloquea los hosts; la carga real la corre quien tenga `SUPABASE_DB_URL` |
+| Licencia del SEA | **[NO COMPROBADO]** | sin licencia declarada en el servicio (`copyrightText = "sea"`); `license_label` sigue «por confirmar» y ser un organismo del Estado no equivale a una licencia de reutilización |
+
+### P4.3 Modelo de datos
+
+```
+data_sources ──< source_snapshots ──< seia_projects ──1:1── seia_project_geo_checks
+ (EIA, DIA)            │  └──< seia_rejected_rows
+                       └── seia_current_snapshot (1 fila por fuente: la foto vigente)
+data_sources ──< seia_project_geo_reviews   (por fuente + expediente: sobrevive a las cargas y a la purga)
+```
+
+| Tabla | Para qué | Claves y restricciones destacadas |
+|---|---|---|
+| `seia_projects` | Un expediente por foto. Campos del servicio en columnas tipadas; `raw jsonb` solo con lo que **no** tiene columna (`OBJECTID`, `X`, `Y`, `NUEVO_X/Y`, fechas en epoch…) | `UNIQUE(snapshot_id, external_id)`; FK compuesta `(snapshot_id, source_id)`; `external_id` **texto**; trigger que **prohíbe todo UPDATE**; `comuna_cuts char(5)[]` y `comunas_unresolved text[]` |
+| `seia_project_geo_checks` | Resultado de la validación punto-en-polígono (una fila angosta por proyecto) | `status` ∈ `inside · near_border · outside_declared · comuna_unmatched · no_geometry`; «sin validar» = no hay fila y **publish no avanza** |
+| `seia_current_snapshot` | La foto vigente de cada fuente | PK `source_id`; solo `seia_publish_snapshot()` escribe |
+| `seia_rejected_rows` | Expedientes que no se pudieron cargar, con motivo | `missing_id · duplicate_key · unreadable_feature` |
+| `seia_project_geo_reviews` | Revisión humana de una ubicación dudosa | **append-only**; solo `admin` inserta y a su nombre (`reviewed_by = auth.uid()`); `corrected` exige punto propuesto |
+| `seia_projects_current_v` | Vista del mapa: solo la foto vigente, punto original + última revisión **sin mezclarlos** | `security_invoker`; sin `raw` |
+
+**Reutilizado sin editar** (parte 1): `data_sources` (`seia_proyectos_eia`, `seia_proyectos_dia`, dataset `building_projects`), `source_snapshots`, `source_checks`, `comunas`, `comuna_name_aliases`
+y los umbrales `projects.near_border_m` (500 m), `publish.max_reject_ratio` (0,5 %) y `retention.keep_snapshots` (2). **Ninguna semilla compartida se modificó.**
+RLS: `authenticated` lee; nadie escribe por la API; `anon` sin acceso; `check_*`, `publish` y `purge` solo `service_role`.
+
+**Decisiones y alternativas descartadas**
+
+* **Carga completa de las dos capas, filtro al leer.** El cuadre con el servicio es exacto y no se pierde información si cambia la lista de tipologías. Se descartó filtrar por tipología en el ETL (menos filas, pero el cuadre pasaría a depender de una lista editable); reconsiderar si el tamaño molesta.
+* **Tipología por código exacto, no por letra.** Valor inicial de la hoja: `["g", "h.1"]` (el grupo `g` se expande a los códigos que existen: desarrollo urbano/turístico; `h.1` = proyectos inmobiliarios).
+  **Excluye** `h.2` (industriales) y `h.3`–`h.6` (planes de ordenamiento, no son obras). Es un **dato** de `thematic_layers.default_params`, editable por un admin sin desplegar código.
+  **[HIPÓTESIS]** que esa sea la definición de «inmobiliario» que se quiere: el panel muestra el filtro activo y permite pasar a «Todas».
+* **Una comuna sin resolver no se esconde**: `comunas_unresolved` y `geo_check_detail.unresolved`. Con varias comunas declaradas basta caer dentro de **alguna** resuelta.
+* **Coordenadas fuera de rango o geometría no puntual**: el expediente se conserva **sin punto** (`no_geometry`) y se cuenta; no se descarta ni se «arregla» (p. ej. metros tomados por grados).
+
+### P4.4 Pipeline (ETL)
+
+`python etl/seia_proyectos.py --dry-run` (ensayo: no escribe en la base ni en Storage) y, sin `--dry-run`, la carga. Detalle y opciones: [`etl/seia/README.md`](../../etl/seia/README.md).
+
+```
+1 CONTAR     returnCountOnly de la capa
+2 PAGINAR    orderByFields=OBJECTID, resultOffset += lo recibido, hasta página vacía (tope contra paginación sin fin)
+3 CONTAR     de nuevo: debe ser el mismo
+4 ARCHIVAR   páginas tal como llegaron (.seia.gz determinista); sha256 = el de las PÁGINAS (idempotente aunque cambien los metadatos)
+5 NORMALIZAR comunas (nombre exacto + alias), fechas, inversión, punto; todo lo dudoso se cuenta
+6 CARGAR     COPY a seia_projects + seia_rejected_rows; status = validated
+7 VALIDAR    seia_check_geometry (tolerancia configurable)
+8 PUBLICAR   seia_publish_snapshot (cuadre, umbral de rechazo, sin proyectos sin validar, no publica una foto más vieja) y seia_purge_superseded, en UNA transacción
+9 REGISTRAR  source_checks: ok_new_data · ok_same_content · unreachable
+```
+
+Códigos de salida: 0 ok · 2 argumentos/archivo · 3 no cuadra con el servicio · 4 red/base/Storage · 5 hay rechazados (se carga igual si están bajo el umbral). Una publicación rechazada deja el snapshot `rejected` con su motivo y se puede reintentar con el mismo contenido.
+`--from-archive` reproduce una captura guardada **sin red**. El ETL **no** está programado: la frecuencia semanal de §6 sigue siendo un workflow por crear (decisión abierta, §P4.9).
+
+### P4.5 Lectura, mapa y ficha
+
+* **RPC** (`security invoker`): `get_seia_projects()` (recuadro + filtros; usa el GIST; devuelve los de **mayor inversión declarada** si hay más de 3.000 y dice cuántos había), `get_seia_facets()` (valores **reales** de tipologías, estados y años, y la calidad de ubicación de lo vigente) y `get_seia_project()` (la ficha con su procedencia). La procedencia y frescura de la leyenda salen de `get_layer_provenance('building_projects')`, la misma RPC de permisos.
+* **Hoja del árbol**: *Edificación y expansión urbana ▸ Proyectos SEIA* (`thematic_layers`: `renderer = 'points_projects'`, `dataset = 'seia_projects'`). La carpeta se busca por slug y se crea si falta, así el orden entre ramas no importa.
+* **Panel** (siempre visible): qué es y qué **no** es la capa; fuente, captura, frescura y «Fuente no verificada» si corresponde; filtros por código de tipología, estado, años (por fecha de presentación; un proyecto sin fecha no pasa), EIA/DIA y «ocultar ubicaciones dudosas»; el filtro activo; si la vista está **recortada**; la leyenda de calidad de ubicación con conteos de toda la base.
+* **Mapa**: puntos en canvas, tamaño según la inversión **declarada** (sin dato = el más pequeño), estilo según la calidad de la ubicación; la corrección propuesta por una revisión se dibuja **aparte** (verde, unida con una línea punteada) y nunca reemplaza al original.
+* **Ficha**: campos tal como los informa el SEA; **«no es un permiso de edificación»**, **«inversión declarada»** y «la fecha de calificación no es fecha de permiso»; la calidad de la ubicación con la distancia y la frase «no se movió»; las revisiones; el enlace a e-SEIA (`URL_EXPEDIENTE`; si faltara, uno construido y marcado como tal); la fuente, la captura y la huella; y los atributos originales sin columna propia.
+* **Pendiente a propósito**: no hay formulario para que un admin registre revisiones (la tabla y la RLS están listas; hoy se inserta por SQL o por el cliente).
+
+### P4.6 Espacio y tiempos — medidos, con **textos sintéticos** y los conteos reales (30.002 filas)
+
+Script reproducible: `supabase/tests/seia_projects_space.test.sql` (termina en `ROLLBACK`; **medir con una base recién creada**: las filas muertas de corridas anteriores inflan `pg_table_size`).
+
+| Medida | Resultado |
+|---|---|
+| Una foto completa (30.002 filas) | **29 MB** = tabla 21 + índices 5 + validaciones 3 |
+| 3 fotos de la DIA + 1 de la EIA **sin purgar** | **84 MB** (el primer diseño, con `is_current` por fila: 494 MB) |
+| Régimen con `keep_snapshots = 2` | ≈ **58 MB** (estimado: 2 fotos; el espacio liberado por la purga lo reutiliza `autovacuum`, no se medió) |
+| `seia_check_geometry` sobre 30.002 puntos y las 346 comunas reales | 0,7 s (con `UPDATE` de filas anchas eran 5,5 s) |
+| `get_seia_projects`: Santiago con 3.000 filas / país filtrado por tipología | 120–150 ms / 50–70 ms |
+| `get_seia_facets` (30.002 filas) / `get_seia_project` | 0,4 s / 1–2 ms |
+
+Hallazgos que salieron de medir: el `UPDATE` masivo de `is_current` (bloat), el `UPDATE` de la validación sobre filas anchas (otro 50 % de bloat) y `raw` repitiendo lo que ya estaba en columnas. Con **textos reales** el tamaño puede diferir: **repetir con la primera carga real**.
+
+### P4.7 Agregar otro dataset de puntos (p. ej. INE) sin editar `ProyectosHost`
+
+`ProyectosHost` (montado con **una línea** en `MapView.tsx`) pinta las hojas con `renderer = 'points_projects'` que estén encendidas, **un componente por `dataset`**. Los paneles van a un *dock* común (abajo a la izquierda), así dos fuentes a la vez se apilan en vez de superponerse. Un dataset que falla al dibujarse no tumba el mapa (se avisa en el dock) y uno sin componente muestra un aviso.
+
+1. **Hoja**: una migración propia inserta en `territorial_layers` (carpeta `edificacion_expansion`) y en `thematic_layers` con su `dataset` (modelo: `20261021120200_seia_projects_layer_node.sql`).
+2. **Componente**: recibe `{ layer }` y pinta su capa dentro del `MapContainer`; su panel usa `<ProyectosPanelPortal>`.
+3. **Registro**: un archivo `src/components/map/proyectos/datasets/<nombre>.tsx` con `export default { dataset: "<valor>", Layer: MiComponente } satisfies ProyectosDataset`. `registry.ts` lo descubre solo (`import.meta.glob`). Un archivo nuevo no puede producir conflicto de *merge* con el del SEIA.
+
+Cada dataset tiene **sus propias tablas, RPC, hooks y servicio**. Guía corta: `src/components/map/proyectos/README.md`.
+
+### P4.8 Entrega, orden de despliegue y archivos compartidos
+
+Migraciones (`20261021…`, posteriores a todo lo existente; **no se tocaron las `20261020120000`–`…0200`**): `…120000_seia_projects` (tablas, validación, publicación, purga) → `…120100_seia_projects_read` (RPC) → **[desplegar el front]** → `…120200_seia_projects_layer_node` (hoja del árbol). Rollbacks en `supabase/rollbacks/`; el de las tablas se niega a correr mientras existan las RPC o la hoja (las funciones SQL no registran dependencias).
+Orden: migraciones de permisos 1–3 → `…120000` → `…120100` → `permisos_comunas.py seed` (si falta) → `etl/seia_proyectos.py --dry-run` → carga → front → `…120200`.
+Archivos compartidos tocados (cambios mínimos y aditivos): `src/components/map/MapView.tsx` (+2 líneas: el `import` y el montaje de `ProyectosHost`), `etl/requirements.txt` (+1 línea: `tzdata` para Windows) y este documento (solo esta sección).
+Se **eliminan** `20261020120300_building_projects.sql`, su rollback y `supabase/tests/building_projects.test.sql` (permitido: la migración nunca se aplicó).
+
+### P4.9 Pendientes y decisiones abiertas
+
+1. **Repetir con datos reales** (tamaño, tiempos, y una prueba versionada con recortes reales del sondeo) y correr la primera carga real con `--dry-run`: revisar `AVISOS`, comunas sin resolver y la lista de tipologías.
+2. **Definición de «inmobiliario»** (`["g", "h.1"]`): confirmarla o ajustarla; `h.1` incluye proyectos no residenciales. ¿Mostrar por defecto solo ciertos **estados** (el panel muestra siempre el estado, pero no filtra por defecto)?
+3. **Frecuencia**: SEIA es `automatic` semanal (§5–§6); falta el workflow programado (`workflow_dispatch` + `schedule`) y sus secretos. Mientras tanto la carga es manual.
+4. **Revisión humana**: formulario de admin para `seia_project_geo_reviews` (hoy solo SQL/cliente).
+5. **P7 (de §1.3) quedó así**: formato de `COMUNAS` → guion **[COMPROBADO·usuario]**; CRS → se usa solo la geometría del servicio; fechas → medianoche UTC; términos de uso → **sin licencia declarada**; unicidad de `ID_EXPEDIENTE` → **no comprobada** (el ETL rechaza los repetidos, todas las copias); `MODIFICADO` (1 ó 2) → significado no documentado, queda en `raw`; el servicio no declara `editingInfo.lastEditDate`, así que `declared_date` es `NULL`.
+6. **P10** sigue abierto para estas migraciones: probar en una rama/copia de Supabase (grants de `has_role`, `pg_cron`, Storage).
+7. Una **vista común** de proyectos entre fuentes, si se necesita, va en un PR aparte.
+8. En `main`, `npm ci` falla por `package-lock.json` desincronizado (falta `esbuild@0.28.2`); no se tocó. Las pruebas se corrieron con `npm install --no-package-lock`.
+
+### P4.10 Criterios de aceptación y pruebas
+
+- [x] **F1.** Punto fuera de su comuna ⇒ `outside_declared` con la distancia, sin mover el original. ✔ (SQL, ETL contra Postgres y arnés visual)
+- [x] **F2.** Carga incompleta rechazada (conteo del servicio, antes y después de paginar; y de nuevo en `seia_publish_snapshot`). ✔
+- [x] **F3.** La ficha dice «no es un permiso de edificación» e «inversión declarada». ✔ (vitest; mutación detectada)
+- [x] **F4.** La inversión faltante es `NULL`/«no informada», nunca 0; el estado de la evaluación se muestra siempre; la fuente no verificada se rotula. ✔
+- [x] **F5.** Un dataset nuevo se agrega con un archivo, sin editar `ProyectosHost`; uno roto no tumba el mapa. ✔ (vitest)
+- [ ] **F6.** Probado contra el servicio real y el proyecto Supabase real. ◻ **pendiente** (§P4.2, P10)
+
+**Pruebas ejecutadas:** SQL `seia_projects.test.sql` 130 · SQL de permisos preexistente 92 (sobre la misma base) · `etl/seia/tests` 73 (63 sin base) · `etl/permisos/tests` 43 + 4 omitidas (sin los XLSX completos) · vitest 477 (397 + 80) ·
+`tsc` 22 errores **previos** en 8 archivos ajenos, 0 en lo nuevo · ESLint sin avisos en lo nuevo o tocado. **Previo a este trabajo y sin cambios:** 3 archivos de vitest fallan por falta de `VITE_SUPABASE_URL` (`ImportWizard`, `layerTreeExport`, `nearbyStores`).
