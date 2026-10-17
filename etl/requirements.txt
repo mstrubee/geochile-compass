@@ -8,3 +8,4 @@ supabase>=2.0.0
 python-dotenv>=1.0.0
 psycopg[binary]>=3.1        # etl/permisos_minvu.py y etl/permisos_comunas.py (SUPABASE_DB_URL)
 pytest>=8.0                 # tests de etl/permisos (python -m pytest etl/permisos/tests)
+tzdata; sys_platform == "win32"   # etl/seia_proyectos.py: zona America/Santiago (zoneinfo) en Windows
