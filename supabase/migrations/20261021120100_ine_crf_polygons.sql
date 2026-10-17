@@ -204,6 +204,7 @@ begin
   perform public._ine_crf_make_partition(v_n);
 
   -- reparación una sola vez por fila (la función es inmutable pero costosa)
+  drop table if exists pg_temp._crf_res, pg_temp._crf_fix;        -- por si se publica dos veces en la misma transacción
   create temp table _crf_fix on commit drop as
     select s.src_oid, s.comuna_cut, s.year, s.dwellings,
            ST_SetSRID(ST_GeomFromGeoJSON(s.geojson), 4326) as g0

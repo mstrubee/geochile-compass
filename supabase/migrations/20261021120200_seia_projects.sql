@@ -188,6 +188,10 @@ begin
     raise exception 'ya hay un snapshot más nuevo publicado; no se publica uno más viejo';
   end if;
 
+  if exists (select 1 from public.seia_stage where snapshot_n = v_n and service_layer <> v_layer) then
+    raise exception 'hay filas de otra capa en la zona de paso';
+  end if;
+
   -- conteos: lo cargado + lo excluido por tipología + lo rechazado = lo que el servidor declaró; el servidor no cambió
   select count(*) into v_staged from public.seia_stage where snapshot_n = v_n;
   v_excluded := coalesce((v_snap.validation_report ->> 'typology_excluded_count')::bigint, -1);
@@ -207,9 +211,6 @@ begin
   end if;
 
   -- dominios
-  if exists (select 1 from public.seia_stage where snapshot_n = v_n and service_layer <> v_layer) then
-    raise exception 'hay filas de otra capa en la zona de paso';
-  end if;
   select string_agg(distinct s.typology_letter, ', ') into v_bad from public.seia_stage s
     left join public.seia_typology_rules r on r.letter = s.typology_letter and r.include
    where s.snapshot_n = v_n and r.letter is null;
@@ -227,6 +228,7 @@ begin
 
   -- validación geográfica contra la(s) comuna(s) que declara el expediente; la distancia solo se calcula si no cae dentro
   v_near := public.pipeline_setting('projects.near_border_m');
+  drop table if exists pg_temp._seia_geo;                           -- por si se publica dos veces en la misma transacción
   create temp table _seia_geo on commit drop as
     select s.expediente_id,
            case when s.lon is null or s.lat is null then null else ST_SetSRID(ST_MakePoint(s.lon, s.lat), 4326) end as pt,
