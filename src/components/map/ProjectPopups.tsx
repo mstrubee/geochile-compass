@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
 import type { CrfPolygonRow, InePermitPointRow, SeiaProjectRow } from "@/types/projects";
 import {
-  fmtDate, fmtInt, fmtUsd, PE_GEO_STATUS_LABEL, PRECISION_LABEL, safeHttpUrl, SEIA_DOUBTFUL, SEIA_GEO_STATUS_LABEL, USO_LABEL, WARN,
+  fmtDate, fmtInt, fmtUsd, PE_GEO_STATUS_LABEL, PRECISION_LABEL, safeHttpUrl, isCoarseLocation, SEIA_DOUBTFUL, SEIA_GEO_STATUS_LABEL, USO_LABEL, WARN,
 } from "@/utils/projectsScale";
 
 const Row = ({ k, v }: { k: string; v: React.ReactNode }) => (
@@ -65,6 +65,7 @@ export const SeiaPopup = ({ row }: { row: SeiaProjectRow }) => {
           . El punto mostrado es el original de la fuente; no se movió.
         </p>
       )}
+      {isCoarseLocation(row) && <p className="text-red-700" data-testid="popup-seia-coarse">{WARN.seiaCoarse}</p>}
       {row.review_decision === "propose_correction" && <p className="text-blue-700">Hay una corrección PROPUESTA (no oficial){row.review_note ? `: ${row.review_note}` : ""}; se dibuja aparte.</p>}
       <p className="text-amber-700">{WARN.seiaQualified} {WARN.seiaInvestment}</p>
       {url && <a className="underline" href={url} target="_blank" rel="noopener noreferrer">Expediente en el SEIA<ExternalLink className="ml-0.5 inline h-3 w-3" /></a>}

@@ -35,7 +35,7 @@ export const SeiaProjectsPanel = (p: Props) => {
   };
   const thisYear = new Date().getFullYear();
   const warnings = [
-    WARN.seiaScope, WARN.seiaQualified, WARN.seiaInvestment, WARN.seiaTypology,
+    WARN.seiaScope, WARN.seiaQualified, WARN.seiaInvestment, WARN.seiaTypology, WARN.seiaCoarse,
     ...(doubtful > 0 ? [`${fmtInt(doubtful)} de ${fmtInt(total)} proyectos tienen ubicación dudosa (fuera de su comuna declarada o con la comuna sin cruzar); se dibujan con borde rojo y su punto es el original de la fuente.`] : []),
   ];
   return (
@@ -65,7 +65,7 @@ export const SeiaProjectsPanel = (p: Props) => {
       <div data-testid="seia-legend" className="space-y-1">
         <p className="font-medium">{p.loading ? "Cargando…" : `${fmtInt(p.shown)} proyectos en el mapa`}</p>
         {p.error && <p role="alert" className="text-destructive">No se pudieron leer los datos: {p.error}</p>}
-        <p>Color = estado de evaluación. Borde rojo punteado = ubicación dudosa. Círculo azul punteado = corrección propuesta (no oficial).</p>
+        <p>Color = estado de evaluación. Borde rojo punteado = ubicación dudosa o aproximada (coordenadas redondeadas a grado entero). Círculo azul punteado = corrección propuesta (no oficial).</p>
       </div>
       <SourceBlock title="Proyectos SEIA" sources={p.sources} error={p.provenanceError} loading={p.provenanceLoading} warnings={warnings} />
     </ProjectsPanelShell>

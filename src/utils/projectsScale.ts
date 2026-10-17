@@ -37,6 +37,8 @@ export const SEIA_STATE_COLOR: Record<string, string> = {
   "Rechazado": "#dc2626", "No calificado": "#6b7280", "Abandonado": "#9ca3af", "Caducado": "#9ca3af", "Revocado": "#b91c1c", "Renuncia RCA": "#9ca3af",
 };
 export const stateColor = (s: string) => SEIA_STATE_COLOR[s] ?? "#6b7280";
+/** Punto exactamente sobre un grado entero de lat y lon: coordenadas redondeadas en la fuente (X/Y crudos), no una ubicación real. */
+export const isCoarseLocation = (r: { lon: number; lat: number }) => Number.isInteger(r.lon) && Number.isInteger(r.lat);
 export const SEIA_DEFAULT_STATES = ["Aprobado", "En Calificación"];
 
 // ---------------------------------------------------------------------------------------------- advertencias
@@ -49,6 +51,7 @@ export const WARN = {
   seiaScope: "Solo proyectos que ingresan al SEIA (no es un catastro de edificación).",
   seiaQualified: "La fecha de calificación NO es un permiso de edificación ni el inicio de obras.",
   seiaInvestment: "La inversión es la DECLARADA por el titular, no la ejecutada.",
+  seiaCoarse: "Ubicación APROXIMADA: la fuente trae las coordenadas redondeadas a grado entero (puede estar a decenas de km del proyecto real).",
   seiaTypology: "La tipología «inmobiliaria» incluye proyectos no residenciales (fábricas, centros comerciales…).",
 } as const;
 

@@ -28,6 +28,13 @@ const prov = (over: Partial<LayerProvenanceRow> = {}): LayerProvenanceRow => ({
 });
 
 describe("utilidades", () => {
+  it("SEIA: coordenadas de grado entero se avisan como ubicación APROXIMADA y no se mueven", () => {
+    const first = render(<SeiaPopup row={{ ...seiaRow, lon: -71, lat: -33, geo_status: 0, review_decision: null }} />);
+    expect(screen.getByTestId("popup-seia-coarse").textContent).toContain("APROXIMADA");
+    first.unmount();
+    render(<SeiaPopup row={{ ...seiaRow, lon: -70.72, lat: -33.8, geo_status: 0, review_decision: null }} />);
+    expect(screen.queryByTestId("popup-seia-coarse")).toBeNull();
+  });
   it("el radio de un cluster crece con las unidades y está acotado", () => {
     expect(clusterRadius(1)).toBeLessThan(clusterRadius(100));
     expect(clusterRadius(100)).toBeLessThan(clusterRadius(100000));
