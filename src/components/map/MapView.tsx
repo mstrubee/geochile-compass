@@ -36,6 +36,8 @@ import type { Isochrone } from "@/types/isochrones";
 import type { SavedPoi } from "@/types/pois";
 import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
 import type { IneVariable } from "@/utils/ineScales";
+import { PermitsHost } from "@/components/map/PermitsHost";
+import { useThematicLayers } from "@/hooks/usePermits";
 
 // Fix default Leaflet marker icon paths (when bundled)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -496,11 +498,16 @@ const TerritorialLayersHost = () => {
   }, [layers, ensureVisibleDefaults]);
   // El árbol manda: una capa archivada ahí deja de pintarse. Si el árbol no cargó,
   // se pinta todo como antes en vez de dejar el mapa sin capas.
+  // Las capas temáticas (p. ej. permisos de edificación) las dibuja su propio renderer, no TerritorialLayersLayer.
+  const { data: thematic } = useThematicLayers();
+  const thematicRows = useMemo(() => thematic ?? [], [thematic]);
   const activeLayers = useMemo(() => {
-    if (!tree) return layers;
+    const themIds = new Set(thematicRows.map((t) => t.layer_id));
+    const own = layers.filter((l) => !themIds.has(l.id));
+    if (!tree) return own;
     const active = new Set(tree.nodes.filter((n) => n.kind === "layer").map((n) => n.id));
-    return layers.filter((l) => active.has(l.id));
-  }, [layers, tree]);
+    return own.filter((l) => active.has(l.id));
+  }, [layers, tree, thematicRows]);
   // Opacidad fijada por un administrador en las propiedades de cada capa.
   const opacityByLayer = useMemo(() => {
     const m = new Map<string, number>();
@@ -510,12 +517,15 @@ const TerritorialLayersHost = () => {
     return m;
   }, [tree]);
   return (
-    <TerritorialLayersLayer
-      layers={activeLayers}
-      visibleLayerIds={visibleLayerIds}
-      heatmap={heatmapEnabled}
-      opacityByLayer={opacityByLayer}
-    />
+    <>
+      <TerritorialLayersLayer
+        layers={activeLayers}
+        visibleLayerIds={visibleLayerIds}
+        heatmap={heatmapEnabled}
+        opacityByLayer={opacityByLayer}
+      />
+      <PermitsHost thematic={thematicRows} visibleLayerIds={visibleLayerIds} />
+    </>
   );
 };
 
