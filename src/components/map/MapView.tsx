@@ -38,6 +38,7 @@ import type { Microzone, MicrozoneSubmode } from "@/types/microzones";
 import type { IneVariable } from "@/utils/ineScales";
 import { PermitsHost } from "@/components/map/PermitsHost";
 import { useThematicLayers } from "@/hooks/usePermits";
+import { ProyectosHost } from "@/components/map/ProyectosHost";
 
 // Fix default Leaflet marker icon paths (when bundled)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -525,6 +526,7 @@ const TerritorialLayersHost = () => {
         opacityByLayer={opacityByLayer}
       />
       <PermitsHost thematic={thematicRows} visibleLayerIds={visibleLayerIds} />
+      <ProyectosHost thematic={thematicRows} visibleLayerIds={visibleLayerIds} />
     </>
   );
 };
