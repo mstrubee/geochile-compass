@@ -1,0 +1,184 @@
+{
+ "name": "EIA",
+ "geometryType": "esriGeometryPoint",
+ "maxRecordCount": 2000,
+ "editingInfo": null,
+ "fields": [
+  {
+   "name": "OBJECTID",
+   "type": "esriFieldTypeOID",
+   "alias": "OBJECTID",
+   "domain": null
+  },
+  {
+   "name": "ID_EXPEDIENTE",
+   "type": "esriFieldTypeDouble",
+   "alias": "ID_Expediente",
+   "domain": null
+  },
+  {
+   "name": "NOMBRE_PROYECTO",
+   "type": "esriFieldTypeString",
+   "alias": "Nombre_Proyecto",
+   "length": 1000,
+   "domain": null
+  },
+  {
+   "name": "FORMA_PRESENTACION",
+   "type": "esriFieldTypeString",
+   "alias": "Forma_Presentacion",
+   "length": 255,
+   "domain": null
+  },
+  {
+   "name": "LETRA_TIPOLOGIA",
+   "type": "esriFieldTypeString",
+   "alias": "Letra_Tipologia",
+   "length": 255,
+   "domain": null
+  },
+  {
+   "name": "REGION",
+   "type": "esriFieldTypeString",
+   "alias": "Region",
+   "length": 255,
+   "domain": null
+  },
+  {
+   "name": "TITULAR",
+   "type": "esriFieldTypeString",
+   "alias": "Titular",
+   "length": 255,
+   "domain": null
+  },
+  {
+   "name": "ESTADO_EVALUACION",
+   "type": "esriFieldTypeString",
+   "alias": "Estado_Evaluacion",
+   "length": 255,
+   "domain": null
+  },
+  {
+   "name": "FECHA_PRESENTACION",
+   "type": "esriFieldTypeDate",
+   "alias": "Fecha_Presentacion",
+   "length": 8,
+   "domain": null
+  },
+  {
+   "name": "X",
+   "type": "esriFieldTypeDouble",
+   "alias": "x",
+   "domain": null
+  },
+  {
+   "name": "Y",
+   "type": "esriFieldTypeDouble",
+   "alias": "y",
+   "domain": null
+  },
+  {
+   "name": "COMUNAS",
+   "type": "esriFieldTypeString",
+   "alias": "Comunas",
+   "length": 1073741822,
+   "domain": null
+  },
+  {
+   "name": "USUARIO",
+   "type": "esriFieldTypeString",
+   "alias": "usuario",
+   "length": 60,
+   "domain": null
+  },
+  {
+   "name": "MODIFICADO",
+   "type": "esriFieldTypeSmallInteger",
+   "alias": "modificado",
+   "domain": null
+  },
+  {
+   "name": "FECHA_MODIFICACION",
+   "type": "esriFieldTypeDate",
+   "alias": "Fecha_modificacion",
+   "length": 8,
+   "domain": null
+  },
+  {
+   "name": "NUEVO_X",
+   "type": "esriFieldTypeDouble",
+   "alias": "nuevo_x",
+   "domain": null
+  },
+  {
+   "name": "NUEVO_Y",
+   "type": "esriFieldTypeDouble",
+   "alias": "nuevo_y",
+   "domain": null
+  },
+  {
+   "name": "FECHA_CALIFICACION",
+   "type": "esriFieldTypeDate",
+   "alias": "Fecha_Calificacion",
+   "length": 8,
+   "domain": null
+  },
+  {
+   "name": "INVERSION_US",
+   "type": "esriFieldTypeDouble",
+   "alias": "Inversion_US",
+   "domain": null
+  },
+  {
+   "name": "URL_EXPEDIENTE",
+   "type": "esriFieldTypeString",
+   "alias": "URL_EXPEDIENTE",
+   "length": 256,
+   "domain": null
+  },
+  {
+   "name": "NOMBRE_TIPOLOGIA",
+   "type": "esriFieldTypeString",
+   "alias": "NOMBRE_TIPOLOGIA",
+   "length": 1000,
+   "domain": null
+  },
+  {
+   "name": "ID_DOC_EIA_DIA",
+   "type": "esriFieldTypeDouble",
+   "alias": "ID_DOC_EIA_DIA",
+   "domain": null
+  },
+  {
+   "name": "ID_ESTADO",
+   "type": "esriFieldTypeDouble",
+   "alias": "ID_ESTADO",
+   "domain": null
+  },
+  {
+   "name": "ID_LISTA_TIPOLOGIA",
+   "type": "esriFieldTypeDouble",
+   "alias": "ID_LISTA_TIPOLOGIA",
+   "domain": null
+  },
+  {
+   "name": "ID_TIPOLOGIA",
+   "type": "esriFieldTypeDouble",
+   "alias": "ID_TIPOLOGIA",
+   "domain": null
+  },
+  {
+   "name": "WORK_ID",
+   "type": "esriFieldTypeDouble",
+   "alias": "WORK_ID",
+   "domain": null
+  },
+  {
+   "name": "SHAPE",
+   "type": "esriFieldTypeGeometry",
+   "alias": "SHAPE",
+   "domain": null
+  }
+ ],
+ "currentVersion": 11.1
+}

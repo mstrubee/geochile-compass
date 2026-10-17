@@ -1,0 +1,4 @@
+[
+  {"name": "Coyhaique", "cut": "11101", "region_label": "", "reason": "Grafía del SEIA para Coihaique; la propia capa INE usa «COYHAIQUE» para el CUT 11101 (comprobado en el ensayo del 2026-10-17)"},
+  {"name": "Aysén", "cut": "11201", "region_label": "", "reason": "Grafía del SEIA para Aisen; la propia capa INE usa «AYSÉN» para el CUT 11201 (comprobado en el ensayo del 2026-10-17)"}
+]

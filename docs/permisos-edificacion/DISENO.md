@@ -36,7 +36,7 @@ nadie lo probó · **[HIPÓTESIS]** · **[NO DISPONIBLE]**.
 
 | # | Afirmación | Estado | Efecto en el diseño |
 |---|---|---|---|
-| 1 | SEIA tiene servicio ArcGIS REST público `…/WEBServices/ProyectosSEIA/MapServer`; capa 1 = EIA (1.594), capa 2 = DIA (28.408); JSON/geoJSON/PBF; `maxRecordCount` 2000 con `resultOffset`/`resultRecordCount`; campos listados | **[COMPROBADO·usuario]** | Es la fuente de proyectos individuales (reemplaza raspar el buscador). §8 y migración 4 |
+| 1 | SEIA tiene servicio ArcGIS REST público `…/WEBServices/ProyectosSEIA/MapServer`; capa 1 = EIA (1.594), capa 2 = DIA (28.408); JSON/geoJSON/PBF; `maxRecordCount` 2000 con `resultOffset`/`resultRecordCount`; campos listados | **[COMPROBADO·usuario]** | Es la fuente de proyectos individuales (reemplaza raspar el buscador). Ver §14 |
 | 1b | El punto de "Praderas La Dehesa" (Lo Barnechea) cae en lat -33,80, fuera de su comuna | **[COMPROBADO·usuario]** | Validación punto-en-polígono que **marca** y nunca corrige en silencio |
 | 2 | `catalogo.minvu.cl` corta TLS (unexpected eof) también desde otra nube; coincide con lo que documenta chile-hub | **[COMPROBADO·usuario]** + **[COMPROBADO]** que el código de chile-hub lo documenta (medido 2026-09-25) | MINVU es **ingesta manual / IP chilena**; la descarga automática es opcional |
 | 3 | MapBiomas Chile Colección 2: anual 1999–2024, 30 m, CC-BY 4.0 según sus términos; clase "Infraestructura" con ATBD propio | **[COMPROBADO·usuario]** | Fuente futura de crecimiento físico (§9), fuera del MVP |
@@ -102,7 +102,9 @@ data_sources ──< source_snapshots ──< building_permit_statistics >──
      │                  │                     │ (comuna_cut)
      │                  ├──< permit_rejected_rows
      │                  ├──< snapshot_control_totals >── permit_series
-     │                  └──< building_projects (SEIA, fase 2) >──< building_project_geo_reviews
+     │                  └──< building_projects (SEIA, Parte 4) >──< building_project_geo_reviews
+     │                  ├──< ine_pe_points_p<n> (INE permisos, partición por snapshot)
+     │                  └──< ine_crf_polygons_p<n> (INE recepciones, partición por snapshot)
      ├──< source_checks         comunas ──< building_permit_statistics
      ├──< source_alerts         comunas ──< comuna_name_aliases >── data_sources
      └──< permit_destination_map
@@ -126,7 +128,7 @@ territorial_layers ──1:1── thematic_layers          source_freshness_v (
 | `permit_stage` | Zona de paso del snapshot en curso; se vacía tras publicar | — |
 | `permit_rejected_rows`, `snapshot_control_totals` | Cada celda rechazada con motivo; total nacional **publicado** vs suma de comunas | `publish` rechaza si algún control no cuadra |
 | `thematic_layers` | Marca una hoja del árbol como capa temática | PK = `territorial_layers.id` |
-| `building_projects`, `building_project_geo_reviews` (fase 2) | Proyectos SEIA + revisión humana append-only | migración 4, opcional |
+| `ine_pe_points`, `ine_crf_polygons`, `building_projects`, `building_project_geo_reviews`, `geo_rejected_rows` (Parte 4) | Puntos de permisos INE, polígonos de recepción final INE, proyectos SEIA, revisión humana append-only y rechazos | migraciones `20261021120000`–`…0200`; ver §14 |
 
 ### 3.3 Índices y RLS
 
@@ -291,23 +293,11 @@ MINVU: el filtrado es por IP de origen (**[COMPROBADO·usuario]**); un workflow 
 
 ---
 
-## 8. Proyectos individuales: SEIA (fase 2)
+## 8. Proyectos individuales: SEIA
 
-* **Qué es y qué no:** solo proyectos que **ingresan al SEIA**. `FECHA_CALIFICACION` **no** es permiso ni inicio de obras; `INVERSION_US` es **declarada**. Los `COMMENT ON COLUMN` y el texto de la ficha lo dicen.
-* **Tabla** `building_projects`: campos del servicio + `raw jsonb` (incluye `X, Y, NUEVO_X, NUEVO_Y, MODIFICADO, OBJECTID`) + `comuna_cuts` resueltos por el ETL (vacío = no cruzó) + estado de validación geográfica.
-* **Validación punto-en-polígono** (`check_project_geometry`) contra la(s) comuna(s) que **declara el propio expediente**:
-
-| Estado | Significado |
-|---|---|
-| `inside` | el punto cae dentro de una comuna declarada |
-| `near_border` | fuera, a ≤ tolerancia (500 m, **[HIPÓTESIS]**: la geometría comunal puede estar generalizada) |
-| `outside_declared` | fuera y a más de la tolerancia → **se marca, no se mueve** |
-| `comuna_unmatched` | no se pudo traducir `COMUNAS` a CUT |
-| `no_geometry` | el servicio no trajo punto |
-
-  El caso reportado (Lo Barnechea con punto en lat -33,80) se reprodujo con coordenadas construidas desde la geometría real y queda `outside_declared` con la distancia registrada. **La geometría original no se modifica nunca** (trigger); una corrección es una fila en `building_project_geo_reviews` (quién, cuándo, por qué) y el mapa muestra el punto original con la corrección **propuesta** aparte.
-* **Cierre de carga:** `publish_project_snapshot` exige que `cargadas + rechazadas = conteo del servicio` y que no queden proyectos sin validar.
-* **Pendiente:** RPC de lectura por bbox/filtros (usará el GIST) y decisión de si se espeja a `territorial_features`; lo recomendable es una RPC dedicada.
+**Reemplazado por la Parte 4 (§14).** El diseño de la «fase 2» (tabla única con `raw jsonb`, una sola migración) se rehízo con los datos reales del sondeo
+del 2026-10-17: `expediente_id` es `bigint`, no se guarda JSON por fila, hay filtro de tipologías por letra, validación geográfica en la base y snapshots con
+conteo del servidor. La migración antigua `20261020120300_building_projects.sql` **se eliminó** (nunca se aplicó en ningún entorno).
 
 ---
 
@@ -325,7 +315,7 @@ Dos conjuntos de parches **separados** (`git format-patch`), más un zip con la 
 1. **`01-migraciones/`** — `supabase/migrations/*` (1, 2, 3 y 4 opcional), `supabase/rollbacks/*`, `supabase/tests/*` y este documento. Probar en una rama/copia de Supabase antes de producción (P10).
 2. **`02-etl-front/`** — `etl/permisos/`, `etl/permisos_minvu.py`, `etl/permisos_comunas.py`, `etl/requirements.txt`, front (`src/…/Permits*`, servicio, hooks, utils, tests).
 
-Orden de aplicación: migración 1 → migración 2 → `permisos_comunas.py seed` → carga de los 2 XLSX → desplegar el front → **migración 3** (nodo en el árbol; el front tolera que aún no exista `thematic_layers`) → fase 2 (migración 4) cuando se quiera.
+Orden de aplicación: migración 1 → migración 2 → `permisos_comunas.py seed` → carga de los 2 XLSX → desplegar el front → **migración 3** (nodo en el árbol; el front tolera que aún no exista `thematic_layers`) → Parte 4 (§14.9).
 
 **Lo que no se pudo hacer desde esta sesión:** alcanzar Postgres/Storage reales (el proxy no admite TCP crudo ni los hosts gov), así que la **carga real a Supabase la corres tú** con `SUPABASE_DB_URL`; el ETL ya se ejecutó extremo a extremo contra PostgreSQL local.
 
@@ -370,16 +360,13 @@ Estado: ✔ = comprobado en esta sesión (PostgreSQL local / vitest) · ◻ = pe
 - [x] G2. 12202 sin geometría y con datos. ✔
 - [x] G3. `comunas` única fuente de CUT; `check` detecta divergencia con los archivos del repo. ✔
 
-**SEIA (fase 2)**
-- [x] F1. Punto fuera de su comuna ⇒ `outside_declared`, sin mover el original. ✔
-- [x] F2. Carga incompleta rechazada. ✔
-- [ ] F3. La ficha dice «no es permiso de edificación» y «inversión declarada». ◻ (UI de fase 2 no construida)
+**SEIA** — los criterios vigentes están en §14.10 (reemplazan F1–F3 de la fase 2).
 
 ---
 
 ## 12. Pruebas ejecutadas (evidencia)
 
-* **SQL:** PostgreSQL 16 + PostGIS 3 local, esquema mínimo que imita al del repo (`supabase/tests/permits_stub_esquema_minimo.sql`) y las **346 comunas reales**. `permits_stats.test.sql` = **92 aserciones OK**; `building_projects.test.sql` = **16 OK**; migraciones aplicadas 2–3 veces sin error; rollback 4→3→2→1 en cadena; la 1 se niega a revertirse mientras existan las otras.
+* **SQL:** PostgreSQL 16 + PostGIS 3 local, esquema mínimo que imita al del repo (`supabase/tests/permits_stub_esquema_minimo.sql`) y las **346 comunas reales**. `permits_stats.test.sql` = **92 aserciones OK**; migraciones aplicadas 2–3 veces sin error; rollback 4→3→2→1 en cadena; la 1 se niega a revertirse mientras existan las otras.
 * **ETL (pytest, 47 pasan):** 37 de parser/CLI sobre **fixtures reales recortados** de los XLSX MINVU (sin datos sintéticos), 6 de base de datos extremo a extremo (`TEST_DATABASE_URL`) y 4 contra los archivos completos (`MINVU_ANUAL`, `MINVU_MENSUAL`).
 * **Carga real local:** seed idempotente; anual 49.824 + mensual 124.560 filas publicadas; recarga = `already_loaded`; sumas en la base = 133.914 / 150.491 / 66.947 / 42.202; 504 controles guardados, todos OK; 0 rechazos.
 * **Front (vitest):** 23 pruebas nuevas (períodos, escala, servicio, panel, y un humo de `PermitsHost` en un `MapContainer`); `tsc` y `eslint` sin errores nuevos. En jsdom no hay SVG/canvas, así que el dibujo de polígonos de la coroplética **no se probó**.
@@ -401,3 +388,127 @@ Estado: ✔ = comprobado en esta sesión (PostgreSQL local / vitest) · ◻ = pe
 8. **Normalización per cápita:** `public/ine_communes.csv` existe pero su año/fuente no están comprobados; no se usa.
 9. **Tablas existentes con comuna como nombre** (no CUT): migrarlas a `comuna_cut` con FK es trabajo futuro.
 10. **Nombres y timestamps** de las migraciones son provisorios; se renumeran al aplicarlas (deben ser posteriores a `20261015130000`).
+
+---
+
+## 14. Parte 4 — de la comuna al proyecto (INE puntos, INE recepciones finales, SEIA)
+
+Base empírica: `docs/proyectos-parte4/HALLAZGOS_SONDEO.md` (sondeo real del 2026-10-17, corrido por el usuario con `etl/proyectos_probe.py`).
+Regla rectora, igual que antes: **cada valor mostrado es trazable a la fuente oficial** (URL, fecha de captura, fecha declarada, período); lo no comprobable se marca o no se publica.
+Las tres capas **reutilizan** `data_sources` → `source_snapshots`; no hay un sistema paralelo.
+
+### 14.1 Qué es cada capa (y qué NO es)
+
+| Capa | Fuente | Qué representa | Qué NO es |
+|---|---|---|---|
+| **Permisos georreferenciados (INE)** | `CRF_PE_v2/1` PE_NACIONAL, 163.487 reg., 2010–2025 | Un registro = un grupo de unidades de un permiso, con punto y año | No trae fecha, ni número de permiso, ni dirección. **No es un conteo de permisos**: se suma `CANTIDAD_UNIDAD`. Cobertura **parcial** (117–123 de 346 comunas por año) |
+| **Recepciones finales (INE)** | `CRF_PE_v2/2` CRF_NACIONAL, 18.272 pol., 2011–2025 | Obra **terminada** (huella, `N_VIVIENDA`, año de emisión) | **Nunca** se suma ni se mezcla con permisos (permiso ≠ obra terminada) |
+| **Proyectos SEIA** | `ProyectosSEIA/MapServer` capas 1 (EIA) y 2 (DIA) | Proyectos que **ingresan al SEIA** (tipologías inmobiliarias/urbanas) | No es un catastro de edificación; `FECHA_CALIFICACION` ≠ permiso ni inicio de obras; `INVERSION_US` es **declarada** por el titular |
+
+### 14.2 Modelo y decisión de particionado
+
+* **Una partición LIST por snapshot** (`ine_pe_points_p<n>`, `ine_crf_polygons_p<n>`). Razón: reemplazar una captura de 163 mil puntos con `DELETE` + `VACUUM` deja
+  espacio muerto y duplica el pico; con partición, `DROP` libera el disco al instante y el cambio de vigente es atómico (`_ine_pe_current_snapshot`).
+  Las particiones están revocadas a `anon`/`authenticated` (la RLS vive en el padre); se lee **solo por RPC**.
+* **Retención** `retention.keep_point_snapshots` = **1** (configurable). Con 2 se guardarían ≈ 25 MB más de puntos y ≈ 7 MB de polígonos; no se justifica mientras el original gz quede en disco local/Storage.
+* **Tipos compactos:** `comuna_cut char(5)` con FK a `comunas`; `year/units/floors smallint`; `uso`, `geo_precision`, `geo_status` `smallint` (codificados); `glosa_id` a una tabla de glosas (858 textos distintos → una vez); `area_m2 double`; `geom geometry(Point,4326)` + GIST. **Sin JSONB por fila.**
+* **Codificaciones:** `uso` 1 HABITACIONAL · 2 MIXTO · 3 NO HABITACIONAL; `geo_precision` 3 ALTA · 2 MODERADA · 1 BAJA · 0 sin dato; `geo_status` 0 dentro · 1 cerca del borde · 2 fuera de la comuna declarada · 3 comuna sin polígono.
+* **CRF:** `geom` MultiPolygon con `CHECK (ST_IsValid)`; si se repara, `geom_original` guarda la **original** y `ine_crf_geom_repairs` el método y la diferencia de área; supera `crf.geom_repair_max_area_diff_pct` ⇒ `needs_review` (no se muestra como oficial sin marca). **No se simplifica**: son huellas de 5–58 vértices (mediana 8) y 250–20.000 m²; el filtro por bbox + zoom ≥ 12 basta, y se guarda siempre la geometría completa.
+* **Capa 0 (CRF individuales, 9.013 pts, 2017–2018) queda fuera de la v1**: sin `N_VIVIENDA` y posible doble conteo con CRF_NACIONAL **[NO COMPROBADO]**.
+* **SEIA:** `building_projects` PK `(snapshot_n, service_layer, expediente_id)`, `expediente_id bigint` (llega a 2.147.998.999 > 2³¹−1), `comuna_cuts char(5)[]`, `x_raw/y_raw/modificado` tal cual, `geo_status` y `geo_distance_m`.
+  `building_project_geo_reviews` es **append-only** (trigger + RLS: solo `admin` inserta): una corrección es una fila con quién/cuándo/por qué; **la geometría original nunca se modifica**, el mapa muestra el punto original y la corrección *propuesta* aparte.
+* **Rechazos:** tabla común `geo_rejected_rows` con códigos (`cut_invalid`, `cut_unknown`, `year_invalid`, `value_invalid`, `uso_unmapped`, `geometry_missing`, `geometry_invalid_unrepairable`, `coordinates_out_of_range`, `duplicate_key`, `other`).
+
+### 14.3 Procedencia por captura (todo-o-nada)
+
+Cada snapshot guarda: URL de la capa, fecha/hora de consulta, `editingInfo.lastEditDate` (INE; **SEIA no lo declara** ⇒ NULL + nota), **conteo del servidor antes y después** (`returnCountOnly`), filas descargadas
+y el `sha256` del GeoJSON **normalizado** (orden por `OBJECTID`, claves ordenadas, gzip con `mtime=0`: el mismo contenido da siempre el mismo hash; fechas epoch-ms convertidas en **UTC**).
+El ETL **falla** si `antes ≠ después` o `descargados ≠ servidor` (duplicado de `OBJECTID` = error). `publish_*_snapshot()` (SECURITY DEFINER) **re-valida en la base**:
+`count_before = count_after = row_count_raw`; `cargadas + rechazadas (+ excluidas por tipología, en SEIA) = conteo del servidor`; razón de rechazo ≤ `publish.max_reject_ratio`; todo CUT existe en `comunas`; año en el período; umbrales geográficos. Si algo falla **no queda nada vigente** y el snapshot pasa a `rejected`. Re-ejecutar con el mismo hash ⇒ `already_loaded`; hash nuevo ⇒ snapshot nuevo y se elimina la partición vieja (retención).
+
+### 14.4 Validación geográfica (nunca se corrige en silencio)
+
+* **Permisos INE:** cada punto se prueba contra el polígono de su `COD_COMUNA` (convertido a `char(5)` con `lpad` y validado). Dentro ⇒ 0; fuera pero a ≤ `ine_points.near_border_m` (500 m) ⇒ 1; más lejos ⇒ 2 (se **marca**, no se mueve); comuna sin polígono (12202) ⇒ 3.
+  Si la proporción `outside_declared` supera `ine_points.max_outside_ratio` (5 %) la publicación se detiene. En el sondeo, 695 de 695 puntos de muestra caían dentro de su comuna; **el universo lo mide el ETL** (el `--dry-run` usa Shapely como aproximación; la medición autoritativa es la de la base con `geography`).
+* **SEIA:** el punto se valida contra la(s) comuna(s) que declara el expediente: `0 dentro · 1 cerca (projects.near_border_m, 500) · 2 fuera de la declarada · 3 nombre sin CUT · 4 sin geometría · 5 comuna sin polígono`. El caso *Praderas La Dehesa* (`ID 2147600353`, declara Lo Barnechea, punto en lat −33,802 / lon −70,720) se reproduce con datos reales y queda `outside_declared` con la distancia registrada.
+* **Semántica de la geometría SEIA [COMPROBADO sobre los recortes]:** la geometría del servicio coincide con `NUEVO_X/NUEVO_Y` (coordenadas corregidas por el SEA) cuando existen —257/258; la excepción real es *Condominio Parque Rio Cruces II*, a ≈ 90 m— y con `X/Y` cuando `NUEVO_*` es nulo (9/9). En proyectos recientes `X/Y` vienen redondeados a grados enteros. `MODIFICADO` ∈ {1, 2}: **significado no documentado**.
+
+### 14.5 Filtro de tipologías SEIA (documentado y editable)
+
+El *mismo código* tiene *nombres distintos* según el reglamento vigente (p. ej. `g.1` = «Conjuntos habitacionales…» o «Proyectos de desarrollo urbano…»; `i.1` = minería o canteras), por eso la regla es **por letra del artículo 3**, en la tabla `seia_typology_rules` (editable por `admin`, espejo en `etl/proyectos/seia_typology_rules.json`):
+
+| Letra | Incluida | Categoría |
+|---|---|---|
+| `g.` / `g.1` | sí | desarrollo urbano |
+| `g.2` | sí | equipamiento |
+| `g.3` | sí | urbanización industrial |
+| `g.4` | sí | turismo |
+| `h.1` | sí | inmobiliario |
+| `h.2` | no | industrial |
+| `h.3`–`h.6` | no | planes |
+| **cualquier otra letra** | **no** | — |
+
+Lo excluido **se cuenta y se informa** (`typology_excluded_count` es obligatorio en el reporte y entra en el cuadre del servidor). **Tipología inmobiliaria ≠ vivienda:** `h.1` incluye fábricas y centros comerciales; la leyenda lo dice.
+
+### 14.6 Cuadre externo INE ↔ MINVU (diagnóstico, **no** error)
+
+`get_ine_pe_vs_minvu_by_year()` y el `--dry-run` comparan, **solo en las comunas cubiertas** por el INE de cada año, las viviendas INE (`CANTIDAD_UNIDAD` de HABITACIONAL + MIXTO) con las viviendas MINVU. Diferencias **esperadas**, no errores: el INE cubre pocas comunas y las comparaciones se acotan a ellas;
+las unidades MIXTO incluyen superficie no habitacional; los criterios de fecha (permiso vs. ingreso) y de revisión difieren entre INE y MINVU; los años recientes de MINVU son preliminares. Dato del sondeo (nacional, **no** acotado a comunas cubiertas): razón INE/MINVU ≈ 0,69–0,81, estable alrededor de 0,75 antes y después de 2020.
+**Caída desde 2020 [COMPROBADO el efecto, NO la causa]:** registros 11.771 → 6.572 (−44 %), unidades 122.385 → 93.851 (−23 %); la razón unidades/MINVU no cambia ⇒ la cantidad de *registros* no es comparable entre ≤2019 y ≥2020 (se agrupan más unidades por registro). 2020 además concentra 31 % de registros sin `PRECISION_` (2.013 de 6.572). La interfaz suma unidades, nunca cuenta puntos como permisos.
+
+### 14.7 Precisión y qué se muestra por defecto
+
+`PRECISION_` se muestra siempre (popup y leyenda). **BAJA y sin dato se excluyen por defecto** (`p_min_precision = 2`) y, cuando el usuario las incluye, se dibujan distinto (relleno más tenue según la precisión; borde rojo punteado = fuera de su comuna declarada). La mezcla de precisión **cambia mucho entre años** (ALTA entre 50 % y 94 %); por eso la cobertura por año se cuantifica en `get_ine_pe_coverage()` y se muestra en el panel junto con las comunas cubiertas.
+
+### 14.8 Espacio (medido localmente, **datos sintéticos con la forma real** — etiquetado)
+
+| Objeto | Por snapshot | Observación |
+|---|---|---|
+| `ine_pe_points` (163.487 pts, heap + GIST + 2 índices) | ≈ 25 MB | pico transitorio ≈ 66 MB al reemplazar (nuevo + viejo + stage), luego vuelve a ≈ 25 MB |
+| `ine_crf_polygons` (18.272 pol.) | ≈ 6–7 MB | geometrías pequeñas, sin simplificar |
+| `building_projects` (≈ 30.000 filas) | < 2 MB | — |
+| **Total Parte 4 en régimen** | **≈ 33–35 MB** | La base de producción hoy pesa ≈ 295 MB de 500 MB (plan gratuito) ⇒ ≈ 330 MB; **el pico de carga (~+70 MB) cabe**, pero conviene no cargar PE y CRF a la vez |
+
+**[NO COMPROBADO en Supabase real]**: tamaños reales de particiones y del stage; se confirmarán tras la primera carga con `select pg_size_pretty(pg_total_relation_size(...))`.
+
+### 14.9 Parámetros (`pipeline_settings`, configurables)
+
+| Clave | Valor inicial | Para qué |
+|---|---|---|
+| `retention.keep_point_snapshots` | 1 | particiones INE que se conservan |
+| `ine_points.near_border_m` | 500 | tolerancia «cerca del borde» (puntos INE) |
+| `ine_points.max_outside_ratio` | 0,05 | tope de puntos fuera de su comuna para publicar |
+| `crf.geom_repair_max_area_diff_pct` | 1 | tope de cambio de área al reparar un polígono |
+| `crf.max_invalid_ratio` | 0,02 | tope de polígonos inválidos |
+| `projects.near_border_m` | 500 | tolerancia SEIA |
+| `publish.max_reject_ratio` | 0,005 | tope de rechazos |
+
+Todos son **valores iniciales** a calibrar con el primer `--dry-run` real.
+
+**Orden de aplicación** (cada una con `psql "$PROD" -1 -v ON_ERROR_STOP=1 -f …`, revisando conteos y `_migration_log`; ver `SQL_MIGRATION_GUARDRAILS.md`):
+`20261021120000_ine_permit_points` → `20261021120100_ine_crf_polygons` → `20261021120200_seia_projects` → `python etl/proyectos_ine.py --dry-run` y `python etl/proyectos_seia.py --dry-run` (reportes) → cargas reales → **desplegar el front** → `20261021120300_projects_layer_nodes` (crea las 3 hojas bajo «Edificación y expansión urbana»; +3 `layer_nodes`, +3 `territorial_layers`). Rollbacks en `supabase/rollbacks/` (cadena 4→3→2→1 probada).
+
+### 14.10 Criterios de aceptación de la Parte 4
+
+- [x] P4-1. `PE_NACIONAL`: `COD_COMUNA` → `char(5)` con ceros, validado contra `comunas`; los que no calzan se **rechazan con motivo**, no se adivinan. ✔ (tests ETL + SQL)
+- [x] P4-2. Conteo del servidor == descargado == cargado + rechazado (+ excluido en SEIA), o la carga falla. ✔ (tests con servidor ArcGIS simulado que sirve fixtures **reales**; con fallas inyectadas)
+- [x] P4-3. Mismo contenido ⇒ mismo hash ⇒ `already_loaded`; contenido nuevo ⇒ snapshot nuevo y partición vieja liberada. ✔ (base local)
+- [x] P4-4. Un punto fuera de su comuna queda `outside_declared`, con el original intacto; revisión humana append-only. ✔ (111 aserciones SQL)
+- [x] P4-5. `PRECISION_` siempre visible; BAJA/sin dato excluidos por defecto y dibujados distinto. ✔ (front, vitest)
+- [x] P4-6. Cada panel: ficha de procedencia, licencia «por confirmar» si no está declarada, advertencias («solo año», «cobertura parcial de comunas», «ubicación de precisión baja», «inversión declarada»). ✔ (front, vitest; **no probado en un navegador real**)
+- [x] P4-7. El `--dry-run` no escribe nada (ni base, ni Storage, ni disco). ✔
+- [ ] P4-8. `--dry-run` contra los 3 servicios **reales**. ◻ lo corre el usuario (la sesión no alcanza esos hosts)
+- [ ] P4-9. Licencia oficial de INE y SEA. ◻ pendiente (§14.11)
+
+### 14.11 Lo que NO se pudo comprobar
+
+1. **Licencia / términos de reutilización:** el ítem de ArcGIS del INE trae `licenseInfo = null`; SEA sólo `copyrightText = "sea"`. Se registra `license_label = NULL` y la UI muestra «por confirmar (el servicio no la declara)». Un ítem del Hub INE 2010-2018 decía CC BY-NC 4.0: **no se aplica** sin confirmar. Si resultara NC, hay que adaptar la oferta comercial.
+2. **Dry-run y cuadres completos** contra los servicios reales y contra MINVU completo (fixtures son recortes reales).
+3. **Causa** de la caída de registros desde 2020 y de los 2.013 registros sin precisión en 2020.
+4. Si la **capa 0** duplica CRF_NACIONAL (por eso está fuera).
+5. **SEIA, comunas (ensayo real 2026-10-17):** 32 proyectos DIA sin CUT. 24 son grafías distintas de una sola comuna («Coyhaique»×16 → 11101, «Aysén»×8 → 11201; la propia capa INE usa esas grafías para esos CUT): se agregaron como **alias explícitos** en `aliases_seia.json`. Los otros 7 son proyectos de **varias comunas separadas por guion** («Arica-Putre», «San Bernardo-La Pintana», «Yungay-Pemuco», «Iquique-Pica-Pozo Almonte» y una lista de 40 comunas de la RM): el ETL **no los divide** (el separador es una convención observada, no documentada) y quedan `comuna_unmatched`, visibles y sin corregir. Decisión pendiente: dividir por guion solo si *todas* las partes calzan exactamente con una comuna.
+5b. **SEIA, coordenadas redondeadas (ensayo real):** 70 de 75 EIA y 2.482 de 3.791 DIA traen `X/Y` crudos redondeados a grado entero; la geometría usa `NUEVO_X/Y` cuando existen (todas menos 8 EIA y 139 DIA). Los que quedan con `X/Y` redondeado caen a decenas de km (p. ej. −71,−33): 222 de 3.791 DIA (5,9 %) y 8 de 75 EIA salen `outside_declared`. Un punto exactamente sobre un grado entero **puede caer dentro de su comuna por casualidad** y verse «bueno»: por eso la capa y el popup lo marcan como **ubicación aproximada** (borde rojo punteado) aunque `geo_status` sea 0. No se mueve ni se corrige. Además, 9 DIA tienen geometría ≠ `NUEVO_X/Y` (se cuentan, no se corrigen).
+6. Significado de `MODIFICADO` y **unidad de `SUPERFICIE`** (se supone m²; marcado no verificado).
+7. Cadencia/rezago de actualización INE y SEA (hipótesis: 365/210/30 días; el SEIA no declara `editingInfo`).
+8. Comportamiento real en Supabase (particiones, permisos), y el front en un navegador (jsdom no tiene SVG/canvas: se prueban los datos que reciben las capas, no el dibujo).
+9. Los originales de MINVU se cargaron con `--no-storage`: su `storage_path` apunta a un objeto que no existe.

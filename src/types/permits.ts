@@ -99,10 +99,13 @@ export interface LayerProvenanceRow {
 /** Fila de `thematic_layers`: marca una hoja del árbol como capa temática. */
 export interface ThematicLayerRow {
   layer_id: string;
-  renderer: "choropleth_comuna" | "points_projects";
+  renderer: "choropleth_comuna" | "points_projects" | "points_permits" | "polygons_crf";
   dataset: string;
   default_params: Partial<{
     source_key: string;
+    source_keys: string[];
+    states: string[];
+    min_precision: number;
     metric: PermitMetric;
     destination_class: PermitDestination;
     granularity: "year" | "month";
