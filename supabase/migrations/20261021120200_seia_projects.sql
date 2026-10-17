@@ -6,8 +6,9 @@
 --
 -- HALLAZGOS REALES que cambian el diseño anterior (docs/proyectos-parte4/HALLAZGOS_SONDEO.md):
 --   * ID_EXPEDIENTE llega a 2.147.998.999 (> 2^31-1): bigint, no integer;
---   * la geometría del servicio coincide con NUEVO_X/NUEVO_Y (coordenadas corregidas por el SEA); X/Y vienen redondeados a
---     grados enteros en proyectos recientes. Se guarda la geometría del servicio y X/Y crudos aparte;
+--   * la geometría del servicio coincide con NUEVO_X/NUEVO_Y (coordenadas corregidas por el SEA) cuando existen (257 de 258 en los
+--     recortes; 1 excepción real de ~90 m) y con X/Y cuando NUEVO es nulo; X/Y vienen redondeados a grados enteros en proyectos
+--     recientes. Se guarda la geometría del servicio y X/Y crudos aparte;
 --   * COMUNAS es el NOMBRE de la comuna (el ETL lo cruza a CUT contra `comunas` + alias); REGION es romano;
 --   * las fechas son epoch a medianoche UTC (se convierten a fecha en UTC);
 --   * el MISMO código de tipología tiene NOMBRES distintos según el reglamento: se filtra por letra (tabla de reglas, editable);
@@ -45,7 +46,7 @@ create temp table _p4_counts_before on commit drop as
 -- Las dos fuentes SEIA ya existen (parte 1): se actualiza su verificación con el sondeo real (idempotente).
 update public.data_sources
    set verified_at = date '2026-10-17',
-       verification_note = verification_note || ' RE-COMPROBADO por sondeo real el 2026-10-17: capa 1 = 1.594 y capa 2 = 28.408 registros; maxRecordCount 2000; el servicio NO declara editingInfo (sin fecha de última edición); copyrightText = "sea"; sin licencia declarada (por confirmar). La geometría del servicio coincide con NUEVO_X/NUEVO_Y.',
+       verification_note = verification_note || ' RE-COMPROBADO por sondeo real el 2026-10-17: capa 1 = 1.594 y capa 2 = 28.408 registros; maxRecordCount 2000; el servicio NO declara editingInfo (sin fecha de última edición); copyrightText = "sea"; sin licencia declarada (por confirmar). La geometría del servicio coincide con NUEVO_X/NUEVO_Y cuando existen (con X/Y si no).',
        scope_note = 'Solo proyectos que ingresan al SEIA (no es un catastro de edificación). FECHA_CALIFICACION no es permiso de edificación ni inicio de obras. INVERSION_US es DECLARADA. La tipología inmobiliaria incluye proyectos no residenciales. El estado de evaluación (aprobado, desistido, rechazado…) se muestra siempre.'
  where source_key in ('seia_proyectos_eia', 'seia_proyectos_dia')
    and verification_note not like '%RE-COMPROBADO por sondeo real el 2026-10-17%';
@@ -112,7 +113,7 @@ create index if not exists building_projects_status_idx on public.building_proje
 
 comment on table public.building_projects is
   'Proyectos del SEIA (EIA/DIA) de tipologías inmobiliarias y urbanas. Solo lo que ingresa al SEIA. qualified_at NO es permiso ni inicio de obras; investment_usd es DECLARADA; muestra siempre status_declared.';
-comment on column public.building_projects.geom is 'Geometría del servicio (= NUEVO_X/NUEVO_Y). Nunca se modifica; una corrección es una fila en building_project_geo_reviews.';
+comment on column public.building_projects.geom is 'Geometría del servicio (= NUEVO_X/NUEVO_Y cuando existen; si no, X/Y). Nunca se modifica; una corrección es una fila en building_project_geo_reviews.';
 comment on column public.building_projects.geo_status is '0 dentro de la comuna declarada, 1 near_border, 2 outside_declared, 3 comuna_unmatched, 4 no_geometry, 5 comuna sin polígono.';
 
 -- Revisión humana de una ubicación dudosa: APPEND-ONLY y por proyecto (sobrevive a los snapshots).

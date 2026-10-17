@@ -1,0 +1,14 @@
+{
+  "_nota": "Espejo de la tabla public.seia_typology_rules (migración 20261021120200) para el ensayo sin base de datos. Con --db se lee la tabla real. Cualquier letra que no esté aquí queda EXCLUIDA.",
+  "g.":  {"include": true,  "category": "urban_development"},
+  "g.1": {"include": true,  "category": "urban_development"},
+  "g.2": {"include": true,  "category": "equipment"},
+  "g.3": {"include": true,  "category": "industrial_urbanization"},
+  "g.4": {"include": true,  "category": "tourism"},
+  "h.1": {"include": true,  "category": "real_estate"},
+  "h.2": {"include": false, "category": "industrial"},
+  "h.3": {"include": false, "category": "plan"},
+  "h.4": {"include": false, "category": "plan"},
+  "h.5": {"include": false, "category": "plan"},
+  "h.6": {"include": false, "category": "plan"}
+}

@@ -62,8 +62,8 @@ solo dos años). Se puede añadir después como capa aparte si se comprueba que 
 
 ## SEIA
 * `ID_EXPEDIENTE` es `double` en el servicio y llega hasta **2.147.998.999 > 2³¹−1**: debe ser `bigint`, no `integer`. `OBJECTID` llega a 2.147.149.324.
-* **La geometría del servicio coincide con `NUEVO_X/NUEVO_Y`** (coordenadas corregidas por el SEA), no con `X/Y`: en la muestra `X/Y` vienen **redondeados a grados enteros**
-  (p. ej. −71, −33) en proyectos recientes. `MODIFICADO` vale 1 ó 2 (significado **no documentado**).
+* **La geometría del servicio coincide con `NUEVO_X/NUEVO_Y`** (coordenadas corregidas por el SEA) cuando existen —257 de 258 proyectos en los recortes; la excepción real es *Condominio Parque Rio Cruces II* (ID 2149732511), a ≈ 90 m—, y con `X/Y` cuando `NUEVO_X/Y` es nulo (9 de 9). En proyectos recientes `X/Y` vienen **redondeados a grados enteros**
+  (p. ej. −71, −33). `MODIFICADO` vale 1 ó 2 (significado **no documentado**). El ETL cuenta ambos casos en el reporte y no corrige nada.
 * `COMUNAS` es el **nombre** de la comuna (p. ej. «Lo Barnechea»), no el CUT; `REGION` es romano o «RM» (no CUT). Ningún valor de `COMUNAS` contiene coma en las dos capas completas (la consulta `COMUNAS LIKE '%,%'` devolvió 0 filas en EIA y DIA); si existen proyectos con varias
   comunas, el separador **[NO COMPROBADO]** — el ETL lo detectará y los marcará `comuna_unmatched`, no los adivinará.
 * Las fechas (`FECHA_*`) son epoch en ms a **medianoche UTC**: se convierten a fecha en UTC (en America/Santiago caerían un día antes).

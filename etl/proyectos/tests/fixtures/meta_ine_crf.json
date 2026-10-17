@@ -1,0 +1,108 @@
+{
+ "name": "CRF_NACIONAL",
+ "geometryType": "esriGeometryPolygon",
+ "maxRecordCount": 2000,
+ "editingInfo": {
+  "lastEditDate": 1785440343315,
+  "schemaLastEditDate": 1785440343315,
+  "dataLastEditDate": 1785440343315
+ },
+ "fields": [
+  {
+   "name": "OBJECTID",
+   "type": "esriFieldTypeOID",
+   "alias": "OBJECTID",
+   "sqlType": "sqlTypeOther",
+   "nullable": false,
+   "editable": false,
+   "domain": null,
+   "defaultValue": "",
+   "required": true
+  },
+  {
+   "name": "REGION",
+   "type": "esriFieldTypeString",
+   "alias": "REGION",
+   "sqlType": "sqlTypeOther",
+   "length": 2,
+   "nullable": true,
+   "editable": true,
+   "domain": null,
+   "defaultValue": ""
+  },
+  {
+   "name": "NOM_REGION",
+   "type": "esriFieldTypeString",
+   "alias": "NOMBRE REGION",
+   "sqlType": "sqlTypeOther",
+   "length": 60,
+   "nullable": true,
+   "editable": true,
+   "domain": null,
+   "defaultValue": ""
+  },
+  {
+   "name": "CUT",
+   "type": "esriFieldTypeString",
+   "alias": "COMUNA",
+   "sqlType": "sqlTypeOther",
+   "length": 5,
+   "nullable": true,
+   "editable": true,
+   "domain": null,
+   "defaultValue": ""
+  },
+  {
+   "name": "NOM_COMUNA",
+   "type": "esriFieldTypeString",
+   "alias": "NOMBRE COMUNA",
+   "sqlType": "sqlTypeOther",
+   "length": 60,
+   "nullable": true,
+   "editable": true,
+   "domain": null,
+   "defaultValue": ""
+  },
+  {
+   "name": "N_VIVIENDA",
+   "type": "esriFieldTypeInteger",
+   "alias": "N_VIVIENDAS",
+   "sqlType": "sqlTypeOther",
+   "nullable": false,
+   "editable": true,
+   "domain": null,
+   "defaultValue": ""
+  },
+  {
+   "name": "AÑO_EMISION",
+   "type": "esriFieldTypeInteger",
+   "alias": "AÑO_EMISION",
+   "sqlType": "sqlTypeOther",
+   "nullable": false,
+   "editable": true,
+   "domain": null,
+   "defaultValue": ""
+  },
+  {
+   "name": "SHAPE__Area",
+   "type": "esriFieldTypeDouble",
+   "alias": "SHAPE__Area",
+   "sqlType": "sqlTypeDouble",
+   "nullable": true,
+   "editable": false,
+   "domain": null,
+   "defaultValue": null
+  },
+  {
+   "name": "SHAPE__Length",
+   "type": "esriFieldTypeDouble",
+   "alias": "SHAPE__Length",
+   "sqlType": "sqlTypeDouble",
+   "nullable": true,
+   "editable": false,
+   "domain": null,
+   "defaultValue": null
+  }
+ ],
+ "currentVersion": 12
+}
