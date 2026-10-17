@@ -1,0 +1,24 @@
+# PLAN B de la Fase 0: PostGIS local en TU máquina (solo si no se puede levantar PostGIS en la sesión del agente).
+# Misma versión que la sesión: PostgreSQL 16 + PostGIS 3.4. NO PROBADO en la sesión de la Fase 0 (allí no hay daemon de docker): [NO COMPROBADO].
+#
+#   docker compose -f docs/salud/planb/docker-compose.yml up -d --wait
+#   SALUD_EXTERNAL_PG=1 SALUD_PGPORT=5433 bash etl/salud/dev_env.sh      # crea las 3 bases *test*, siembra y corre la línea base
+#   docker compose -f docs/salud/planb/docker-compose.yml down            # (-v borra también el volumen con los datos)
+#
+# Requiere en tu máquina: docker, el cliente psql, python3 y node. Escucha SOLO en 127.0.0.1 y sin contraseña: no lo expongas.
+services:
+  postgis:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - salud_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  salud_pg:
