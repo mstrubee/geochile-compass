@@ -458,7 +458,7 @@ las unidades MIXTO incluyen superficie no habitacional; los criterios de fecha (
 
 ### 14.7 Precisión y qué se muestra por defecto
 
-`PRECISION_` se muestra siempre (popup y leyenda). **BAJA y sin dato se excluyen por defecto** (`p_min_precision = 2`) y, cuando el usuario las incluye, se dibujan distinto (borde punteado/hueco). La mezcla de precisión **cambia mucho entre años** (ALTA entre 50 % y 94 %); por eso la cobertura por año se cuantifica en `get_ine_pe_coverage()` y se muestra en el panel junto con las comunas cubiertas.
+`PRECISION_` se muestra siempre (popup y leyenda). **BAJA y sin dato se excluyen por defecto** (`p_min_precision = 2`) y, cuando el usuario las incluye, se dibujan distinto (relleno más tenue según la precisión; borde rojo punteado = fuera de su comuna declarada). La mezcla de precisión **cambia mucho entre años** (ALTA entre 50 % y 94 %); por eso la cobertura por año se cuantifica en `get_ine_pe_coverage()` y se muestra en el panel junto con las comunas cubiertas.
 
 ### 14.8 Espacio (medido localmente, **datos sintéticos con la forma real** — etiquetado)
 
