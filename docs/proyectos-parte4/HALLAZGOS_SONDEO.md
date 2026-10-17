@@ -20,8 +20,7 @@ Todo lo de abajo es **[COMPROBADO]** sobre esa salida salvo donde diga otra cosa
 **Campos reales:** `OBJECTID, COD_REGION, GLOSA_REGION, COD_COMUNA (smallint), GLOSA_COMUNA, AÑO (smallint), CANTIDAD_UNIDAD (smallint),
 NUM_PISOS (smallint), GLOSA_DESTINO, USO_DESTINO, SUPERFICIE (double), PRECISION_`. Sin fecha, sin número de permiso, sin dirección.
 
-**Cobertura (comunas con ≥1 registro):** 117–123 comunas por año (128 distintas entre 2010 y 2025) de 346; 44 de 52 en la RM, solo 2–6 en las
-regiones extremas. Es **cobertura parcial de comunas**, estable en el tiempo (no es la causa de la caída de 2020). Comunas presentes solo ≥2020:
+**Cobertura (comunas con ≥1 registro):** 117–123 comunas por año (128 distintas entre 2010 y 2025) de 346; 44 de 52 en la RM y entre 2 y 13 de las comunas de cada una de las otras regiones. Es **cobertura parcial de comunas**, estable en el tiempo (no es la causa de la caída de 2020). Comunas presentes solo ≥2020:
 Caldera, Canela, Zapallar, Marchihue, Romeral, Colbún, Yerbas Buenas, Pucón, Cobquecura; presente solo ≤2019: Paillaco; Maipú (13119)
 desaparece en 2025. La cobertura por comuna **varía de un año a otro** (hasta 12 comunas faltantes según el año).
 
@@ -35,9 +34,11 @@ desaparece en 2025. La cobertura por comuna **varía de un año a otro** (hasta 
   eliminación del número de permiso el 30-12-2020?). La interfaz no debe contar puntos como si fueran permisos; debe sumar `CANTIDAD_UNIDAD`.
 * 2025 tiene más registros (9.274) pero menos unidades por registro (≈5,2) y 123 comunas; puede ser un año aún no consolidado (hipótesis).
 
-**`PRECISION_`:** valores `ALTA / MODERADA / BAJA / nulo`. BAJA: 2 %–8 % por año. MODERADA: ≈40–45 % en 2010, 2012, 2016, 2017 (4.000–6.000 registros)
-y ≤1 % en 2011, 2013–2015, 2019 en adelante. **Nulo solo aparece en 2020 (2.013), 2022 (299) y 2023 (34).** La mezcla de precisión cambia por año:
-no es un atributo homogéneo.
+**`PRECISION_`:** valores `ALTA / MODERADA / BAJA / nulo`, con una mezcla que **cambia mucho de un año a otro** (no es un atributo homogéneo):
+* BAJA: entre 1,8 % (2018) y 7,1 % (2015) de los registros de cada año.
+* MODERADA: 44 % (2010), 43 % (2012), 46 % (2016), 38 % (2017) y 15 % (2018); en el resto de los años entre 2 % y 8 %.
+* **Nulo: solo en 2020 (2.013 registros = 31 % de ese año), 2022 (299 = 4 %) y 2023 (34).** El 31 % sin precisión en 2020 coincide con el año de la caída de registros: no se puede decir si está relacionado.
+* ALTA: entre 50 % (2010, 2012, 2016) y 94 % (2019, 2024, 2025) según el año.
 
 **`USO_DESTINO`:** `HABITACIONAL / MIXTO / NO HABITACIONAL`. Las unidades de NO HABITACIONAL ≈ número de registros (≈1,05 por registro): para no vivienda,
 `CANTIDAD_UNIDAD` parece contar edificaciones/unidades de obra, no viviendas **[HIPÓTESIS]**. `MIXTO` concentra muchas unidades por registro
@@ -63,8 +64,8 @@ solo dos años). Se puede añadir después como capa aparte si se comprueba que 
 * `ID_EXPEDIENTE` es `double` en el servicio y llega hasta **2.147.998.999 > 2³¹−1**: debe ser `bigint`, no `integer`. `OBJECTID` llega a 2.147.149.324.
 * **La geometría del servicio coincide con `NUEVO_X/NUEVO_Y`** (coordenadas corregidas por el SEA), no con `X/Y`: en la muestra `X/Y` vienen **redondeados a grados enteros**
   (p. ej. −71, −33) en proyectos recientes. `MODIFICADO` vale 1 ó 2 (significado **no documentado**).
-* `COMUNAS` es el **nombre** de la comuna (p. ej. «Lo Barnechea»), no el CUT; `REGION` es romano o «RM» (no CUT). En 132 proyectos de la muestra no apareció ningún valor con coma;
-  los separadores de proyectos con varias comunas **[NO COMPROBADO]**.
+* `COMUNAS` es el **nombre** de la comuna (p. ej. «Lo Barnechea»), no el CUT; `REGION` es romano o «RM» (no CUT). Ningún valor de `COMUNAS` contiene coma en las dos capas completas (la consulta `COMUNAS LIKE '%,%'` devolvió 0 filas en EIA y DIA); si existen proyectos con varias
+  comunas, el separador **[NO COMPROBADO]** — el ETL lo detectará y los marcará `comuna_unmatched`, no los adivinará.
 * Las fechas (`FECHA_*`) son epoch en ms a **medianoche UTC**: se convierten a fecha en UTC (en America/Santiago caerían un día antes).
 * **Caso reportado reproducido con datos reales:** *Praderas La Dehesa* (`ID_EXPEDIENTE 2147600353`, `COMUNAS = Lo Barnechea`) trae su punto en lat −33,802013, lon −70,720227,
   fuera de Lo Barnechea. Es el fixture de `outside_declared`.
