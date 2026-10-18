@@ -12,6 +12,8 @@ import { useMap } from "react-leaflet";
 import L from "leaflet";
 import type { RiskLevel } from "@/types/crime";
 import { RISK_COLORS } from "@/types/crime";
+import { POBLACION_LABEL, SIN_DATO } from "@/types/poblacion";
+import { loadPoblacionIndex, poblacionOf } from "@/services/poblacionService";
 
 // ── URLs de fallback ──────────────────────────────────────────────────────────
 
@@ -100,7 +102,8 @@ function style(f?: GeoJSON.Feature): L.PathOptions {
   };
 }
 
-function popup(p: CP): string {
+/** `censada`: población del Censo 2024 (INE) de la comuna, o null = «sin dato». La `poblacion` del GeoJSON NO se muestra como población: es solo el denominador de la tasa. */
+export function crimePopup(p: CP, censada: number | null): string {
   const n = (p.nivel_riesgo ?? "Medio") as RiskLevel;
   const c = RISK_COLORS[n] ?? "#9e9e9e";
   return `<div style="min-width:200px;font-family:system-ui,sans-serif;font-size:12px">
@@ -115,9 +118,10 @@ function popup(p: CP): string {
       <tr><td style="color:#888;padding:1px 6px 1px 0">Total delitos/año</td><td>${fmt(p.total_delitos_anual)}</td></tr>
       <tr><td style="color:#888;padding:1px 6px 1px 0">Robos c/violencia</td><td>${fmt(p.robos_violencia_anual)}</td></tr>
       <tr><td style="color:#888;padding:1px 6px 1px 0">Hurtos</td><td>${fmt(p.hurtos_anual)}</td></tr>
-      <tr><td style="color:#888;padding:1px 6px 1px 0">Población</td><td>${fmt(p.poblacion)}</td></tr>
+      <tr><td style="color:#888;padding:1px 6px 1px 0">${POBLACION_LABEL}</td><td>${censada != null ? fmt(censada) : SIN_DATO}</td></tr>
+      <tr><td style="color:#888;padding:1px 6px 1px 0" title="Población con que se calculó la tasa en el archivo de delitos; su origen no está documentado y puede diferir de la censada">Base de la tasa (sin fuente)</td><td>${fmt(p.poblacion)}</td></tr>
     </table>
-    <div style="margin-top:4px;font-size:9px;color:#666">${p.fuente ?? "CEAD"} · ${p.years ?? "2022-2024"}</div>
+    <div style="margin-top:4px;font-size:9px;color:#666">Delitos: ${p.fuente ?? "CEAD"} · ${p.years ?? "2022-2024"}</div>
   </div>`;
 }
 
@@ -186,15 +190,15 @@ export const CrimeLayer = ({ visible }: CrimeLayerProps) => {
     setStatus("loading");
     setMsg("346 comunas · CEAD 2022-2024 · ~6 MB");
 
-    loadData()
-      .then((data) => {
+    Promise.all([loadData(), loadPoblacionIndex()])
+      .then(([data, pob]) => {
         if (!visible) return;               // el usuario desactivó mientras cargaba
 
         const geoLayer = L.geoJSON(data, {
           style,
           onEachFeature(feature, lyr) {
             const p = feature.properties as CP;
-            lyr.bindPopup(popup(p), { maxWidth: 290 });
+            lyr.bindPopup(crimePopup(p, poblacionOf(pob, { cut: typeof p.cut === "string" ? p.cut : null, name: p.comuna ?? null })), { maxWidth: 290 });
             lyr.on("mouseover", function(this: L.Path) {
               this.setStyle({ weight: 2, fillOpacity: 0.88 });
             });

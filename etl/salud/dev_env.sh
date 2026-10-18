@@ -32,11 +32,12 @@ for a in "$@"; do case "$a" in --skip-check) SKIP_CHECK=1;; --reset-dbs) RESET_D
 # LÍNEA BASE (medida en main, commit 9026d67). Un PR no puede empeorarla; si cambia, se actualiza AQUÍ y se explica en el PR.
 # Vitest: 472 tests / 34 archivos en main (9026d67) + 40 tests / 3 archivos de fix/seguridad-edge
 # (edgeAuth 24, clientReady 12, migrationsConvention 4) = 512 / 37.
-BASE_VITEST_TESTS=594; BASE_VITEST_FILES=41
+BASE_VITEST_TESTS=608; BASE_VITEST_FILES=42
 BASE_PERMISOS_PASS=43; BASE_PERMISOS_SKIP=4; BASE_PROYECTOS_PASS=45
 BASE_SQL_P12=92; BASE_SQL_PARTE4_GEO=111; BASE_SQL_PARTE4_NODES=7
 BASE_SQL_HEALTH=71; BASE_SQL_HEALTH_RB=4; BASE_SALUD_PASS=92        # Fase 1a (establecimientos): pruebas SQL, rollback y pytest de etl/salud
 BASE_SQL_ISAPRE=88; BASE_SQL_ISAPRE_RB=2; BASE_SQL_CASEN=24; BASE_SQL_PREVISION=5   # Fase 1b (previsión): Isapre, CASEN regional, hojas del árbol y rollbacks
+BASE_SQL_CENSO=27; BASE_SQL_CENSO_RB=3; BASE_CENSO_PASS=18; BASE_CENSO_SKIP=1       # Población censada 2024 (etl/censo): SQL, rollback y pytest (1 omitida: la del archivo real, requiere CENSO_D1_XLSX)
 
 log() { printf '\n== %s\n' "$*"; }
 need_root() { [ "$(id -u)" = 0 ] || { echo "este paso necesita root (apt/initdb como postgres)" >&2; exit 1; }; }
@@ -125,7 +126,7 @@ ensure_dbs() {
   log "5. Bases de prueba (stub + migraciones + comunas)"
   local all=("$ROOT"/supabase/migrations/2026102*.sql)                                  # 7 migraciones: partes 1, 2, 3 y 4
   local p12=("$ROOT/supabase/migrations/20261020120000_permits_provenance.sql" "$ROOT/supabase/migrations/20261020120100_building_permit_statistics.sql")
-  local salud=("${all[@]}" "$ROOT"/supabase/migrations/20261102*.sql "$ROOT"/supabase/migrations/20261103*.sql)   # + Fase 1a (establecimientos) y 1b (previsión)
+  local salud=("${all[@]}" "$ROOT"/supabase/migrations/20261102*.sql "$ROOT"/supabase/migrations/20261103*.sql "$ROOT"/supabase/migrations/20261104*.sql)   # + Fase 1a (establecimientos), 1b (previsión) y población censada
   for spec in "geochile_test:all" "geochile_sql_test:all" "geochile_p12_test:p12" "geochile_salud_test:salud"; do
     local db="${spec%%:*}" set="${spec##*:}"
     if [ "$RESET_DBS" = 0 ] && db_ready "$db"; then echo "$db: lista (346 comunas)"; continue; fi
@@ -179,6 +180,14 @@ run_baseline() {
   cmp_eq "SQL isapre_cartera rollback" "$(sql_recipe geochile_salud_test ${N}000000_isapre_cartera.sql ${T}/isapre_cartera_rollback.sql ${NR}000000_isapre_cartera_down.sql ${NR}000000_isapre_cartera_down.sql ${T}/isapre_cartera_rollback_check.sql ${N}000000_isapre_cartera.sql)" "$BASE_SQL_ISAPRE_RB"
   cmp_eq "SQL casen_prevision.test" "$(sql_recipe geochile_salud_test ${N}000100_casen_prevision.sql ${N}000100_casen_prevision.sql ${T}/casen_prevision.sql)" "$BASE_SQL_CASEN"
   cmp_eq "SQL previsión: hojas y rollbacks" "$(sql_recipe geochile_salud_test ${N}000000_isapre_cartera.sql ${N}000100_casen_prevision.sql ${N}000200_prevision_layer_nodes.sql ${N}000200_prevision_layer_nodes.sql ${T}/prevision_layer_nodes.sql ${NR}000200_prevision_layer_nodes_down.sql ${NR}000200_prevision_layer_nodes_down.sql ${NR}000100_casen_prevision_down.sql ${NR}000100_casen_prevision_down.sql ${NR}000000_isapre_cartera_down.sql ${NR}000000_isapre_cartera_down.sql ${T}/prevision_rollback_check.sql ${N}000000_isapre_cartera.sql ${N}000100_casen_prevision.sql ${N}000200_prevision_layer_nodes.sql)" "$BASE_SQL_PREVISION"
+  # Población censada 2024 (20261104*): receta propia, la migración dos veces; el rollback se prueba aparte
+  local C=supabase/migrations/20261104000000_censo_poblacion.sql CR=supabase/rollbacks/20261104000000_censo_poblacion_down.sql
+  cmp_eq "SQL censo_poblacion.test" "$(sql_recipe geochile_salud_test $C $C ${T}/censo_poblacion.sql)" "$BASE_SQL_CENSO"
+  cmp_eq "SQL censo_poblacion rollback" "$(sql_recipe geochile_salud_test $C ${T}/censo_poblacion_rollback.sql $CR $CR ${T}/censo_poblacion_rollback_check.sql $C)" "$BASE_SQL_CENSO_RB"
+  pyout="$(TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:$PGPORT/geochile_salud_test" PYTHONDONTWRITEBYTECODE=1 "$VENV/bin/python" -m pytest etl/censo/tests -q -p no:cacheprovider 2>&1 || true)"
+  cmp_eq "pytest etl/censo (pasan)" "$(grep -oE '[0-9]+ passed' <<<"$pyout" | grep -oE '[0-9]+')" "$BASE_CENSO_PASS"
+  cmp_eq "pytest etl/censo (fallan)" "$(grep -oE '[0-9]+ failed' <<<"$pyout" | grep -oE '[0-9]+' || echo 0)" 0
+  cmp_eq "pytest etl/censo (omitidos)" "$(grep -oE '[0-9]+ skipped' <<<"$pyout" | grep -oE '[0-9]+' || echo 0)" "$BASE_CENSO_SKIP"
   pyout="$(TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:$PGPORT/geochile_salud_test" PYTHONDONTWRITEBYTECODE=1 "$VENV/bin/python" -m pytest etl/salud/tests -q -p no:cacheprovider 2>&1 || true)"
   cmp_eq "pytest etl/salud (pasan)" "$(grep -oE '[0-9]+ passed' <<<"$pyout" | grep -oE '[0-9]+')" "$BASE_SALUD_PASS"
   cmp_eq "pytest etl/salud (fallan)" "$(grep -oE '[0-9]+ failed' <<<"$pyout" | grep -oE '[0-9]+' || echo 0)" 0

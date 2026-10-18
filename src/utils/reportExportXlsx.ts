@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import type { IsochroneReport, IsochroneBandReport } from "./reportData";
+import { popSourceLabel } from "./isochroneAnalysis";
 
 const fmt = (n: number) => Math.round(n);
 const fmtPct = (frac: number) => Math.round(frac * 1000) / 10; // 0..100, 1 decimal
@@ -36,7 +37,7 @@ const buildResumenAOA = (
     ["Densidad hogares (hog/km²)", fmt(band.density.hhPerKm2)],
     [
       "Fuente población",
-      band.totals.source === "manzanas" ? "Manzanas (Censo)" : "Estimación comunal proporcional",
+      popSourceLabel(band.totals),
     ],
   ];
 };
@@ -49,7 +50,7 @@ const buildComunasAOA = (
     "Comuna",
     "% del área de la iso",
     "% del área comuna en iso",
-    "Población comuna",
+    "Población censada 2024 (INE), comuna",
     "Hogares comuna (estimado)",
     "Ingreso/hogar (CLP)",
     "NSE",

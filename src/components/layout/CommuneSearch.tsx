@@ -1,6 +1,8 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { Search, MapPin, Filter, GitCompare, X, Plus, Trash2 } from "lucide-react";
-import { COMMUNES, type Commune } from "@/data/communes";
+import { type Commune } from "@/data/communes";
+import { useCommunesWithPopulation } from "@/hooks/usePoblacion";
+import { POBLACION_LABEL } from "@/types/poblacion";
 import { normalizeCommuneName } from "@/services/communeDataService";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -27,6 +29,8 @@ export const CommuneSearch = ({
   searchedList,
   onSearchedListChange,
 }: CommuneSearchProps) => {
+  // La población de cada comuna es la CENSADA 2024 (INE), leída de la base; 0 = sin dato (esas comunas no entran a un rango de población).
+  const COMMUNES = useCommunesWithPopulation();
   const [tab, setTab] = useState<"text" | "range" | "compare">("text");
   const [text, setText] = useState("");
   const [highlight, setHighlight] = useState(0);
@@ -39,7 +43,7 @@ export const CommuneSearch = ({
     const q = normalizeCommuneName(text);
     if (!q) return [];
     return COMMUNES.filter((c) => normalizeCommuneName(c.name).includes(q)).slice(0, 8);
-  }, [text]);
+  }, [text, COMMUNES]);
 
   const cmpSuggestions = useMemo(() => {
     const q = normalizeCommuneName(cmpQuery);
@@ -48,7 +52,7 @@ export const CommuneSearch = ({
     return COMMUNES.filter(
       (c) => !taken.has(c.name) && normalizeCommuneName(c.name).includes(q),
     ).slice(0, 8);
-  }, [cmpQuery, compareList]);
+  }, [cmpQuery, compareList, COMMUNES]);
 
   const pickSuggestion = (c: Commune) => {
     setText("");
@@ -127,7 +131,7 @@ export const CommuneSearch = ({
       return;
     }
     const results = COMMUNES.filter(
-      (c) => c.pop >= minN && (maxN === null || c.pop <= maxN),
+      (c) => c.pop > 0 && c.pop >= minN && (maxN === null || c.pop <= maxN),
     );
     if (results.length === 0) {
       toast.info("No se encontraron comunas en ese rango");
@@ -192,7 +196,7 @@ export const CommuneSearch = ({
                   <MapPin className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                   <span className="flex-1 truncate">{c.name}</span>
                   {c.pop > 0 && (
-                    <span className="font-mono text-[10px] text-muted-foreground">
+                    <span className="font-mono text-[10px] text-muted-foreground" title={POBLACION_LABEL}>
                       {c.pop.toLocaleString("es-CL")}
                     </span>
                   )}
@@ -274,7 +278,7 @@ export const CommuneSearch = ({
           Buscar comunas
         </button>
         <p className="text-[10px] text-text-muted">
-          Filtra por población. Resultados ordenables y exportables.
+          Filtra por {POBLACION_LABEL.toLowerCase()}. Resultados ordenables y exportables. Las comunas sin dato no entran al rango.
         </p>
       </TabsContent>
 
@@ -307,7 +311,7 @@ export const CommuneSearch = ({
                   <Plus className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                   <span className="flex-1 truncate">{c.name}</span>
                   {c.pop > 0 && (
-                    <span className="font-mono text-[10px] text-muted-foreground">
+                    <span className="font-mono text-[10px] text-muted-foreground" title={POBLACION_LABEL}>
                       {c.pop.toLocaleString("es-CL")}
                     </span>
                   )}

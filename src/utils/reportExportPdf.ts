@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import { formatAdjustmentLabel, type IsochroneReport, type IsochroneBandReport } from "./reportData";
 import type { MapCaptureImages } from "./mapCapture";
 import { ventaMM, VENTA_MM_LABEL } from "./formatVenta";
+import { popSourceLabel } from "./isochroneAnalysis";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PALETA Y TIPOGRAFÍA
@@ -38,7 +39,7 @@ const NSE_COLORS: Record<string, [number,number,number]> = {
 };
 
 const NSE_SOURCE_LABEL: Record<string, string> = {
-  gse:      "Manzanas GSE · Censo 2024 · ponderado por hogares",
+  gse:      "Manzanas GSE 2024 · ponderado por hogares",
   manzanas: "Manzanas INE · Censo 2017 · ponderado por población",
   comuna:   "Estimación comunal — una sola clase por comuna, no refleja la variación interna del área",
 };
@@ -683,7 +684,7 @@ const addBandPage = (
   doc.setTextColor(...C.slate600);
   doc.text(
     `Centro: ${report.iso.centerLat.toFixed(5)}, ${report.iso.centerLng.toFixed(5)}  ·  ` +
-    `Fuente: ${band.totals.source === "manzanas" ? "Manzanas Censo 2017" : "Estimación comunal proporcional"}`,
+    `Fuente población: ${popSourceLabel(band.totals)}`,
     ML, y
   );
   y += 8;

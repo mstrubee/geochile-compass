@@ -231,7 +231,7 @@ export const TerritorialLayerFloatingPanel = ({
                     onChange={onChileCommunesVariableChange}
                   />
                   <p className="text-[9.5px] leading-relaxed text-text-muted">
-                    Sin CSV INE, solo 52 comunas RM tienen datos. Sube <code>/ine_communes.csv</code> para cobertura nacional.
+                    Población: censada 2024 (INE), leída de la base; sin captura cargada, «sin dato». Superficie, ingreso y NSE vienen de <code>/ine_communes.csv</code> y no tienen fuente documentada.
                   </p>
                 </div>
               )}

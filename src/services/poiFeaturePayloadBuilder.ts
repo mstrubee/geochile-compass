@@ -53,7 +53,7 @@ type BuilderRole = keyof typeof ROLE_WEIGHTS_BUILDER;
  *  - /gse/<slug>.geojson — clasificación GSE fina por bloque (RM only,
  *    overlay sobre las manzanas).
  *  - /comunas.geojson — perímetro real de las 345 comunas (Chile).
- *  - /ine_communes.csv — población, densidad, ingreso, NSE por comuna
+ *  - /ine_communes.csv — superficie, ingreso, NSE por comuna (SIN fuente documentada); la población es la censada de la base (Censo 2024, INE)
  *    (cargado vía ineService).
  *
  * Estrategia:
@@ -444,28 +444,13 @@ const buildGseCells = async (
   return cells;
 };
 
-const buildRegionCells = async (
+export const buildRegionCells = async (
   poi: SavedPoi,
   comuna: string | null,
 ): Promise<ManzanaCell[]> => {
-  // Si por alguna razón no hay comuna, igual devolvemos UNA celda con
-  // valores neutros — preferimos features pobres pero presentes a una
-  // celda vacía que rompe todos los agregados.
-  if (!comuna) {
-    return [
-      {
-        id: `commune-unknown`,
-        pop: 50_000,
-        hh: 15_000,
-        nse: 3,
-        income: NSE_INCOME[3],
-        density: 1_000,
-        traffic: 50,
-        centroid: [poi.lng, poi.lat],
-        area_m2: 50_000_000, // 50 km² aproximado
-      },
-    ];
-  }
+  // SIN DATO ⇒ SIN CELDA. La población de la celda comunal es la censada (Censo 2024, INE); si la comuna no se resuelve o la base no la tiene,
+  // no se inventa una (antes: 50.000 hab. y 15.000 hogares de relleno): los agregados quedan en cero y el resto del flujo lo trata como «sin dato».
+  if (!comuna) return [];
 
   const { byName } = await loadComunasIndex();
   const ine = await loadIneIndex();
@@ -473,9 +458,13 @@ const buildRegionCells = async (
   const feature = byName.get(norm);
   const ineStats = ine.byName.get(norm);
 
-  const pop = ineStats?.poblacion ?? 50_000;
-  const density = ineStats?.densidad ?? 1_000;
-  const area = ineStats?.superficie_km2 ?? 50;
+  const pop = ineStats?.poblacion ?? null;
+  if (pop == null || pop <= 0) return [];
+
+  // Superficie: la del CSV (sin fuente documentada) o, si falta, la de la geometría de la comuna; nunca un valor fijo.
+  const areaKm2 = ineStats?.superficie_km2 ?? (feature?.geometry ? area(feature as never) / 1_000_000 : null);
+  if (areaKm2 == null || !(areaKm2 > 0)) return [];
+
   const nse: 1 | 2 | 3 | 4 | 5 = ineStats?.nse
     ? NSE_LABEL_TO_NUM[ineStats.nse] ?? 3
     : 3;
@@ -493,10 +482,10 @@ const buildRegionCells = async (
       hh: Math.round(pop / 3.2),
       nse,
       income,
-      density,
+      density: pop / areaKm2,
       traffic: 50,
       centroid,
-      area_m2: area * 1_000_000,
+      area_m2: areaKm2 * 1_000_000,
     },
   ];
 };

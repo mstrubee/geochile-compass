@@ -2,6 +2,7 @@ import { formatAdjustmentLabel, type IsochroneReport, type ReportProjection } fr
 import type { MapCaptureImages } from "./mapCapture";
 import { fitContain, pngSize } from "./imageSize";
 import { ventaMM, VENTA_MM_LABEL } from "./formatVenta";
+import { popSourceShort } from "./isochroneAnalysis";
 import type { Cell, SlideSurface } from "./slideSurface";
 import { PptxSlideSurface } from "./slideSurfacePptx";
 
@@ -155,7 +156,7 @@ export const drawTerritorySlide = (
   // ── Datos demográficos ─────────────────────────────────────────────────────
   let y = BODY_TOP;
   const resumen: Array<[string, string]> = [
-    ["Personas", fmt(band.totals.pop)],
+    [`Personas · ${popSourceShort(band.totals)}`, fmt(band.totals.pop)],
     ["Hogares", fmt(band.totals.hh)],
     ["Ingreso prom./hogar", fmtCLP(band.totals.incomeAvgPerHh)],
     ["Área", `${band.area_km2.toFixed(2)} km²`],

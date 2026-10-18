@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { CircleMarker, Popup, useMap } from "react-leaflet";
 import type { CircleMarker as LCircleMarker, LeafletMouseEvent } from "leaflet";
-import { COMMUNES, NSE_LABELS, NSE_INCOME, type Commune, type NSE } from "@/data/communes";
+import { NSE_LABELS, NSE_INCOME, type Commune, type NSE } from "@/data/communes";
+import { useCommunesWithPopulation } from "@/hooks/usePoblacion";
+import { POBLACION_LABEL, SIN_DATO } from "@/types/poblacion";
 import { colorForPopulation } from "@/utils/colorScales";
 import { fmtNum, fmtCLP, fmtArea, fmtDensity } from "@/utils/formatters";
 import {
@@ -39,7 +41,7 @@ const PopupRow = ({ k, v }: { k: string; v: string }) => (
   </div>
 );
 
-const CommunePopup = ({ c, lat, lng }: {
+export const CommunePopup = ({ c, lat, lng }: {
   c: Commune;
   lat: number;
   lng: number;
@@ -52,8 +54,8 @@ const CommunePopup = ({ c, lat, lng }: {
       </div>
       {hasData ? (
         <div className="space-y-0.5">
-          <PopupRow k="Población" v={fmtNum(c.pop)} />
-          <PopupRow k="Hogares" v={fmtNum(c.hh)} />
+          <PopupRow k={POBLACION_LABEL} v={fmtNum(c.pop)} />
+          <PopupRow k="Hogares (estimado)" v={fmtNum(c.hh)} />
           <PopupRow k="Área" v={fmtArea(c.area)} />
           <PopupRow k="Densidad" v={fmtDensity(c.density)} />
           <PopupRow k="NSE pred." v={NSE_LABELS[c.nse]} />
@@ -61,7 +63,10 @@ const CommunePopup = ({ c, lat, lng }: {
           <PopupRow k="Tráfico" v={c.traffic > 0 ? `${c.traffic}/100` : "—"} />
         </div>
       ) : (
-        <div className="text-[10px] text-[hsl(215_19%_55%)]">Sin datos demográficos detallados.</div>
+        <div className="space-y-0.5">
+          <PopupRow k={POBLACION_LABEL} v={SIN_DATO} />
+          <div className="text-[10px] text-[hsl(215_19%_55%)]">Sin datos demográficos detallados.</div>
+        </div>
       )}
       <div className="mt-1.5 border-t border-[hsl(215_19%_25%)] pt-1.5 space-y-0.5">
         <PopupRow k="Lat" v={lat.toFixed(5)} />
@@ -122,17 +127,17 @@ export const CommuneLayer = ({
     return () => { mounted = false; };
   }, []);
 
-  // Apply overrides + merge INE stats
+  // Apply overrides + merge INE stats. La población SIEMPRE es la del Censo 2024 (base); 0 = sin dato.
+  const censados = useCommunesWithPopulation();
   const communes = useMemo(() => {
-    return COMMUNES.map((c) => {
+    return censados.map((c) => {
       const ov = overrides[c.name];
       const base = ov ? { ...c, lat: ov.lat, lng: ov.lng } : { ...c };
       const stats = ine?.byName.get(normalizeCommuneName(c.name));
       if (stats) {
-        if (!base.pop && stats.poblacion) base.pop = stats.poblacion;
         if (!base.area && stats.superficie_km2) base.area = stats.superficie_km2;
         if (!base.density && stats.densidad) base.density = stats.densidad;
-        if (!base.hh && base.pop) base.hh = Math.round(base.pop / 3.3);
+        if (!base.hh && base.pop) base.hh = Math.round(base.pop / 3.3);                 // estimación con tamaño de hogar supuesto (3,3): no es dato del Censo
         if (stats.nse && c.pop === 0) {
           const n = NSE_LABEL_TO_NUM[stats.nse];
           if (n) base.nse = n;
@@ -141,7 +146,7 @@ export const CommuneLayer = ({
       }
       return base;
     });
-  }, [overrides, ine]);
+  }, [overrides, ine, censados]);
 
   // Open popup programmatically after fly-to
   useEffect(() => {

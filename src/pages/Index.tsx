@@ -1870,7 +1870,7 @@ const Index = () => {
       setFitMicrozoneId(id);
       toast.success(
         stats.manzanaCount > 0
-          ? `Microzona creada · ${stats.manzanaCount} manzanas · ${stats.pop.toLocaleString("es-CL")} hab.`
+          ? `Microzona creada · ${stats.manzanaCount} manzanas · ${stats.pop.toLocaleString("es-CL")} hab. (manzanas Censo 2017)`
           : "Microzona creada (activa la capa Manzanas para análisis demográfico)",
       );
       return id;

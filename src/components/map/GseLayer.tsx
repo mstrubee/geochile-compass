@@ -6,7 +6,9 @@ import type { Feature } from "geojson";
 import type { GseFeatureCollection, GseProperties, GseVariable } from "@/types/gse";
 import { colorForGse, GSE_VARIABLE_LABEL } from "@/utils/gseScales";
 import { gseService } from "@/services/gseService";
-import { COMMUNES, NSE_COLOR_HSL, NSE_LABELS, type Commune, type NSE } from "@/data/communes";
+import { NSE_COLOR_HSL, NSE_LABELS, type Commune, type NSE } from "@/data/communes";
+import { useCommunesWithPopulation } from "@/hooks/usePoblacion";
+import { POBLACION_LABEL, SIN_DATO } from "@/types/poblacion";
 import { fmtNum } from "@/utils/formatters";
 
 interface GseLayerProps {
@@ -24,7 +26,6 @@ const fmtN = (v: number | null, dig = 1) =>
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
-const COMMUNE_BY_NAME = new Map<string, Commune>(COMMUNES.map((c) => [norm(c.name), c]));
 
 const FallbackCirclePopup = ({ c }: { c: Commune }) => (
   <div style={{ minWidth: 170 }}>
@@ -33,7 +34,7 @@ const FallbackCirclePopup = ({ c }: { c: Commune }) => (
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "2px 8px", fontSize: 10 }}>
       <span style={{ color: "hsl(215 19% 50%)" }}>NSE pred.</span><span style={{ fontFamily: "monospace" }}>{NSE_LABELS[c.nse]}</span>
-      <span style={{ color: "hsl(215 19% 50%)" }}>Población</span><span style={{ fontFamily: "monospace" }}>{fmtNum(c.pop)}</span>
+      <span style={{ color: "hsl(215 19% 50%)" }}>{POBLACION_LABEL}</span><span style={{ fontFamily: "monospace" }}>{c.pop > 0 ? fmtNum(c.pop) : SIN_DATO}</span>
       <span style={{ color: "hsl(215 19% 50%)" }}>Hogares</span><span style={{ fontFamily: "monospace" }}>{fmtNum(c.hh)}</span>
     </div>
     <div style={{ marginTop: 6, fontSize: 9, color: "hsl(215 19% 35%)" }}>
@@ -96,11 +97,12 @@ export const GseLayer = ({
     };
   }, [map, visible, data]);
 
+  const COMMUNES = useCommunesWithPopulation();                      // población censada 2024 (base); 0 = sin dato
   const fallbackCommunes = useMemo(() => {
     if (!showCommuneFallback) return [];
     // Comunas que NO están cubiertas por GSE 2024 → mostramos círculo estimado.
     return COMMUNES.filter((c) => !coveredCommuneNames.has(norm(c.name)));
-  }, [coveredCommuneNames, showCommuneFallback]);
+  }, [coveredCommuneNames, showCommuneFallback, COMMUNES]);
 
   if (!visible) return null;
 

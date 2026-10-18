@@ -28,7 +28,7 @@ import type { ProjectionSettings } from "@/types/savedIsochrones";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Isochrone } from "@/types/isochrones";
-import type { IsochroneAnalysis } from "@/utils/isochroneAnalysis";
+import { popSourceLabel, type IsochroneAnalysis } from "@/utils/isochroneAnalysis";
 import { useIsochroneAnalysis } from "@/hooks/useIsochroneAnalysis";
 import { useIsochroneInsights } from "@/hooks/useIsochroneInsights";
 import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
@@ -132,7 +132,7 @@ const exportCsv = (a: IsochroneAnalysis) => {
   lines.push(`totales,hogares,${a.totals.hh}`);
   lines.push(`totales,ingreso_total_clp,${a.totals.incomeTotal}`);
   lines.push(`totales,ingreso_promedio_hogar_clp,${a.totals.incomeAvgPerHh}`);
-  lines.push(`totales,fuente,${a.totals.source}`);
+  lines.push(`totales,fuente,${popSourceLabel(a.totals)}`);
   lines.push(`densidad,pop_por_km2,${a.density.popPerKm2}`);
   lines.push(`densidad,hh_por_km2,${a.density.hhPerKm2}`);
   lines.push(`densidad,puntos_por_km2,${a.density.pointsPerKm2}`);
@@ -665,7 +665,7 @@ export const AnalysisPanel = ({
   }, [analysis]);
 
   const nseSource = analysis?.gse
-    ? "GSE manzana (Censo 2024)"
+    ? "GSE manzana 2024"
     : analysis?.totals.source === "manzanas"
       ? "Manzanas Censo 2017"
       : "Comunal";
@@ -789,13 +789,11 @@ export const AnalysisPanel = ({
               <div className="rounded-md bg-surface-2/40 px-3 py-1.5 text-[10px] text-muted-foreground">
                 Fuente población:{" "}
                 <span className="font-medium text-foreground">
-                  {analysis.totals.source === "manzanas"
-                    ? "Manzanas Censo 2017"
-                    : "Estimado por comuna (proporcional al área)"}
+                  {popSourceLabel(analysis.totals)}
                 </span>
                 {analysis.gse && (
                   <div className="mt-1">
-                    GSE/NSE enriquecido con {analysis.gse.manzanaCount} manzanas Censo 2024.
+                    GSE/NSE enriquecido con {analysis.gse.manzanaCount} manzanas GSE 2024.
                   </div>
                 )}
               </div>

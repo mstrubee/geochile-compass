@@ -1,5 +1,7 @@
 import { CircleMarker, Popup } from "react-leaflet";
-import { COMMUNES, NSE_LABELS, type Commune, type NSE } from "@/data/communes";
+import { NSE_LABELS, type Commune, type NSE } from "@/data/communes";
+import { useCommunesWithPopulation } from "@/hooks/usePoblacion";
+import { POBLACION_LABEL, SIN_DATO } from "@/types/poblacion";
 import { fmtNum } from "@/utils/formatters";
 import { trafficLevelOf, TRAFFIC_LEVELS, type TrafficLevel } from "@/utils/traffic";
 
@@ -23,7 +25,7 @@ const TrafficPopup = ({ c }: { c: Commune }) => {
       <div className="space-y-0.5">
         <PopupRow k="Índice tráfico" v={`${c.traffic}/100`} />
         <PopupRow k="Categoría" v={tc.label} />
-        <PopupRow k="Población" v={fmtNum(c.pop)} />
+        <PopupRow k={POBLACION_LABEL} v={c.pop > 0 ? fmtNum(c.pop) : SIN_DATO} />
         <PopupRow k="NSE pred." v={NSE_LABELS[c.nse]} />
         <PopupRow k="Hora punta est." v={c.traffic > 72 ? "07:30 / 18:30" : c.traffic > 50 ? "08:00 / 19:00" : "—"} />
       </div>
@@ -38,6 +40,7 @@ interface TrafficLayerProps {
 }
 
 export const TrafficLayer = ({ visible = true, nseFilter = null, trafficFilter = null }: TrafficLayerProps) => {
+  const COMMUNES = useCommunesWithPopulation();                      // población censada 2024 (base); 0 = sin dato
   if (!visible) return null;
   const anyFilter = nseFilter !== null || trafficFilter !== null;
   return (
