@@ -62,7 +62,7 @@ export const HealthFichaDialog = ({ open, onClose, summary, tipos, tiposError, s
           </section>
           <section aria-label="Qué NO dice esta capa" className="space-y-1">
             <p className="font-medium">Qué NO dice esta capa</p>
-            <ul className="list-disc space-y-1 pl-5"><li>{WARN.registry}</li><li>{WARN.counting}</li><li data-testid="health-ficha-heterogeneity">{WARN.heterogeneity}</li><li>{WARN.altaDefs}</li><li>{WARN.zeroTrue}</li></ul>
+            <ul className="list-disc space-y-1 pl-5"><li>{WARN.registry}</li><li>{WARN.counting}</li><li data-testid="health-ficha-heterogeneity">{WARN.heterogeneity}</li><li data-testid="health-ficha-report-rule">{WARN.reportRule}</li><li>{WARN.altaDefs}</li><li>{WARN.zeroTrue}</li></ul>
           </section>
         </div>
       </DialogContent>

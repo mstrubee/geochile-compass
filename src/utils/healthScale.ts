@@ -51,7 +51,8 @@ export const WARN = {
   privateDef: "«Privado» = dependencia administrativa Privado; no coincide con «sistema privado» ni con «no perteneciente al SNSS».",
   zeroTrue: "0 = la comuna no tiene ningún establecimiento que cumpla el filtro en el registro (cero verdadero).",
   counting: "Se cuentan TODOS los tipos de establecimiento del registro (consultas privadas, clínicas dentales, laboratorios, tomas de muestras, diálisis, vacunatorios, postas, hospitales…), no solo los que atienden pacientes. Filtre por tipo para acotar.",
-  heterogeneity: "El registro NO es homogéneo entre regiones: cuántos establecimientos privados figuran en una comuna depende de cómo cada SEREMI los autoriza y registra (consultas dentales, centros de especialidades, tomas de muestras). El conteo NO es oferta ni es comparable entre comunas o regiones (ver HALLAZGOS_FASE1A §7).",
+  heterogeneity: "El registro NO es homogéneo entre regiones: la cantidad de establecimientos privados (consultas dentales, centros de especialidades, tomas de muestras) varía entre regiones de un modo que la población no explica. La causa NO está comprobada (consulta pendiente a la SEREMI de Salud de Coquimbo y al DEIS). El conteo NO es oferta ni es comparable entre comunas o regiones (ver HALLAZGOS_FASE1A §7).",
+  reportRule: "En informes para clientes NO se publica el ranking nacional o interregional de «todos los establecimientos»: solo cortes asistenciales comparables (público; hospitales y clínicas) o comparaciones dentro de una misma región.",
   notClientReady: "Capa aún NO apta para clientes (client_ready = false): no entra a informes ni exportaciones.",
 } as const;
 

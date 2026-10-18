@@ -66,7 +66,8 @@ psql "$PROD" -1 -v ON_ERROR_STOP=1 -f supabase/migrations/20261102000100_health_
 ## Paso 5 — Revisión y `client_ready` (manual, **no se automatiza**)
 Las dos capas siguen en `false` (no entran a informes ni exportaciones y el panel lo avisa) hasta que se cumplan **las tres** condiciones:
 1. **(a)** Resuelta la anomalía del ranking: el panel dice qué se cuenta, ofrece el filtro por tipo y advierte la heterogeneidad entre regiones (`HALLAZGOS_FASE1A.md` §7).
-2. **(b)** El dueño las revisa **en un navegador contra Supabase real** después de aplicar. Mínimo a revisar: puntos y popups; coropleta; ranking y desglose de una comuna; filtros de alta complejidad (las dos definiciones), dependencia y tipo; cerrados ocultos por defecto; la ficha (tabla de clasificación y advertencias); procedencia y licencia; captura de mapa de un informe sin la capa mientras esté en `false`.
+2. **(b)** El dueño las revisa **en un navegador contra Supabase real** después de aplicar. Mínimo a revisar: puntos y popups; coropleta; ranking y desglose de una comuna; filtros de alta complejidad (las dos definiciones), dependencia y tipo; cerrados ocultos por defecto; la ficha (tabla de clasificación y advertencias); procedencia y licencia; captura de mapa de un informe sin la capa mientras esté en `false`; y que la ficha diga que la causa de la heterogeneidad entre regiones es **[NO COMPROBADO]** mientras no responda la SEREMI/DEIS (solicitud R5, `solicitudes/LISTA_1C.md`).
+   Con la capa en `true` rige la regla de DISENO §2.8: en informes para clientes **no** se publica el ranking nacional o interregional de «todos los establecimientos»; solo cortes asistenciales comparables o comparaciones dentro de una región.
 3. **(c)** Se pasan a `true` con un `UPDATE` explícito que **registra en `client_ready_note` la fecha, quién revisó y qué se revisó**:
    ```sql
    update public.thematic_layers
