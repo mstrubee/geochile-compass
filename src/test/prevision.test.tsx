@@ -16,7 +16,7 @@ import {
   casenByRegion, casenCounts, casenRangeText, countInexact, isapreFilterLabel, midpoint, QUESTIONS, QUESTION_STATE_TEXT, rangeText, totalRange, WARN_CASEN, WARN_ISAPRE,
 } from "@/utils/previsionScale";
 import { buildIsapreComunaPopup } from "@/utils/previsionPopup";
-import { CasenRegionPanel, IsapreChoroplethPanel, QuestionsBlock } from "@/components/map/PrevisionPanels";
+import { CASEN_SECTION_TITLE, CasenRegionSection, IsapreChoroplethPanel, QuestionsBlock } from "@/components/map/PrevisionPanels";
 
 beforeEach(() => rpcMock.mockReset());
 
@@ -227,15 +227,16 @@ describe("panel Isapre", () => {
   });
 });
 
-describe("panel CASEN regional", () => {
+describe("sección CASEN regional (dentro del panel Isapre)", () => {
   const casenProps = (rows: CasenRegionRow[], over: Record<string, unknown> = {}) => ({
-    layer: { client_ready: false, client_ready_note: "Pendiente." }, rows, loading: false, error: null, sources: [prov({ source_key: "mds_casen_2024_nacional" })], provenanceError: null, provenanceLoading: false, offset: 1, ...over,
+    layer: { client_ready: false, client_ready_note: "Pendiente." }, open: true, onOpenChange: vi.fn(), rows, loading: false, error: null,
+    sources: [prov({ source_key: "mds_casen_2024_nacional" })], provenanceError: null, provenanceLoading: false, ...over,
   });
 
   it("estimada con rango: nivel y sello, solo Fonasa e Isapre por defecto, y nunca una cifra puntual sola", () => {
-    render(<CasenRegionPanel {...casenProps([casen("13", "fonasa"), casen("13", "isapre"), casen("13", "otro")])} />);
-    expect(screen.getByTestId("prevision-level-seal").textContent).toContain("Estimada con rango");
-    expect(screen.getByTestId("prevision-level-seal").textContent).toContain("Estimado");
+    render(<CasenRegionSection {...casenProps([casen("13", "fonasa"), casen("13", "isapre"), casen("13", "otro")])} />);
+    expect(screen.getByTestId("casen-level-seal").textContent).toContain("Estimada con rango (intervalo de confianza del 95 %)");
+    expect(screen.getByTestId("casen-level-seal").textContent).toContain("Sello: Estimado");
     expect(screen.getByTestId("casen-13-isapre").textContent).toContain("entre 12,9 % y 15,6 %");
     expect(screen.queryByTestId("casen-13-otro")).toBeNull();
     fireEvent.click(screen.getByLabelText("Mostrar todos los sistemas"));
@@ -243,7 +244,7 @@ describe("panel CASEN regional", () => {
   });
 
   it("estimación no publicable: sin números, con el motivo, y se cuentan", () => {
-    render(<CasenRegionPanel {...casenProps([casen("13", "isapre"), casen("01", "isapre", { publishable: false, reason: "menos de 60 casos muestrales", pct: null, ci_lo: null, ci_hi: null })])} />);
+    render(<CasenRegionSection {...casenProps([casen("13", "isapre"), casen("01", "isapre", { publishable: false, reason: "menos de 60 casos muestrales", pct: null, ci_lo: null, ci_hi: null })])} />);
     const t = screen.getByTestId("casen-01-isapre").textContent ?? "";
     expect(t).toContain("no publicable: menos de 60 casos muestrales");
     expect(t).not.toMatch(/\d %/);
@@ -251,17 +252,54 @@ describe("panel CASEN regional", () => {
   });
 
   it("no pinta comunas, dice que no es representativa a ese nivel; 1b-4 no respondible; no se suma con otras fuentes", () => {
-    render(<CasenRegionPanel {...casenProps([casen("13", "isapre")])} />);
-    expect(screen.getByTestId("casen-region-panel").textContent).toContain("la encuesta no es representativa a ese nivel");
+    render(<CasenRegionSection {...casenProps([casen("13", "isapre")])} />);
+    expect(screen.getByTestId("casen-region-body").textContent).toContain("la encuesta no es representativa a ese nivel");
     expect(screen.getByTestId("question-1b-4").textContent).toContain("No respondible hoy");
     expect(screen.getByTestId("projects-warnings").textContent).toContain("No se suma con Isapre ni con Fonasa");
   });
 
   it("error o vacío: lo dice", () => {
-    const { rerender } = render(<CasenRegionPanel {...casenProps([], { error: "boom" })} />);
+    const { rerender } = render(<CasenRegionSection {...casenProps([], { error: "boom" })} />);
     expect(screen.getByTestId("casen-regions").textContent).toContain("No se pudieron leer los datos: boom");
-    rerender(<CasenRegionPanel {...casenProps([])} />);
+    rerender(<CasenRegionSection {...casenProps([])} />);
     expect(screen.getByTestId("casen-regions").textContent).toContain("Todavía no hay estimaciones cargadas");
+  });
+
+  it("es plegable: el título es «Previsión regional (CASEN 2024, estimada)», cerrada no monta su cuerpo y avisa al abrirse", () => {
+    const onOpenChange = vi.fn();
+    render(<CasenRegionSection {...casenProps([casen("13", "isapre")], { open: false, onOpenChange })} />);
+    expect(CASEN_SECTION_TITLE).toBe("Previsión regional (CASEN 2024, estimada)");
+    const d = screen.getByTestId("casen-region-section") as HTMLDetailsElement;
+    expect(d.querySelector("summary")?.textContent).toBe("Previsión regional (CASEN 2024, estimada)");
+    expect(d.open).toBe(false);
+    expect(screen.queryByTestId("casen-region-body")).toBeNull();
+    d.open = true;
+    fireEvent(d, new Event("toggle"));
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it("la sección conserva su PROPIO client_ready: con la capa Isapre apta y CASEN no, el aviso de CASEN sigue y el de Isapre no aparece", () => {
+    render(<IsapreChoroplethPanel {...isapreProps({ layer: { client_ready: true, client_ready_note: null }, casen: casenProps([casen("13", "isapre")], { layer: { client_ready: false, client_ready_note: "CASEN pendiente." } }) })} />);
+    const avisos = screen.getAllByTestId("health-not-client-ready");
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0].textContent).toContain("CASEN pendiente.");
+    expect(screen.getByTestId("casen-region-section").contains(avisos[0])).toBe(true);
+  });
+
+  it("con la capa Isapre NO apta y CASEN apta, solo aparece el aviso de Isapre", () => {
+    render(<IsapreChoroplethPanel {...isapreProps({ layer: { client_ready: false, client_ready_note: "Isapre pendiente." }, casen: casenProps([casen("13", "isapre")], { layer: { client_ready: true, client_ready_note: null } }) })} />);
+    const avisos = screen.getAllByTestId("health-not-client-ready");
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0].textContent).toContain("Isapre pendiente.");
+    expect(screen.getByTestId("casen-region-section").contains(avisos[0])).toBe(false);
+  });
+
+  it("el panel Isapre trae la sección dentro, con su título; sin la prop no hay sección", () => {
+    const { rerender } = render(<IsapreChoroplethPanel {...isapreProps()} />);
+    expect(screen.queryByTestId("casen-region-section")).toBeNull();
+    rerender(<IsapreChoroplethPanel {...isapreProps({ casen: casenProps([casen("13", "isapre")], { open: false }) })} />);
+    expect(screen.getByTestId("isapre-choropleth-panel").contains(screen.getByTestId("casen-region-section"))).toBe(true);
+    expect(screen.getByTestId("casen-region-section").textContent).toContain("Previsión regional (CASEN 2024, estimada)");
   });
 });
 

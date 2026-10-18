@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef } from "react";
 import { GeoJSON } from "react-leaflet";
 import type { Feature, Geometry } from "geojson";
-import type { GeoJSON as LeafletGeoJSON, Layer, Path, PathOptions } from "leaflet";
+import type { Layer, PathOptions } from "leaflet";
 import { useComunasGeoIndex, type ComunaProps } from "@/hooks/useComunasGeoIndex";
+import { nameTooltip, useComunaHover } from "@/hooks/useComunaHover";
 import type { IsapreComunaRow, IsapreMetric, IsaprePenetracionRow } from "@/types/prevision";
 import { classify, N_SCALE, PCT_SCALE } from "@/utils/isapreClasses";
 import { buildIsapreComunaPopup, type PenetracionSources } from "@/utils/previsionPopup";
@@ -24,8 +25,6 @@ interface Props {
   sources?: PenetracionSources;
 }
 
-const HIGHLIGHT: PathOptions = { weight: 2, color: "hsl(199 89% 70%)", fillOpacity: 0.85 };
-
 /**
  * Beneficiarios Isapre por comuna. Une `/comunas.geojson` con `get_isapre_comuna()` por `codigo_comuna`.
  * El color sale del PUNTO MEDIO del rango publicado (la ventana de la comuna muestra el rango). 0 publicado = color propio; comuna sin fila = «sin dato», gris punteado.
@@ -33,8 +32,6 @@ const HIGHLIGHT: PathOptions = { weight: 2, color: "hsl(199 89% 70%)", fillOpaci
  */
 export const IsapreChoroplethLayer = ({ rows, filterText, metric = "n", penRows, penShown, sexoSinInfo = false, sources }: Props) => {
   const { ready, fc, nombresPorCodigo } = useComunasGeoIndex(true);
-  const geoRef = useRef<LeafletGeoJSON | null>(null);
-  const hoverRef = useRef<Layer | null>(null);
   const rowByCut = useMemo(() => new Map((rows ?? []).map((r) => [r.cut, r])), [rows]);
   const penByCut = useMemo(() => new Map((penRows ?? []).map((r) => [r.cut, r])), [penRows]);
   const penShownByCut = useMemo(() => new Map((penShown ?? []).map((r) => [r.cut, r])), [penShown]);
@@ -50,11 +47,9 @@ export const IsapreChoroplethLayer = ({ rows, filterText, metric = "n", penRows,
     return { fillColor: c.color, fillOpacity: c.fillOpacity, color: BORDER_COLOR, weight: BORDER_WEIGHT, dashArray: c.dashed ? "3 3" : undefined };
   };
 
+  const hover = useComunaHover(styleFor as never);
   useEffect(() => {
-    if (geoRef.current) {
-      geoRef.current.setStyle(styleFor);
-      hoverRef.current = null;
-    }
+    hover.restyle();     // datos o métrica nuevos: restila todo SIN perder el resaltado de la comuna bajo el puntero
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowByCut, ready, metric, penShownByCut]);
 
@@ -62,22 +57,13 @@ export const IsapreChoroplethLayer = ({ rows, filterText, metric = "n", penRows,
 
   const onEachFeature = (feature: Feature<Geometry, ComunaProps>, layer: Layer) => {
     const cut = cutOf(feature);
+    hover.bind(layer, nameTooltip(() => latest.current.rowByCut.get(cut)?.name ?? latest.current.nombresPorCodigo[cut] ?? "Comuna"));
     layer.bindPopup(() => {
       const { rowByCut: byCut, nombresPorCodigo: names, filterText: ft, penByCut: pens, sexoSinInfo: si, sources: src, metric: m } = latest.current;
       const pen = src ? { row: pens.get(cut), sexoSinInfo: si, sources: src, metric: m } : undefined;
       return buildIsapreComunaPopup(byCut.get(cut), names[cut] ?? "Comuna", cut, ft, pen);
     });
-    layer.on({
-      mouseover: (e) => {
-        const next = e.target as Path;
-        const prev = hoverRef.current as Path | null;
-        if (prev && prev !== next) geoRef.current?.resetStyle(prev as never);
-        next.setStyle(HIGHLIGHT);
-        next.bringToFront();
-        hoverRef.current = next;
-      },
-    });
   };
 
-  return <GeoJSON key="isapre-choropleth" ref={(r) => { geoRef.current = r as unknown as LeafletGeoJSON | null; }} data={fc} style={styleFor} onEachFeature={onEachFeature} />;
+  return <GeoJSON key="isapre-choropleth" ref={hover.setRef} data={fc} style={hover.style as never} onEachFeature={onEachFeature} />;
 };

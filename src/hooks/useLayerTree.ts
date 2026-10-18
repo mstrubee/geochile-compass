@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toLayerNode, type LayerNode } from "@/types/layerNodes";
 import { POI_PAGE_SIZE, type FeaturePreview, type FeaturePreviewItem } from "@/utils/layerTree";
 import { buildTrashItems, type TrashItem } from "@/utils/layerTreeEdit";
+import { fetchEmbeddedLayerIds, withoutEmbedded } from "@/utils/embeddedLayers";
 
 export const LAYER_TREE_QUERY_KEY = ["layer-tree"] as const;
 
@@ -30,15 +31,17 @@ export interface LayerTreeData {
 }
 
 const fetchLayerTreeData = async (): Promise<LayerTreeData> => {
-  const [nodes, counts] = await Promise.all([
+  const [nodes, counts, embedded] = await Promise.all([
     // Los administradores también ven lo archivado (política de lectura): acá solo lo activo.
     fetchAll((from, to) =>
       supabase.from("layer_nodes").select("*").is("archived_at", null).order("id").range(from, to),
     ),
     fetchAll((from, to) => supabase.from("territorial_layers").select("id,feature_count").order("id").range(from, to)),
+    fetchEmbeddedLayerIds(),
   ]);
   return {
-    nodes: nodes.map(toLayerNode),
+    // las capas incrustadas en el panel de otra (CASEN dentro de Isapre) no tienen nodo visible
+    nodes: withoutEmbedded(nodes.map(toLayerNode), embedded),
     featureCounts: new Map(counts.map((c) => [c.id, c.feature_count ?? 0])),
   };
 };

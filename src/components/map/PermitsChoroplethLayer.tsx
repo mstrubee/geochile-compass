@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef } from "react";
 import { GeoJSON } from "react-leaflet";
 import type { Feature, Geometry } from "geojson";
-import type { GeoJSON as LeafletGeoJSON, Layer, Path, PathOptions } from "leaflet";
+import type { Layer, PathOptions } from "leaflet";
 import { useComunasGeoIndex, type ComunaProps } from "@/hooks/useComunasGeoIndex";
+import { nameTooltip, useComunaHover } from "@/hooks/useComunaHover";
 import type { PermitChoroplethRow, PermitSelection } from "@/types/permits";
 import { classify, displayValue, formatPermitValue, METRIC_LABEL, periodLabel } from "@/utils/permitsScale";
 
@@ -13,8 +14,6 @@ interface Props {
   onSelectComuna: (cut: string, name: string) => void;
 }
 
-const HIGHLIGHT: PathOptions = { weight: 2, color: "hsl(199 89% 70%)", fillOpacity: 0.85 };
-
 /**
  * Coropleta por comuna de "Permisos de edificación". Une el GeoJSON estático (`/comunas.geojson`, por
  * `codigo_comuna`, SIEMPRE texto de 5 dígitos) con las filas de `get_permit_choropleth()`.
@@ -22,8 +21,6 @@ const HIGHLIGHT: PathOptions = { weight: 2, color: "hsl(199 89% 70%)", fillOpaci
  */
 export const PermitsChoroplethLayer = ({ rows, selection, breaks, onSelectComuna }: Props) => {
   const { ready, fc, nombresPorCodigo } = useComunasGeoIndex(true);
-  const geoRef = useRef<LeafletGeoJSON | null>(null);
-  const hoverRef = useRef<Layer | null>(null);
   const rowByCut = useMemo(() => new Map((rows ?? []).map((r) => [r.comuna_cut, r])), [rows]);
 
   // Los popups se construyen al abrirse: leen SIEMPRE lo último vía ref (no quedan con datos viejos).
@@ -44,11 +41,9 @@ export const PermitsChoroplethLayer = ({ rows, selection, breaks, onSelectComuna
     };
   };
 
+  const hover = useComunaHover(styleFor as never);
   useEffect(() => {
-    if (geoRef.current) {
-      geoRef.current.setStyle(styleFor);
-      hoverRef.current = null;
-    }
+    hover.restyle();     // datos o selección nuevos: restila todo SIN perder el resaltado de la comuna bajo el puntero
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowByCut, selection.display, selection.metric, breaks, ready]);
 
@@ -86,27 +81,16 @@ export const PermitsChoroplethLayer = ({ rows, selection, breaks, onSelectComuna
 
   const onEachFeature = (feature: Feature<Geometry, ComunaProps>, layer: Layer) => {
     const cut = cutOf(feature);
+    hover.bind(layer, nameTooltip(() => latest.current.rowByCut.get(cut)?.comuna_name ?? latest.current.nombresPorCodigo[cut] ?? "Comuna"));
     layer.bindPopup(() => popupFor(cut));
-    layer.on({
-      mouseover: (e) => {
-        const next = e.target as Path;
-        const prev = hoverRef.current as Path | null;
-        if (prev && prev !== next) geoRef.current?.resetStyle(prev as never);
-        next.setStyle(HIGHLIGHT);
-        next.bringToFront();
-        hoverRef.current = next;
-      },
-    });
   };
 
   return (
     <GeoJSON
       key="permits-choropleth"
-      ref={(r) => {
-        geoRef.current = r as unknown as LeafletGeoJSON | null;
-      }}
+      ref={hover.setRef}
       data={fc}
-      style={styleFor}
+      style={hover.style as never}
       onEachFeature={onEachFeature}
     />
   );

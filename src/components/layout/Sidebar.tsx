@@ -772,7 +772,7 @@ export const Sidebar = ({
   onFocusMicrozone,
   onGenerateVoronoi,
   savedPois = [],
-  savedPoisVisible = true,
+  savedPoisVisible = false,
   onToggleSavedPoisVisible,
   onRemoveSavedPoi,
   onDeleteFolder,

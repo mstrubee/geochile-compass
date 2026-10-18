@@ -450,7 +450,7 @@ describe("capa en el mapa: clases discretas viridis, relleno 0,7, borde visible,
     await setup("n");
     await waitFor(() => expect((got.layer?.sources as PenetracionSources | undefined)?.censo.period_end).toBe("2024-12-31"));
     const bound: Array<() => HTMLElement> = [];
-    gj.props!.onEachFeature(feat("90002"), { bindPopup: (f: () => HTMLElement) => bound.push(f), on: () => undefined });
+    gj.props!.onEachFeature(feat("90002"), { bindPopup: (f: () => HTMLElement) => bound.push(f), bindTooltip: () => undefined, on: () => undefined });
     const el = bound[0]();
     expect(el.querySelector('[data-testid="popup-penetracion"]')?.textContent).toBe("Penetración: 50,0 %");
     expect(el.querySelector('[data-testid="popup-poblacion"]')?.textContent).toBe("Población censada 2024 (INE): 100");
@@ -460,7 +460,7 @@ describe("capa en el mapa: clases discretas viridis, relleno 0,7, borde visible,
 
   it("un rango que cruza clases lo dice la ventana (la de la escala de la métrica activa); uno que cae en una sola, no", async () => {
     await setup("pct");
-    const popup = (c: string) => { const b: Array<() => HTMLElement> = []; gj.props!.onEachFeature(feat(c), { bindPopup: (f: () => HTMLElement) => b.push(f), on: () => undefined }); return b[0](); };
+    const popup = (c: string) => { const b: Array<() => HTMLElement> = []; gj.props!.onEachFeature(feat(c), { bindPopup: (f: () => HTMLElement) => b.push(f), bindTooltip: () => undefined, on: () => undefined }); return b[0](); };
     expect(popup("90004").querySelector('[data-testid="popup-range-classes"]')).toBeNull();     // 125 % exacto
     // 1–4 %: cruza «0–2 %» y «2–5 %»
     const ranged = buildIsapreComunaPopup(comuna("90004", "D", 1, 4), "D", "90004", "f", { row: pen("90004", "D", 1, 4, 100), sexoSinInfo: false, sources: SOURCES, metric: "pct" });

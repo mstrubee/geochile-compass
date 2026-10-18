@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toLayerNode } from "@/types/layerNodes";
 import type { TerritorialGroup, TerritorialLayer, TerritorialFeature } from "@/types/territorial";
 import { groupsFromNodes } from "@/utils/territorialGroups";
+import { fetchEmbeddedLayerIds, withoutEmbedded } from "@/utils/embeddedLayers";
 
 export const TERRITORIAL_LAYERS_QUERY_KEY = ["territorial-layers"] as const;
 
@@ -19,9 +20,10 @@ const EMPTY_LAYERS: TerritorialLayer[] = [];
 const fetchTerritorialData = async (): Promise<TerritorialData> => {
   // Solo lo activo: lo que está en la papelera del árbol no debe verlo el análisis ni el mapa.
   // Los grupos son las carpetas raíz del árbol de capas (la tabla `territorial_layer_groups` ya no se lee).
-  const [roots, l] = await Promise.all([
+  const [roots, l, embedded] = await Promise.all([
     supabase.from("layer_nodes").select("*").eq("kind", "folder").is("parent_id", null).is("archived_at", null).eq("scope", "shared"),
     supabase.from("territorial_layers_active").select("*").order("order_index", { ascending: true }),
+    fetchEmbeddedLayerIds(),    // capas temáticas incrustadas en el panel de otra: sin nodo visible
   ]);
   if (roots.error) throw roots.error;
   const groups = groupsFromNodes((roots.data ?? []).map(toLayerNode));
@@ -29,9 +31,9 @@ const fetchTerritorialData = async (): Promise<TerritorialData> => {
     // Si la vista aún no existe (el código llegó antes que la migración) se lee la tabla.
     const l2 = await supabase.from("territorial_layers").select("*").order("order_index", { ascending: true });
     if (l2.error) throw l2.error;
-    return { groups, layers: (l2.data ?? []) as unknown as TerritorialLayer[] };
+    return { groups, layers: withoutEmbedded((l2.data ?? []) as unknown as TerritorialLayer[], embedded) };
   }
-  return { groups, layers: (l.data ?? []) as unknown as TerritorialLayer[] };
+  return { groups, layers: withoutEmbedded((l.data ?? []) as unknown as TerritorialLayer[], embedded) };
 };
 
 /**
