@@ -32,7 +32,7 @@ for a in "$@"; do case "$a" in --skip-check) SKIP_CHECK=1;; --reset-dbs) RESET_D
 # LÍNEA BASE (medida en main, commit 9026d67). Un PR no puede empeorarla; si cambia, se actualiza AQUÍ y se explica en el PR.
 # Vitest: 472 tests / 34 archivos en main (9026d67) + 40 tests / 3 archivos de fix/seguridad-edge
 # (edgeAuth 24, clientReady 12, migrationsConvention 4) = 512 / 37.
-BASE_VITEST_TESTS=659; BASE_VITEST_FILES=44
+BASE_VITEST_TESTS=663; BASE_VITEST_FILES=44
 BASE_PERMISOS_PASS=43; BASE_PERMISOS_SKIP=4; BASE_PROYECTOS_PASS=45
 BASE_SQL_P12=92; BASE_SQL_PARTE4_GEO=111; BASE_SQL_PARTE4_NODES=7
 BASE_SQL_HEALTH=71; BASE_SQL_HEALTH_RB=4; BASE_SALUD_PASS=92        # Fase 1a (establecimientos): pruebas SQL, rollback y pytest de etl/salud

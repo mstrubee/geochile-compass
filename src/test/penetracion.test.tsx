@@ -29,7 +29,7 @@ vi.mock("@/components/map/IsapreChoroplethLayer", async (orig) => {
 import { PrevisionHost } from "@/components/map/PrevisionHost";
 import { IsapreChoroplethPanel } from "@/components/map/PrevisionPanels";
 import { buildIsapreComunaPopup, type PenetracionSources } from "@/utils/previsionPopup";
-import { pctMid, pctRangeText, penetracionRowsShown, QUESTIONS, WARN_PENETRACION } from "@/utils/previsionScale";
+import { PCT_APPROX_NOTE, pctIsApprox, pctMid, pctRangeText, penetracionRowsShown, QUESTIONS, WARN_PENETRACION } from "@/utils/previsionScale";
 import { FILL_OPACITY, N_SCALE, PCT_SCALE, VIRIDIS_7 } from "@/utils/isapreClasses";
 
 const pen = (cut: string, name: string, lo: number | null, hi: number | null, poblacion: number | null, over: Partial<IsaprePenetracionRow> = {}): IsaprePenetracionRow => ({
@@ -64,6 +64,26 @@ describe("utilidades de penetración", () => {
     expect(pctRangeText(125, 125, true)).toBe("125,0 %");
   });
 
+  it("el criterio es el texto ya redondeado: si los dos extremos dicen lo mismo con 1 decimal, un solo valor con «≈»; si no, «entre a % y b %»", () => {
+    const hualpen = pen("08112", "Hualpén", 4643, 4662, 87731);
+    expect(hualpen.pct_lo).toBeCloseTo(5.2921, 3);
+    expect(hualpen.pct_hi).toBeCloseTo(5.3138, 3);
+    expect(pctRangeText(hualpen.pct_lo, hualpen.pct_hi, hualpen.exact)).toBe("≈ 5,3 %");
+    const camarones = pen("15102", "Camarones", 2, 4, 861);
+    expect(pctRangeText(camarones.pct_lo, camarones.pct_hi, camarones.exact)).toBe("entre 0,2 % y 0,5 %");
+    const vitacura = pen("13132", "Vitacura", 77372, 77372, 86420);
+    expect(pctRangeText(vitacura.pct_lo, vitacura.pct_hi, vitacura.exact)).toBe("89,5 %");
+    // exacto sin «≈» aunque el decimal sea el mismo; extremos que redondean distinto (5,24 y 5,26) siguen como «entre»
+    expect(pctRangeText(5.3, 5.3, true)).toBe("5,3 %");
+    expect(pctRangeText(5.24, 5.26, false)).toBe("entre 5,2 % y 5,3 %");
+    expect(pctRangeText(5.25, 5.34, false)).toBe("≈ 5,3 %");
+    expect(pctIsApprox(5.29, 5.31, false)).toBe(true);
+    expect(pctIsApprox(5.29, 5.31, true)).toBe(false);
+    expect(pctIsApprox(0.23, 0.46, false)).toBe(false);
+    expect(pctIsApprox(null, 5, false)).toBe(false);
+    expect(PCT_APPROX_NOTE).toBe("rango publicado menor que 0,1 puntos");
+  });
+
   it("el filtro «sin alta» muestra solo las comunas permitidas", () => {
     const rows = [pen("90001", "A", 1, 1, 10), pen("90002", "B", 2, 2, 10)];
     expect(penetracionRowsShown(rows, new Set(["90002"])).map((r) => r.cut)).toEqual(["90002"]);
@@ -89,6 +109,31 @@ describe("ventana de la comuna: bloque «Previsión de salud»", () => {
     expect(txt(el, "popup-fuentes")).toContain("período hasta 2025-12-31; publicación 2026-01-28");
     expect(txt(el, "popup-fuentes")).toContain("INE, Censo 2024 (período hasta 2024-12-31; publicación 2025-03-27)");
     expect(el.querySelector('[data-testid="popup-over100"]')).toBeNull();
+  });
+
+  it("Hualpén (4.643–4.662 sobre 87.731): «≈ 5,3 %» con la nota; Camarones (2–4 sobre 861): «entre 0,2 % y 0,5 %» sin nota; Vitacura exacta: «89,5 %»", () => {
+    const hualpen = build(comuna("08112", "Hualpén", 4643, 4662), pen("08112", "Hualpén", 4643, 4662, 87731));
+    expect(txt(hualpen, "popup-isapre")).toBe("Beneficiarios Isapre: entre 4.643 y 4.662");
+    expect(txt(hualpen, "popup-penetracion")).toBe("Penetración: ≈ 5,3 %");
+    expect(txt(hualpen, "popup-pct-approx")).toBe("(rango publicado menor que 0,1 puntos)");
+    expect(hualpen.textContent).not.toContain("entre 5,3 % y 5,3 %");
+    const camarones = build(comuna("15102", "Camarones", 2, 4), pen("15102", "Camarones", 2, 4, 861));
+    expect(txt(camarones, "popup-penetracion")).toBe("Penetración: entre 0,2 % y 0,5 %");
+    expect(camarones.querySelector('[data-testid="popup-pct-approx"]')).toBeNull();
+    expect(camarones.textContent).not.toContain("≈");
+    const vitacura = build(comuna("13132", "Vitacura", 77372, 77372), pen("13132", "Vitacura", 77372, 77372, 86420));
+    expect(txt(vitacura, "popup-penetracion")).toBe("Penetración: 89,5 %");
+    expect(vitacura.querySelector('[data-testid="popup-pct-approx"]')).toBeNull();
+    expect(vitacura.textContent).not.toContain("≈");
+  });
+
+  it("«≈» y «el rango abarca dos clases» conviven sin contradicción: 4,96–5,04 % se lee «≈ 5,0 %» y cruza «2–5 %» y «5–10 %»", () => {
+    const r = pen("90009", "Borde", 4960, 5040, 100000);
+    const el = buildIsapreComunaPopup(comuna("90009", "Borde", 4960, 5040), "x", "90009", "f", { row: r, sexoSinInfo: false, sources: SOURCES, metric: "pct" });
+    expect(txt(el, "popup-penetracion")).toBe("Penetración: ≈ 5,0 %");
+    expect(txt(el, "popup-pct-approx")).toBe("(rango publicado menor que 0,1 puntos)");
+    expect(txt(el, "popup-range-classes")).toContain("El rango abarca dos clases (2–5 % y 5–10 %)");
+    expect(txt(el, "popup-range-classes")).not.toMatch(/entre|≈/);                                  // la nota habla de clases, no repite el rango
   });
 
   it("rango: «entre a y b» beneficiarios y «entre a % y b %»", () => {
@@ -204,6 +249,14 @@ describe("panel con métrica «Penetración»", () => {
     expect(t).toContain("No se recorta a 100 %");
     expect(t).toContain("Puede reflejar diferencias de definición territorial o de fecha entre las dos fuentes, o el efecto de poblaciones muy pequeñas; la causa no está comprobada.");
     expect(t).not.toMatch(/no (es|un) error|señala/i);
+  });
+
+  it("comunas sobre 100 % con rango casi exacto: «≈» y la nota, en el mismo criterio", () => {
+    const rows = [pen("90001", "Casi", 12496, 12504, 10000)];                                       // 124,96–125,04 % → «≈ 125,0 %»
+    render(<IsapreChoroplethPanel {...baseProps()} penRows={rows} penShown={rows} />);
+    const t = screen.getByTestId("isapre-over100").textContent ?? "";
+    expect(t).toContain("Casi: ≈ 125,0 % (rango publicado menor que 0,1 puntos)");
+    expect(t).not.toContain("entre 125,0 % y 125,0 %");
   });
 
   it("advertencias de la métrica: método, asimetría, fechas distintas, comuna no declarada [NO COMPROBADO], sin Fonasa ni «resto»", () => {

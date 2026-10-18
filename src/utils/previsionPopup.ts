@@ -2,7 +2,7 @@ import type { IsapreComunaRow, IsapreMetric, IsaprePenetracionRow } from "@/type
 import { POBLACION_LABEL } from "@/types/poblacion";
 import { fmtN } from "@/utils/healthScale";
 import { N_SCALE, PCT_SCALE, rangeClassNote } from "@/utils/isapreClasses";
-import { FONASA_PENDING, WARN_ISAPRE, WARN_PENETRACION, pctRangeText, rangeText } from "@/utils/previsionScale";
+import { FONASA_PENDING, PCT_APPROX_NOTE, WARN_ISAPRE, WARN_PENETRACION, pctIsApprox, pctRangeText, rangeText } from "@/utils/previsionScale";
 
 /** Procedencia de las dos capturas que se muestran juntas: período de los datos y fecha de publicación (no son lo mismo). */
 export interface PenetracionSources {
@@ -48,6 +48,7 @@ export const buildIsapreComunaPopup = (row: IsapreComunaRow | undefined, fallbac
     add(`${POBLACION_LABEL}: ${pen.sexoSinInfo ? "sin dato (el Censo no tiene «sexo sin información»)" : r?.poblacion == null ? "sin dato" : fmtN(r.poblacion)}`, "", "popup-poblacion");
     const pctText = pen.sexoSinInfo ? "sin dato" : pctRangeText(r?.pct_lo, r?.pct_hi, r?.exact);
     add(`Penetración: ${pctText}`, "font-weight:600", "popup-penetracion");
+    if (!pen.sexoSinInfo && pctIsApprox(r?.pct_lo, r?.pct_hi, r?.exact)) add(`(${PCT_APPROX_NOTE})`, "font-size:11px;opacity:.8", "popup-pct-approx");
     const pNote = pen.metric === "pct" && !pen.sexoSinInfo ? rangeClassNote(PCT_SCALE, r?.pct_lo, r?.pct_hi) : null;
     if (pNote) add(pNote, "font-size:11px;color:#b45309", "popup-range-classes");
     if ((r?.pct_hi ?? 0) > 100) add("Supera 100 %: se muestra tal cual. Puede reflejar diferencias de definición territorial (domicilio Isapre [NO COMPROBADO] frente a residencia censal) o de fecha entre las dos fuentes, o el efecto de poblaciones muy pequeñas; la causa no está comprobada.", "font-size:11px;color:#b45309", "popup-over100");

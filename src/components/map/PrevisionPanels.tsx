@@ -6,7 +6,7 @@ import { ALTA_LABEL, fmtN } from "@/utils/healthScale";
 import { FILL_OPACITY, legendRows, N_SCALE, PCT_SCALE, type LegendRow } from "@/utils/isapreClasses";
 import {
   casenByRegion, casenCounts, casenRangeText, CASEN_LEVEL_SEAL, countInexact, countPctInexact, countPctOver100, FONASA_PENDING, isapreFilterLabel, ISAPRE_LEVEL_SEAL, MIN_TRAMO_LABEL,
-  midpoint, pctMid, pctRangeText, QUESTIONS, QUESTION_STATE_TEXT, rangeText, SEXO_LABEL, SISTEMAS_SHOWN, SISTEMA_LABEL, totalRange, WARN_CASEN, WARN_ISAPRE, WARN_PENETRACION,
+  midpoint, PCT_APPROX_NOTE, pctIsApprox, pctMid, pctRangeText, QUESTIONS, QUESTION_STATE_TEXT, rangeText, SEXO_LABEL, SISTEMAS_SHOWN, SISTEMA_LABEL, totalRange, WARN_CASEN, WARN_ISAPRE, WARN_PENETRACION,
 } from "@/utils/previsionScale";
 import { ClientReadyNotice } from "./HealthPanels";
 import { ProjectsPanelShell, SourceBlock } from "./ProjectsPanelShell";
@@ -117,7 +117,7 @@ export const IsapreChoroplethPanel = (p: IsapreProps) => {
         {pct && pctInexact > 0 && <p role="status" data-testid="isapre-inexact">{fmtN(pctInexact)} comunas se muestran como rango por conteos pequeños suprimidos.</p>}
         {pct && over100.length > 0 && (
           <p role="alert" data-testid="isapre-over100" className="text-amber-700">
-            {fmtN(over100.length)} {over100.length === 1 ? "comuna supera" : "comunas superan"} 100 % ({over100.map((r) => `${r.name}: ${pctRangeText(r.pct_lo, r.pct_hi, r.exact)}`).join("; ")}): {WARN_PENETRACION.noClip}
+            {fmtN(over100.length)} {over100.length === 1 ? "comuna supera" : "comunas superan"} 100 % ({over100.map((r) => `${r.name}: ${pctRangeText(r.pct_lo, r.pct_hi, r.exact)}${pctIsApprox(r.pct_lo, r.pct_hi, r.exact) ? ` (${PCT_APPROX_NOTE})` : ""}`).join("; ")}): {WARN_PENETRACION.noClip}
           </p>
         )}
         {pct && p.penError && <p role="alert" className="text-destructive">No se pudo leer la penetración: {p.penError}</p>}

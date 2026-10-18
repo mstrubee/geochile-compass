@@ -111,9 +111,18 @@ export const altaOptions: readonly HealthAltaDef[] = ["hospital", "ampliada"];
 /** Punto medio del rango de penetración; null = sin dato. */
 export const pctMid = (r: Pick<IsaprePenetracionRow, "pct_lo" | "pct_hi">): number | null => (r.pct_lo == null || r.pct_hi == null ? null : (r.pct_lo + r.pct_hi) / 2);
 
-/** «21,8 %» o «entre 8,9 % y 20,7 %»; «sin dato» si falta. */
-export const pctRangeText = (lo: number | null | undefined, hi: number | null | undefined, exact?: boolean | null): string =>
-  lo == null || hi == null ? "sin dato" : exact || lo === hi ? fmtPct(lo) : `entre ${fmtPct(lo)} y ${fmtPct(hi)}`;
+export const PCT_APPROX_NOTE = "rango publicado menor que 0,1 puntos";
+
+/** El rango NO es exacto pero sus dos extremos, ya formateados con 1 decimal, dicen lo mismo (p. ej. 5,29 % y 5,31 % → «5,3 %»): se muestra «≈ valor», no «entre 5,3 % y 5,3 %». */
+export const pctIsApprox = (lo: number | null | undefined, hi: number | null | undefined, exact?: boolean | null): boolean =>
+  lo != null && hi != null && !exact && lo !== hi && fmtPct(lo) === fmtPct(hi);
+
+/** «21,8 %» (exacto), «≈ 5,3 %» (rango menor que 0,1 puntos), «entre 8,9 % y 20,7 %» (rango); «sin dato» si falta. La comparación es sobre el texto ya redondeado. */
+export const pctRangeText = (lo: number | null | undefined, hi: number | null | undefined, exact?: boolean | null): string => {
+  if (lo == null || hi == null) return "sin dato";
+  if (exact || lo === hi) return fmtPct(lo);
+  return pctIsApprox(lo, hi, exact) ? `≈ ${fmtPct(lo)}` : `entre ${fmtPct(lo)} y ${fmtPct(hi)}`;
+};
 
 /** Comunas que se muestran en la capa de penetración: todas las filas y, si hay filtro «sin alta», solo las que están en `allowed` (CUT de get_isapre_comuna con ese filtro). */
 export const penetracionRowsShown = (rows: IsaprePenetracionRow[] | undefined, allowed: Set<string> | null): IsaprePenetracionRow[] =>
