@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { fetchLayerProvenance } from "@/services/permitsService";
-import { fetchHealthComunaCounts, fetchHealthEstablishments, fetchHealthSummary, fetchHealthTipos } from "@/services/healthService";
+import { fetchHealthComunaCounts, fetchHealthComunaTipos, fetchHealthEstablishments, fetchHealthSummary, fetchHealthTipos } from "@/services/healthService";
 import { HEALTH_DATASET, type HealthFilters } from "@/types/health";
 import type { Bounds } from "@/types/projects";
 
@@ -15,6 +15,9 @@ export const useHealthPoints = (bounds: Bounds | null, filters: HealthFilters, e
 
 export const useHealthComunaCounts = (filters: HealthFilters, enabled: boolean) =>
   useQuery({ queryKey: ["health", "comuna-counts", filters], queryFn: () => fetchHealthComunaCounts(filters), enabled, staleTime: STALE, retry: 1, placeholderData: keepPreviousData });
+
+export const useHealthComunaTipos = (cut: string | null) =>
+  useQuery({ queryKey: ["health", "comuna-tipos", cut], queryFn: () => fetchHealthComunaTipos(cut as string), enabled: cut != null, staleTime: STALE, retry: 1 });
 
 export const useHealthSummary = (enabled: boolean) =>
   useQuery({ queryKey: ["health", "summary"], queryFn: fetchHealthSummary, enabled, staleTime: 5 * STALE, retry: 1 });

@@ -4,8 +4,9 @@
 -- Las claves health.* de pipeline_settings se borran.
 drop function if exists public.get_health_tipo_clasificacion();
 drop function if exists public.get_health_summary();
-drop function if exists public.get_health_comuna_counts(boolean, text[], text[], text[], text);
-drop function if exists public.get_health_establishments(double precision, double precision, double precision, double precision, boolean, text[], text[], text[], text, integer);
+drop function if exists public.get_health_comuna_tipos(char);
+drop function if exists public.get_health_comuna_counts(boolean, text[], text[], text[], text, text[], text[]);
+drop function if exists public.get_health_establishments(double precision, double precision, double precision, double precision, boolean, text[], text[], text[], text, integer, text[], text[]);
 drop function if exists public._health_current_snapshot();
 drop function if exists public.publish_health_establishments(uuid);
 drop table if exists public.health_establishments_stage;

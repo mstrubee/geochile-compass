@@ -13,15 +13,22 @@ export type HealthComplejidad = "alta" | "mediana" | "baja" | "no_aplica" | "sin
 /** D1: «hospital» = alta complejidad y tipo Hospital (por defecto) · «ampliada» = además Clínicas y Centros de Especialidades. */
 export type HealthAltaDef = "hospital" | "ampliada";
 
+/** AmbitoFuncionamiento de la fuente. Por defecto se cuentan solo «Establecimiento de Salud»: las unidades y los programas cuelgan de un establecimiento. */
+export const AMBITO_ESTABLECIMIENTO = "Establecimiento de Salud";
+
 export interface HealthFilters {
   includeClosed: boolean;
+  /** null = todos los ámbitos (unidades de atención y programas incluidos) */
+  ambito: string[] | null;
+  /** tipo_norm de la tabla de clasificación; null = todos los tipos */
+  tipo: string[] | null;
   dependencia: string[] | null;
   complejidad: HealthComplejidad[] | null;
   clase: HealthClase[] | null;
   alta: HealthAltaDef | null;
 }
 
-export const DEFAULT_HEALTH_FILTERS: HealthFilters = { includeClosed: false, dependencia: null, complejidad: null, clase: null, alta: null };
+export const DEFAULT_HEALTH_FILTERS: HealthFilters = { includeClosed: false, ambito: [AMBITO_ESTABLECIMIENTO], tipo: null, dependencia: null, complejidad: null, clase: null, alta: null };
 
 /** Fila de get_health_establishments(). */
 export interface HealthEstablishmentRow {
@@ -64,6 +71,9 @@ export interface HealthComunaCountRow {
   snapshot_id: string;
   captured_at: string;
 }
+
+/** Fila de get_health_comuna_tipos(): qué hay detrás del número de una comuna. */
+export interface HealthComunaTipoRow { tipo_glosa: string; ambito: string | null; estado: "vigente" | "cerrado"; n: number }
 
 export interface HealthSummaryRow { dimension: string; value: string; n: number }
 

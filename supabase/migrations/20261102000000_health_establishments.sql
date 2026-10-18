@@ -10,6 +10,7 @@
 --                                    en la base, calcula geo_status y las clases
 --   get_health_establishments()      puntos por bbox con filtros (SECURITY INVOKER)
 --   get_health_comuna_counts()       CAPA DERIVADA: establecimientos por comuna con los filtros elegidos y ranking
+--   get_health_comuna_tipos()        desglose de una comuna por tipo y estado (qué hay detrás de un número del ranking)
 --   get_health_summary()             leyenda y ficha: conteos por estado, geo_status, clase imputada, alta complejidad
 --   get_health_tipo_clasificacion()  la tabla de clasificación, para mostrarla en la ficha
 --
@@ -361,7 +362,7 @@ $$;
 create or replace function public.get_health_establishments(
   p_west double precision default -180, p_south double precision default -90, p_east double precision default 180, p_north double precision default 90,
   p_include_closed boolean default false, p_dependencia text[] default null, p_complejidad text[] default null, p_clase text[] default null,
-  p_alta text default null, p_limit integer default 6000)
+  p_alta text default null, p_limit integer default 6000, p_ambito text[] default null, p_tipo text[] default null)
 returns table (
   code text, name text, tipo_glosa text, comuna_cut char(5), comuna_name text, dependencia_norm text, complejidad text, tipo_atencion text,
   clase_servicio text, clase_fuente text, estado text, alta_hospital boolean, alta_ampliada boolean, tiene_urgencia boolean, address text,
@@ -384,6 +385,8 @@ begin
      and (p_complejidad is null or e.complejidad = any (p_complejidad))
      and (p_clase is null or e.clase_servicio = any (p_clase))
      and (p_alta is null or (p_alta = 'hospital' and e.alta_hospital) or (p_alta = 'ampliada' and e.alta_ampliada))
+     and (p_ambito is null or e.ambito = any (p_ambito))
+     and (p_tipo is null or e.tipo_norm = any (p_tipo))
    order by e.alta_hospital desc, e.alta_ampliada desc, e.code
    limit p_limit;
 end $$;
@@ -394,9 +397,14 @@ end $$;
 --   not_drawable    de esos, cuántos no se pueden dibujar (sin coordenadas, coordenada inválida o comuna sin polígono)
 --   marked_geo      de esos, cuántos tienen la ubicación marcada (borde, costero o fuera de su comuna declarada)
 --   rank            1 = la comuna con más establecimientos (empates comparten puesto)
+-- QUÉ SE CUENTA: sin filtros, TODOS los tipos del registro (consultas, clínicas dentales, laboratorios, tomas de muestras, diálisis, vacunatorios…).
+--   p_ambito  = AmbitoFuncionamiento de la fuente: 'Establecimiento de Salud' | 'Unidad de Atención' | 'Programa de Atención' | 'No Aplica'. El front cuenta por defecto
+--               solo 'Establecimiento de Salud' (las unidades y programas cuelgan de un establecimiento) y lo dice en el panel.
+--   p_tipo    = tipo_norm de health_tipo_clasificacion.
+-- El número NO es oferta ni es comparable entre regiones: depende de cómo cada SEREMI autoriza y registra a los privados (HALLAZGOS_FASE1A.md §7).
 create or replace function public.get_health_comuna_counts(
   p_include_closed boolean default false, p_dependencia text[] default null, p_complejidad text[] default null, p_clase text[] default null,
-  p_alta text default null)
+  p_alta text default null, p_ambito text[] default null, p_tipo text[] default null)
 returns table (
   cut char(5), name text, region_cut char(2), region_name text, establishments bigint, imputed bigint, not_drawable bigint, marked_geo bigint,
   rank integer, snapshot_id uuid, captured_at timestamptz)
@@ -418,12 +426,26 @@ begin
        and (p_complejidad is null or e.complejidad = any (p_complejidad))
        and (p_clase is null or e.clase_servicio = any (p_clase))
        and (p_alta is null or (p_alta = 'hospital' and e.alta_hospital) or (p_alta = 'ampliada' and e.alta_ampliada))
+       and (p_ambito is null or e.ambito = any (p_ambito))
+       and (p_tipo is null or e.tipo_norm = any (p_tipo))
      group by e.comuna_cut)
   select c.cut, c.name, c.region_cut, c.region_name, coalesce(a.n, 0), coalesce(a.imputed, 0), coalesce(a.not_drawable, 0), coalesce(a.marked_geo, 0),
          (rank() over (order by coalesce(a.n, 0) desc))::integer, cs.snapshot_id, cs.captured_at
     from cs cross join public.comunas c left join agg a on a.cut = c.cut
    order by 9, c.cut;
 end $$;
+
+-- Desglose de UNA comuna por tipo de establecimiento y estado (para ver qué hay detrás de un número del ranking). Sin filtro de ámbito: muestra todo y el ámbito.
+create or replace function public.get_health_comuna_tipos(p_cut char(5))
+returns table (tipo_glosa text, ambito text, estado text, n bigint)
+language sql stable security invoker set search_path = public as $$
+  select e.tipo_glosa, e.ambito, e.estado, count(*)
+    from public._health_current_snapshot() cs
+    join public.health_establishments e on e.snapshot_n = cs.snapshot_n
+   where e.comuna_cut = p_cut
+   group by e.tipo_glosa, e.ambito, e.estado
+   order by sum(count(*) filter (where e.estado = 'vigente')) over (partition by e.tipo_glosa) desc, e.tipo_glosa, e.ambito nulls last, e.estado
+$$;
 
 -- Conteos para leyenda y ficha, en formato largo (dimension, value, n) de la captura vigente.
 create or replace function public.get_health_summary()
@@ -474,12 +496,12 @@ revoke all on public.health_establishments_stage from authenticated;
 revoke all on function public.publish_health_establishments(uuid) from public, anon, authenticated;
 grant execute on function public.publish_health_establishments(uuid) to service_role;
 revoke all on function public._health_current_snapshot(),
-  public.get_health_establishments(double precision, double precision, double precision, double precision, boolean, text[], text[], text[], text, integer),
-  public.get_health_comuna_counts(boolean, text[], text[], text[], text),
+  public.get_health_establishments(double precision, double precision, double precision, double precision, boolean, text[], text[], text[], text, integer, text[], text[]),
+  public.get_health_comuna_counts(boolean, text[], text[], text[], text, text[], text[]), public.get_health_comuna_tipos(char),
   public.get_health_summary(), public.get_health_tipo_clasificacion() from public, anon;
 grant execute on function public._health_current_snapshot(),
-  public.get_health_establishments(double precision, double precision, double precision, double precision, boolean, text[], text[], text[], text, integer),
-  public.get_health_comuna_counts(boolean, text[], text[], text[], text),
+  public.get_health_establishments(double precision, double precision, double precision, double precision, boolean, text[], text[], text[], text, integer, text[], text[]),
+  public.get_health_comuna_counts(boolean, text[], text[], text[], text, text[], text[]), public.get_health_comuna_tipos(char),
   public.get_health_summary(), public.get_health_tipo_clasificacion() to authenticated, service_role;
 
 -- -----------------------------------------------------------------------------

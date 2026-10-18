@@ -63,9 +63,9 @@ create or replace function pg_temp.st(p_n int, p_code text, p_cut text, p_tipo t
 returns void language plpgsql as $$
 begin
   insert into public.health_establishments_stage
-    (snapshot_n, code, name, region_cut, comuna_cut, comuna_glosa, tipo_glosa, dependencia_raw, dependencia_norm, complejidad, tipo_atencion, estado,
+    (snapshot_n, code, name, region_cut, comuna_cut, comuna_glosa, tipo_glosa, ambito, dependencia_raw, dependencia_norm, complejidad, tipo_atencion, estado,
      coords_present, lon_raw, lat_raw)
-  values (p_n, p_code, 'FIXTURE ' || p_code, left(p_cut, 2), p_cut, 'FIXTURE', p_tipo, p_dep, p_dep, p_comp, p_ta, p_estado, p_present, p_lon, p_lat);
+  values (p_n, p_code, 'FIXTURE ' || p_code, left(p_cut, 2), p_cut, 'FIXTURE', p_tipo, 'Establecimiento de Salud', p_dep, p_dep, p_comp, p_ta, p_estado, p_present, p_lon, p_lat);
 end $$;
 
 create or replace function pg_temp.pub(p_tag text) returns jsonb language sql as $$
@@ -155,6 +155,8 @@ select pg_temp.st(n, c, cut, tipo, comp, ta, dep, est, lon, lat, pres) from (
 update public.health_establishments_stage set
   complejidad = case complejidad when 'Alta Complejidad' then 'alta' when 'Mediana Complejidad' then 'mediana' when 'Baja Complejidad' then 'baja'
                                  when 'No Aplica' then 'no_aplica' else complejidad end;
+update public.health_establishments_stage set ambito = 'Unidad de Atención' where code in ('900007', '900009');     -- unidades (p. ej. toma de muestras), no establecimientos
+update public.health_establishments_stage set ambito = 'Programa de Atención' where code = '900004';
 select pg_temp.assert_that('20 filas en la zona de paso', (select count(*) from public.health_establishments_stage) = 20);
 select pg_temp.assert_that('publica con el snapshot validated (fixture h1)', (pg_temp.pub('h1') ->> 'inserted')::int = 20);
 select pg_temp.assert_that('el snapshot quedó loaded y la zona de paso vacía',
@@ -248,6 +250,23 @@ select pg_temp.assert_that('get_health_summary: total, estados y los conteos de 
   and (select n from public.get_health_summary() where dimension = 'alta_fuera_de_ambas_vigentes') = 1);
 select pg_temp.assert_that('get_health_tipo_clasificacion muestra la tabla con su evidencia', (select count(*) from public.get_health_tipo_clasificacion() where evidence <> '') = 29);
 
+select pg_temp.assert_that('p_ambito: contar solo «Establecimiento de Salud» deja fuera unidades y programas (Santiago 12 → 9); sin filtro cuenta todo',
+  (select establishments from public.get_health_comuna_counts(false, null, null, null, null, array['Establecimiento de Salud']) where cut = '13101') = 9
+  and (select establishments from public.get_health_comuna_counts(false, null, null, null, null, null) where cut = '13101') = 12
+  and (select establishments from public.get_health_comuna_counts(false, null, null, null, null, array['Unidad de Atención', 'Programa de Atención']) where cut = '13101') = 3);
+select pg_temp.assert_that('p_tipo filtra por tipo (Centro de Salud Privado en Santiago: 2 de las 3 filas de ese tipo; 900009 es unidad pero cuenta sin filtro de ámbito)',
+  (select establishments from public.get_health_comuna_counts(false, null, null, null, null, null, array['centro de salud privado']) where cut = '13101') = 2
+  and (select establishments from public.get_health_comuna_counts(false, null, null, null, null, array['Establecimiento de Salud'], array['centro de salud privado']) where cut = '13101') = 1);
+select pg_temp.assert_that('get_health_establishments también filtra por ámbito y tipo',
+  (select count(*) from public.get_health_establishments(-180, -90, 180, 90, false, null, null, null, null, 6000, array['Establecimiento de Salud'])) = 14
+  and (select count(*) from public.get_health_establishments(-180, -90, 180, 90, false, null, null, null, null, 6000, null, array['laboratorio clínico'])) = 1);
+select pg_temp.assert_that('get_health_comuna_tipos: desglose por tipo, ámbito y estado de una comuna (suma = filas de la comuna; cerrados aparte)',
+  (select sum(n) from public.get_health_comuna_tipos('13101')) = 13
+  and (select sum(n) from public.get_health_comuna_tipos('13101') where estado = 'cerrado') = 1
+  and (select n from public.get_health_comuna_tipos('13101') where tipo_glosa = 'Hospital' and estado = 'vigente') = 2
+  and (select count(*) from public.get_health_comuna_tipos('13101') where tipo_glosa = 'Laboratorio Clínico' and ambito = 'Unidad de Atención') = 1
+  and (select count(*) from public.get_health_comuna_tipos('01107')) = 0);
+
 -- ============================ 4. Todo o nada: la base RE-VALIDA ============================
 select pg_temp.mk('h_cut', 2);
 select pg_temp.st((select n from public.source_snapshots where storage_path = 'test/h_cut'), '910001', '99999', 'Hospital', 'alta', 'hospitalaria', 'privado', 'vigente', null, null, false);
@@ -313,7 +332,8 @@ select pg_temp.as_role('anon');
 select pg_temp.assert_that('anon no lee las tablas ni ejecuta las RPC',
   pg_temp.try_sql('select count(*) from public.health_establishments') like '42501%'
   and pg_temp.try_sql('select * from public.get_health_comuna_counts()') like '42501%'
-  and pg_temp.try_sql('select * from public.get_health_summary()') like '42501%');
+  and pg_temp.try_sql('select * from public.get_health_summary()') like '42501%'
+  and pg_temp.try_sql($$select * from public.get_health_comuna_tipos('13101')$$) like '42501%');
 select pg_temp.reset_role();
 select pg_temp.as_role('authenticated');
 select pg_temp.assert_that('authenticated lee las RPC pero NO publica, NO escribe y NO ve la zona de paso',

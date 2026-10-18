@@ -5,16 +5,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { LayerProvenanceRow, ThematicLayerRow } from "@/types/permits";
-import { DEFAULT_HEALTH_FILTERS, type HealthComunaCountRow, type HealthEstablishmentRow, type HealthSummaryRow, type HealthTipoRow } from "@/types/health";
+import { DEFAULT_HEALTH_FILTERS, type HealthComunaCountRow, type HealthComunaTipoRow, type HealthEstablishmentRow, type HealthSummaryRow, type HealthTipoRow } from "@/types/health";
 
 const rpcMock = vi.hoisted(() => vi.fn());
 const fromMock = vi.hoisted(() => vi.fn());
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc: rpcMock, from: fromMock } }));
 
 import {
-  claseText, filterLabel, hasActiveFilters, pointRadius, rankComunas, summaryN, totalEstablishments, totalImputed, WARN, ALTA_LABEL, GEO_MARKED, GEO_NOT_DRAWN,
+  breakdownByTipo, claseText, countingText, filterLabel, hasActiveFilters, pointRadius, rankComunas, summaryN, totalEstablishments, totalImputed, WARN, ALTA_LABEL, GEO_MARKED, GEO_NOT_DRAWN,
 } from "@/utils/healthScale";
-import { fetchHealthComunaCounts, fetchHealthEstablishments, fetchHealthSummary, healthFilterArgs, healthPointsArgs } from "@/services/healthService";
+import { fetchHealthComunaCounts, fetchHealthComunaTipos, fetchHealthEstablishments, fetchHealthSummary, healthFilterArgs, healthPointsArgs } from "@/services/healthService";
 import { fetchThematicLayers } from "@/services/permitsService";
 import { withThematicClientReady, visibleIdsToHideForCapture } from "@/utils/clientReady";
 import { HealthPopup } from "@/components/map/HealthPopup";
@@ -61,13 +61,31 @@ describe("utilidades", () => {
   });
 
   it("filterLabel y hasActiveFilters: dicen siempre qué definición y si hay cerrados", () => {
-    expect(hasActiveFilters(DEFAULT_HEALTH_FILTERS)).toBe(false);
+    expect(hasActiveFilters(DEFAULT_HEALTH_FILTERS)).toBe(false);                       // el ámbito por defecto («solo establecimientos») no cuenta como filtro activo
+    expect(hasActiveFilters({ ...DEFAULT_HEALTH_FILTERS, ambito: null })).toBe(true);
+    expect(hasActiveFilters({ ...DEFAULT_HEALTH_FILTERS, tipo: ["hospital"] })).toBe(true);
     expect(filterLabel(DEFAULT_HEALTH_FILTERS)).toBe("Todos los establecimientos · vigentes");
     const f = { ...DEFAULT_HEALTH_FILTERS, alta: "ampliada" as const, dependencia: ["privado"], clase: ["ambulatorio" as const], includeClosed: true };
     expect(hasActiveFilters(f)).toBe(true);
     expect(filterLabel(f)).toContain(ALTA_LABEL.ampliada);
     expect(filterLabel(f)).toContain("Privado");
     expect(filterLabel(f)).toContain("vigentes y cerrados");
+  });
+
+  it("countingText: dice SIEMPRE qué se está contando (tipos, ámbito y estado)", () => {
+    expect(countingText(DEFAULT_HEALTH_FILTERS)).toBe("Se cuenta: todos los tipos · solo establecimientos (sin unidades de atención ni programas) · solo vigentes.");
+    expect(countingText({ ...DEFAULT_HEALTH_FILTERS, ambito: null, tipo: ["hospital", "clínica"], includeClosed: true }, { hospital: "Hospital", "clínica": "Clínica" }))
+      .toBe("Se cuenta: solo Hospital o Clínica · incluye unidades de atención y programas · vigentes y cerrados.");
+  });
+
+  it("breakdownByTipo agrupa tipo/ámbito/estado conservando el orden y colapsando espacios dobles", () => {
+    const rows: HealthComunaTipoRow[] = [
+      { tipo_glosa: "Sala  Externa de Toma de Muestras (SETM)", ambito: "Unidad de Atención", estado: "vigente", n: 24 },
+      { tipo_glosa: "Sala  Externa de Toma de Muestras (SETM)", ambito: "Unidad de Atención", estado: "cerrado", n: 1 },
+      { tipo_glosa: "Hospital", ambito: "Establecimiento de Salud", estado: "vigente", n: 2 }];
+    expect(breakdownByTipo(rows)).toEqual([
+      { tipo: "Sala Externa de Toma de Muestras (SETM)", vigentes: 24, cerrados: 1, ambitos: ["Unidad de Atención"] },
+      { tipo: "Hospital", vigentes: 2, cerrados: 0, ambitos: ["Establecimiento de Salud"] }]);
   });
 
   it("claseText: declara cuando la clase es imputada o no se declara", () => {
@@ -92,7 +110,9 @@ describe("utilidades", () => {
 
 describe("servicio", () => {
   it("los arreglos vacíos viajan como null y el bbox va completo", () => {
-    expect(healthFilterArgs(DEFAULT_HEALTH_FILTERS)).toEqual({ p_include_closed: false, p_dependencia: null, p_complejidad: null, p_clase: null, p_alta: null });
+    expect(healthFilterArgs(DEFAULT_HEALTH_FILTERS)).toEqual({ p_include_closed: false, p_dependencia: null, p_complejidad: null, p_clase: null, p_alta: null,
+      p_ambito: ["Establecimiento de Salud"], p_tipo: null });
+    expect(healthFilterArgs({ ...DEFAULT_HEALTH_FILTERS, ambito: null, tipo: ["hospital"] })).toMatchObject({ p_ambito: null, p_tipo: ["hospital"] });
     expect(healthFilterArgs({ ...DEFAULT_HEALTH_FILTERS, dependencia: [], alta: "hospital", includeClosed: true, clase: ["ambulatorio"] }))
       .toMatchObject({ p_include_closed: true, p_dependencia: null, p_alta: "hospital", p_clase: ["ambulatorio"] });
     expect(healthPointsArgs({ west: -71, south: -34, east: -70, north: -33 }, DEFAULT_HEALTH_FILTERS)).toMatchObject({ p_west: -71, p_south: -34, p_east: -70, p_north: -33, p_limit: 6000 });
@@ -103,7 +123,9 @@ describe("servicio", () => {
     await fetchHealthEstablishments({ west: -71, south: -34, east: -70, north: -33 }, DEFAULT_HEALTH_FILTERS);
     await fetchHealthComunaCounts({ ...DEFAULT_HEALTH_FILTERS, alta: "ampliada" });
     await fetchHealthSummary();
-    expect(rpcMock.mock.calls.map((c) => c[0])).toEqual(["get_health_establishments", "get_health_comuna_counts", "get_health_summary"]);
+    await fetchHealthComunaTipos("04101");
+    expect(rpcMock.mock.calls.map((c) => c[0])).toEqual(["get_health_establishments", "get_health_comuna_counts", "get_health_summary", "get_health_comuna_tipos"]);
+    expect(rpcMock.mock.calls[3][1]).toEqual({ p_cut: "04101" });
     expect(rpcMock.mock.calls[1][1]).toMatchObject({ p_alta: "ampliada" });
   });
 
@@ -116,15 +138,27 @@ describe("servicio", () => {
 });
 
 describe("capas temáticas y client_ready (regla 6)", () => {
-  it("fetchThematicLayers pide client_ready y, si la columna aún no existe, repite la consulta anterior", async () => {
+  it("fetchThematicLayers pide client_ready y, SOLO si la columna no existe (42703), repite la consulta anterior", async () => {
     const select = vi.fn()
-      .mockResolvedValueOnce({ data: null, error: { message: 'column "client_ready" does not exist' } })
+      .mockResolvedValueOnce({ data: null, error: { message: 'column "client_ready" does not exist', code: "42703" } })
       .mockResolvedValueOnce({ data: [{ layer_id: "L1", renderer: "choropleth_comuna", dataset: "building_permits", default_params: null }], error: null });
     fromMock.mockReturnValue({ select });
     const rows = await fetchThematicLayers();
     expect(select.mock.calls[0][0]).toContain("client_ready");
     expect(select.mock.calls[1][0]).not.toContain("client_ready");
     expect(rows).toHaveLength(1);
+  });
+
+  it("cualquier OTRO error (permisos, red, tabla ausente) no se esconde con un reintento: una sola consulta, [] y aviso en consola", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const err of [{ message: "permission denied for table thematic_layers", code: "42501" }, { message: "relation does not exist", code: "42P01" }, { message: "network" }]) {
+      const select = vi.fn().mockResolvedValue({ data: null, error: err });
+      fromMock.mockReturnValue({ select });
+      await expect(fetchThematicLayers()).resolves.toEqual([]);
+      expect(select).toHaveBeenCalledTimes(1);
+    }
+    expect(warn).toHaveBeenCalledTimes(3);
+    warn.mockRestore();
   });
 
   it("con la columna presente, una sola consulta y la bandera llega", async () => {
@@ -245,7 +279,7 @@ describe("panel de puntos", () => {
 
 describe("panel por comuna con ranking", () => {
   const rows = [cnt("13101", "Santiago", 12, { rank: 1, imputed: 3 }), cnt("13102", "Cerrillos", 3, { rank: 2 }), cnt("05101", "Valparaíso", 0, { rank: 3 })];
-  const props = { ...baseProps, rows, breaks: [3, 12], missingPolygons: 0, onPick: vi.fn() };
+  const props = { ...baseProps, rows, breaks: [3, 12], missingPolygons: 0, onPick: vi.fn(), selected: null as { cut: string; name: string } | null, breakdown: undefined as HealthComunaTipoRow[] | undefined, breakdownError: null as string | null };
 
   it("lista el ranking (más tienen), el total y el cero verdadero en la leyenda", () => {
     render(<HealthChoroplethPanel {...props} />);
@@ -285,6 +319,65 @@ describe("panel por comuna con ranking", () => {
   });
 });
 
+describe("qué se cuenta (anomalía del ranking)", () => {
+  const tiposRows: HealthTipoRow[] = [{ tipo_norm: "hospital", tipo_label: "Hospital", clase: "hospitalario", alta_hospital: true, alta_ampliada: true, evidence: "e" },
+    { tipo_norm: "clínica dental", tipo_label: "Clínica Dental", clase: "ambulatorio", alta_hospital: false, alta_ampliada: false, evidence: "e" }];
+  const props = { ...baseProps, rows: [cnt("04101", "La Serena", 209)], breaks: [], missingPolygons: 0, onPick: vi.fn(), selected: null as { cut: string; name: string } | null,
+    breakdown: undefined as HealthComunaTipoRow[] | undefined, breakdownError: null as string | null, tipos: tiposRows };
+
+  it("los dos paneles dicen qué se cuenta: todos los tipos, solo establecimientos (sin unidades ni programas) y solo vigentes", () => {
+    render(<HealthChoroplethPanel {...props} />);
+    const c = screen.getByTestId("health-counting").textContent ?? "";
+    expect(c).toContain("todos los tipos");
+    expect(c).toContain("solo establecimientos (sin unidades de atención ni programas)");
+    expect(c).toContain("solo vigentes");
+    expect(c).toContain("laboratorios, tomas de muestras");
+  });
+
+  it("el panel de puntos también", () => {
+    render(<HealthPointsPanel {...baseProps} tipos={tiposRows} shown={1} totalMatching={1} imputedShown={0} markedShown={0} />);
+    expect(screen.getByTestId("health-counting").textContent).toContain("todos los tipos");
+  });
+
+  it("la heterogeneidad entre regiones aparece como advertencia en el panel (no es oferta ni comparable)", () => {
+    render(<HealthChoroplethPanel {...props} />);
+    expect(screen.getByTestId("health-choropleth-panel").textContent).toContain("cada SEREMI los autoriza y registra");
+    expect(screen.getByTestId("health-choropleth-panel").textContent).toContain("NO es oferta");
+  });
+
+  it("filtro por tipo (alimentado por la tabla) y casilla de unidades/programas cambian el filtro", () => {
+    const onFilters = vi.fn();
+    render(<HealthChoroplethPanel {...props} onFilters={onFilters} />);
+    const sel = screen.getByLabelText("Tipo de establecimiento") as HTMLSelectElement;
+    expect(Array.from(sel.options).map((o) => o.textContent)).toEqual(["Todos los tipos", "Hospital", "Clínica Dental"]);
+    fireEvent.change(sel, { target: { value: "clínica dental" } });
+    expect(onFilters).toHaveBeenCalledWith(expect.objectContaining({ tipo: ["clínica dental"] }));
+    expect((screen.getByLabelText("Incluir unidades de atención y programas") as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByLabelText("Incluir unidades de atención y programas"));
+    expect(onFilters).toHaveBeenCalledWith(expect.objectContaining({ ambito: null }));
+  });
+
+  it("al elegir una comuna muestra el desglose por tipo y estado (qué hay detrás del número)", () => {
+    const breakdown: HealthComunaTipoRow[] = [
+      { tipo_glosa: "Centro de Salud Privado", ambito: "Establecimiento de Salud", estado: "vigente", n: 78 },
+      { tipo_glosa: "Centro de Salud Privado", ambito: "Establecimiento de Salud", estado: "cerrado", n: 2 },
+      { tipo_glosa: "Sala  Externa de Toma de Muestras (SETM)", ambito: "Unidad de Atención", estado: "vigente", n: 24 }];
+    render(<HealthChoroplethPanel {...props} selected={{ cut: "04101", name: "La Serena" }} breakdown={breakdown} />);
+    const t = screen.getByTestId("health-breakdown").textContent ?? "";
+    expect(t).toContain("La Serena");
+    expect(t).toContain("Centro de Salud Privado");
+    expect(t).toContain("78");
+    expect(t).toContain("Sala Externa de Toma de Muestras (SETM) (Unidad de Atención)");
+  });
+
+  it("sin comuna elegida no hay desglose; con error de lectura lo dice", () => {
+    const { rerender } = render(<HealthChoroplethPanel {...props} />);
+    expect(screen.queryByTestId("health-breakdown")).toBeNull();
+    rerender(<HealthChoroplethPanel {...props} selected={{ cut: "04101", name: "La Serena" }} breakdownError="boom" />);
+    expect(screen.getByRole("alert").textContent).toContain("boom");
+  });
+});
+
 describe("ficha", () => {
   const tipos: HealthTipoRow[] = [
     { tipo_norm: "hospital", tipo_label: "Hospital", clase: "hospitalario", alta_hospital: true, alta_ampliada: true, evidence: "Evidencia de prueba." },
@@ -309,6 +402,8 @@ describe("ficha", () => {
     expect(screen.getByTestId("health-tipos").textContent).toContain("Mixto (no se imputa)");
     expect(t).toContain("Qué NO dice esta capa");
     expect(t).toContain("decisión de diseño");
+    expect(screen.getByTestId("health-ficha-heterogeneity").textContent).toContain("NO es oferta");
+    expect(t).toContain("Se cuentan TODOS los tipos de establecimiento");
   });
 
   it("errores de lectura se muestran, no se disfrazan", () => {

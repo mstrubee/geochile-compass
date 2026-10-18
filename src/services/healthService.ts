@@ -4,7 +4,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import type { Bounds } from "@/types/projects";
-import type { HealthComunaCountRow, HealthEstablishmentRow, HealthFilters, HealthSummaryRow, HealthTipoRow } from "@/types/health";
+import type { HealthComunaCountRow, HealthComunaTipoRow, HealthEstablishmentRow, HealthFilters, HealthSummaryRow, HealthTipoRow } from "@/types/health";
 
 type RpcResult<T> = Promise<{ data: T | null; error: { message: string } | null }>;
 const rpc = <T>(name: string, args: Record<string, unknown> = {}): RpcResult<T> =>
@@ -21,6 +21,7 @@ const arr = <T>(a: T[] | null | undefined) => (a && a.length ? a : null);
 
 export const healthFilterArgs = (f: HealthFilters) => ({
   p_include_closed: f.includeClosed, p_dependencia: arr(f.dependencia), p_complejidad: arr(f.complejidad), p_clase: arr(f.clase), p_alta: f.alta,
+  p_ambito: arr(f.ambito), p_tipo: arr(f.tipo),
 });
 
 export const healthPointsArgs = (b: Bounds, f: HealthFilters, limit = 6000) => ({
@@ -29,5 +30,6 @@ export const healthPointsArgs = (b: Bounds, f: HealthFilters, limit = 6000) => (
 
 export const fetchHealthEstablishments = (b: Bounds, f: HealthFilters) => run<HealthEstablishmentRow>("get_health_establishments", healthPointsArgs(b, f));
 export const fetchHealthComunaCounts = (f: HealthFilters) => run<HealthComunaCountRow>("get_health_comuna_counts", healthFilterArgs(f));
+export const fetchHealthComunaTipos = (cut: string) => run<HealthComunaTipoRow>("get_health_comuna_tipos", { p_cut: cut });
 export const fetchHealthSummary = () => run<HealthSummaryRow>("get_health_summary");
 export const fetchHealthTipos = () => run<HealthTipoRow>("get_health_tipo_clasificacion");

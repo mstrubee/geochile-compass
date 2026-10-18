@@ -2,8 +2,9 @@
  * Salud, Fase 1a — etiquetas, colores, advertencias y funciones puras de las capas de establecimientos.
  * Todo texto de advertencia vive aquí para que panel, popup y ficha digan lo mismo (regla 3).
  */
+import { AMBITO_ESTABLECIMIENTO } from "@/types/health";
 import type {
-  HealthAltaDef, HealthClase, HealthComplejidad, HealthComunaCountRow, HealthEstablishmentRow, HealthFilters, HealthGeoStatus, HealthSummaryRow,
+  HealthAltaDef, HealthClase, HealthComplejidad, HealthComunaCountRow, HealthComunaTipoRow, HealthEstablishmentRow, HealthFilters, HealthGeoStatus, HealthSummaryRow,
 } from "@/types/health";
 
 export const DEPENDENCIA_LABEL: Record<string, string> = {
@@ -49,14 +50,18 @@ export const WARN = {
   noPolygon: "Las comunas sin polígono (p. ej. Antártica) no se pueden pintar; sus establecimientos sí figuran en el ranking.",
   privateDef: "«Privado» = dependencia administrativa Privado; no coincide con «sistema privado» ni con «no perteneciente al SNSS».",
   zeroTrue: "0 = la comuna no tiene ningún establecimiento que cumpla el filtro en el registro (cero verdadero).",
+  counting: "Se cuentan TODOS los tipos de establecimiento del registro (consultas privadas, clínicas dentales, laboratorios, tomas de muestras, diálisis, vacunatorios, postas, hospitales…), no solo los que atienden pacientes. Filtre por tipo para acotar.",
+  heterogeneity: "El registro NO es homogéneo entre regiones: cuántos establecimientos privados figuran en una comuna depende de cómo cada SEREMI los autoriza y registra (consultas dentales, centros de especialidades, tomas de muestras). El conteo NO es oferta ni es comparable entre comunas o regiones (ver HALLAZGOS_FASE1A §7).",
   notClientReady: "Capa aún NO apta para clientes (client_ready = false): no entra a informes ni exportaciones.",
 } as const;
 
 const nf = new Intl.NumberFormat("es-CL", { maximumFractionDigits: 0 });
 export const fmtN = (n: number | null | undefined) => (n == null ? "sin dato" : nf.format(n));
 
+const isDefaultAmbito = (a: string[] | null) => a != null && a.length === 1 && a[0] === AMBITO_ESTABLECIMIENTO;
+
 export const hasActiveFilters = (f: HealthFilters) =>
-  f.includeClosed || f.alta != null || (f.dependencia?.length ?? 0) > 0 || (f.complejidad?.length ?? 0) > 0 || (f.clase?.length ?? 0) > 0;
+  f.includeClosed || f.alta != null || !isDefaultAmbito(f.ambito) || (f.tipo?.length ?? 0) > 0 || (f.dependencia?.length ?? 0) > 0 || (f.complejidad?.length ?? 0) > 0 || (f.clase?.length ?? 0) > 0;
 
 /** Etiqueta corta del filtro activo, para rotular el ranking y la leyenda. */
 export const filterLabel = (f: HealthFilters): string => {
@@ -67,6 +72,13 @@ export const filterLabel = (f: HealthFilters): string => {
   if (f.clase?.length) parts.push(f.clase.map((c) => CLASE_LABEL[c]).join(" o ").toLowerCase());
   parts.push(f.includeClosed ? "vigentes y cerrados" : "vigentes");
   return parts.join(" · ");
+};
+
+/** «Qué se está contando»: lo dice el panel junto a cada número. `tipoLabels` mapea tipo_norm → etiqueta. */
+export const countingText = (f: HealthFilters, tipoLabels: Record<string, string> = {}): string => {
+  const tipo = f.tipo?.length ? `solo ${f.tipo.map((t) => tipoLabels[t] ?? t).join(" o ")}` : "todos los tipos";
+  const ambito = f.ambito == null ? "incluye unidades de atención y programas" : isDefaultAmbito(f.ambito) ? "solo establecimientos (sin unidades de atención ni programas)" : `ámbito ${f.ambito.join(" o ")}`;
+  return `Se cuenta: ${tipo} · ${ambito} · ${f.includeClosed ? "vigentes y cerrados" : "solo vigentes"}.`;
 };
 
 export interface RankingRow { cut: string; name: string; regionName: string; n: number; rank: number; imputed: number }
@@ -95,3 +107,16 @@ export const claseText = (r: Pick<HealthEstablishmentRow, "clase_servicio" | "cl
 
 /** Radio del punto: más grande para alta complejidad (según la definición ampliada, que incluye a la de hospitales). */
 export const pointRadius = (r: Pick<HealthEstablishmentRow, "alta_ampliada">): number => (r.alta_ampliada ? 8 : 5);
+
+/** Agrupa las filas (tipo, ámbito, estado) por tipo para mostrarlas en una tabla; el orden lo trae la RPC (más vigentes primero). */
+export const breakdownByTipo = (rows: HealthComunaTipoRow[]) => {
+  const m = new Map<string, { tipo: string; vigentes: number; cerrados: number; ambitos: string[] }>();
+  for (const r of rows) {
+    const e = m.get(r.tipo_glosa) ?? { tipo: r.tipo_glosa.replace(/\s+/g, " "), vigentes: 0, cerrados: 0, ambitos: [] };
+    if (r.estado === "vigente") e.vigentes += r.n; else e.cerrados += r.n;
+    const a = r.ambito ?? "sin ámbito";
+    if (!e.ambitos.includes(a)) e.ambitos.push(a);
+    m.set(r.tipo_glosa, e);
+  }
+  return [...m.values()];
+};

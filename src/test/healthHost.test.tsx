@@ -5,9 +5,9 @@ import { MapContainer } from "react-leaflet";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ThematicLayerRow } from "@/types/permits";
 
-const svc = vi.hoisted(() => ({ pts: vi.fn(), counts: vi.fn(), summary: vi.fn(), tipos: vi.fn(), prov: vi.fn() }));
+const svc = vi.hoisted(() => ({ pts: vi.fn(), counts: vi.fn(), summary: vi.fn(), tipos: vi.fn(), prov: vi.fn(), comunaTipos: vi.fn() }));
 vi.mock("@/services/healthService", () => ({
-  fetchHealthEstablishments: svc.pts, fetchHealthComunaCounts: svc.counts, fetchHealthSummary: svc.summary, fetchHealthTipos: svc.tipos,
+  fetchHealthEstablishments: svc.pts, fetchHealthComunaCounts: svc.counts, fetchHealthSummary: svc.summary, fetchHealthTipos: svc.tipos, fetchHealthComunaTipos: svc.comunaTipos,
 }));
 vi.mock("@/services/permitsService", () => ({ fetchLayerProvenance: svc.prov }));
 vi.mock("@/hooks/useComunasGeoIndex", () => ({ useComunasGeoIndex: () => ({ ready: false, fc: null, nombresPorCodigo: {} }) }));
@@ -38,7 +38,7 @@ const row = (cut: string, name: string, n: number) => ({ cut, name, region_cut: 
 
 beforeEach(() => {
   Object.values(svc).forEach((m) => m.mockReset());
-  svc.prov.mockResolvedValue([]); svc.pts.mockResolvedValue([]); svc.summary.mockResolvedValue([]); svc.tipos.mockResolvedValue([]);
+  svc.prov.mockResolvedValue([]); svc.pts.mockResolvedValue([]); svc.summary.mockResolvedValue([]); svc.tipos.mockResolvedValue([]); svc.comunaTipos.mockResolvedValue([]);
   svc.counts.mockResolvedValue([row("13101", "Santiago", 12), row("13102", "Cerrillos", 0)]);
   got.pts = got.choro = null;
 });
@@ -110,12 +110,28 @@ describe("HealthHost", () => {
     await waitFor(() => expect(screen.getByTestId("health-points-panel").textContent).toContain("sin permiso"), { timeout: 5000 });
   });
 
-  it("la ficha pide el resumen y la tabla de clasificación SOLO al abrirla", async () => {
+  it("la tabla de tipos se lee al montar (alimenta el filtro por tipo); el resumen, SOLO al abrir la ficha", async () => {
     mount(["HP"]);
-    await waitFor(() => expect(screen.getByTestId("health-points-panel")).toBeTruthy());
+    await waitFor(() => expect(svc.tipos).toHaveBeenCalled());
     expect(svc.summary).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /Ver definiciones y clasificación/ }));
-    await waitFor(() => expect(svc.tipos).toHaveBeenCalled());
-    expect(svc.summary).toHaveBeenCalled();
+    await waitFor(() => expect(svc.summary).toHaveBeenCalled());
+  });
+
+  it("por defecto cuenta solo «Establecimiento de Salud» (sin unidades ni programas) y el panel lo dice", async () => {
+    mount(["HC"]);
+    await waitFor(() => expect(svc.counts).toHaveBeenCalled());
+    expect(svc.counts.mock.calls[0][0]).toMatchObject({ ambito: ["Establecimiento de Salud"], tipo: null });
+    expect(screen.getByTestId("health-counting").textContent).toContain("solo establecimientos");
+  });
+
+  it("elegir una comuna del ranking pide su desglose por tipo", async () => {
+    svc.comunaTipos.mockResolvedValue([{ tipo_glosa: "Hospital", ambito: "Establecimiento de Salud", estado: "vigente", n: 3 }]);
+    mount(["HC"]);
+    await waitFor(() => expect(screen.getByTestId("rank-13101")).toBeTruthy());
+    expect(svc.comunaTipos).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Santiago" }));
+    await waitFor(() => expect(svc.comunaTipos).toHaveBeenCalledWith("13101"));
+    await waitFor(() => expect(screen.getByTestId("health-breakdown").textContent).toContain("Hospital"));
   });
 });

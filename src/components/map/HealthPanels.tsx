@@ -2,14 +2,21 @@ import { useState } from "react";
 import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LayerProvenanceRow, ThematicLayerRow } from "@/types/permits";
-import type { HealthComunaCountRow, HealthFilters, HealthSummaryRow, HealthTipoRow } from "@/types/health";
+import type { HealthComunaCountRow, HealthComunaTipoRow, HealthFilters, HealthSummaryRow, HealthTipoRow } from "@/types/health";
 import {
-  CLASE_COLOR, CLASE_LABEL, filterLabel, fmtN, LEVEL_SEAL, rankComunas, totalImputed, totalMarked, totalNotDrawable, totalEstablishments, WARN,
+  breakdownByTipo, CLASE_COLOR, CLASE_LABEL, countingText, filterLabel, fmtN, LEVEL_SEAL, rankComunas, totalImputed, totalMarked, totalNotDrawable, totalEstablishments, WARN,
 } from "@/utils/healthScale";
 import { legendEntries } from "@/utils/permitsScale";
 import { HealthFichaDialog } from "./HealthFichaDialog";
 import { HealthFiltersForm } from "./HealthFiltersForm";
 import { ProjectsPanelShell, SourceBlock } from "./ProjectsPanelShell";
+
+const tipoLabels = (tipos: HealthTipoRow[] | undefined) => Object.fromEntries((tipos ?? []).map((t) => [t.tipo_norm, t.tipo_label]));
+
+/** «Qué se está contando»: junto a cada número, para que nadie lea el ranking como oferta. */
+const Counting = ({ filters, tipos }: { filters: HealthFilters; tipos: HealthTipoRow[] | undefined }) => (
+  <p data-testid="health-counting" className="rounded border px-2 py-1">{countingText(filters, tipoLabels(tipos))} <span className="text-muted-foreground">{WARN.counting}</span></p>
+);
 
 export const ClientReadyNotice = ({ layer }: { layer: Pick<ThematicLayerRow, "client_ready" | "client_ready_note"> }) =>
   layer.client_ready === false ? (
@@ -51,7 +58,7 @@ export const HealthPointsPanel = (p: PointsProps) => {
   const open = (o: boolean) => { setFicha(o); p.onFichaOpen(o); };
   const truncated = p.totalMatching != null && p.shown < p.totalMatching;
   const warnings = [
-    WARN.registry, p.filters.includeClosed ? WARN.closedShown : WARN.closedHidden, WARN.altaDefs, WARN.privateDef,
+    WARN.registry, WARN.heterogeneity, p.filters.includeClosed ? WARN.closedShown : WARN.closedHidden, WARN.altaDefs, WARN.privateDef,
     ...(p.imputedShown > 0 ? [WARN.imputed(p.imputedShown, p.shown)] : []),
     ...(p.markedShown > 0 ? [WARN.marked(p.markedShown)] : []),
   ];
@@ -59,7 +66,8 @@ export const HealthPointsPanel = (p: PointsProps) => {
     <ProjectsPanelShell title="Establecimientos de salud" offset={p.offset} testId="health-points-panel">
       <ClientReadyNotice layer={p.layer} />
       <p data-testid="health-level-seal"><span className="font-medium">Nivel: </span>{LEVEL_SEAL.level} · <span className="font-medium">Sello: </span>{LEVEL_SEAL.seal}</p>
-      <HealthFiltersForm filters={p.filters} onFilters={p.onFilters} />
+      <HealthFiltersForm filters={p.filters} onFilters={p.onFilters} tipos={p.tipos} />
+      <Counting filters={p.filters} tipos={p.tipos} />
       <div data-testid="health-points-legend" className="space-y-1">
         <p className="font-medium">{p.loading ? "Cargando…" : `${fmtN(p.shown)} establecimientos en el mapa${p.totalMatching != null ? ` de ${fmtN(p.totalMatching)} con ubicación` : ""}`}</p>
         {p.error && <p role="alert" className="text-destructive">No se pudieron leer los datos: {p.error}</p>}
@@ -82,6 +90,9 @@ interface ChoroProps extends Common {
   breaks: number[];
   missingPolygons: number;
   onPick: (cut: string) => void;
+  selected: { cut: string; name: string } | null;
+  breakdown: HealthComunaTipoRow[] | undefined;
+  breakdownError: string | null;
 }
 
 const sel = "h-8 w-full rounded-md border border-input bg-background px-2 text-xs";
@@ -99,7 +110,7 @@ export const HealthChoroplethPanel = (p: ChoroProps) => {
   const marked = totalMarked(p.rows);
   const legend = legendEntries("value", "units", p.breaks);
   const warnings = [
-    WARN.registry, p.filters.includeClosed ? WARN.closedShown : WARN.closedHidden, WARN.altaDefs, WARN.privateDef, WARN.zeroTrue,
+    WARN.registry, WARN.heterogeneity, p.filters.includeClosed ? WARN.closedShown : WARN.closedHidden, WARN.altaDefs, WARN.privateDef, WARN.zeroTrue,
     ...(imputed > 0 ? [WARN.imputed(imputed, total)] : []),
     ...(notDrawable > 0 ? [WARN.notDrawn(notDrawable)] : []),
     ...(marked > 0 ? [WARN.marked(marked)] : []),
@@ -109,7 +120,8 @@ export const HealthChoroplethPanel = (p: ChoroProps) => {
     <ProjectsPanelShell title="Establecimientos por comuna" offset={p.offset} testId="health-choropleth-panel">
       <ClientReadyNotice layer={p.layer} />
       <p data-testid="health-level-seal"><span className="font-medium">Nivel: </span>{LEVEL_SEAL.level} · <span className="font-medium">Sello: </span>{LEVEL_SEAL.seal}</p>
-      <HealthFiltersForm filters={p.filters} onFilters={p.onFilters} />
+      <HealthFiltersForm filters={p.filters} onFilters={p.onFilters} tipos={p.tipos} />
+      <Counting filters={p.filters} tipos={p.tipos} />
       <div data-testid="health-choropleth-legend" className="space-y-1">
         <p className="font-medium">{p.loading ? "Cargando…" : `${fmtN(total)} establecimientos · ${filterLabel(p.filters)}`}</p>
         {p.error && <p role="alert" className="text-destructive">No se pudieron leer los datos: {p.error}</p>}
@@ -141,6 +153,26 @@ export const HealthChoroplethPanel = (p: ChoroProps) => {
           ))}
         </ol>
       </div>
+      {p.selected && (
+        <div data-testid="health-breakdown" className="space-y-1 border-t pt-2">
+          <p className="font-medium">Qué hay en {p.selected.name} (por tipo, todos los ámbitos)</p>
+          {p.breakdownError && <p role="alert" className="text-destructive">No se pudo leer el desglose: {p.breakdownError}</p>}
+          {!p.breakdownError && !p.breakdown && <p role="status">Cargando…</p>}
+          {p.breakdown && (
+            <table className="w-full">
+              <thead><tr className="text-left"><th>Tipo</th><th className="text-right">Vigentes</th><th className="text-right">Cerrados</th></tr></thead>
+              <tbody>
+                {breakdownByTipo(p.breakdown).map((r) => (
+                  <tr key={r.tipo} className="border-t align-top">
+                    <td>{r.tipo}{r.ambitos.some((a) => a !== "Establecimiento de Salud") ? <span className="text-muted-foreground"> ({r.ambitos.filter((a) => a !== "Establecimiento de Salud").join(", ") || "sin ámbito"})</span> : null}</td>
+                    <td className="text-right tabular-nums">{fmtN(r.vigentes)}</td><td className="text-right tabular-nums">{fmtN(r.cerrados)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
       <SourceBlock title="Establecimientos por comuna" sources={p.sources} error={p.provenanceError} loading={p.provenanceLoading} warnings={warnings} />
       <FichaButton open={ficha} onOpen={open} props={p} />
     </ProjectsPanelShell>

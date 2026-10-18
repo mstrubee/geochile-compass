@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import L from "leaflet";
 import { useMap } from "react-leaflet";
-import { useHealthComunaCounts, useHealthPoints, useHealthProvenance, useHealthSummary, useHealthTipos } from "@/hooks/useHealth";
+import { useHealthComunaCounts, useHealthComunaTipos, useHealthPoints, useHealthProvenance, useHealthSummary, useHealthTipos } from "@/hooks/useHealth";
 import { useComunasGeoIndex } from "@/hooks/useComunasGeoIndex";
 import { useMapViewport } from "@/hooks/useMapViewport";
 import { DEFAULT_HEALTH_FILTERS, type HealthFilters } from "@/types/health";
@@ -21,10 +21,11 @@ const msg = (e: unknown) => (e ? (e as Error).message : null);
 
 const initialFilters = (layer: ThematicLayerRow): HealthFilters => ({ ...DEFAULT_HEALTH_FILTERS, includeClosed: layer.default_params?.include_closed === true });
 
+/** La tabla de tipos se lee siempre (alimenta el filtro «Tipo de establecimiento» y la ficha); el resumen solo al abrir la ficha. */
 const useFicha = () => {
   const [open, setOpen] = useState(false);
   const summary = useHealthSummary(open);
-  const tipos = useHealthTipos(open);
+  const tipos = useHealthTipos(true);
   return { setOpen, summary: summary.data, summaryError: msg(summary.error), tipos: tipos.data, tiposError: msg(tipos.error) };
 };
 
@@ -56,6 +57,8 @@ const ChoroplethHost = ({ offset, layer }: { offset: number; layer: ThematicLaye
   const ficha = useFicha();
   const [filters, setFilters] = useState<HealthFilters>(() => initialFilters(layer));
   const q = useHealthComunaCounts(filters, true);
+  const [selected, setSelected] = useState<{ cut: string; name: string } | null>(null);
+  const tipoRows = useHealthComunaTipos(selected?.cut ?? null);
   const breaks = useMemo(() => quantileBreaks((q.data ?? []).map((r) => r.establishments), 5), [q.data]);
   const missingPolygons = useMemo(() => {
     if (!geo.fc) return 0;
@@ -63,6 +66,7 @@ const ChoroplethHost = ({ offset, layer }: { offset: number; layer: ThematicLaye
     return (q.data ?? []).filter((r) => r.establishments > 0 && !have.has(r.cut)).length;
   }, [geo.fc, q.data]);
   const onPick = (cut: string) => {
+    setSelected({ cut, name: (q.data ?? []).find((r) => r.cut === cut)?.name ?? cut });
     const f = geo.fc?.features.find((x) => String(x.properties?.codigo_comuna ?? x.properties?.cod_comuna ?? "") === cut);
     if (!f) return;
     const b = L.geoJSON(f as never).getBounds();
@@ -74,7 +78,8 @@ const ChoroplethHost = ({ offset, layer }: { offset: number; layer: ThematicLaye
       {createPortal(
         <HealthChoroplethPanel layer={layer} filters={filters} onFilters={setFilters} sources={prov.data ?? []} provenanceError={msg(prov.error)} provenanceLoading={prov.isLoading}
           summary={ficha.summary} summaryError={ficha.summaryError} tipos={ficha.tipos} tiposError={ficha.tiposError} onFichaOpen={ficha.setOpen}
-          loading={q.isFetching} error={msg(q.error)} offset={offset} rows={q.data} breaks={breaks} missingPolygons={missingPolygons} onPick={onPick} />,
+          loading={q.isFetching} error={msg(q.error)} offset={offset} rows={q.data} breaks={breaks} missingPolygons={missingPolygons} onPick={onPick}
+          selected={selected} breakdown={tipoRows.data} breakdownError={msg(tipoRows.error)} />,
         map.getContainer())}
     </>
   );

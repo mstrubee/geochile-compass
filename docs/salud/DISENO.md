@@ -78,12 +78,12 @@ Se reproduce con `bash etl/salud/dev_env.sh` (idempotente; ver su cabecera). Lí
 
 | Suite | Comando | Línea base |
 |---|---|---|
-| Vitest | `VITE_SUPABASE_URL=… VITE_SUPABASE_PUBLISHABLE_KEY=… npm test` (valores falsos solo en el comando) | 549 tests en 39 archivos (472 de `main` + 40 de seguridad y convención + 37 de salud 1a; sin las variables fallan los que no mockean el cliente) |
+| Vitest | `VITE_SUPABASE_URL=… VITE_SUPABASE_PUBLISHABLE_KEY=… npm test` (valores falsos solo en el comando) | 560 tests en 39 archivos (472 de `main` + 40 de seguridad y convención + 48 de salud 1a; sin las variables fallan los que no mockean el cliente) |
 | pytest permisos | `TEST_DATABASE_URL=… python -m pytest etl/permisos/tests -q -p no:cacheprovider` | 43 pasan, 4 omitidos |
 | pytest proyectos | `TEST_DATABASE_URL=… python -m pytest etl/proyectos/tests -q -p no:cacheprovider` | 45 pasan |
 | SQL `permits_stats.test.sql` | `psql -f` sobre base con **solo** las migraciones 1 y 2 | 92 aserciones |
 | SQL `parte4_geo.test.sql` / `parte4_nodes.test.sql` | `psql -f` sobre base con migraciones 2026102x | 111 / 7 |
-| SQL `health_establishments.sql` / `health_establishments_rollback.sql` (Fase 1a) | receta de su cabecera (migraciones dos veces + prueba, una transacción que termina en error) en `geochile_salud_test` | 67 / 4 aserciones |
+| SQL `health_establishments.sql` / `health_establishments_rollback.sql` (Fase 1a) | receta de su cabecera (migraciones dos veces + prueba, una transacción que termina en error) en `geochile_salud_test` | 71 / 4 aserciones |
 | pytest salud | `TEST_DATABASE_URL=…/geochile_salud_test python -m pytest etl/salud/tests -q -p no:cacheprovider` | 46 pasan (16 del sondeo + 30 de establecimientos) |
 
 * `npm ci` falla en `main` (lock desincronizado: falta `esbuild@0.28.2`); se usa `npm install --no-save`.
@@ -211,6 +211,7 @@ Cada punto se compara con el polígono de **su propia comuna declarada** (`publi
 | `publish_health_establishments(snapshot)` | **único camino** (SECURITY DEFINER, todo-o-nada): re-valida dominios, duplicados, CUT, cuadres, calcula `geo_status` y las dos definiciones de alta complejidad **en la base** |
 | `get_health_establishments(bbox, filtros)` | puntos para el mapa (SECURITY INVOKER) |
 | `get_health_comuna_counts(filtros)` | **capa derivada**: por comuna, conteo con los filtros elegidos, etiquetado `ranking`; incluye las 346 comunas (un cero verdadero se distingue de «sin dato») |
+| `get_health_comuna_tipos(cut)` | desglose de una comuna por tipo, ámbito y estado: qué hay detrás de un número del ranking (§2.12) |
 | `get_health_summary()` | leyenda y ficha: conteos por estado, geo_status, clase imputada, alta complejidad (ambas definiciones) |
 | `thematic_layers.client_ready` + nota | regla 6 (ver §2.8); renderers nuevos `points_health` y `choropleth_health` (**`choropleth_comuna` está capturado por `PermitsHost`**, no se reutiliza) |
 
@@ -237,12 +238,13 @@ paciente puede atenderse fuera de su comuna y que la capa no mide distancia ni t
 
 * `thematic_layers.client_ready boolean` **nullable**: `NULL` = sin evaluar (comportamiento previo, las capas existentes **no cambian**); `false` = no entra a informes ni exportaciones y
   el panel lo avisa; `true` = apta. Las dos capas de salud nacen con `false` y la nota «pendiente de revisión del dueño»: **el dueño decide** cuándo pasan a `true`.
+* **Procedimiento para pasar a `true`** (decidido por el dueño; **no se automatiza**): (a) resuelta la anomalía del ranking (§2.12); (b) revisión del dueño en un navegador contra Supabase real, después de aplicar; (c) un `UPDATE` explícito que registre en `client_ready_note` la fecha, quién revisó y qué se revisó. Plantilla y lista de revisión en [`RUNBOOK_1A.md`](./RUNBOOK_1A.md) §5.
 * El front lee la bandera de `thematic_layers` (con *fallback* a la consulta anterior si la columna aún no existe) y la une a las capas del árbol que usan las capturas de
   mapa de `Index.tsx` (ya preparadas en el PR de seguridad). Las capas de salud no tienen filas en `territorial_features`, así que los análisis por isócrona no las ven.
 
 ### 2.9 Supresión de conteos pequeños (regla 5) — **algoritmo definido ahora, se codifica en la primera fase que publique conteos de personas (1c)**
 
-**D11 (a confirmar por el dueño):** los conteos de **establecimientos** de esta fase **no** llevan supresión: son instalaciones de un registro público con nombre y dirección, no
+**D11 (CONFIRMADO por el dueño):** los conteos de **establecimientos** de esta fase **no** llevan supresión: son instalaciones de un registro público con nombre y dirección, no
 personas. Se sigue publicando el número real (incluidos 1–4). La regla 5 se aplica desde que haya **conteos de personas** (egresos, atenciones, inscritos).
 
 **Algoritmo (especificación, pruebas con fixtures sintéticos en 1c):**
@@ -268,6 +270,12 @@ Medido con el archivo real (`HALLAZGOS_FASE1A.md` §3): los 33 puntos fuera de s
 
 * Población comunal Censo 2024 (1a-1/1a-2) — **pendiente del dueño**.
 * D11 (supresión no aplica a establecimientos) — **pendiente de confirmar**.
-* La clase `hospitalario/ambulatorio` imputada por tabla es una **decisión de diseño**, no un dato oficial.
+* La clase `hospitalario/ambulatorio` imputada por tabla es una **decisión de diseño**, no un dato oficial. `Clínica` queda como mixta (no se imputa) y `Hospital de Día` como ambulatorio: **confirmado por el dueño**.
+* Causa de la heterogeneidad entre regiones en los privados (§2.12): **[NO COMPROBADO]**; habría que preguntarla a la SEREMI de Salud de Coquimbo o al DEIS.
 * Si el polígono comunal del repo (`public/comunas.geojson`) es simplificado: el efecto en `borde/costero` se mide en §2.10; no se compara contra un límite oficial de alta resolución.
 
+### 2.12 Qué cuenta el ranking, y por qué no es oferta (hallazgo de la revisión del dueño)
+
+El conteo por comuna de la primera entrega contaba **todos los tipos** del registro. Al revisarlo, La Serena (239) quedaba sobre Providencia (110), Santiago (99) y Puente Alto (50); el análisis (`HALLAZGOS_FASE1A.md` §7) muestra que **no es un error de código de comuna** (238 de 239 puntos caen en su polígono) sino que **el registro no es homogéneo entre regiones**: la región de Coquimbo trae 119 clínicas dentales privadas (Biobío 9, RM 62) y 63 centros de especialidades privados (Biobío 0, RM 1). Causa **[NO COMPROBADO]**.
+
+Decisiones: (1) **no se corrige ningún dato**; (2) por defecto se cuenta solo `AmbitoFuncionamiento = 'Establecimiento de Salud'` (las unidades de atención y los programas cuelgan de un establecimiento) — el filtro por sí solo no corrige la distorsión y se dice; (3) **cada panel declara qué se cuenta** (tipos, ámbito, estado) y la lista de tipos que entran; (4) filtro por **tipo** y **desglose por tipo** de la comuna elegida; (5) la **ficha** y el bloque de fuente advierten que el conteo no es oferta ni comparable entre comunas o regiones; (6) el nivel se mantiene en *Respondida con rigor* **como conteo del registro**, nunca como oferta asistencial.
