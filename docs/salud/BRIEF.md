@@ -127,3 +127,51 @@ REPORTE DE CIERRE DE CADA FASE (va en la descripción del PR y en el chat)
 Luego DETENTE y espera "Continuar con Fase X".
 
 Para los puntos 1 a 3 de la Fase 0 usa los resultados del prechequeo y de la preparación del entorno que ya hiciste, y re-verifica solo lo que haya cambiado. El clúster Postgres sigue en el puerto 5433 si lo necesitas.
+
+---
+
+# ADENDA (2026-10-18) — reglas permanentes y decisiones posteriores a la Fase 0
+
+> Todo lo anterior es el encargo original, **sin cambios**. Esta adenda registra lo que el dueño del proyecto dispuso al aprobar el PR de la Fase 0
+> ([mstrubee/geochile-compass#14](https://github.com/mstrubee/geochile-compass/pull/14), merge `da8de67`). Si algo de la adenda contradice el texto original, **rige la adenda**.
+
+## Regla de merge (permanente)
+Cuando el dueño apruebe un PR («aprobado», «OK, mergea» o «Continuar con…» referido a ese PR), **lo mergea el agente**:
+`gh api -X PUT repos/mstrubee/geochile-compass/pulls/<N>/merge -f merge_method=merge`
+- **Antes de mergear:** verificar que el PR siga apuntando al commit que el dueño revisó y que no haya conflictos. Si `mergeable_state` no es `clean`, mirar la causa; si es solo el workflow de sincronización, decirlo en una línea y mergear igual.
+- **Después:** actualizar el `main` local y reportar el SHA del merge.
+- **Sigue prohibido:** el push directo a `main`, mergear sin aprobación y aplicar migraciones. Tampoco se despliegan funciones: lo hace el dueño.
+
+## Decisiones D1–D10 (aprobadas)
+| # | Decisión |
+|---|---|
+| D1 | «Hospital de alta complejidad»: se reportan **las dos definiciones, con rótulo**. Por defecto `TipoEstablecimiento = Hospital` (82); la variante agrega clínicas (39) y centros de especialidades (8). |
+| D2 | «Privado» = `DependenciaAdministrativa = Privado`. La ficha documenta la diferencia con `TipoSistemaSalud` y con no-SNSS. |
+| D3 | El dueño baja los archivos de Fonasa. Mientras no lleguen, la 1b avanza con Isapre y la **1b-5 queda No respondible hoy**. |
+| D4 | **Sí:** agregar **R4 (egresos hospitalarios con código de establecimiento)** a la Fase 1c, como **solicitud prioritaria**. |
+| D5 | La **3-2 queda No respondible hoy** hasta tener R4. |
+| D6 | CASEN **solo regional**, como Estimada con error muestral. **A nivel comunal, nunca.** |
+| D7 | Fase 2b **aprobada, condicionada al conteo de manzanas**. |
+| D8 | **2-3 aprobada**, con la advertencia de semántica y el **mismo año (dic-2024)**. |
+| D9 | El dueño corre el inventario en su Supabase y entrega las 9 salidas (`docs/salud/planb/inventario_esquema_base.sql`). |
+| D10 | Sí: `isochrone` exige JWT y rol **sin esperar a la Fase 3** → PR de seguridad `fix/seguridad-edge`. |
+
+## Preguntas de uso (versión final aprobada)
+Las del `HALLAZGOS_FASE0.md` §12 **con los niveles propuestos** y estos ajustes (D1, D2, D5, D8):
+- **1a-1** y **1a-2**: con las definiciones de D1 y D2. Quedan **en espera del archivo de población comunal del Censo 2024** (lo único que bloquea la 1a).
+- **1b-3**: CASEN solo regional (Estimada). **1b-4**: No respondible hoy. **1b-5**: No respondible hoy mientras no lleguen los archivos de Fonasa.
+- **2-1, 2-2 y 2-3 (egresos):** el residuo enmascarado con `*` **se muestra siempre como fila propia, nunca se reparte**. 2-3 con la advertencia de semántica y dic-2024.
+- **2-4 y 2-5**: No respondible hoy hasta R4.
+- **3-1**: Estimada, **bloqueada** hasta saber si hay población y previsión por manzana (o versión comunal con advertencia que el dueño apruebe). **3-2**: **No respondible hoy** hasta R4.
+
+## Orden de trabajo vigente
+1. `fix/seguridad-edge` (PR aparte, independiente de salud; con tests; **detención hasta que el dueño lo apruebe**; sin desplegar).
+2. **Fase 1a** con «Preguntas OK» ya dadas. El plan B del dueño corre en paralelo (población comunal del Censo 2024, diccionario Isapre, Fonasa, inventario y `probe --full`).
+   Si la **población comunal** no llegó al terminar el PR de seguridad, la 1a avanza con todo lo demás y deja **1a-1 y 1a-2 en espera** de ese archivo.
+
+## Deuda del esquema (registrada, no se arregla ahora)
+Issue [mstrubee/geochile-compass#15](https://github.com/mstrubee/geochile-compass/issues/15): `public.custom_layers` no la crea ninguna migración, `fn_marcas_categoria` se usa antes de existir y 9 de 114 migraciones no se aplican desde cero. Hay que poder reconstruir la base desde el repo.
+
+## Corrección de la LÍNEA BASE
+- La causa original de que 5 pruebas SQL no corran en local («asumen `public.user_roles`, que no está en el repo») **era errónea**: `user_roles` y `app_role` los crea `20260507233321`. La causa real está en `HALLAZGOS_FASE0.md` §8.
+- Vitest: **472 tests / 34 archivos** en `main` `9026d67`; **508 / 36** una vez mergeado `fix/seguridad-edge` (+36 tests, +2 archivos). `etl/salud/dev_env.sh` guarda las constantes vigentes.

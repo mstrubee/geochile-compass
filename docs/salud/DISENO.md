@@ -122,4 +122,8 @@ la app.
 - [ ] Fuentes en plan B (Fonasa, Geofabrik, descargas del Censo 2024, diccionario Isapre trimestral): **pendientes del usuario**.
 - [ ] Inventario del esquema base confirmado contra el Supabase real: **pendiente del usuario** (`planb/inventario_esquema_base.sql`).
 
+**Tras la Fase 0 (aprobada, merge `da8de67`):** las decisiones D1–D10, las preguntas aprobadas, la regla de merge y el orden de trabajo están en la
+**adenda de [`BRIEF.md`](./BRIEF.md)**, que es la fuente de verdad. Dos efectos de diseño que cada fase debe respetar: (a) «hospital de alta complejidad» y «privado» tienen definición
+fija (D1, D2); (b) el residuo `*` de los egresos es siempre una fila propia, nunca se reparte.
+
 *Las secciones de las fases 1a, 1b, 1c, 2, 2b, 3 y 4 se agregan aquí al empezar cada una.*
