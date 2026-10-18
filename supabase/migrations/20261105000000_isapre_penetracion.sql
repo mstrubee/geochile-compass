@@ -21,7 +21,7 @@
 --  · ASIMETRÍA DEL NUMERADOR (declarada, no corregible con lo publicado): con TODAS las edades (0) el numerador incluye la edad SIN información (tramo 21) y, con ambos
 --    sexos, el sexo SIN información; con cualquier corte ≥ 1 (p. ej. 60+) EXCLUYE la edad sin información e INCLUYE el sexo sin información (con ambos sexos). El Censo no
 --    tiene «sin información»: el denominador es la población con edad y sexo conocidos.
---  · SIN RECORTE: un % sobre 100 se devuelve tal cual (domicilio Isapre [NO COMPROBADO] frente a residencia censal; capturas de fechas distintas: dic-2025 frente a 2024).
+--  · SIN RECORTE: un % sobre 100 se devuelve tal cual. Posibles causas, no comprobadas: definición territorial distinta (domicilio Isapre [NO COMPROBADO] frente a residencia censal), fechas distintas (dic-2025 frente a 2024) o poblaciones muy pequeñas.
 --  · SIN DATO (null, nunca una cifra de respaldo): comuna sin fila Isapre; sin población censada (o población 0 para ese filtro) ⇒ pct null; sin captura vigente de alguna
 --    de las dos fuentes. Siempre 346 filas (las de public.comunas).
 --  · REGLA 8: ni Fonasa, ni restas, ni residuo «sin previsión» o «resto». Isapre y Censo no se suman ni se restan: solo se dividen, con el filtro declarado.

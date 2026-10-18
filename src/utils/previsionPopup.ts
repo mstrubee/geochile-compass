@@ -41,7 +41,7 @@ export const buildIsapreComunaPopup = (row: IsapreComunaRow | undefined, fallbac
     add(`${POBLACION_LABEL}: ${pen.sexoSinInfo ? "sin dato (el Censo no tiene «sexo sin información»)" : r?.poblacion == null ? "sin dato" : fmtN(r.poblacion)}`, "", "popup-poblacion");
     const pctText = pen.sexoSinInfo ? "sin dato" : pctRangeText(r?.pct_lo, r?.pct_hi, r?.exact);
     add(`Penetración: ${pctText}`, "font-weight:600", "popup-penetracion");
-    if ((r?.pct_hi ?? 0) > 100) add("Supera 100 %: diferencia de definición (domicilio Isapre [NO COMPROBADO] frente a residencia censal) y de fecha; se muestra tal cual.", "font-size:11px;color:#b45309", "popup-over100");
+    if ((r?.pct_hi ?? 0) > 100) add("Supera 100 %: se muestra tal cual. Puede reflejar diferencias de definición territorial (domicilio Isapre [NO COMPROBADO] frente a residencia censal) o de fecha entre las dos fuentes, o el efecto de poblaciones muy pequeñas; la causa no está comprobada.", "font-size:11px;color:#b45309", "popup-over100");
     add(FONASA_PENDING, "font-size:11px;opacity:.8", "popup-fonasa");
     add(`Sello: ${SEAL}`, "font-size:10px;margin-top:3px;font-weight:600", "popup-seal");
     add(`Fuentes: Superintendencia de Salud, cartera de beneficiarios Isapre (período hasta ${when(pen.sources.isapre.period_end)}; publicación ${when(pen.sources.isapre.declared_date)}) · INE, Censo 2024 (período hasta ${when(pen.sources.censo.period_end)}; publicación ${when(pen.sources.censo.declared_date)}).`, "font-size:10px;opacity:.7", "popup-fuentes");

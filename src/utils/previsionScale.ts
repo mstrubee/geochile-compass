@@ -34,7 +34,7 @@ export const WARN_PENETRACION = {
   asymmetry: "Con todas las edades el numerador incluye a quienes no informan edad y, con ambos sexos, a quienes no informan sexo; con 60 años o más EXCLUYE la edad sin información e INCLUYE el sexo sin información (con ambos sexos). El Censo no tiene «sin información»: el denominador es la población con edad y sexo conocidos.",
   dates: "Los períodos difieren: Isapre, cartera vigente a diciembre de 2025; Censo, año 2024.",
   residence: "La comuna de la cartera Isapre no está declarada en la fuente (domicilio, contrato u otra) [NO COMPROBADO]; la del Censo es la de residencia habitual. Pueden no coincidir.",
-  noClip: "No se recorta a 100 %: un valor sobre 100 % se muestra tal cual y señala esa diferencia de definición y de fecha, no un error de cálculo [NO COMPROBADO].",
+  noClip: "No se recorta a 100 %: un valor sobre 100 % se muestra tal cual. Puede reflejar diferencias de definición territorial o de fecha entre las dos fuentes, o el efecto de poblaciones muy pequeñas; la causa no está comprobada.",
   noSex: "«Sexo sin información» no tiene penetración: el Censo no tiene ese grupo.",
   noFonasa: "Solo Isapre. Fonasa y los demás sistemas no se incluyen ni se estiman: no hay «resto» ni «sin previsión».",
   cap: (cap: number, max: number) => `El color llega al azul más oscuro en ${fmtPct(cap)} (percentil 95 de las comunas mostradas) para que una comuna extrema no aplane el resto; el máximo publicado es ${fmtPct(max)}. La ventana de cada comuna trae su valor real.`,

@@ -151,6 +151,9 @@ describe("ventana de la comuna: bloque «Previsión de salud»", () => {
     expect(txt(el, "popup-penetracion")).toBe("Penetración: 125,0 %");
     expect(txt(el, "popup-over100")).toContain("Supera 100 %");
     expect(txt(el, "popup-over100")).toContain("[NO COMPROBADO]");
+    expect(txt(el, "popup-over100")).toContain("la causa no está comprobada");
+    expect(txt(el, "popup-over100")).toContain("poblaciones muy pequeñas");
+    expect(txt(el, "popup-over100")).not.toMatch(/no (es|un) error|se debe a|debido a|porque|causa(da)? por/i);
   });
 
   it("sexo sin información: no hay penetración ni población (el Censo no tiene ese grupo)", () => {
@@ -210,6 +213,8 @@ describe("panel con métrica «Penetración»", () => {
     expect(t).toContain("1 comuna supera 100 %");
     expect(t).toContain("Antártica: 125,0 %");
     expect(t).toContain("No se recorta a 100 %");
+    expect(t).toContain("Puede reflejar diferencias de definición territorial o de fecha entre las dos fuentes, o el efecto de poblaciones muy pequeñas; la causa no está comprobada.");
+    expect(t).not.toMatch(/no (es|un) error|señala/i);
   });
 
   it("advertencias de la métrica: método, asimetría, fechas distintas, comuna no declarada [NO COMPROBADO], sin Fonasa ni «resto»", () => {
