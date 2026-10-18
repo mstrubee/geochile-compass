@@ -39,6 +39,7 @@ import type { IneVariable } from "@/utils/ineScales";
 import { PermitsHost } from "@/components/map/PermitsHost";
 import { ProjectsHost } from "@/components/map/ProjectsHost";
 import { HealthHost } from "@/components/map/HealthHost";
+import { PrevisionHost } from "@/components/map/PrevisionHost";
 import { useThematicLayers } from "@/hooks/usePermits";
 
 // Fix default Leaflet marker icon paths (when bundled)
@@ -529,6 +530,7 @@ const TerritorialLayersHost = () => {
       <PermitsHost thematic={thematicRows} visibleLayerIds={visibleLayerIds} />
       <ProjectsHost thematic={thematicRows} visibleLayerIds={visibleLayerIds} />
       <HealthHost thematic={thematicRows} visibleLayerIds={visibleLayerIds} />
+      <PrevisionHost thematic={thematicRows} visibleLayerIds={visibleLayerIds} />
     </>
   );
 };

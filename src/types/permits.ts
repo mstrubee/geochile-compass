@@ -99,7 +99,7 @@ export interface LayerProvenanceRow {
 /** Fila de `thematic_layers`: marca una hoja del árbol como capa temática. */
 export interface ThematicLayerRow {
   layer_id: string;
-  renderer: "choropleth_comuna" | "points_projects" | "points_permits" | "polygons_crf" | "points_health" | "choropleth_health";
+  renderer: "choropleth_comuna" | "points_projects" | "points_permits" | "polygons_crf" | "points_health" | "choropleth_health" | "choropleth_isapre" | "panel_casen_region";
   dataset: string;
   /** Regla 6: null/undefined = sin evaluar (se trata como lista); false = no entra a informes ni exportaciones. */
   client_ready?: boolean | null;

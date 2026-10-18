@@ -4,7 +4,7 @@ Documento vivo de la iniciativa. **Una sección por fase**; cada fase la relee a
 tal cual en la Fase 0). La evidencia con los archivos reales vive en [`HALLAZGOS_FASE0.md`](./HALLAZGOS_FASE0.md). Este documento recoge solo las
 **decisiones de diseño** y las convenciones; no repite cifras.
 
-Estado: **Fase 0 cerrada · Fase 1a (establecimientos) en curso — §2**. Las demás secciones se agregan en su fase.
+Estado: **Fase 0 y 1a cerradas · Fase 1b (previsión) en curso — §3**. Las demás secciones se agregan en su fase.
 
 ---
 
@@ -280,3 +280,68 @@ Medido con el archivo real (`HALLAZGOS_FASE1A.md` §3): los 33 puntos fuera de s
 El conteo por comuna de la primera entrega contaba **todos los tipos** del registro. Al revisarlo, La Serena (239) quedaba sobre Providencia (110), Santiago (99) y Puente Alto (50); el análisis (`HALLAZGOS_FASE1A.md` §7) muestra que **no es un error de código de comuna** (238 de 239 puntos caen en su polígono) sino que **el registro no es homogéneo entre regiones**: la región de Coquimbo trae 119 clínicas dentales privadas (Biobío 9, RM 62) y 63 centros de especialidades privados (Biobío 0, RM 1). Causa **[NO COMPROBADO]**: se consultará a la SEREMI de Salud de Coquimbo y al DEIS (solicitud **R5**, [`solicitudes/LISTA_1C.md`](./solicitudes/LISTA_1C.md)); mientras no haya respuesta así queda también en la ficha.
 
 Decisiones: (1) **no se corrige ningún dato**; (2) por defecto se cuenta solo `AmbitoFuncionamiento = 'Establecimiento de Salud'` (las unidades de atención y los programas cuelgan de un establecimiento) — el filtro por sí solo no corrige la distorsión y se dice; (3) **cada panel declara qué se cuenta** (tipos, ámbito, estado) y la lista de tipos que entran; (4) filtro por **tipo** y **desglose por tipo** de la comuna elegida; (5) la **ficha** y el bloque de fuente advierten que el conteo no es oferta ni comparable entre comunas o regiones; (6) el nivel se mantiene en *Respondida con rigor* **como conteo del registro**, nunca como oferta asistencial.
+
+---
+
+## 3. Fase 1b — Previsión (Isapre comunal y CASEN regional) — decisiones tomadas ANTES de codificar
+
+**Alcance (D3, D6).** Solo **Isapre** (cartera comunal de la Superintendencia de Salud) y **CASEN regional**. **Fonasa no está descargado: no se crea nada que dependa de él** y la 1b-5 queda *No respondible hoy*.
+La población comunal del Censo 2024 sigue pendiente: **1b-2 queda EN ESPERA** (no se construye ninguna tabla de población ni proporción). Regla 8: Isapre, Fonasa y Censo no se suman ni se restan; no hay residuo «sin previsión» por comuna.
+
+### 3.1 Fuentes (regla 1: organismo, URL exacta, publicación ≠ período, licencia, hash)
+
+| | Isapre — cartera comunal | CASEN 2024 — tabulados y base |
+|---|---|---|
+| Organismo | Superintendencia de Salud | Ministerio de Desarrollo Social y Familia (Observatorio Social) |
+| URL | `https://www.superdesalud.gob.cl/app/uploads/2026/01/estadistica-anual-de-cartera-de-beneficiarios-comunal-2025.xlsx` | `https://observatorio.ministeriodesarrollosocial.gob.cl/storage/docs/casen/2024/casen_2024.sav` y `…/Salud_Casen_2024.xlsx` (tabulados oficiales, para contrastar) |
+| **Período** | **diciembre 2025** (cartera vigente) | **2024** (trabajo de campo; factores calibrados con proyección base Censo 2017) |
+| **Publicación** | `Last-Modified` 2026-01-28 → `declared_date`; «fecha de extracción» 2026-01-22 va aparte en el reporte de la captura | `Last-Modified` 2026-06-10 |
+| Licencia | **No declarada** en el archivo [NO COMPROBADO] → `client_ready = false` | **[NO COMPROBADO]** → `client_ready = false` |
+| Advertencia oficial | «Información provisional… sujeta a modificación» | no usar estimaciones con < 60 casos muestrales (nota b); no es representativa a nivel comunal |
+
+* `source_snapshots` guarda `period_start/period_end` (el período) y `declared_date` (la publicación): **siempre separados**. El hash se calcula sobre el archivo original.
+* **Semántica del Isapre comunal [NO COMPROBADO]:** el archivo no declara si la comuna es la de domicilio, la del contrato u otra. No se interpreta ni se compara con el Censo (que es por residencia).
+
+### 3.2 Qué se publica y a qué grano (Isapre)
+
+Grano de lo **publicado**: `unidad × sexo × tramo de edad`, con **beneficiarios = cotizantes + cargas**. *Unidad* = comuna (CUT `char(5)`), «sin dato de comuna» de cada región, o «sin dato de región». *Sexo* = F, M, S/I. *Tramo* = los 21 quinquenales `0-4 … >=100` más `S/I` de edad (22 posiciones, `0..21`).
+El rol (cotizante / carga) **no se publica por comuna**: solo vive en el esquema restringido. Se publican además los **totales por región y rol** (siempre grandes) y se cuadra contra los totales del propio archivo.
+
+* **Esquema restringido `salud_restringido`:** conteos completos (sin suprimir) con rol. `REVOKE ALL` a `public`, `anon` y `authenticated`; RLS activa con política solo para admin (`public.has_role(auth.uid(),'admin')`) que **no tiene efecto mientras nadie conceda SELECT**; acceso real: `service_role` y SQL directo del dueño. No debe figurar en «Exposed schemas» (se verifica con la consulta 7 del inventario).
+* **Públicas:** `isapre_cartera_celda` (valor o suprimido, con cotas), `isapre_cartera_grupo` (total del grupo, suma publicada, **residuo «<5 agrupado»**, cotas y cuadre) e `isapre_cartera_region`.
+
+### 3.3 Algoritmo de supresión (regla 5) — especialización de §2.9 para esta tabla
+
+Se ejecuta **en la base** (`publish_isapre_snapshot`, fuente única de verdad) con los conteos completos y se **replica en Python** (`etl/salud/isapre.py`) para el `--dry-run`; una prueba exige que ambos den lo mismo con el archivo real. Orden de dimensiones: unidad (región ⊃ comuna) → sexo → edad. Un **grupo** = una `unidad × sexo` con sus 22 celdas y su total.
+
+1. **Cuadre antes de suprimir** (datos completos): fila = suma de tramos; `cotizantes = F+M+S/I`; Σ comunas + «sin dato de comuna» = subtotal regional; Σ regiones + «sin dato de región» = **Total País publicado** por el archivo. Si algo no cuadra, **no se carga**.
+2. **Supresión primaria:** celda con valor **1–4** → suprimida (`primary`; se publica «<5», `n = NULL`, cotas 1–4). **0 se publica** como 0 (no identifica a nadie).
+3. **Total del grupo:** se publica si es ≥ 5; si es 1–4 se suprime (y todas sus celdas no nulas ya son primarias).
+4. **Supresión complementaria:** si el total del grupo **se publica** y queda **exactamente una** celda suprimida, se suprime también la **menor celda publicada con valor ≥ 5** (empate: menor tramo). Un grupo con total publicado queda con **0 o ≥ 2** suprimidas, así que ninguna celda se despeja por resta. (Con un solo total por grupo basta una pasada; si el diseño publicara subtotales habría que iterar hasta un punto fijo; **no se publican subtotales** por esa razón.)
+5. **Residuo «<5 agrupado» y cotas:** por grupo con total publicado, `residuo = total − Σ publicadas` y `k` suprimidas. Cotas por celda: primaria `[1, 4]`; complementaria `[5, residuo − Σ cotas inferiores de las demás]`. **Cuadre por cotas:** `Σ mínimos ≤ residuo` y, sin complementarias, `residuo ≤ 4k`. Si falla, **no se publica**.
+6. **Métricas derivadas con datos completos:** las agregaciones sobre muchas comunas (p. ej. 1b-1) se calculan con los conteos completos dentro de una función `SECURITY DEFINER` que **solo devuelve el agregado** de un conjunto fijo y grande de comunas (mínimo 10) y su verificación contra el rango publicado. Lo que se muestra por comuna sale **solo** de lo suprimido (con rango cuando hay celdas suprimidas).
+7. **Declaración honesta:** la cartera por comuna, edad y sexo **ya es pública completa** en el XLSX de la Superintendencia (no hay microdatos individuales). Esta supresión es una **política de presentación**, no una protección real.
+8. **Pruebas:** propiedad sobre miles de grupos aleatorios (ningún valor 1–4 publicado; 0 o ≥ 2 suprimidas; residuo = total − Σ; cotas coherentes); mutación (quitar la complementaria hace fallar); la base re-valida las mismas invariantes al publicar.
+
+### 3.4 Qué muestra la interfaz y con qué nivel
+
+* **Capa «Isapre: beneficiarios por comuna»** (renderer propio `choropleth_isapre`): métrica (todas las edades o edad mínima), sexo, y filtro «solo comunas sin hospital de alta complejidad (en la comuna)» con las dos definiciones de D1. Valor por comuna = **rango** cuando hay celdas suprimidas («entre a y b»); 0 verdadero ≠ sin dato.
+* **Panel «Previsión regional (CASEN, estimada)»** (renderer propio `panel_casen_region`; **sin pintar comunas**: una región no se pinta sobre sus comunas para no insinuar un dato comunal).
+* **Niveles (regla 9) y sello (regla 2):** Isapre = *Respondida con rigor* · sello *Oficial con advertencia* (provisional, domicilio no declarado, fecha distinta de los establecimientos). CASEN = *Estimada* (siempre rango con intervalo de confianza) · sello *Estimado* con nota metodológica. Todo con `client_ready = false` hasta la revisión del dueño (mismo procedimiento que 1a, `RUNBOOK_1A.md` §5).
+
+### 3.5 CASEN regional: método
+
+Estimación de la distribución del sistema previsional de salud (`s13`: Fonasa, Isapre, FF.AA. y del Orden, Ninguno, Otro, No sabe) por región (`region`), con el factor regional `expr` y **error muestral por linealización de Taylor** (estratos `varstrat`, conglomerados `varunit`, un solo nivel de conglomerados, `df = conglomerados − estratos`) → intervalo de confianza del 95 %. Se **contrasta con el tabulado oficial** `Salud_Casen_2024.xlsx` (hoja 3): los puntos deben coincidir. No se publica un valor con **< 60 casos muestrales** (nota técnica b). **Nunca a nivel comunal (D6).** El tabulado oficial **sí** trae error estándar, población expandida y casos muestrales, y las notas «no fiable»: el error estándar publicado aquí lo **calcula esta plataforma** con el diseño muestral y se **contrasta** contra el del tabulado (coincide con una diferencia máxima de ~3·10⁻⁸ pp); el intervalo de confianza del 95 % (t de Student, df = conglomerados − estratos) es cálculo nuestro, el tabulado no lo trae.
+
+### 3.6 Preguntas de la fase
+
+| # | Pregunta | Nivel | Estado |
+|---|---|---|---|
+| 1b-1 | ¿Cuántos beneficiarios Isapre de **60 años o más** hay en comunas **sin** hospital de alta complejidad **en la comuna**? (dos definiciones D1) | **Respondida con rigor** · *Oficial con advertencia* | construida (agregado con datos completos + rango publicado) |
+| 1b-2 | ¿Qué comunas tienen la mayor proporción de beneficiarios Isapre sobre el Censo 2024? | Respondida con rigor · *Oficial con advertencia* | **EN ESPERA** (falta población comunal) |
+| 1b-3 | ¿Qué proporción de cada **región** declara Fonasa o Isapre (CASEN 2024)? | **Estimada** (rango con IC 95 %) · *Estimado* | construida (regional; contraste con el tabulado oficial) |
+| 1b-4 | Esa proporción **por comuna** | **No respondible hoy** | CASEN no es representativa a nivel comunal (D6) |
+| 1b-5 | Inscritos **Fonasa** por comuna, tramo, edad y sexo | **No respondible hoy** | faltan los archivos de Fonasa (D3); no se crea nada que dependa de ellos |
+
+**«En la comuna» no es «accesible»** (misma advertencia que 1a): la población Isapre puede atenderse en comunas vecinas.
+
