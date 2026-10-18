@@ -35,7 +35,7 @@ for a in "$@"; do case "$a" in --skip-check) SKIP_CHECK=1;; --reset-dbs) RESET_D
 BASE_VITEST_TESTS=593; BASE_VITEST_FILES=41
 BASE_PERMISOS_PASS=43; BASE_PERMISOS_SKIP=4; BASE_PROYECTOS_PASS=45
 BASE_SQL_P12=92; BASE_SQL_PARTE4_GEO=111; BASE_SQL_PARTE4_NODES=7
-BASE_SQL_HEALTH=71; BASE_SQL_HEALTH_RB=4; BASE_SALUD_PASS=76        # Fase 1a (establecimientos): pruebas SQL, rollback y pytest de etl/salud
+BASE_SQL_HEALTH=71; BASE_SQL_HEALTH_RB=4; BASE_SALUD_PASS=77        # Fase 1a (establecimientos): pruebas SQL, rollback y pytest de etl/salud
 BASE_SQL_ISAPRE=59; BASE_SQL_ISAPRE_RB=2; BASE_SQL_CASEN=21; BASE_SQL_PREVISION=5   # Fase 1b (previsión): Isapre, CASEN regional, hojas del árbol y rollbacks
 
 log() { printf '\n== %s\n' "$*"; }
@@ -181,6 +181,8 @@ run_baseline() {
   cmp_eq "SQL previsión: hojas y rollbacks" "$(sql_recipe geochile_salud_test ${N}000000_isapre_cartera.sql ${N}000100_casen_prevision.sql ${N}000200_prevision_layer_nodes.sql ${N}000200_prevision_layer_nodes.sql ${T}/prevision_layer_nodes.sql ${NR}000200_prevision_layer_nodes_down.sql ${NR}000200_prevision_layer_nodes_down.sql ${NR}000100_casen_prevision_down.sql ${NR}000100_casen_prevision_down.sql ${NR}000000_isapre_cartera_down.sql ${NR}000000_isapre_cartera_down.sql ${T}/prevision_rollback_check.sql ${N}000000_isapre_cartera.sql ${N}000100_casen_prevision.sql ${N}000200_prevision_layer_nodes.sql)" "$BASE_SQL_PREVISION"
   pyout="$(TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:$PGPORT/geochile_salud_test" PYTHONDONTWRITEBYTECODE=1 "$VENV/bin/python" -m pytest etl/salud/tests -q -p no:cacheprovider 2>&1 || true)"
   cmp_eq "pytest etl/salud (pasan)" "$(grep -oE '[0-9]+ passed' <<<"$pyout" | grep -oE '[0-9]+')" "$BASE_SALUD_PASS"
+  cmp_eq "pytest etl/salud (fallan)" "$(grep -oE '[0-9]+ failed' <<<"$pyout" | grep -oE '[0-9]+' || echo 0)" 0
+  cmp_eq "pytest etl/salud (omitidos)" "$(grep -oE '[0-9]+ skipped' <<<"$pyout" | grep -oE '[0-9]+' || echo 0)" 0           # con la base de prueba las pruebas con base NO se omiten
   echo "  (SQL api_quota, layer_nodes, layer_nodes_edit, layer_import, legacy_retired: NO corren en local; ver docs/salud/HALLAZGOS_FASE0.md §8)"
   local dirty; dirty="$(git status --short | grep -v '^??' || true)"
   if [ -n "$dirty" ]; then echo "  FALLA  hay archivos versionados modificados:"; echo "$dirty"; FAILS=$((FAILS+1)); else echo "  OK     git: ningún archivo versionado cambió"; fi

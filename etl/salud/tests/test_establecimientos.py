@@ -382,18 +382,18 @@ def test_load_end_to_end_idempotent_and_replacement(conn, tmp_path):
     assert got == {"900001": ("vigente", 0, "oficial"), "900002": ("cerrado", 0, "oficial"),
                    "900003": ("vigente", 4, "tabla"), "900004": ("vigente", 5, "oficial")}
     assert conn.execute("select count(*) from public.health_establishments_stage").fetchone()[0] == 0
-    snap = conn.execute("select status, row_count_raw, rejected_count, capture_method, original_filename, declared_date from public.source_snapshots").fetchall()
+    snap = conn.execute("select status, row_count_raw, rejected_count, capture_method, original_filename, declared_date from public.source_snapshots where source_id in (select id from public.data_sources where source_key = 'deis_establecimientos')").fetchall()
     assert snap == [("loaded", 4, 0, "manual_download", "establecimientos_20261014.csv", __import__("datetime").date(2026, 10, 14))]
     # mismo archivo → ya cargado, sin tocar nada
     r = load(p1, tmp_path)
     assert r.returncode == 0 and '"result": "already_loaded"' in r.stdout
-    assert conn.execute("select count(*) from public.source_snapshots").fetchone()[0] == 1
+    assert conn.execute("select count(*) from public.source_snapshots where source_id in (select id from public.data_sources where source_key = 'deis_establecimientos')").fetchone()[0] == 1
     # archivo nuevo → reemplaza (retención 1): el anterior queda superseded y sin filas
     p2 = tmp_path / "establecimientos_20261115.csv"
     p2.write_bytes(csv_bytes(rows1 + [row(EstablecimientoCodigo="900005")]))
     r = load(p2, tmp_path)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert conn.execute("select status, count(*) from public.source_snapshots group by 1 order by 1").fetchall() == [("loaded", 1), ("superseded", 1)]
+    assert conn.execute("select status, count(*) from public.source_snapshots where source_id in (select id from public.data_sources where source_key = 'deis_establecimientos') group by 1 order by 1").fetchall() == [("loaded", 1), ("superseded", 1)]
     assert conn.execute("select count(*) from public.health_establishments").fetchone()[0] == 5
 
 

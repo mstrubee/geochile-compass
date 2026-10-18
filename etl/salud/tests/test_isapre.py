@@ -314,6 +314,13 @@ def conn():
     c.execute("delete from public.source_checks where source_id in (select id from public.data_sources where source_key = %s)", (I.SOURCE_KEY,))
     c.execute("delete from public.source_snapshots where source_id in (select id from public.data_sources where source_key = %s)", (I.SOURCE_KEY,))
     yield c
+    # la base de prueba queda como estaba: otras suites (p. ej. establecimientos) cuentan sus propias capturas
+    c.execute("truncate salud_restringido.isapre_stage")
+    c.execute("delete from salud_restringido.isapre_unidad")
+    c.execute("delete from public.isapre_cartera_unidad")
+    c.execute("delete from public.geo_rejected_rows where snapshot_id in (select id from public.source_snapshots where source_id in (select id from public.data_sources where source_key = %s))", (I.SOURCE_KEY,))
+    c.execute("delete from public.source_checks where source_id in (select id from public.data_sources where source_key = %s)", (I.SOURCE_KEY,))
+    c.execute("delete from public.source_snapshots where source_id in (select id from public.data_sources where source_key = %s)", (I.SOURCE_KEY,))
     c.close()
 
 
@@ -342,13 +349,14 @@ def test_load_matches_python_replica_cell_by_cell_and_is_idempotent(conn, tmp_pa
         "select unit, sexo, total_pub, published_sum, suppressed_cells, residual, lo_sum, cuadre_ok from public.isapre_cartera_grupo").fetchall()}
     assert grp == {k: (g.total_pub, g.published_sum, g.suppressed_cells, g.residual, g.lo_sum, g.cuadre_ok) for k, g in py.items()}
     assert conn.execute("select count(*) from salud_restringido.isapre_stage").fetchone()[0] == 0
-    snap = conn.execute("select status, row_count_raw, rejected_count, declared_date, period_start, period_end, capture_method from public.source_snapshots").fetchall()
+    snap = conn.execute("select status, row_count_raw, rejected_count, declared_date, period_start, period_end, capture_method from public.source_snapshots "
+                        "where source_id in (select id from public.data_sources where source_key = %s)", (I.SOURCE_KEY,)).fetchall()
     assert snap == [("loaded", len(cart.units), 0, date(2026, 1, 28), date(2025, 12, 1), date(2025, 12, 31), "manual_download")]
     # el conteo COMPLETO está en el esquema restringido y los publicados no lo muestran
     assert conn.execute("select coalesce(sum(n), 0) from salud_restringido.isapre_cartera").fetchone()[0] == sum(sum(v) for v in cart.counts.values())
     r2 = load(p, tmp_path)
     assert r2.returncode == 0 and '"result": "already_loaded"' in r2.stdout
-    assert conn.execute("select count(*) from public.source_snapshots").fetchone()[0] == 1
+    assert conn.execute("select count(*) from public.source_snapshots where source_id in (select id from public.data_sources where source_key = %s)", (I.SOURCE_KEY,)).fetchone()[0] == 1
 
 
 def test_load_is_all_or_nothing_when_the_base_revalidates(conn, tmp_path):
