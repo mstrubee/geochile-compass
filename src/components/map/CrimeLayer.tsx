@@ -121,7 +121,7 @@ export function crimePopup(p: CP, censada: number | null): string {
       <tr><td style="color:#888;padding:1px 6px 1px 0">${POBLACION_LABEL}</td><td>${censada != null ? fmt(censada) : SIN_DATO}</td></tr>
       <tr><td style="color:#888;padding:1px 6px 1px 0" title="Población con que se calculó la tasa en el archivo de delitos; su origen no está documentado y puede diferir de la censada">Base de la tasa (sin fuente)</td><td>${fmt(p.poblacion)}</td></tr>
     </table>
-    <div style="margin-top:4px;font-size:9px;color:#666">Delitos: CEAD · ${p.years ?? "2022-2024"}</div>
+    <div style="margin-top:4px;font-size:9px;color:#666">Delitos: ${p.fuente ?? "CEAD"} · ${p.years ?? "2022-2024"}</div>
   </div>`;
 }
 

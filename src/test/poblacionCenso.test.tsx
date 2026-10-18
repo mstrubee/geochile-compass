@@ -146,6 +146,8 @@ describe("capas y fichas", () => {
     expect(con).toContain(POBLACION_LABEL);
     expect(con).toContain("861");
     expect(con).toContain("Base de la tasa (sin fuente)");
+    expect(crimePopup({ ...p, fuente: "CEAD 2022–2024" }, 861)).toContain("Delitos: CEAD 2022–2024");
+    expect(con).toContain("Delitos: CEAD ·"); // sin p.fuente cae a «CEAD»
     const sin = crimePopup(p, null);
     expect(sin).toContain(SIN_DATO);
     expect(sin).not.toMatch(/Censo 2024<\/div>/);
