@@ -4,20 +4,22 @@ import type { Feature, Geometry } from "geojson";
 import type { GeoJSON as LeafletGeoJSON, Layer, Path, PathOptions } from "leaflet";
 import { useComunasGeoIndex, type ComunaProps } from "@/hooks/useComunasGeoIndex";
 import type { IsapreComunaRow, IsapreMetric, IsaprePenetracionRow } from "@/types/prevision";
+import { classify, N_SCALE, PCT_SCALE } from "@/utils/isapreClasses";
 import { buildIsapreComunaPopup, type PenetracionSources } from "@/utils/previsionPopup";
-import { midpoint, PCT_FILL_OPACITY, PCT_NODATA_COLOR, pctColor, pctMid, type PctDomain } from "@/utils/previsionScale";
-import { classify } from "@/utils/permitsScale";
+import { midpoint, pctMid } from "@/utils/previsionScale";
+
+/** Borde de comuna: explícito (un gris medio visible sobre los mapas Oscuro, Claro y Satélite); no depende de una variable CSS dentro de un atributo SVG. */
+export const BORDER_COLOR = "#6b7280";
+export const BORDER_WEIGHT = 0.8;
 
 interface Props {
   rows: IsapreComunaRow[] | undefined;
-  breaks: number[];
   filterText: string;
-  /** «n»: beneficiarios (escala por cuantiles, como siempre). «pct»: penetración, degradado continuo blanco → azul al 50 %. */
+  /** «n»: beneficiarios; «pct»: penetración. Las dos usan clases discretas de la misma familia de color (viridis de 7 clases, relleno 0,7). */
   metric?: IsapreMetric;
   /** Filas de get_isapre_penetracion() de TODAS las comunas (la ventana las usa siempre) y las que se pintan (tras el filtro «sin alta»). */
   penRows?: IsaprePenetracionRow[];
   penShown?: IsaprePenetracionRow[];
-  domain?: PctDomain | null;
   sexoSinInfo?: boolean;
   sources?: PenetracionSources;
 }
@@ -27,28 +29,25 @@ const HIGHLIGHT: PathOptions = { weight: 2, color: "hsl(199 89% 70%)", fillOpaci
 /**
  * Beneficiarios Isapre por comuna. Une `/comunas.geojson` con `get_isapre_comuna()` por `codigo_comuna`.
  * El color sale del PUNTO MEDIO del rango publicado (la ventana de la comuna muestra el rango). 0 publicado = color propio; comuna sin fila = «sin dato», gris punteado.
- * Con la métrica «pct» (1b-2) el color es un degradado continuo de blanco (menor %) a azul profundo sobre el punto medio del rango de penetración, con relleno al 50 %; sin dato, gris punteado.
+ * Con la métrica «pct» (1b-2) el color sale del punto medio del rango de penetración. En las dos métricas: clases discretas (isapreClasses.ts), relleno 0,7, borde visible, sin dato gris punteado.
  */
-export const IsapreChoroplethLayer = ({ rows, breaks, filterText, metric = "n", penRows, penShown, domain, sexoSinInfo = false, sources }: Props) => {
+export const IsapreChoroplethLayer = ({ rows, filterText, metric = "n", penRows, penShown, sexoSinInfo = false, sources }: Props) => {
   const { ready, fc, nombresPorCodigo } = useComunasGeoIndex(true);
   const geoRef = useRef<LeafletGeoJSON | null>(null);
   const hoverRef = useRef<Layer | null>(null);
   const rowByCut = useMemo(() => new Map((rows ?? []).map((r) => [r.cut, r])), [rows]);
   const penByCut = useMemo(() => new Map((penRows ?? []).map((r) => [r.cut, r])), [penRows]);
   const penShownByCut = useMemo(() => new Map((penShown ?? []).map((r) => [r.cut, r])), [penShown]);
-  const latest = useRef({ rowByCut, nombresPorCodigo, filterText, penByCut, sexoSinInfo, sources });
-  latest.current = { rowByCut, nombresPorCodigo, filterText, penByCut, sexoSinInfo, sources };
+  const latest = useRef({ rowByCut, nombresPorCodigo, filterText, penByCut, sexoSinInfo, sources, metric });
+  latest.current = { rowByCut, nombresPorCodigo, filterText, penByCut, sexoSinInfo, sources, metric };
 
   const cutOf = (f?: Feature<Geometry, ComunaProps>) => String(f?.properties?.codigo_comuna ?? f?.properties?.cod_comuna ?? "");
   const styleFor = (feature?: Feature<Geometry, ComunaProps>): PathOptions => {
-    if (metric === "pct") {
-      const mid = pctMid(penShownByCut.get(cutOf(feature)) ?? { pct_lo: null, pct_hi: null });
-      if (mid == null || !domain) return { fillColor: PCT_NODATA_COLOR, fillOpacity: 0.4, color: "hsl(var(--border))", weight: 0.6, dashArray: "3 3" };
-      return { fillColor: pctColor(mid, domain.max), fillOpacity: PCT_FILL_OPACITY, color: "hsl(var(--border))", weight: 0.6 };
-    }
-    const row = rowByCut.get(cutOf(feature));
-    const c = classify(row ? midpoint(row) : null, "value", breaks);
-    return { fillColor: c.color, fillOpacity: c.kind === "nodata" ? 0.4 : 0.72, color: "hsl(var(--border))", weight: 0.6, dashArray: c.kind === "nodata" ? "3 3" : undefined };
+    const cut = cutOf(feature);
+    const c = metric === "pct"
+      ? classify(PCT_SCALE, pctMid(penShownByCut.get(cut) ?? { pct_lo: null, pct_hi: null }))
+      : classify(N_SCALE, rowByCut.get(cut) ? midpoint(rowByCut.get(cut)!) : null);
+    return { fillColor: c.color, fillOpacity: c.fillOpacity, color: BORDER_COLOR, weight: BORDER_WEIGHT, dashArray: c.dashed ? "3 3" : undefined };
   };
 
   useEffect(() => {
@@ -57,15 +56,15 @@ export const IsapreChoroplethLayer = ({ rows, breaks, filterText, metric = "n", 
       hoverRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rowByCut, breaks, ready, metric, penShownByCut, domain]);
+  }, [rowByCut, ready, metric, penShownByCut]);
 
   if (!ready || !fc) return null;
 
   const onEachFeature = (feature: Feature<Geometry, ComunaProps>, layer: Layer) => {
     const cut = cutOf(feature);
     layer.bindPopup(() => {
-      const { rowByCut: byCut, nombresPorCodigo: names, filterText: ft, penByCut: pens, sexoSinInfo: si, sources: src } = latest.current;
-      const pen = src ? { row: pens.get(cut), sexoSinInfo: si, sources: src } : undefined;
+      const { rowByCut: byCut, nombresPorCodigo: names, filterText: ft, penByCut: pens, sexoSinInfo: si, sources: src, metric: m } = latest.current;
+      const pen = src ? { row: pens.get(cut), sexoSinInfo: si, sources: src, metric: m } : undefined;
       return buildIsapreComunaPopup(byCut.get(cut), names[cut] ?? "Comuna", cut, ft, pen);
     });
     layer.on({

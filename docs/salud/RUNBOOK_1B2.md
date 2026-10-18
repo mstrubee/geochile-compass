@@ -72,9 +72,9 @@ Verificación como `anon` (sin sesión): `curl -s "$SUPABASE_URL/rest/v1/rpc/get
 ## Paso 3 — Desplegar el front (solo con el paso 2 correcto)
 Desplegar la rama mergeada como de costumbre. Después, **con un usuario autenticado**:
 1. Capa «Isapre: beneficiarios por comuna»: el selector «Métrica» ofrece «Beneficiarios (n.º)» y «Penetración (% de la población censada 2024)».
-2. Con «Penetración»: degradado de blanco a azul profundo al 50 %, leyenda con «0 %» y «≥ 20,3 %» (tope = percentil 95 con todas las edades y ambos sexos) y la nota del tope; sin dato en gris punteado.
+2. Con «Penetración»: 7 clases viridis (0–2, 2–5, 5–10, 10–20, 20–40, 40–60 y ≥ 60 %), relleno 0,7, leyenda con una fila por clase y su número de comunas (todas las edades y ambos sexos: 85 · 122 · 75 · 46 · 12 · 2 · 4); sin dato en gris punteado.
 3. Popup de Vitacura: bloque «Previsión de salud» → Beneficiarios Isapre 77.372 · Población censada 2024 (INE) 86.420 · Penetración 89,5 % · «Fonasa: pendiente (fase C)» (sin cifra) · «Sello: Oficial con advertencia» con las dos fuentes, períodos (2025-12-31 / 2024-12-31) y fechas de publicación (2026-01-28 / 2025-03-27).
-4. Popup de Camarones: «entre 2 y 4» y «entre 0,2 % y 0,5 %». Con «Mujeres» + «Todas las edades», Antártica: 125,0 % con la advertencia «Supera 100 %».
+4. Popup de Camarones: «entre 2 y 4» y «entre 0,2 % y 0,5 %»; Hualpén: «entre 4.643 y 4.662» y «≈ 5,3 %» con «(rango publicado menor que 0,1 puntos)»; Vitacura (exacta): «89,5 %» sin «≈». Con «Mujeres» + «Todas las edades», Antártica: 125,0 % con la advertencia «Supera 100 %».
 5. Con «Penetración», «Sexo sin información» aparece deshabilitado; edad solo «Todas las edades» y «60 años o más».
 6. Si algo dice «No se pudo leer la penetración: …», la migración no está aplicada o falta una captura: repetir el paso 2.
 

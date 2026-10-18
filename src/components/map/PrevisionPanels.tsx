@@ -3,11 +3,10 @@ import type { HealthAltaDef } from "@/types/health";
 import type { LayerProvenanceRow, ThematicLayerRow } from "@/types/permits";
 import { METRIC_LABEL, type CasenRegionRow, type IsapreComunaRow, type IsapreFilters, type IsapreMetric, type IsaprePenetracionRow, type IsapreResumenRow, type IsapreSexo, type IsapreSinAltaRow } from "@/types/prevision";
 import { ALTA_LABEL, fmtN } from "@/utils/healthScale";
-import { legendEntries } from "@/utils/permitsScale";
+import { FILL_OPACITY, legendRows, N_SCALE, PCT_SCALE, type LegendRow } from "@/utils/isapreClasses";
 import {
-  casenByRegion, casenCounts, casenRangeText, CASEN_LEVEL_SEAL, countInexact, countPctInexact, countPctOver100, FONASA_PENDING, fmtPct, isapreFilterLabel, ISAPRE_LEVEL_SEAL, MIN_TRAMO_LABEL,
-  PCT_BLUE, PCT_FILL_OPACITY, PCT_NODATA_COLOR, PCT_WHITE, pctRangeText, QUESTIONS, QUESTION_STATE_TEXT, rangeText, SEXO_LABEL, SISTEMAS_SHOWN, SISTEMA_LABEL, totalRange, WARN_CASEN, WARN_ISAPRE,
-  WARN_PENETRACION, type PctDomain,
+  casenByRegion, casenCounts, casenRangeText, CASEN_LEVEL_SEAL, countInexact, countPctInexact, countPctOver100, FONASA_PENDING, isapreFilterLabel, ISAPRE_LEVEL_SEAL, MIN_TRAMO_LABEL,
+  midpoint, PCT_APPROX_NOTE, pctIsApprox, pctMid, pctRangeText, QUESTIONS, QUESTION_STATE_TEXT, rangeText, SEXO_LABEL, SISTEMAS_SHOWN, SISTEMA_LABEL, totalRange, WARN_CASEN, WARN_ISAPRE, WARN_PENETRACION,
 } from "@/utils/previsionScale";
 import { ClientReadyNotice } from "./HealthPanels";
 import { ProjectsPanelShell, SourceBlock } from "./ProjectsPanelShell";
@@ -35,7 +34,6 @@ interface IsapreProps {
   filters: IsapreFilters;
   onFilters: (f: IsapreFilters) => void;
   rows: IsapreComunaRow[] | undefined;
-  breaks: number[];
   loading: boolean;
   error: string | null;
   resumen: IsapreResumenRow | undefined;
@@ -54,30 +52,41 @@ interface IsapreProps {
   onMetric?: (m: IsapreMetric) => void;
   penRows?: IsaprePenetracionRow[];
   penShown?: IsaprePenetracionRow[];
-  domain?: PctDomain | null;
   penLoading?: boolean;
   penError?: string | null;
 }
 
 const dateText = (d: string | null | undefined) => d ?? "no la declara";
 
+/** Una fila por clase: color, rango y número de comunas; «Sin dato» al final. Los colores son los de la capa (misma escala, mismo relleno). */
+const ClassLegend = ({ rows }: { rows: LegendRow[] }) => (
+  <ul data-testid="isapre-class-legend" className="space-y-0.5">
+    {rows.map((r) => (
+      <li key={`${r.kind}-${r.label}`} data-testid="isapre-legend-row" data-kind={r.kind} data-count={r.count ?? ""} data-color={r.color} className="flex items-center gap-1.5">
+        <span aria-hidden className="inline-block h-3 w-5 shrink-0 border" style={{ background: r.color, opacity: r.fillOpacity, borderStyle: r.kind === "nodata" ? "dashed" : "solid" }} data-fill-opacity={r.fillOpacity} />
+        <span className="flex-1">{r.label}</span>
+        <span className="tabular-nums text-muted-foreground">{r.count == null ? "" : `${fmtN(r.count)} ${r.count === 1 ? "comuna" : "comunas"}`}</span>
+      </li>
+    ))}
+  </ul>
+);
+
 export const IsapreChoroplethPanel = (p: IsapreProps) => {
   const range = totalRange(p.rows);
   const inexact = countInexact(p.rows);
-  const legend = legendEntries("value", "units", p.breaks);
   const metric = p.metric ?? "n";
   const pct = metric === "pct";
   const over100 = countPctOver100(p.penShown);
   const pctInexact = countPctInexact(p.penShown);
   const pctWithValue = (p.penShown ?? []).filter((r) => r.pct_lo != null).length;
+  const totalComunas = p.penRows && p.penRows.length > 0 ? p.penRows.length : null;
+  const legendList = pct ? legendRows(PCT_SCALE, (p.penShown ?? []).map(pctMid), totalComunas) : legendRows(N_SCALE, (p.rows ?? []).map(midpoint), totalComunas);
   const warnings = [WARN_ISAPRE.scope, WARN_ISAPRE.provisional, WARN_ISAPRE.comuna, WARN_ISAPRE.age60, WARN_ISAPRE.period, WARN_ISAPRE.suppression(p.resumen?.suppress_below ?? 5), WARN_ISAPRE.color, WARN_ISAPRE.zero, WARN_ISAPRE.noAccess,
-    ...(pct ? [WARN_PENETRACION.method, WARN_PENETRACION.asymmetry, WARN_PENETRACION.dates, WARN_PENETRACION.residence, WARN_PENETRACION.noClip, WARN_PENETRACION.noSex, WARN_PENETRACION.noFonasa,
-      ...(p.domain ? [WARN_PENETRACION.cap(p.domain.max, p.domain.maxPublished)] : [])] : [])];
+    ...(pct ? [WARN_PENETRACION.method, WARN_PENETRACION.asymmetry, WARN_PENETRACION.dates, WARN_PENETRACION.residence, WARN_PENETRACION.noClip, WARN_PENETRACION.noSex, WARN_PENETRACION.noFonasa, WARN_PENETRACION.classes] : [])];
   const s = p.sinAlta;
   return (
     <ProjectsPanelShell title="Isapre: beneficiarios por comuna" offset={p.offset} testId="isapre-choropleth-panel">
       <ClientReadyNotice layer={p.layer} />
-      <p data-testid="prevision-level-seal"><span className="font-medium">Nivel: </span>{ISAPRE_LEVEL_SEAL.level} · <span className="font-medium">Sello: </span>{ISAPRE_LEVEL_SEAL.seal}</p>
       <div className="grid grid-cols-2 gap-2" data-testid="isapre-filters">
         <label className="col-span-2 space-y-1"><span className="font-medium">Métrica</span>
           <select aria-label="Métrica" className={sel} value={metric} onChange={(e) => p.onMetric?.(e.target.value === "pct" ? "pct" : "n")}>
@@ -97,43 +106,25 @@ export const IsapreChoroplethPanel = (p: IsapreProps) => {
       </div>
       <div data-testid="isapre-legend" className="space-y-1">
         {pct ? (
-          <>
-            <p className="font-medium">{p.penLoading ? "Cargando…" : `Penetración Isapre en ${fmtN(pctWithValue)} comunas con dato`}</p>
-            <p>{isapreFilterLabel(p.filters)} · {METRIC_LABEL.pct}</p>
-            {pctInexact > 0 && <p role="status" data-testid="isapre-inexact">{fmtN(pctInexact)} comunas se muestran como rango por conteos pequeños suprimidos.</p>}
-            {over100.length > 0 && (
-              <p role="alert" data-testid="isapre-over100" className="text-amber-700">
-                {fmtN(over100.length)} {over100.length === 1 ? "comuna supera" : "comunas superan"} 100 % ({over100.map((r) => `${r.name}: ${pctRangeText(r.pct_lo, r.pct_hi, r.exact)}`).join("; ")}): {WARN_PENETRACION.noClip}
-              </p>
-            )}
-            {p.penError && <p role="alert" className="text-destructive">No se pudo leer la penetración: {p.penError}</p>}
-            {p.filters.sexo === "SI" && <p role="status" data-testid="isapre-pct-sexo-si">{WARN_PENETRACION.noSex}</p>}
-            {p.domain ? (
-              <div data-testid="isapre-pct-legend" className="space-y-0.5">
-                <div aria-hidden className="h-3 w-full border" style={{ background: `linear-gradient(to right, rgb(${PCT_WHITE.join(",")}), rgb(${PCT_BLUE.join(",")}))`, opacity: PCT_FILL_OPACITY }} data-fill-opacity={PCT_FILL_OPACITY} />
-                <div className="flex justify-between tabular-nums"><span data-testid="isapre-pct-min">0 %</span><span data-testid="isapre-pct-max">{p.domain.capped ? "≥ " : ""}{fmtPct(p.domain.max)}</span></div>
-                {p.domain.capped && <p className="text-muted-foreground" data-testid="isapre-pct-cap">{WARN_PENETRACION.cap(p.domain.max, p.domain.maxPublished)}</p>}
-              </div>
-            ) : (!p.penLoading && !p.penError && <p role="status" data-testid="isapre-pct-empty">Sin penetración que mostrar con este filtro: sin dato.</p>)}
-            <p className="flex items-center gap-1"><span aria-hidden className="inline-block h-3 w-4 border" style={{ background: PCT_NODATA_COLOR, borderStyle: "dashed" }} />Sin dato</p>
-          </>
+          <p className="font-medium">{p.penLoading ? "Cargando…" : `Penetración Isapre · ${fmtN(pctWithValue)} comunas con dato`}</p>
         ) : (
-          <>
-            <p className="font-medium">{p.loading ? "Cargando…" : `${fmtN(range.lo)}${range.lo === range.hi ? "" : ` a ${fmtN(range.hi)}`} beneficiarios en ${fmtN((p.rows ?? []).length)} comunas`}</p>
-            <p>{isapreFilterLabel(p.filters)}</p>
-            {inexact > 0 && <p role="status" data-testid="isapre-inexact">{fmtN(inexact)} comunas se muestran como rango por conteos pequeños suprimidos.</p>}
-            {p.error && <p role="alert" className="text-destructive">No se pudieron leer los datos: {p.error}</p>}
-            <ul className="space-y-0.5">
-              {legend.map((e) => (
-                <li key={`${e.kind}-${e.label}`} className="flex items-center gap-1">
-                  <span aria-hidden className="inline-block h-3 w-4 border" style={{ background: e.color, borderStyle: e.kind === "nodata" ? "dashed" : "solid" }} />{e.label}
-                </li>
-              ))}
-            </ul>
-          </>
+          <p className="font-medium">{p.loading ? "Cargando…" : `${fmtN(range.lo)}${range.lo === range.hi ? "" : ` a ${fmtN(range.hi)}`} beneficiarios en ${fmtN((p.rows ?? []).length)} comunas`}</p>
         )}
+        <ClassLegend rows={legendList} />
+        <p className="text-muted-foreground" data-testid="isapre-legend-note" title={isapreFilterLabel(p.filters)}>Color por el punto medio del rango · relleno {String(FILL_OPACITY).replace(".", ",")}</p>
+        {!pct && inexact > 0 && <p role="status" data-testid="isapre-inexact">{fmtN(inexact)} comunas se muestran como rango por conteos pequeños suprimidos.</p>}
+        {!pct && p.error && <p role="alert" className="text-destructive">No se pudieron leer los datos: {p.error}</p>}
+        {pct && pctInexact > 0 && <p role="status" data-testid="isapre-inexact">{fmtN(pctInexact)} comunas se muestran como rango por conteos pequeños suprimidos.</p>}
+        {pct && over100.length > 0 && (
+          <p role="alert" data-testid="isapre-over100" className="text-amber-700">
+            {fmtN(over100.length)} {over100.length === 1 ? "comuna supera" : "comunas superan"} 100 % ({over100.map((r) => `${r.name}: ${pctRangeText(r.pct_lo, r.pct_hi, r.exact)}${pctIsApprox(r.pct_lo, r.pct_hi, r.exact) ? ` (${PCT_APPROX_NOTE})` : ""}`).join("; ")}): {WARN_PENETRACION.noClip}
+          </p>
+        )}
+        {pct && p.penError && <p role="alert" className="text-destructive">No se pudo leer la penetración: {p.penError}</p>}
+        {pct && p.filters.sexo === "SI" && <p role="status" data-testid="isapre-pct-sexo-si">{WARN_PENETRACION.noSex}</p>}
         <p data-testid="isapre-fonasa-pending" className="text-muted-foreground">{FONASA_PENDING}</p>
       </div>
+      <p data-testid="prevision-level-seal"><span className="font-medium">Nivel: </span>{ISAPRE_LEVEL_SEAL.level} · <span className="font-medium">Sello: </span>{ISAPRE_LEVEL_SEAL.seal}</p>
       <div data-testid="isapre-sin-alta" className="space-y-1 border-t pt-2">
         <p className="font-medium">1b-1 · 60 años o más en comunas sin alta complejidad</p>
         <label className="space-y-1"><span className="sr-only">Definición de alta complejidad</span>
