@@ -29,7 +29,8 @@ vi.mock("@/components/map/IsapreChoroplethLayer", async (orig) => {
 import { PrevisionHost } from "@/components/map/PrevisionHost";
 import { IsapreChoroplethPanel } from "@/components/map/PrevisionPanels";
 import { buildIsapreComunaPopup, type PenetracionSources } from "@/utils/previsionPopup";
-import { PCT_BLUE, PCT_FILL_OPACITY, PCT_WHITE, pctColor, pctDomain, pctMid, pctRangeText, penetracionRowsShown, QUESTIONS, WARN_PENETRACION } from "@/utils/previsionScale";
+import { pctMid, pctRangeText, penetracionRowsShown, QUESTIONS, WARN_PENETRACION } from "@/utils/previsionScale";
+import { FILL_OPACITY, N_SCALE, PCT_SCALE, VIRIDIS_7 } from "@/utils/isapreClasses";
 
 const pen = (cut: string, name: string, lo: number | null, hi: number | null, poblacion: number | null, over: Partial<IsaprePenetracionRow> = {}): IsaprePenetracionRow => ({
   cut, name, region_cut: cut.slice(0, 2), n_lo: lo, n_hi: hi, exact: lo == null || hi == null ? null : lo === hi, poblacion,
@@ -48,38 +49,7 @@ beforeEach(() => {
   got.layer = null;
 });
 
-describe("escala de penetración: degradado continuo de blanco a azul profundo", () => {
-  it("0 % es blanco, el tope es el azul profundo, y por encima del tope no pasa del azul", () => {
-    expect(pctColor(0, 20)).toBe("rgb(255, 255, 255)");
-    expect(pctColor(20, 20)).toBe(`rgb(${PCT_BLUE.join(", ")})`);
-    expect(pctColor(95, 20)).toBe(pctColor(20, 20));
-    expect(pctColor(-3, 20)).toBe(pctColor(0, 20));
-    expect(PCT_WHITE).toEqual([255, 255, 255]);
-  });
-
-  it("es CONTINUO: 200 valores distintos dan colores distintos y cada canal baja de forma monótona (no hay clases)", () => {
-    const cols = Array.from({ length: 201 }, (_, i) => pctColor((i / 200) * 20, 20));
-    expect(new Set(cols).size).toBeGreaterThan(150);
-    const red = cols.map((c) => Number(/rgb\((\d+)/.exec(c)![1]));
-    expect(red.every((v, i) => i === 0 || v <= red[i - 1])).toBe(true);
-    expect(pctColor(10, 20)).toBe("rgb(132, 152, 181)");   // mitad exacta entre blanco y azul profundo
-  });
-
-  it("el relleno es 0,5", () => expect(PCT_FILL_OPACITY).toBe(0.5));
-
-  it("dominio: de 0 al percentil 95 de los puntos medios, y el máximo publicado se informa aparte", () => {
-    const rows = [...Array.from({ length: 19 }, (_, i) => pen(`9${String(i).padStart(4, "0")}`, `C${i}`, i + 1, i + 1, 100)), pen("99999", "Extrema", 90, 90, 100)];
-    const d = pctDomain(rows)!;
-    expect(d.maxPublished).toBe(90);
-    expect(d.capped).toBe(true);
-    expect(d.max).toBeGreaterThanOrEqual(19);
-    expect(d.max).toBeLessThan(25);                       // el valor extremo (90 %) no aplana al resto
-    expect(pctDomain([pen("90001", "A", 5, 5, 100)])).toEqual({ max: 5, maxPublished: 5, capped: false });
-    expect(pctDomain([pen("90001", "A", 0, 0, 100)])!.max).toBe(1);   // todo en 0: dominio mínimo válido
-    expect(pctDomain([])).toBeNull();
-    expect(pctDomain([pen("90001", "A", null, null, 100)])).toBeNull();
-  });
-
+describe("utilidades de penetración", () => {
   it("el color sale del PUNTO MEDIO del rango", () => {
     const r = pen("90001", "A", 10, 30, 100);
     expect(pctMid(r)).toBe(20);
@@ -163,6 +133,18 @@ describe("ventana de la comuna: bloque «Previsión de salud»", () => {
     expect(txt(el, "popup-penetracion")).toBe("Penetración: sin dato");
   });
 
+  it("Beneficiarios: si el rango publicado cruza clases lo dice la ventana (con y sin el bloque de previsión); con la métrica de penetración, solo la nota de penetración", () => {
+    const cruza = comuna("90007", "Cruza", 250, 320);
+    const sin = buildIsapreComunaPopup(cruza, "x", "90007", "f");
+    expect(sin.querySelector('[data-testid="popup-range-classes"]')?.textContent).toContain("El rango abarca dos clases (100 – <300 y 300 – <1.000)");
+    const con = buildIsapreComunaPopup(cruza, "x", "90007", "f", { row: pen("90007", "Cruza", 250, 320, 100000), sexoSinInfo: false, sources: SOURCES, metric: "n" });
+    expect(con.querySelector('[data-testid="popup-range-classes"]')?.textContent).toContain("100 – <300 y 300 – <1.000");
+    const pct = buildIsapreComunaPopup(cruza, "x", "90007", "f", { row: pen("90007", "Cruza", 250, 320, 100000), sexoSinInfo: false, sources: SOURCES, metric: "pct" });
+    expect(pct.querySelector('[data-testid="popup-range-classes"]')).toBeNull();                     // 0,25–0,32 %: una sola clase de penetración
+    const unaClase = buildIsapreComunaPopup(comuna("90008", "Una", 120, 140), "x", "90008", "f");
+    expect(unaClase.querySelector('[data-testid="popup-range-classes"]')).toBeNull();
+  });
+
   it("sin el parámetro de penetración el popup es el de antes (beneficiarios y advertencias, sin bloque)", () => {
     const el = buildIsapreComunaPopup(comuna("90001", "A", 10, 10), "x", "90001", "f");
     expect(el.textContent).toContain("Beneficiarios Isapre: 10");
@@ -171,9 +153,9 @@ describe("ventana de la comuna: bloque «Previsión de salud»", () => {
 });
 
 const baseProps = () => ({
-  layer: { client_ready: false, client_ready_note: "Pendiente." }, filters: DEFAULT_ISAPRE_FILTERS, onFilters: vi.fn(), rows: [] as IsapreComunaRow[], breaks: [] as number[], loading: false, error: null,
+  layer: { client_ready: false, client_ready_note: "Pendiente." }, filters: DEFAULT_ISAPRE_FILTERS, onFilters: vi.fn(), rows: [] as IsapreComunaRow[], loading: false, error: null,
   resumen: undefined, resumenError: null, sinAlta: undefined, sinAltaError: null, sinAltaLoading: false, sinAltaDef: "hospital" as const, onSinAltaDef: vi.fn(), sources: [], provenanceError: null,
-  provenanceLoading: false, offset: 0, metric: "pct" as const, onMetric: vi.fn(), penRows: [] as IsaprePenetracionRow[], penShown: [] as IsaprePenetracionRow[], domain: null, penLoading: false, penError: null,
+  provenanceLoading: false, offset: 0, metric: "pct" as const, onMetric: vi.fn(), penRows: [] as IsaprePenetracionRow[], penShown: [] as IsaprePenetracionRow[], penLoading: false, penError: null,
 });
 
 describe("panel con métrica «Penetración»", () => {
@@ -186,29 +168,28 @@ describe("panel con métrica «Penetración»", () => {
     expect(baseProps().onMetric).not.toBe(undefined);
   });
 
-  it("con penetración: leyenda con los extremos del dominio (0 % y «≥ tope»), nota del percentil 95 y «Sin dato» gris punteado", () => {
-    const rows = [pen("90001", "A", 5, 5, 100), pen("90002", "B", 40, 40, 100), pen("90003", "C", null, null, 100)];
-    const domain = { max: 30, maxPublished: 40, capped: true };
-    render(<IsapreChoroplethPanel {...baseProps()} penRows={rows} penShown={rows} domain={domain} />);
-    expect(screen.getByTestId("isapre-pct-min").textContent).toBe("0 %");
-    expect(screen.getByTestId("isapre-pct-max").textContent).toBe("≥ 30,0 %");
-    expect(screen.getByTestId("isapre-pct-cap").textContent).toContain("percentil 95");
-    expect(screen.getByTestId("isapre-pct-cap").textContent).toContain("40,0 %");
-    expect(screen.getByTestId("isapre-pct-legend").querySelector("[data-fill-opacity]")?.getAttribute("data-fill-opacity")).toBe("0.5");
-    expect(screen.getByTestId("isapre-legend").textContent).toContain("Sin dato");
+  it("con penetración: una fila por clase con su color, rango y número de comunas, más «Sin dato»; el Fonasa pendiente sin cifra", () => {
+    const rows = [pen("90001", "A", 5, 5, 100), pen("90002", "B", 40, 40, 100), pen("90003", "C", null, null, 100), pen("90004", "D", 0, 0, 100)];
+    render(<IsapreChoroplethPanel {...baseProps()} penRows={rows} penShown={rows} />);
+    const r = [...screen.getByTestId("isapre-class-legend").querySelectorAll('[data-testid="isapre-legend-row"]')];
+    expect(r.map((e) => e.getAttribute("data-kind"))).toEqual(["zero", "class", "class", "class", "class", "class", "class", "class", "nodata"]);
+    expect(r.map((e) => e.querySelector("span.flex-1")?.textContent)).toEqual(["0 % (cero publicado)", ...PCT_SCALE.labels, "Sin dato"]);
+    expect(r.map((e) => e.getAttribute("data-count"))).toEqual(["1", "0", "0", "1", "0", "0", "1", "0", "1"]);   // 0 · 0–2 · 2–5 · 5–10 · 10–20 · 20–35 · 35–50 · ≥50 · sin dato (40 % cae en 35–50 %)
+    expect(r.map((e) => e.getAttribute("data-color"))).toEqual(["#d6cfc4", ...VIRIDIS_7, "#9ca3af"]);
     expect(screen.getByTestId("isapre-fonasa-pending").textContent).toBe("Fonasa: pendiente (fase C)");
   });
 
-  it("sin tope aplicado, el extremo no lleva «≥»", () => {
-    const rows = [pen("90001", "A", 5, 5, 100)];
-    render(<IsapreChoroplethPanel {...baseProps()} penRows={rows} penShown={rows} domain={{ max: 5, maxPublished: 5, capped: false }} />);
-    expect(screen.getByTestId("isapre-pct-max").textContent).toBe("5,0 %");
-    expect(screen.queryByTestId("isapre-pct-cap")).toBeNull();
+  it("las clases vacías se muestran igual, con 0 comunas; sin penetración que mostrar siguen las 7 filas", () => {
+    render(<IsapreChoroplethPanel {...baseProps()} penRows={[]} penShown={[]} />);
+    const r = [...screen.getByTestId("isapre-class-legend").querySelectorAll('[data-testid="isapre-legend-row"]')];
+    expect(r).toHaveLength(8);                                                                       // 7 clases + Sin dato (el 0 solo si hay comunas con 0)
+    expect(r.slice(0, 7).every((e) => e.getAttribute("data-count") === "0")).toBe(true);
+    expect(r[7].getAttribute("data-count")).toBe("");                                                // total de comunas desconocido: sin cifra inventada
   });
 
   it("comunas sobre 100 %: se listan con su valor y la advertencia de que no se recorta", () => {
     const rows = [pen("90001", "Antártica", 5, 5, 4), pen("90002", "B", 1, 1, 100)];
-    render(<IsapreChoroplethPanel {...baseProps()} penRows={rows} penShown={rows} domain={{ max: 1, maxPublished: 125, capped: true }} />);
+    render(<IsapreChoroplethPanel {...baseProps()} penRows={rows} penShown={rows} />);
     const t = screen.getByTestId("isapre-over100").textContent ?? "";
     expect(t).toContain("1 comuna supera 100 %");
     expect(t).toContain("Antártica: 125,0 %");
@@ -219,16 +200,17 @@ describe("panel con métrica «Penetración»", () => {
 
   it("advertencias de la métrica: método, asimetría, fechas distintas, comuna no declarada [NO COMPROBADO], sin Fonasa ni «resto»", () => {
     const rows = [pen("90001", "A", 5, 5, 100)];
-    render(<IsapreChoroplethPanel {...baseProps()} penRows={rows} penShown={rows} domain={{ max: 5, maxPublished: 5, capped: false }} />);
+    render(<IsapreChoroplethPanel {...baseProps()} penRows={rows} penShown={rows} />);
     const w = screen.getByTestId("projects-warnings").textContent ?? "";
-    for (const k of ["población censada 2024 (INE) del mismo sexo", "EXCLUYE la edad sin información e INCLUYE el sexo sin información", "diciembre de 2025", "[NO COMPROBADO]", "no hay «resto» ni «sin previsión»", "Sexo sin información"]) expect(w).toContain(k);
+    for (const k of ["población censada 2024 (INE) del mismo sexo", "EXCLUYE la edad sin información e INCLUYE el sexo sin información", "diciembre de 2025", "[NO COMPROBADO]", "no hay «resto» ni «sin previsión»", "Sexo sin información", "clases fijas (0–2 %, 2–5 %, 5–10 %, 10–20 %, 20–35 %, 35–50 % y ≥ 50 %)"]) expect(w).toContain(k);
+    expect(w).not.toContain("percentil 95");
     expect(w).not.toMatch(/porque|se debe a|debido a|causa(da)? por/i);
-    expect(Object.values(WARN_PENETRACION).map((v) => (typeof v === "function" ? v(20, 40) : v)).join(" ")).not.toMatch(/porque|se debe a|debido a|causa(da)? por/i);
+    expect(Object.values(WARN_PENETRACION).join(" ")).not.toMatch(/porque|se debe a|debido a|causa(da)? por/i);
   });
 
   it("con métrica de beneficiarios no aparece la leyenda de penetración", () => {
     render(<IsapreChoroplethPanel {...baseProps()} metric="n" />);
-    expect(screen.queryByTestId("isapre-pct-legend")).toBeNull();
+    expect(screen.getAllByTestId("isapre-legend-row").some((e) => e.querySelector("span.flex-1")?.textContent === "< 100")).toBe(true);   // leyenda de Beneficiarios, no la de Penetración
     expect(screen.getByTestId("isapre-fonasa-pending")).toBeTruthy();
   });
 
@@ -242,6 +224,37 @@ describe("panel con métrica «Penetración»", () => {
   it("error de la RPC de penetración: se muestra, no se disfraza de «sin dato»", () => {
     render(<IsapreChoroplethPanel {...baseProps()} penError="permission denied" />);
     expect(screen.getByTestId("isapre-legend").textContent).toContain("No se pudo leer la penetración: permission denied");
+  });
+
+  it("Beneficiarios: la leyenda cuenta las comunas de cada clase con los mismos cortes de la capa y «Sin dato» sale del total", () => {
+    const rows = [comuna("90001", "A", 0, 0), comuna("90002", "B", 50, 50), comuna("90003", "C", 100, 100), comuna("90004", "D", 5000, 6000), comuna("90005", "E", 220000, 221000)];
+    const total = [...rows.map((r) => pen(r.cut, r.name, r.n_lo, r.n_hi, 1000)), pen("90006", "F", null, null, 1000), pen("90007", "G", null, null, 1000)];
+    render(<IsapreChoroplethPanel {...baseProps()} metric="n" rows={rows} penRows={total} penShown={total} />);
+    const r = [...screen.getByTestId("isapre-class-legend").querySelectorAll('[data-testid="isapre-legend-row"]')];
+    expect(r.map((e) => e.getAttribute("data-kind"))).toEqual(["zero", "class", "class", "class", "class", "class", "class", "class", "nodata"]);
+    expect(r.map((e) => e.getAttribute("data-count"))).toEqual(["1", "1", "1", "0", "0", "1", "0", "1", "2"]);    // 0 · <100 · 100–300 · … · 3.000–10.000 · … · ≥30.000 · sin dato (7 − 5)
+    expect(r.map((e) => e.querySelector("span.flex-1")?.textContent)).toEqual(["0 (cero publicado)", ...N_SCALE.labels, "Sin dato"]);
+    expect(r.slice(1, 8).map((e) => e.getAttribute("data-color"))).toEqual([...VIRIDIS_7]);
+    expect(r[0].querySelector("span[data-fill-opacity]")?.getAttribute("data-fill-opacity")).toBe("0.7");
+  });
+
+  it("la leyenda queda ANTES de lo demás (nivel y sello, 1b-1, fuentes) y justo después de los filtros: se ve sin hacer scroll", () => {
+    render(<IsapreChoroplethPanel {...baseProps()} />);
+    const order = (a: string, b: string) => !!(screen.getByTestId(a).compareDocumentPosition(screen.getByTestId(b)) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(order("isapre-filters", "isapre-legend")).toBe(true);
+    expect(order("isapre-legend", "prevision-level-seal")).toBe(true);
+    expect(order("isapre-legend", "isapre-sin-alta")).toBe(true);
+    expect(order("isapre-legend", "projects-source")).toBe(true);
+    expect(order("health-not-client-ready", "isapre-filters")).toBe(true);
+  });
+
+  it("el aviso naranja de «no apta para clientes» es colapsable y está ABIERTO por defecto", () => {
+    render(<IsapreChoroplethPanel {...baseProps()} />);
+    const d = screen.getByTestId("health-not-client-ready") as HTMLDetailsElement;
+    expect(d.tagName).toBe("DETAILS");
+    expect(d.open).toBe(true);
+    expect(d.querySelector("summary")?.textContent).toBe("Capa no apta para clientes");
+    expect(d.textContent).toContain("Pendiente.");
   });
 
   it("1b-2 figura construida, con nivel y sello", () => {
@@ -280,7 +293,7 @@ describe("PrevisionHost con la penetración", () => {
     expect(svc.pen.mock.calls.every((c) => !("sinAlta" in c[0]) && c[0].sexo !== "SI")).toBe(true);
   });
 
-  it("la métrica «Penetración» pasa a la capa los datos, el dominio y las fuentes; «sin dato» no entra al dominio", async () => {
+  it("la métrica «Penetración» pasa a la capa los datos y las fuentes, y la leyenda trae una fila por clase", async () => {
     svc.pen.mockResolvedValue(PEN);
     svc.resumen.mockResolvedValue([{ snapshot_id: "i1", period_start: "2025-12-01", period_end: "2025-12-31", declared_date: "2026-01-28", extraction_date: "2026-01-22", suppress_below: 5, cells: 1, zeros_published: 0, suppressed_primary: 0, suppressed_complementary: 0, groups: 1, groups_total_suppressed: 0 }]);
     svc.prov.mockImplementation(async (d: string) => (d === "poblacion_censo2024" ? [{ source_key: "ine_censo2024_poblacion_comunal", name: "Censo", publisher: "INE", landing_url: null, attribution: null, license_label: "CC BY-SA 4.0", verification_status: "comprobado", scope_note: "", access_mode: "manual", freshness_status: "fresh", check_overdue: false, overdue_since: null, last_checked_at: null, snapshot_id: "c1", origin_url: null, sha256: null, captured_at: "2026-10-18T00:00:00Z", period_start: "2024-01-01", period_end: "2024-12-31", load_from: null, declared_date: "2025-03-27", definitive_until: null, quality_note: null }] : []));
@@ -289,10 +302,9 @@ describe("PrevisionHost con la penetración", () => {
     fireEvent.change(screen.getByLabelText("Métrica"), { target: { value: "pct" } });
     await waitFor(() => expect(got.layer?.metric).toBe("pct"));
     expect((got.layer?.penShown as unknown[]).length).toBe(3);
-    expect(got.layer?.domain).toMatchObject({ maxPublished: 25 });
     await waitFor(() => expect((got.layer?.sources as PenetracionSources).censo.declared_date).toBe("2025-03-27"));
     expect(got.layer?.sources).toEqual({ isapre: { period_end: "2025-12-31", declared_date: "2026-01-28" }, censo: { period_end: "2024-12-31", declared_date: "2025-03-27" } });
-    expect(screen.getByTestId("isapre-pct-legend")).toBeTruthy();
+    expect(screen.getByTestId("isapre-class-legend").querySelectorAll('[data-testid="isapre-legend-row"]').length).toBeGreaterThanOrEqual(8);
   });
 
   it("con el filtro «sin alta» solo se pintan las comunas de ese conjunto", async () => {
@@ -326,40 +338,53 @@ describe("PrevisionHost con la penetración", () => {
   });
 });
 
-describe("capa en el mapa: relleno al 50 %, gris punteado sin dato", () => {
+describe("capa en el mapa: clases discretas viridis, relleno 0,7, borde visible, gris punteado sin dato", () => {
   const feat = (c: string) => ({ type: "Feature", properties: { codigo_comuna: c }, geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } });
-  const setup = async () => {
-    geo.value = { ready: true, nombresPorCodigo: { "90001": "A", "90002": "B", "90003": "C", "90004": "D" }, fc: { type: "FeatureCollection", features: ["90001", "90002", "90003", "90004"].map(feat) } };
+  const setup = async (metric: "n" | "pct") => {
+    geo.value = { ready: true, nombresPorCodigo: { "90001": "A", "90002": "B", "90003": "C", "90004": "D", "90005": "E" }, fc: { type: "FeatureCollection", features: ["90001", "90002", "90003", "90004", "90005"].map(feat) } };
     gj.props = null;
-    svc.comuna.mockResolvedValue([comuna("90001", "A", 0, 0), comuna("90002", "B", 50, 50)]);
-    svc.pen.mockResolvedValue([pen("90001", "A", 0, 0, 100), pen("90002", "B", 50, 50, 100), pen("90003", "C", null, null, 100), pen("90004", "D", 5, 5, 4)]);
+    svc.comuna.mockResolvedValue([comuna("90001", "A", 0, 0), comuna("90002", "B", 50, 50), comuna("90004", "D", 2999, 3000), comuna("90005", "E", 30000, 30000)]);
+    svc.pen.mockResolvedValue([pen("90001", "A", 0, 0, 100), pen("90002", "B", 50, 50, 100), pen("90003", "C", null, null, 100), pen("90004", "D", 5, 5, 4), pen("90005", "E", 3, 3, 100)]);
     mount();
-    await waitFor(() => expect(got.layer?.penShown).toHaveLength(4));
-    fireEvent.change(screen.getByLabelText("Métrica"), { target: { value: "pct" } });
-    await waitFor(() => expect(got.layer?.metric).toBe("pct"));
+    await waitFor(() => expect(got.layer?.penShown).toHaveLength(5));
+    await waitFor(() => expect(got.layer?.rows).toHaveLength(4));
+    if (metric === "pct") {
+      fireEvent.change(screen.getByLabelText("Métrica"), { target: { value: "pct" } });
+      await waitFor(() => expect(got.layer?.metric).toBe("pct"));
+    }
   };
+  const style = (c: string) => gj.props!.style(feat(c));
 
-  it("cada comuna con su color continuo al 50 %, y sin dato en gris punteado", async () => {
-    await setup();
-    const max = (got.layer?.domain as { max: number }).max;
-    const style = (c: string) => gj.props!.style(feat(c));
-    expect(style("90001")).toMatchObject({ fillColor: "rgb(255, 255, 255)", fillOpacity: 0.5 });
-    expect(style("90002")).toMatchObject({ fillColor: pctColor(Math.min(50, max), max), fillOpacity: 0.5 });
+  it("Penetración: cada comuna con el color de su clase, relleno 0,7; el 0, su color propio; sin dato, gris punteado", async () => {
+    await setup("pct");
+    expect(style("90001")).toMatchObject({ fillColor: "#d6cfc4", fillOpacity: 0.7 });        // 0 % publicado
+    expect(style("90005")).toMatchObject({ fillColor: VIRIDIS_7[1], fillOpacity: 0.7 });      // 3 % → «2–5 %»
+    expect(style("90002")).toMatchObject({ fillColor: VIRIDIS_7[6], fillOpacity: 0.7 });      // 50 % cae en la clase superior «≥ 50 %»
+    expect(style("90004")).toMatchObject({ fillColor: VIRIDIS_7[6], fillOpacity: 0.7 });      // 125 %: sin recorte, última clase
     expect(style("90003")).toMatchObject({ fillColor: "#9ca3af", fillOpacity: 0.4, dashArray: "3 3" });
-    expect(style("90003").dashArray).toBe("3 3");
     expect(style("90001").dashArray).toBeUndefined();
     expect(style("99999")).toMatchObject({ fillColor: "#9ca3af", dashArray: "3 3" });         // comuna que no figura: sin dato
+    expect(FILL_OPACITY).toBe(0.7);
   });
 
-  it("una comuna sobre 100 % se pinta con el azul del tope, sin recorte del dato", async () => {
-    await setup();
-    const max = (got.layer?.domain as { max: number }).max;
-    expect(gj.props!.style(feat("90004"))).toMatchObject({ fillColor: pctColor(125, max), fillOpacity: 0.5 });
-    expect(pctColor(125, max)).toBe(`rgb(${PCT_BLUE.join(", ")})`);
+  it("Beneficiarios: mismas clases viridis; 2.999–3.000 (punto medio 2.999,5) en «1.000 – <3.000» y 30.000 en «≥ 30.000»", async () => {
+    await setup("n");
+    expect(style("90001")).toMatchObject({ fillColor: "#d6cfc4", fillOpacity: 0.7 });        // 0
+    expect(style("90002")).toMatchObject({ fillColor: VIRIDIS_7[0], fillOpacity: 0.7 });      // 50 → «< 100»
+    expect(style("90004")).toMatchObject({ fillColor: VIRIDIS_7[3], fillOpacity: 0.7 });
+    expect(style("90005")).toMatchObject({ fillColor: VIRIDIS_7[6], fillOpacity: 0.7 });
+    expect(style("90003")).toMatchObject({ fillColor: "#9ca3af", fillOpacity: 0.4, dashArray: "3 3" });
+  });
+
+  it("el borde de comuna es explícito y visible (no una variable CSS dentro de un atributo SVG)", async () => {
+    await setup("n");
+    const st = style("90002") as { color: string; weight: number };
+    expect(st.color).toBe("#6b7280");
+    expect(st.weight).toBeGreaterThanOrEqual(0.8);
   });
 
   it("la ventana de cada comuna trae el bloque «Previsión de salud» con ambas fuentes, también con la métrica de beneficiarios", async () => {
-    await setup();
+    await setup("n");
     await waitFor(() => expect((got.layer?.sources as PenetracionSources | undefined)?.censo.period_end).toBe("2024-12-31"));
     const bound: Array<() => HTMLElement> = [];
     gj.props!.onEachFeature(feat("90002"), { bindPopup: (f: () => HTMLElement) => bound.push(f), on: () => undefined });
@@ -368,5 +393,14 @@ describe("capa en el mapa: relleno al 50 %, gris punteado sin dato", () => {
     expect(el.querySelector('[data-testid="popup-poblacion"]')?.textContent).toBe("Población censada 2024 (INE): 100");
     expect(el.querySelector('[data-testid="popup-fonasa"]')?.textContent).toBe("Fonasa: pendiente (fase C)");
     expect(el.querySelector('[data-testid="popup-seal"]')?.textContent).toBe("Sello: Oficial con advertencia");
+  });
+
+  it("un rango que cruza clases lo dice la ventana (la de la escala de la métrica activa); uno que cae en una sola, no", async () => {
+    await setup("pct");
+    const popup = (c: string) => { const b: Array<() => HTMLElement> = []; gj.props!.onEachFeature(feat(c), { bindPopup: (f: () => HTMLElement) => b.push(f), on: () => undefined }); return b[0](); };
+    expect(popup("90004").querySelector('[data-testid="popup-range-classes"]')).toBeNull();     // 125 % exacto
+    // 1–4 %: cruza «0–2 %» y «2–5 %»
+    const ranged = buildIsapreComunaPopup(comuna("90004", "D", 1, 4), "D", "90004", "f", { row: pen("90004", "D", 1, 4, 100), sexoSinInfo: false, sources: SOURCES, metric: "pct" });
+    expect(ranged.querySelector('[data-testid="popup-range-classes"]')?.textContent).toContain("El rango abarca dos clases (0–2 % y 2–5 %)");
   });
 });

@@ -18,11 +18,13 @@ const Counting = ({ filters, tipos }: { filters: HealthFilters; tipos: HealthTip
   <p data-testid="health-counting" className="rounded border px-2 py-1">{countingText(filters, tipoLabels(tipos))} <span className="text-muted-foreground">{WARN.counting}</span></p>
 );
 
+/** Aviso naranja de «no apta para clientes»: colapsable y ABIERTO por defecto, para que se pueda plegar y dejar la leyenda a la vista sin perder el aviso. */
 export const ClientReadyNotice = ({ layer }: { layer: Pick<ThematicLayerRow, "client_ready" | "client_ready_note"> }) =>
   layer.client_ready === false ? (
-    <p role="status" data-testid="health-not-client-ready" className="rounded border border-amber-500 px-2 py-1 text-amber-700 dark:text-amber-400">
-      {WARN.notClientReady}{layer.client_ready_note ? ` ${layer.client_ready_note}` : ""}
-    </p>
+    <details open role="status" data-testid="health-not-client-ready" className="rounded border border-amber-500 px-2 py-1 text-amber-700 dark:text-amber-400">
+      <summary className="cursor-pointer font-medium">Capa no apta para clientes</summary>
+      <p className="mt-1">{WARN.notClientReady}{layer.client_ready_note ? ` ${layer.client_ready_note}` : ""}</p>
+    </details>
   ) : null;
 
 interface Common {

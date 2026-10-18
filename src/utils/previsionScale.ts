@@ -37,7 +37,7 @@ export const WARN_PENETRACION = {
   noClip: "No se recorta a 100 %: un valor sobre 100 % se muestra tal cual. Puede reflejar diferencias de definición territorial o de fecha entre las dos fuentes, o el efecto de poblaciones muy pequeñas; la causa no está comprobada.",
   noSex: "«Sexo sin información» no tiene penetración: el Censo no tiene ese grupo.",
   noFonasa: "Solo Isapre. Fonasa y los demás sistemas no se incluyen ni se estiman: no hay «resto» ni «sin previsión».",
-  cap: (cap: number, max: number) => `El color llega al azul más oscuro en ${fmtPct(cap)} (percentil 95 de las comunas mostradas) para que una comuna extrema no aplane el resto; el máximo publicado es ${fmtPct(max)}. La ventana de cada comuna trae su valor real.`,
+  classes: "El color es por clases fijas (0–2 %, 2–5 %, 5–10 %, 10–20 %, 20–35 %, 35–50 % y ≥ 50 %), iguales para todas las edades, 60+ y por sexo; cada comuna se clasifica por el punto medio de su rango. La ventana de cada comuna trae el valor.",
 } as const;
 
 export const WARN_CASEN = {
@@ -105,46 +105,17 @@ export const casenCounts = (rows: CasenRegionRow[] | undefined) => ({
 });
 export const altaOptions: readonly HealthAltaDef[] = ["hospital", "ampliada"];
 
-// ───────────────────────────── 1b-2: penetración (escala, textos) ─────────────────────────────
-export const PCT_FILL_OPACITY = 0.5;
-export const PCT_CAP_PERCENTILE = 0.95;
-/** Blanco (menor %) → azul profundo (mayor %), interpolación lineal en RGB. */
-export const PCT_WHITE: readonly [number, number, number] = [255, 255, 255];
-export const PCT_BLUE: readonly [number, number, number] = [8, 48, 107];
+// ───────────────────────────── 1b-2: penetración (textos y filas) ─────────────────────────────
+// Las clases de color (escala discreta de 7 clases, viridis) viven en `isapreClasses.ts`.
 
 /** Punto medio del rango de penetración; null = sin dato. */
 export const pctMid = (r: Pick<IsaprePenetracionRow, "pct_lo" | "pct_hi">): number | null => (r.pct_lo == null || r.pct_hi == null ? null : (r.pct_lo + r.pct_hi) / 2);
-
-export interface PctDomain { /** tope del color */ max: number; /** máximo de los puntos medios */ maxPublished: number; capped: boolean }
-const percentile = (sorted: number[], q: number): number => {
-  const pos = (sorted.length - 1) * q;
-  const lo = Math.floor(pos);
-  return lo + 1 < sorted.length ? sorted[lo] + (pos - lo) * (sorted[lo + 1] - sorted[lo]) : sorted[lo];
-};
-/** Dominio [0, tope]: el tope es el percentil 95 de los puntos medios mostrados (o el máximo si este es menor). null si no hay ninguna comuna con penetración. */
-export const pctDomain = (rows: Pick<IsaprePenetracionRow, "pct_lo" | "pct_hi">[] | undefined): PctDomain | null => {
-  const v = (rows ?? []).map(pctMid).filter((x): x is number => x != null).sort((a, b) => a - b);
-  if (v.length === 0) return null;
-  const maxPublished = v[v.length - 1];
-  const p95 = percentile(v, PCT_CAP_PERCENTILE);
-  const max = p95 > 0 ? p95 : maxPublished > 0 ? maxPublished : 1;
-  return { max, maxPublished, capped: max < maxPublished };
-};
-
-const mix = (t: number): [number, number, number] => PCT_WHITE.map((w, i) => Math.round(w + (PCT_BLUE[i] - w) * t)) as [number, number, number];
-/** Color continuo de un % (0 → blanco; ≥ tope → azul profundo). */
-export const pctColor = (v: number, max: number): string => {
-  const t = max > 0 ? Math.min(Math.max(v / max, 0), 1) : 0;
-  const [r, g, b] = mix(t);
-  return `rgb(${r}, ${g}, ${b})`;
-};
-export const PCT_NODATA_COLOR = "#9ca3af";
 
 /** «21,8 %» o «entre 8,9 % y 20,7 %»; «sin dato» si falta. */
 export const pctRangeText = (lo: number | null | undefined, hi: number | null | undefined, exact?: boolean | null): string =>
   lo == null || hi == null ? "sin dato" : exact || lo === hi ? fmtPct(lo) : `entre ${fmtPct(lo)} y ${fmtPct(hi)}`;
 
-/** Comunas que se muestran en la capa de penetración: todas las filas con `pct` y, si hay filtro «sin alta», solo las que están en `allowed` (CUT de get_isapre_comuna con ese filtro). */
+/** Comunas que se muestran en la capa de penetración: todas las filas y, si hay filtro «sin alta», solo las que están en `allowed` (CUT de get_isapre_comuna con ese filtro). */
 export const penetracionRowsShown = (rows: IsaprePenetracionRow[] | undefined, allowed: Set<string> | null): IsaprePenetracionRow[] =>
   (rows ?? []).filter((r) => (allowed ? allowed.has(r.cut) : true));
 export const countPctOver100 = (rows: IsaprePenetracionRow[] | undefined) => (rows ?? []).filter((r) => (r.pct_hi ?? 0) > 100 || (r.pct_lo ?? 0) > 100);
