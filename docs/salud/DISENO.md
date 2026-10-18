@@ -74,15 +74,17 @@ como máximo en «Oficial con advertencia», y la advertencia lo dice.
 
 ### 0.7 Entorno de pruebas y línea base
 
-Se reproduce con `bash etl/salud/dev_env.sh` (idempotente; ver su cabecera). Línea base de `main` (commit `9026d67`), que un PR no puede empeorar:
+Se reproduce con `bash etl/salud/dev_env.sh` (idempotente; ver su cabecera). Línea base de `main` (commit `9026d67`, actualizada por cada PR de salud al mergear), que un PR no puede empeorar:
 
 | Suite | Comando | Línea base |
 |---|---|---|
-| Vitest | `VITE_SUPABASE_URL=… VITE_SUPABASE_PUBLISHABLE_KEY=… npm test` (valores falsos solo en el comando) | 472 tests en 34 archivos (433 sin las variables) |
+| Vitest | `VITE_SUPABASE_URL=… VITE_SUPABASE_PUBLISHABLE_KEY=… npm test` (valores falsos solo en el comando) | 549 tests en 39 archivos (472 de `main` + 40 de seguridad y convención + 37 de salud 1a; sin las variables fallan los que no mockean el cliente) |
 | pytest permisos | `TEST_DATABASE_URL=… python -m pytest etl/permisos/tests -q -p no:cacheprovider` | 43 pasan, 4 omitidos |
 | pytest proyectos | `TEST_DATABASE_URL=… python -m pytest etl/proyectos/tests -q -p no:cacheprovider` | 45 pasan |
 | SQL `permits_stats.test.sql` | `psql -f` sobre base con **solo** las migraciones 1 y 2 | 92 aserciones |
 | SQL `parte4_geo.test.sql` / `parte4_nodes.test.sql` | `psql -f` sobre base con migraciones 2026102x | 111 / 7 |
+| SQL `health_establishments.sql` / `health_establishments_rollback.sql` (Fase 1a) | receta de su cabecera (migraciones dos veces + prueba, una transacción que termina en error) en `geochile_salud_test` | 67 / 4 aserciones |
+| pytest salud | `TEST_DATABASE_URL=…/geochile_salud_test python -m pytest etl/salud/tests -q -p no:cacheprovider` | 46 pasan (16 del sondeo + 30 de establecimientos) |
 
 * `npm ci` falla en `main` (lock desincronizado: falta `esbuild@0.28.2`); se usa `npm install --no-save`.
 * Las migraciones se aplican con `psql -1` (necesitan transacción: usan `SET LOCAL` y tablas temporales).
@@ -259,7 +261,8 @@ personas. Se sigue publicando el número real (incluidos 1–4). La regla 5 se a
 
 ### 2.10 Valores iniciales de la validación geográfica (medidos con el archivo real)
 
-*(Se completa tras el dry-run real: ver el informe de cierre y `docs/salud/HALLAZGOS_FASE1A.md`.)*
+Medido con el archivo real (`HALLAZGOS_FASE1A.md` §3): los 33 puntos fuera de su polígono caen **todos dentro de otra comuna**; **9** quedan a ≤ 500 m (`borde`) y **24** más lejos (`fuera_declarada`); ninguno cae en el mar.
+`health.near_border_m = 500` marca 9 filas; **`health.coast_buffer_m = 2.000` no marca ninguna** con este archivo y los polígonos del repo: se conserva configurable porque el polígono comunal es simplificado, pero es un valor inicial **no respaldado por datos de este archivo**.
 
 ### 2.11 [NO COMPROBADO] y decisiones pendientes de esta fase
 
