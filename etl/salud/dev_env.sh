@@ -32,10 +32,11 @@ for a in "$@"; do case "$a" in --skip-check) SKIP_CHECK=1;; --reset-dbs) RESET_D
 # LÍNEA BASE (medida en main, commit 9026d67). Un PR no puede empeorarla; si cambia, se actualiza AQUÍ y se explica en el PR.
 # Vitest: 472 tests / 34 archivos en main (9026d67) + 40 tests / 3 archivos de fix/seguridad-edge
 # (edgeAuth 24, clientReady 12, migrationsConvention 4) = 512 / 37.
-BASE_VITEST_TESTS=560; BASE_VITEST_FILES=39
+BASE_VITEST_TESTS=594; BASE_VITEST_FILES=41
 BASE_PERMISOS_PASS=43; BASE_PERMISOS_SKIP=4; BASE_PROYECTOS_PASS=45
 BASE_SQL_P12=92; BASE_SQL_PARTE4_GEO=111; BASE_SQL_PARTE4_NODES=7
-BASE_SQL_HEALTH=71; BASE_SQL_HEALTH_RB=4; BASE_SALUD_PASS=46        # Fase 1a (establecimientos): pruebas SQL, rollback y pytest de etl/salud
+BASE_SQL_HEALTH=71; BASE_SQL_HEALTH_RB=4; BASE_SALUD_PASS=92        # Fase 1a (establecimientos): pruebas SQL, rollback y pytest de etl/salud
+BASE_SQL_ISAPRE=88; BASE_SQL_ISAPRE_RB=2; BASE_SQL_CASEN=24; BASE_SQL_PREVISION=5   # Fase 1b (previsión): Isapre, CASEN regional, hojas del árbol y rollbacks
 
 log() { printf '\n== %s\n' "$*"; }
 need_root() { [ "$(id -u)" = 0 ] || { echo "este paso necesita root (apt/initdb como postgres)" >&2; exit 1; }; }
@@ -124,7 +125,7 @@ ensure_dbs() {
   log "5. Bases de prueba (stub + migraciones + comunas)"
   local all=("$ROOT"/supabase/migrations/2026102*.sql)                                  # 7 migraciones: partes 1, 2, 3 y 4
   local p12=("$ROOT/supabase/migrations/20261020120000_permits_provenance.sql" "$ROOT/supabase/migrations/20261020120100_building_permit_statistics.sql")
-  local salud=("${all[@]}" "$ROOT"/supabase/migrations/20261102*.sql)                      # + Fase 1a (establecimientos y capas del árbol de salud)
+  local salud=("${all[@]}" "$ROOT"/supabase/migrations/20261102*.sql "$ROOT"/supabase/migrations/20261103*.sql)   # + Fase 1a (establecimientos) y 1b (previsión)
   for spec in "geochile_test:all" "geochile_sql_test:all" "geochile_p12_test:p12" "geochile_salud_test:salud"; do
     local db="${spec%%:*}" set="${spec##*:}"
     if [ "$RESET_DBS" = 0 ] && db_ready "$db"; then echo "$db: lista (346 comunas)"; continue; fi
@@ -168,10 +169,20 @@ run_baseline() {
   cmp_eq "SQL parte4_nodes.test" "$(sql_ok geochile_sql_test parte4_nodes.test.sql)" "$BASE_SQL_PARTE4_NODES"
   # Fase 1a (salud): migraciones 20261102*, pruebas SQL (dos veces cada migración = idempotencia), rollback y pytest con carga real a la base de prueba
   local M=supabase/migrations/20261102 R=supabase/rollbacks/20261102
-  cmp_eq "SQL health_establishments.test" "$(sql_recipe geochile_salud_test ${M}000000_health_establishments.sql ${M}000000_health_establishments.sql ${M}000100_health_layer_nodes.sql ${M}000100_health_layer_nodes.sql supabase/tests/health_establishments.sql)" "$BASE_SQL_HEALTH"
-  cmp_eq "SQL health rollback" "$(sql_recipe geochile_salud_test ${M}000000_health_establishments.sql ${M}000100_health_layer_nodes.sql supabase/tests/health_establishments_rollback.sql ${R}000100_health_layer_nodes_down.sql ${R}000100_health_layer_nodes_down.sql ${R}000000_health_establishments_down.sql ${R}000000_health_establishments_down.sql supabase/tests/health_rollback_check.sql ${M}000000_health_establishments.sql ${M}000100_health_layer_nodes.sql)" "$BASE_SQL_HEALTH_RB"
+  # La base de prueba ya tiene 1b: las recetas de 1a parten del estado de 1a (rollbacks de 1b dentro de la misma transacción, que termina en error)
+  local DOWN1B="supabase/rollbacks/20261103000200_prevision_layer_nodes_down.sql supabase/rollbacks/20261103000100_casen_prevision_down.sql supabase/rollbacks/20261103000000_isapre_cartera_down.sql"
+  cmp_eq "SQL health_establishments.test" "$(sql_recipe geochile_salud_test $DOWN1B ${M}000000_health_establishments.sql ${M}000000_health_establishments.sql ${M}000100_health_layer_nodes.sql ${M}000100_health_layer_nodes.sql supabase/tests/health_establishments.sql)" "$BASE_SQL_HEALTH"
+  cmp_eq "SQL health rollback" "$(sql_recipe geochile_salud_test $DOWN1B ${M}000000_health_establishments.sql ${M}000100_health_layer_nodes.sql supabase/tests/health_establishments_rollback.sql ${R}000100_health_layer_nodes_down.sql ${R}000100_health_layer_nodes_down.sql ${R}000000_health_establishments_down.sql ${R}000000_health_establishments_down.sql supabase/tests/health_rollback_check.sql ${M}000000_health_establishments.sql ${M}000100_health_layer_nodes.sql)" "$BASE_SQL_HEALTH_RB"
+  # Fase 1b (previsión): migraciones 20261103* sobre la base con 1a ya aplicada; cada una dos veces en su receta
+  local N=supabase/migrations/20261103 NR=supabase/rollbacks/20261103 T=supabase/tests
+  cmp_eq "SQL isapre_cartera.test" "$(sql_recipe geochile_salud_test ${N}000000_isapre_cartera.sql ${N}000000_isapre_cartera.sql ${T}/isapre_cartera.sql)" "$BASE_SQL_ISAPRE"
+  cmp_eq "SQL isapre_cartera rollback" "$(sql_recipe geochile_salud_test ${N}000000_isapre_cartera.sql ${T}/isapre_cartera_rollback.sql ${NR}000000_isapre_cartera_down.sql ${NR}000000_isapre_cartera_down.sql ${T}/isapre_cartera_rollback_check.sql ${N}000000_isapre_cartera.sql)" "$BASE_SQL_ISAPRE_RB"
+  cmp_eq "SQL casen_prevision.test" "$(sql_recipe geochile_salud_test ${N}000100_casen_prevision.sql ${N}000100_casen_prevision.sql ${T}/casen_prevision.sql)" "$BASE_SQL_CASEN"
+  cmp_eq "SQL previsión: hojas y rollbacks" "$(sql_recipe geochile_salud_test ${N}000000_isapre_cartera.sql ${N}000100_casen_prevision.sql ${N}000200_prevision_layer_nodes.sql ${N}000200_prevision_layer_nodes.sql ${T}/prevision_layer_nodes.sql ${NR}000200_prevision_layer_nodes_down.sql ${NR}000200_prevision_layer_nodes_down.sql ${NR}000100_casen_prevision_down.sql ${NR}000100_casen_prevision_down.sql ${NR}000000_isapre_cartera_down.sql ${NR}000000_isapre_cartera_down.sql ${T}/prevision_rollback_check.sql ${N}000000_isapre_cartera.sql ${N}000100_casen_prevision.sql ${N}000200_prevision_layer_nodes.sql)" "$BASE_SQL_PREVISION"
   pyout="$(TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:$PGPORT/geochile_salud_test" PYTHONDONTWRITEBYTECODE=1 "$VENV/bin/python" -m pytest etl/salud/tests -q -p no:cacheprovider 2>&1 || true)"
   cmp_eq "pytest etl/salud (pasan)" "$(grep -oE '[0-9]+ passed' <<<"$pyout" | grep -oE '[0-9]+')" "$BASE_SALUD_PASS"
+  cmp_eq "pytest etl/salud (fallan)" "$(grep -oE '[0-9]+ failed' <<<"$pyout" | grep -oE '[0-9]+' || echo 0)" 0
+  cmp_eq "pytest etl/salud (omitidos)" "$(grep -oE '[0-9]+ skipped' <<<"$pyout" | grep -oE '[0-9]+' || echo 0)" 0           # con la base de prueba las pruebas con base NO se omiten
   echo "  (SQL api_quota, layer_nodes, layer_nodes_edit, layer_import, legacy_retired: NO corren en local; ver docs/salud/HALLAZGOS_FASE0.md §8)"
   local dirty; dirty="$(git status --short | grep -v '^??' || true)"
   if [ -n "$dirty" ]; then echo "  FALLA  hay archivos versionados modificados:"; echo "$dirty"; FAILS=$((FAILS+1)); else echo "  OK     git: ningún archivo versionado cambió"; fi

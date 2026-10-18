@@ -1,0 +1,4 @@
+[
+  {"_nota": "Alias EXPLÍCITOS región+nombre → CUT de la cartera Isapre. Un nombre sin cruce NO se adivina: la unidad se rechaza con código cut_unknown."},
+  {"region_cut": "11", "name": "O'Higgins", "cut": "11302", "reason": "El archivo escribe O'Higgins con apóstrofo; public/codigos_territoriales.csv escribe «OHiggins» (comprobado en el ensayo del 2026-10-18)"}
+]

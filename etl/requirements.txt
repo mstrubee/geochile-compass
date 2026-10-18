@@ -9,3 +9,4 @@ python-dotenv>=1.0.0
 psycopg[binary]>=3.1        # etl/permisos_minvu.py y etl/permisos_comunas.py (SUPABASE_DB_URL)
 pytest>=8.0                 # tests de etl/permisos (python -m pytest etl/permisos/tests)
 shapely>=2.0                # etl/proyectos_ine.py y proyectos_seia.py: validación geográfica del ensayo (ya viene con geopandas)
+pyreadstat>=1.2              # etl/salud_casen.py: lee solo 7 columnas de casen_2024.sav (≈ 750 MB)
