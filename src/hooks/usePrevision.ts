@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { fetchLayerProvenance } from "@/services/permitsService";
-import { fetchCasenRegion, fetchIsapreComuna, fetchIsapreResumen, fetchIsapreSinAlta } from "@/services/previsionService";
+import { fetchCasenRegion, fetchIsapreComuna, fetchIsaprePenetracion, fetchIsapreResumen, fetchIsapreSinAlta } from "@/services/previsionService";
 import type { HealthAltaDef } from "@/types/health";
 import { CASEN_DATASET, ISAPRE_DATASET, type IsapreFilters } from "@/types/prevision";
 
@@ -8,6 +8,10 @@ const STALE = 60_000;
 
 export const useIsapreComuna = (filters: IsapreFilters, enabled: boolean) =>
   useQuery({ queryKey: ["prevision", "isapre-comuna", filters], queryFn: () => fetchIsapreComuna(filters), enabled, staleTime: STALE, retry: 1, placeholderData: keepPreviousData });
+
+/** 1b-2. Con sexo «sin información» no se consulta (el Censo no tiene ese grupo): `enabled` lo apaga y la interfaz dice «sin dato». */
+export const useIsaprePenetracion = (filters: Pick<IsapreFilters, "sexo" | "minTramo">, enabled: boolean) =>
+  useQuery({ queryKey: ["prevision", "isapre-penetracion", filters.sexo, filters.minTramo], queryFn: () => fetchIsaprePenetracion({ sexo: filters.sexo, minTramo: filters.minTramo }), enabled: enabled && filters.sexo !== "SI", staleTime: STALE, retry: 1, placeholderData: keepPreviousData });
 
 export const useIsapreResumen = (enabled: boolean) =>
   useQuery({ queryKey: ["prevision", "isapre-resumen"], queryFn: fetchIsapreResumen, enabled, staleTime: 5 * STALE, retry: 1 });

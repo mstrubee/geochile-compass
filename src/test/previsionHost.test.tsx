@@ -5,8 +5,8 @@ import { MapContainer } from "react-leaflet";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ThematicLayerRow } from "@/types/permits";
 
-const svc = vi.hoisted(() => ({ comuna: vi.fn(), resumen: vi.fn(), sinAlta: vi.fn(), casen: vi.fn(), prov: vi.fn() }));
-vi.mock("@/services/previsionService", () => ({ fetchIsapreComuna: svc.comuna, fetchIsapreResumen: svc.resumen, fetchIsapreSinAlta: svc.sinAlta, fetchCasenRegion: svc.casen }));
+const svc = vi.hoisted(() => ({ comuna: vi.fn(), resumen: vi.fn(), sinAlta: vi.fn(), casen: vi.fn(), prov: vi.fn(), pen: vi.fn() }));
+vi.mock("@/services/previsionService", () => ({ fetchIsapreComuna: svc.comuna, fetchIsapreResumen: svc.resumen, fetchIsapreSinAlta: svc.sinAlta, fetchCasenRegion: svc.casen, fetchIsaprePenetracion: svc.pen }));
 vi.mock("@/services/permitsService", () => ({ fetchLayerProvenance: svc.prov }));
 vi.mock("@/hooks/useComunasGeoIndex", () => ({ useComunasGeoIndex: () => ({ ready: false, fc: null, nombresPorCodigo: {} }) }));
 
@@ -36,7 +36,7 @@ const casen = { region_cut: "13", region_name: "Metropolitana", sistema: "isapre
 
 beforeEach(() => {
   Object.values(svc).forEach((m) => m.mockReset());
-  svc.prov.mockResolvedValue([]); svc.resumen.mockResolvedValue([]); svc.sinAlta.mockResolvedValue([sinAlta]); svc.casen.mockResolvedValue([casen]);
+  svc.prov.mockResolvedValue([]); svc.resumen.mockResolvedValue([]); svc.sinAlta.mockResolvedValue([sinAlta]); svc.casen.mockResolvedValue([casen]); svc.pen.mockResolvedValue([]);
   svc.comuna.mockResolvedValue([comuna("90001", "A", 10, 10), comuna("90002", "B", 20, 30)]);
   got.layer = null;
 });
@@ -55,6 +55,7 @@ describe("PrevisionHost", () => {
     expect(svc.comuna.mock.calls[0][0]).toEqual({ sexo: null, minTramo: 0, sinAlta: null });
     expect((got.layer as { rows: unknown[] }).rows).toHaveLength(2);
     expect(svc.prov).toHaveBeenCalledWith("isapre_cartera");
+    expect(svc.prov).toHaveBeenCalledWith("poblacion_censo2024");
     expect(svc.casen).not.toHaveBeenCalled();
     expect(screen.getByTestId("health-not-client-ready")).toBeTruthy();
   });

@@ -4,7 +4,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import type { HealthAltaDef } from "@/types/health";
-import type { CasenRegionRow, IsapreComunaRow, IsapreFilters, IsapreResumenRow, IsapreSinAltaRow } from "@/types/prevision";
+import type { CasenRegionRow, IsapreComunaRow, IsapreFilters, IsaprePenetracionRow, IsapreResumenRow, IsapreSinAltaRow } from "@/types/prevision";
 
 type RpcResult<T> = Promise<{ data: T | null; error: { message: string } | null }>;
 const rpc = <T>(name: string, args: Record<string, unknown> = {}): RpcResult<T> =>
@@ -22,3 +22,6 @@ export const fetchIsapreComuna = (f: IsapreFilters) => run<IsapreComunaRow>("get
 export const fetchIsapreResumen = () => run<IsapreResumenRow>("get_isapre_resumen");
 export const fetchIsapreSinAlta = (alta: HealthAltaDef, minTramo: number) => run<IsapreSinAltaRow>("get_isapre_resumen_sin_alta", { p_alta: alta, p_min_tramo: minTramo });
 export const fetchCasenRegion = () => run<CasenRegionRow>("get_casen_prevision_region");
+
+/** 1b-2. Solo sexo (F, M o null) y edad (0 o 12): la RPC rechaza el resto (22023). El filtro «sin alta complejidad» NO viaja: se aplica en el cliente con las comunas de get_isapre_comuna. */
+export const fetchIsaprePenetracion = (f: Pick<IsapreFilters, "sexo" | "minTramo">) => run<IsaprePenetracionRow>("get_isapre_penetracion", { p_sexo: f.sexo, p_min_tramo: f.minTramo });
