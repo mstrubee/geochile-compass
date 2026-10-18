@@ -1,7 +1,16 @@
 // Edge function: proxy a OpenRouteService para calcular isócronas.
 // Mantiene la API key del lado del servidor.
+//
+// Acceso (antes estaba abierta: verify_jwt = false y sin ninguna validación, así que cualquiera con la URL gastaba
+// la cuota de ORS):
+//   1. JWT de un USUARIO (la clave anon no vale) con la misma regla que la interfaz: administrador o permiso `view`
+//      en la sección `isocronas` (src/config/sections.ts). Ver ../_shared/edge-auth.ts.
+//   2. Cada llamada descuenta 1 de la cuota 'ors' de api_quota (migración 20261101000000_api_quota_ors.sql); si se
+//      agotó o no se puede verificar, responde 429/503 y NO llama a ORS (falla cerrado).
 
 import { getSecret } from "../_shared/get-secret.ts";
+import { authorizeRequest, consumeQuota } from "../_shared/edge-auth.ts";
+import { serviceQuotaDeps, userAuthDeps } from "../_shared/edge-auth-deps.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,6 +35,14 @@ const ALLOWED_MODES = new Set([
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  const auth = await authorizeRequest(req, { kind: "section", key: "isocronas" }, userAuthDeps());
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ error: auth.error }), {
+      status: auth.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
@@ -66,6 +83,18 @@ Deno.serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Cuota de ORS (1 por llamada, no por reintento): después de validar la entrada y antes de gastar ORS.
+    const quota = await consumeQuota("ors", 1, serviceQuotaDeps());
+    if (!quota.ok) {
+      console.warn("ORS quota", quota.error, auth.userId);
+      return new Response(
+        JSON.stringify(quota.status === 429
+          ? { error: quota.error, used: quota.used, limit: quota.limit }
+          : { error: quota.error }),
+        { status: quota.status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     const ranges = minutes.map((m) => Math.round(m * 60)); // seconds

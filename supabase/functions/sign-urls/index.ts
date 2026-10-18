@@ -1,4 +1,9 @@
+// Firma URLs de 1 h de archivos fijos del bucket PRIVADO `territorial-sources` con service_role.
+// Antes no validaba a nadie: cualquiera con la URL obtenía los enlaces. Ahora exige un JWT de usuario con rol
+// administrador (../_shared/edge-auth.ts). Nada en src/ ni en supabase/ la llama (solo la nombra el README).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authorizeRequest } from "../_shared/edge-auth.ts";
+import { userAuthDeps } from "../_shared/edge-auth-deps.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,6 +12,13 @@ const corsHeaders = {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const auth = await authorizeRequest(req, { kind: "admin" }, userAuthDeps());
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ error: auth.error }), {
+      status: auth.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!

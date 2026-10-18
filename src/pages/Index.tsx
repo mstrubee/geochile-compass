@@ -22,6 +22,9 @@ import { PoiDetailDialog } from "@/components/panels/PoiDetailDialog";
 import { PoiFolderSchemaDialog } from "@/components/panels/PoiFolderSchemaDialog";
 import { AnalysisConfigDialog } from "@/components/panels/AnalysisConfigDialog";
 import { ComputeFeaturesDialog } from "@/components/panels/ComputeFeaturesDialog";
+import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
+import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
+import { visibleIdsToHideForCapture } from "@/utils/clientReady";
 // SalesProjectionPanel ahora vive dentro de AnalysisPanel
 import { useAnalysisSettings } from "@/hooks/useAnalysisConfig";
 import { useComputePerformanceBatch } from "@/hooks/usePoiPerformance";
@@ -285,6 +288,10 @@ const Index = () => {
   const [fitId, setFitId] = useState<string | null>(null);
 
   // ── Capturas de mapa para el informe de isócrona (portada/GSE/gasto endógeno) ──
+  // Capas del ÁRBOL (territoriales/temáticas): las que NO son client_ready se apagan mientras dura la foto y se
+  // restauran después (regla 6). Hoy ninguna trae la bandera, así que no cambia lo que se ve.
+  const { layers: treeLayers } = useTerritorialLayers();
+  const { visibleLayerIds: treeVisibleIds, setLayers: setTreeLayersVisible } = useTerritorialVisibility();
   const ALL_LAYERS_OFF: LayerState = {
     communes: false, communesGeo: false, nse: false, traffic: false, density: false,
     manzanas: false, crime: false, commercial: false, gasto: false,
@@ -350,8 +357,10 @@ const Index = () => {
       const prevZoom = map.getZoom();
       const prevVisibility = new Map(isochronesRef.current.map((i) => [i.id, i.visible]));
       const visibles = isoIdsParaCaptura(iso.id);
+      const treeHidden = visibleIdsToHideForCapture(treeVisibleIds, treeLayers);
       try {
         flushSync(() => {
+          setTreeLayersVisible(treeHidden, false);
           setLayers({ ...ALL_LAYERS_OFF, commercial: true });
           setComercialLayers(ALL_COMERCIAL_OFF);
           setIsoOutlineCapture(true);
@@ -362,6 +371,7 @@ const Index = () => {
         return await captureAfterSettle(map);
       } finally {
         flushSync(() => {
+          setTreeLayersVisible(treeHidden, true);
           setLayers(prevLayers);
           setComercialLayers(prevComercial);
           setIsoOutlineCapture(false);
@@ -377,7 +387,7 @@ const Index = () => {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `isochronesRef`/`setIsochrones` se leen vía ref/setState estable
-    [layers, comercialLayers, isoIdsParaCaptura],
+    [layers, comercialLayers, isoIdsParaCaptura, treeVisibleIds, treeLayers, setTreeLayersVisible],
   );
 
   const captureIsochroneMapImages = useCallback(
@@ -413,9 +423,11 @@ const Index = () => {
       // real para restaurarlo, y forzamos que SOLO ella se vea durante la captura.
       const prevVisibility = new Map(isochronesRef.current.map((i) => [i.id, i.visible]));
       const visibles = isoIdsParaCaptura(iso.id);
+      const treeHidden = visibleIdsToHideForCapture(treeVisibleIds, treeLayers);
 
       try {
         flushSync(() => {
+          setTreeLayersVisible(treeHidden, false);
           setLayers(ALL_LAYERS_OFF);
           setComercialLayers(ALL_COMERCIAL_OFF);
           setIsoOutlineCapture(true);
@@ -451,6 +463,7 @@ const Index = () => {
         return { isoOnly, gse, gasto, atractores };
       } finally {
         flushSync(() => {
+          setTreeLayersVisible(treeHidden, true);
           setLayers(prevLayers);
           setComercialLayers(prevComercial);
           setGastoView(prevGastoView);
@@ -467,7 +480,7 @@ const Index = () => {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `isochronesRef`/`setIsochrones` se leen vía ref/setState estable, no necesitan estar en deps
-    [layers, comercialLayers, gastoView, isoIdsParaCaptura],
+    [layers, comercialLayers, gastoView, isoIdsParaCaptura, treeVisibleIds, treeLayers, setTreeLayersVisible],
   );
 
   // Isócronas
