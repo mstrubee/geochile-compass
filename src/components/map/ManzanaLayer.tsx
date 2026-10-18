@@ -78,7 +78,7 @@ export const ManzanaLayer = ({ visible, data, variable, onViewportChange }: Manz
           <span style="color:hsl(215 19% 50%)">NSE</span><span style="font-family:monospace">${NSE_LABELS[p.nse]}</span>
           <span style="color:hsl(215 19% 50%)">Ingreso</span><span style="font-family:monospace">${fmtCLP(p.income)}</span>
           <span style="color:hsl(215 19% 50%)">Tráfico</span><span style="font-family:monospace">${p.traffic}/100</span>
-          <span style="color:hsl(215 19% 50%)">Población</span><span style="font-family:monospace">${fmtNum(p.pop)}</span>
+          <span style="color:hsl(215 19% 50%)">Población (Censo 2017)</span><span style="font-family:monospace">${fmtNum(p.pop)}</span>
           <span style="color:hsl(215 19% 50%)">Hogares</span><span style="font-family:monospace">${fmtNum(p.hh)}</span>
         </div>
       </div>`;

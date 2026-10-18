@@ -124,8 +124,26 @@ export interface IsochroneAnalysis {
     incomeTotal: number; // CLP
     incomeAvgPerHh: number; // CLP por hogar
     source: "manzanas" | "comuna";
+    /** Fuente exacta de la población del total (más fina que `source`). Ausente en análisis guardados antes de este campo. */
+    popSource?: PopSource;
   };
 }
+
+export type PopSource = "gse" | "manzanas2017" | "comuna";
+
+const popSourceKey = (t: { source: "manzanas" | "comuna"; popSource?: PopSource }): PopSource => t.popSource ?? (t.source === "comuna" ? "comuna" : "gse");
+
+/** Rótulo corto (láminas, donde no hay espacio). */
+export const popSourceShort = (t: { source: "manzanas" | "comuna"; popSource?: PopSource }): string =>
+  ({ comuna: "Censo 2024", manzanas2017: "Censo 2017", gse: "GSE 2024" })[popSourceKey(t)];
+
+/** Rótulo único de la fuente de población de una isócrona, para pantalla, XLSX y PDF. */
+export const popSourceLabel = (t: { source: "manzanas" | "comuna"; popSource?: PopSource }): string => {
+  const k = popSourceKey(t);
+  if (k === "comuna") return "Población censada 2024 (INE) por comuna, proporcional al área";
+  if (k === "manzanas2017") return "Manzanas INE (Censo 2017), RM";
+  return "Manzanas GSE 2024 (n_per; origen no verificado, no es la cifra comunal del Censo 2024)";
+};
 
 const HH_SIZE_FALLBACK = 3.1; // tamaño medio de hogar (CL ≈ 3.1)
 
@@ -656,7 +674,7 @@ export const computeIsochroneAnalysis = (params: {
   const manzanasBD = manzanaBreakdown(analysisIso, manzanas);
   const gseBD = gseBreakdown(analysisIso, gse);
 
-  // La población por comuna se toma del Censo 2024 cuando hay manzanas GSE:
+  // La población por comuna se toma de las manzanas GSE cuando las hay:
   // así las filas de la tabla suman el mismo total que se reporta arriba.
   const gsePorComuna = new Map((gseBD?.byCommune ?? []).map((c) => [c.key, c]));
   const communes: CommuneBreakdownRow[] = communesRaw.map((c) => {
@@ -670,7 +688,7 @@ export const computeIsochroneAnalysis = (params: {
 
   // ── Jerarquía de fuentes de población (mejor → peor) ────────────────────
   //
-  // 1. GSE Censo 2024 (n_per / n_hog por manzana, 334 comunas). Se carga
+  // 1. Manzanas GSE 2024 (n_per / n_hog por manzana, 334 comunas; origen de n_per no verificado). Se carga
   //    siempre por bbox de la isócrona, así que cubre el área completa.
   // 2. Manzanas INE Censo 2017 (solo RM). Van SEGUNDAS a propósito: provienen
   //    de la capa del mapa, que solo existe si el usuario la tiene encendida y
@@ -684,22 +702,26 @@ export const computeIsochroneAnalysis = (params: {
   let pop = 0;
   let hh = 0;
   let source: "manzanas" | "comuna" = "comuna";
+  let popSource: PopSource = "comuna";
 
   if (gseBD && gseBD.pop > 0) {
     // Fuente 1: GSE Censo 2024 — n_per/n_hog por manzana × share de área
     pop = gseBD.pop;
     hh = gseBD.hh > 0 ? gseBD.hh : Math.round(pop / HH_SIZE_FALLBACK);
     source = "manzanas";
+    popSource = "gse";
   } else if (manzanasBD && manzanasBD.pop > 0) {
     // Fuente 2: manzanas INE (Censo 2017, solo RM)
     pop = manzanasBD.pop;
     hh = manzanasBD.hh > 0 ? manzanasBD.hh : Math.round(pop / HH_SIZE_FALLBACK);
     source = "manzanas";
+    popSource = "manzanas2017";
   } else {
     // Fuente 3: estimación comunal por área proporcional (último recurso)
     pop = Math.round(communes.reduce((s, c) => s + c.popInIso, 0));
     hh  = Math.round(communes.reduce((s, c) => s + c.hhInIso, 0));
     source = "comuna";
+    popSource = "comuna";
   }
 
   // ── Ingreso por hogar ───────────────────────────────────────────────────
@@ -751,6 +773,7 @@ export const computeIsochroneAnalysis = (params: {
       incomeTotal: Math.round(incomeTotal),
       incomeAvgPerHh: Math.round(incomeAvgPerHh),
       source,
+      popSource,
     },
   };
 };

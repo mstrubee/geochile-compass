@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { type Commune, NSE_LABELS } from "@/data/communes";
 import { exportCommunesSubsetToExcel } from "@/services/communeDataService";
 import { fmtNum, fmtArea, fmtDensity } from "@/utils/formatters";
+import { POBLACION_LABEL, SIN_DATO } from "@/types/poblacion";
 import {
   sortCommunesByPreset,
   sortCommunesByKey,
@@ -109,7 +110,7 @@ export const CommuneSearchResultsDialog = ({
             <div className="min-w-0 flex-1 text-left">
               <DialogTitle>Resultados — {sorted.length} comunas</DialogTitle>
               <DialogDescription className="mt-1">
-                Rango de población: {rangeLabel}. Click en encabezados para ordenar, doble click en una fila para centrar el mapa.
+                Rango de {POBLACION_LABEL.toLowerCase()}: {rangeLabel}. Click en encabezados para ordenar, doble click en una fila para centrar el mapa.
               </DialogDescription>
             </div>
           </div>
@@ -152,7 +153,7 @@ export const CommuneSearchResultsDialog = ({
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
                 <SortHeader k="name" label="Comuna" />
-                <SortHeader k="pop" label="Población" align="right" />
+                <SortHeader k="pop" label={POBLACION_LABEL} align="right" />
                 <SortHeader k="hh" label="Hogares" align="right" />
                 <SortHeader k="nse" label="NSE" />
                 <SortHeader k="density" label="Densidad" align="right" />
@@ -176,7 +177,7 @@ export const CommuneSearchResultsDialog = ({
                 >
                   <TableCell className="py-1.5 font-medium text-[12px]">{c.name}</TableCell>
                   <TableCell className="py-1.5 text-right font-mono text-[11.5px]">
-                    {c.pop > 0 ? fmtNum(c.pop) : "—"}
+                    {c.pop > 0 ? fmtNum(c.pop) : SIN_DATO}
                   </TableCell>
                   <TableCell className="py-1.5 text-right font-mono text-[11.5px]">
                     {c.hh > 0 ? fmtNum(c.hh) : "—"}

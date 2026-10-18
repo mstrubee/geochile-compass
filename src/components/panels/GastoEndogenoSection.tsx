@@ -51,7 +51,7 @@ export const GastoEndogenoSection = ({ analysis }: Props) => {
         <KPICard
           label="Fuente datos"
           value={result.source === "gse" ? "Manzanas GSE" : result.source === "nse_fallback" ? "NSE estimado" : "Sin datos"}
-          sub={result.source === "gse" ? "Censo 2024" : "Approx. comunal"}
+          sub={result.source === "gse" ? "GSE 2024" : "Approx. comunal"}
         />
       </div>
 

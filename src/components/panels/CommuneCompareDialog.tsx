@@ -17,6 +17,7 @@ import {
 import { type Commune, NSE_LABELS } from "@/data/communes";
 import { exportCommunesSubsetToExcel } from "@/services/communeDataService";
 import { fmtNum, fmtArea, fmtDensity } from "@/utils/formatters";
+import { POBLACION_LABEL, SIN_DATO } from "@/types/poblacion";
 import {
   sortCommunesByPreset,
   sortCommunesByKey,
@@ -46,8 +47,8 @@ type MetricRow = {
 const METRICS: MetricRow[] = [
   {
     key: "pop",
-    label: "Población",
-    format: (c) => (c.pop > 0 ? fmtNum(c.pop) : "—"),
+    label: POBLACION_LABEL,
+    format: (c) => (c.pop > 0 ? fmtNum(c.pop) : SIN_DATO),
     numeric: (c) => (c.pop > 0 ? c.pop : null),
     higherIsBetter: true,
   },

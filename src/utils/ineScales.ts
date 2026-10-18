@@ -7,15 +7,18 @@
 export type IneVariable = "poblacion" | "densidad" | "ingreso" | "nse";
 
 export const INE_VARIABLE_LABEL: Record<IneVariable, string> = {
-  poblacion: "Población",
-  densidad: "Densidad",
+  poblacion: "Población censada 2024 (INE)",
+  densidad: "Densidad (superficie sin fuente)",
   ingreso: "Ingreso",
   nse: "NSE",
 };
 
 export interface IneCommuneStats {
+  /** Población CENSADA 2024 (INE) desde la base; null = sin dato. Única fuente de población comunal. */
   poblacion: number | null;
+  /** Sin fuente documentada ([NO COMPROBADO]); viene de /ine_communes.csv. */
   superficie_km2: number | null;
+  /** población censada / superficie_km2 (hereda la falta de fuente de la superficie) */
   densidad: number | null; // hab/km²
   ingreso: number | null; // CLP
   nse: "ABC1" | "C2" | "C3" | "D" | "E" | null;

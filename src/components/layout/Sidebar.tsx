@@ -35,6 +35,7 @@ import { CreatePoiDialog } from "@/components/panels/CreatePoiDialog";
 import { LayerTreeSection } from "@/components/layerTree/LayerTreeSection";
 import { AnalyticsDataSection } from "./AnalyticsDataSection";
 import { useParqueLayer } from "@/hooks/useParqueLayer";
+import { useCommunesWithPopulation } from "@/hooks/usePoblacion";
 
 import { AgroplanetGapPanel } from "@/components/map/AgroplanetGapPanel";
 import { useAgroplanetData }        from "@/hooks/useAgroplanetData";
@@ -824,6 +825,7 @@ export const Sidebar = ({
   onSetComercialHiddenBrands,
   onComercialManagedBrandsChange,
 }: SidebarProps) => {
+  const communesCensadas = useCommunesWithPopulation();   // población censada 2024 (base) para el Excel de comunas
   const [brandCatalogOpen, setBrandCatalogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Input separado para "Cargar KMZ a esta carpeta" (clic derecho sobre carpeta POI)
@@ -1275,7 +1277,7 @@ export const Sidebar = ({
             <button
               onClick={async () => {
                 const { exportCommunesToExcel } = await import("@/services/communeDataService");
-                exportCommunesToExcel();
+                exportCommunesToExcel(undefined, communesCensadas);                      // población = Censo 2024 (base); sin dato queda vacía
                 toast.success("Excel descargado");
               }}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-surface-2/60 px-2 py-1.5 text-[11px] text-foreground transition-colors hover:bg-surface-2"

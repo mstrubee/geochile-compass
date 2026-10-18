@@ -24,7 +24,7 @@ import { ISO_MODE_LABEL } from "@/types/isochrones";
 import type { ManzanaFeatureCollection } from "@/types/manzanas";
 import { useIsochroneReport } from "@/hooks/useIsochroneReport";
 import { useParqueIsochroneStats } from "@/hooks/useParqueIsochroneStats";
-import { pickBandFeature } from "@/utils/isochroneAnalysis";
+import { pickBandFeature, popSourceLabel } from "@/utils/isochroneAnalysis";
 import {
   DEFAULT_COMMERCE_CATEGORIES,
   buildFreeTextCategory,
@@ -57,7 +57,7 @@ const NSE_BAR_COLOR: Record<string, string> = {
 };
 
 const NSE_SOURCE_LABEL: Record<string, string> = {
-  gse: "Manzanas GSE (Censo 2024), por hogares",
+  gse: "Manzanas GSE 2024, por hogares",
   manzanas: "Manzanas INE (Censo 2017), por población",
   comuna: "Estimación comunal — no refleja la variación interna del área",
 };
@@ -220,12 +220,10 @@ export const IsochroneReportDialog = ({
               <div className="mb-4 rounded-md bg-surface-2/40 px-3 py-1.5 text-[10px] text-muted-foreground">
                 Fuente población:{" "}
                 <span className="font-medium text-foreground">
-                  {band.totals.source === "manzanas"
-                    ? "Manzanas (Censo)"
-                    : "Estimado por comuna proporcional al área"}
+                  {popSourceLabel(band.totals)}
                 </span>
                 {band.totals.source !== "manzanas" && (
-                  <span> · Activa la capa "Manzanas" para mayor precisión.</span>
+                  <span> · Sin manzanas disponibles: se asume población uniforme dentro de la comuna.</span>
                 )}
               </div>
 

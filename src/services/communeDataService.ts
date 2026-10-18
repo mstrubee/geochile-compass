@@ -7,9 +7,13 @@
  * NOTA: COMMUNES es estático en código, así que mutamos los registros
  * existentes in-place. Comunas que no existen en el array fuente se
  * ignoran al importar (los nombres deben coincidir exactamente).
+ *
+ * POBLACIÓN: NO es editable por Excel ni se guarda en overrides. La única fuente es el Censo 2024 (INE) en la base (useCommunesWithPopulation); la columna
+ * «Población censada 2024 (INE)» del Excel exportado es solo informativa y se IGNORA al importar (igual que la densidad, que se deriva de ella).
  */
 import * as XLSX from "xlsx";
 import { COMMUNES, type Commune, type NSE } from "@/data/communes";
+import { POBLACION_LABEL } from "@/types/poblacion";
 
 const STORAGE_KEY = "geochile.communeOverrides.v1";
 
@@ -18,10 +22,8 @@ type Overrides = Record<string, Partial<Commune>>;
 const NUMERIC_FIELDS: Array<keyof Commune> = [
   "lat",
   "lng",
-  "pop",
   "nse",
   "traffic",
-  "density",
   "area",
   "hh",
 ];
@@ -78,10 +80,10 @@ export const exportCommunesSubsetToExcel = (
     Comuna: c.name,
     Latitud: c.lat,
     Longitud: c.lng,
-    Población: c.pop,
+    [POBLACION_LABEL]: c.pop > 0 ? c.pop : null,
     "NSE (1=E,5=ABC1)": c.nse,
     "Tráfico (0-100)": c.traffic,
-    "Densidad (hab/km²)": c.density,
+    "Densidad (hab/km²)": c.density > 0 ? c.density : null,
     "Área (km²)": c.area,
     Hogares: c.hh,
   }));
@@ -96,12 +98,12 @@ export const exportCommunesSubsetToExcel = (
 };
 
 /** Genera y descarga un Excel con el snapshot completo de COMMUNES. */
-export const exportCommunesToExcel = (filename = "comunas-demografia.xlsx") => {
-  const rows = COMMUNES.map((c) => ({
+export const exportCommunesToExcel = (filename = "comunas-demografia.xlsx", source: Commune[] = COMMUNES) => {
+  const rows = source.map((c) => ({
     Comuna: c.name,
     Latitud: c.lat,
     Longitud: c.lng,
-    Población: c.pop,
+    [POBLACION_LABEL]: c.pop > 0 ? c.pop : null,
     "NSE (1=E,5=ABC1)": c.nse,
     "Tráfico (0-100)": c.traffic,
     "Densidad (hab/km²)": c.density,
@@ -166,23 +168,15 @@ export const importCommunesFromExcel = async (
     const patch: Partial<Commune> = {};
     const lat = pickNumber(row, ["Latitud", "lat", "latitude"]);
     const lng = pickNumber(row, ["Longitud", "lng", "lon", "longitude"]);
-    const pop = pickNumber(row, ["Población", "Poblacion", "pop", "population"]);
     const nse = pickNumber(row, ["NSE (1=E,5=ABC1)", "NSE", "nse"]);
     const traffic = pickNumber(row, ["Tráfico (0-100)", "Trafico", "traffic"]);
-    const density = pickNumber(row, [
-      "Densidad (hab/km²)",
-      "Densidad",
-      "density",
-    ]);
     const area = pickNumber(row, ["Área (km²)", "Area", "area"]);
     const hh = pickNumber(row, ["Hogares", "hh", "households"]);
 
     if (lat !== null) patch.lat = lat;
     if (lng !== null) patch.lng = lng;
-    if (pop !== null) patch.pop = pop;
     if (nse !== null) patch.nse = clampNse("nse", nse) as NSE;
     if (traffic !== null) patch.traffic = traffic;
-    if (density !== null) patch.density = density;
     if (area !== null) patch.area = area;
     if (hh !== null) patch.hh = hh;
 

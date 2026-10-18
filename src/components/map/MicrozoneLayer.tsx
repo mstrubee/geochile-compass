@@ -77,7 +77,7 @@ export const MicrozoneLayer = ({
         if (mz.visible) {
           const popupHtml = `<div style="font-family: system-ui; font-size: 12px;">
             <strong>${mz.name}</strong><br/>
-            ${mz.stats ? `Área: ${mz.stats.area_km2.toFixed(2)} km²<br/>Manzanas: ${mz.stats.manzanaCount}<br/>Población: ${mz.stats.pop.toLocaleString("es-CL")}` : ""}
+            ${mz.stats ? `Área: ${mz.stats.area_km2.toFixed(2)} km²<br/>Manzanas: ${mz.stats.manzanaCount}<br/>Población (manzanas Censo 2017): ${mz.stats.pop.toLocaleString("es-CL")}` : ""}
           </div>`;
           layer.bindPopup(popupHtml);
         }

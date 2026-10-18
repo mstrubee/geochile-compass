@@ -42,7 +42,7 @@ export interface NseShare {
 
 /**
  * Origen de la distribución socioeconómica, de mayor a menor precisión:
- *  - "gse":      manzanas GSE (Censo 2024), ponderado por hogares reales.
+ *  - "gse":      manzanas GSE 2024, ponderado por hogares reales.
  *                Es la misma fuente que pinta la capa "GSE por manzana".
  *  - "manzanas": manzanas INE (Censo 2017), ponderado por población.
  *  - "comuna":   promedio NSE de las comunas cubiertas. Solo estimación:
@@ -193,7 +193,7 @@ export function formatAdjustmentLabel(
 const computeNseDistribution = (
   analysis: IsochroneAnalysis,
 ): { shares: NseShare[]; source: NseSource } => {
-  // 1. Manzanas GSE (Censo 2024), ponderadas por hogares reales. Es la misma
+  // 1. Manzanas GSE 2024, ponderadas por hogares reales. Es la misma
   //    fuente que pinta la capa "GSE por manzana", así que el informe y el
   //    mapa cuentan lo mismo. Incluye C1, que las otras fuentes no distinguen.
   const gseDist = analysis.gse?.classDistribution;
