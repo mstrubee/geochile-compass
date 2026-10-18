@@ -40,3 +40,6 @@ supabase/.temp/
 
 # Propuestas de presupuesto generadas (scripts/propose-budget.ts)
 propuesta_presupuesto_*.xlsx
+
+# Salida local del sondeo de salud (etl/salud_probe.py): descargas e informes; solo se commitea su hash y fixtures mínimos
+salud_probe_out/
