@@ -14,6 +14,7 @@ import type { RiskLevel } from "@/types/crime";
 import { RISK_COLORS } from "@/types/crime";
 import { POBLACION_LABEL, SIN_DATO } from "@/types/poblacion";
 import { loadPoblacionIndex, poblacionOf } from "@/services/poblacionService";
+import { createComunaHover, nameTooltip } from "@/hooks/useComunaHover";
 
 // ── URLs de fallback ──────────────────────────────────────────────────────────
 
@@ -194,17 +195,14 @@ export const CrimeLayer = ({ visible }: CrimeLayerProps) => {
       .then(([data, pob]) => {
         if (!visible) return;               // el usuario desactivó mientras cargaba
 
+        // Hover compartido con las demás coropletas comunales: resaltado mientras el puntero está encima + tooltip con el nombre
+        const hover = createComunaHover(() => style as never, () => layerRef.current, { highlight: { weight: 2, fillOpacity: 0.88 } });
         const geoLayer = L.geoJSON(data, {
           style,
           onEachFeature(feature, lyr) {
             const p = feature.properties as CP;
+            hover.bind(lyr, nameTooltip(() => p.comuna ?? "Comuna"));
             lyr.bindPopup(crimePopup(p, poblacionOf(pob, { cut: typeof p.cut === "string" ? p.cut : null, name: p.comuna ?? null })), { maxWidth: 290 });
-            lyr.on("mouseover", function(this: L.Path) {
-              this.setStyle({ weight: 2, fillOpacity: 0.88 });
-            });
-            lyr.on("mouseout",  function(this: L.Path) {
-              geoLayer.resetStyle(this);
-            });
           },
         });
 

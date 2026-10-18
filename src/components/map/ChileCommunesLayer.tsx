@@ -1,9 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { GeoJSON } from "react-leaflet";
-import L from "leaflet";
 import type { Feature, Geometry } from "geojson";
-import type { GeoJSON as LeafletGeoJSON, Layer, PathOptions } from "leaflet";
+import type { Layer, PathOptions } from "leaflet";
 import { useComunasGeoIndex, type ComunaProps } from "@/hooks/useComunasGeoIndex";
+import { nameTooltip, useComunaHover } from "@/hooks/useComunaHover";
 import {
   colorForIneCommune,
   formatIneValue,
@@ -16,32 +16,13 @@ interface ChileCommunesLayerProps {
   variable: IneVariable;
 }
 
-const HIGHLIGHT_STYLE: PathOptions = {
-  weight: 2,
-  color: "hsl(199 89% 70%)",
-  fillOpacity: 0.75,
-};
-
 /**
  * Polígonos de las 346 comunas de Chile (GeoJSON estático en /public),
  * coloreadas por la variable INE seleccionada (Población, Densidad, Ingreso, NSE).
- * El destacado por hover persiste hasta que el mouse entra a otra comuna.
+ * Hover: resaltado mientras el puntero está sobre la comuna + tooltip con su nombre (useComunaHover, compartido por todas las coropletas comunales).
  */
 export const ChileCommunesLayer = ({ visible, variable }: ChileCommunesLayerProps) => {
   const { ready, fc, nombresPorCodigo, getIneStats } = useComunasGeoIndex(visible);
-  const geoJsonRef = useRef<LeafletGeoJSON | null>(null);
-  const hoveredLayerRef = useRef<Layer | null>(null);
-
-  // Re-aplicar estilos cuando cambia la variable (sin recrear la capa)
-  useEffect(() => {
-    if (geoJsonRef.current) {
-      geoJsonRef.current.setStyle(styleForFeature);
-      hoveredLayerRef.current = null; // limpia destacado previo
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [variable, ready]);
-
-  if (!visible || !ready || !fc) return null;
 
   const styleForFeature = (feature?: Feature<Geometry, ComunaProps>): PathOptions => {
     const codigo =
@@ -56,9 +37,20 @@ export const ChileCommunesLayer = ({ visible, variable }: ChileCommunesLayerProp
     };
   };
 
+  const hover = useComunaHover(styleForFeature as never);
+
+  // Re-aplicar estilos cuando cambia la variable o los datos (sin recrear la capa y sin perder el resaltado vigente)
+  useEffect(() => {
+    hover.restyle();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variable, ready, getIneStats]);
+
+  if (!visible || !ready || !fc) return null;
+
   const onEachFeature = (feature: Feature<Geometry, ComunaProps>, layer: Layer) => {
     const codigo =
       feature.properties.codigo_comuna ?? feature.properties.cod_comuna ?? "";
+    hover.bind(layer, nameTooltip(() => nombresPorCodigo[codigo] ?? feature.properties.nom_comuna ?? "Comuna desconocida"));
     layer.bindPopup(() => {
       const nombre =
         nombresPorCodigo[codigo] ?? feature.properties.nom_comuna ?? "Comuna desconocida";
@@ -70,30 +62,14 @@ export const ChileCommunesLayer = ({ visible, variable }: ChileCommunesLayerProp
         <span style="font-size:10px;opacity:0.7">Código: ${codigo}</span>
       </div>`;
     });
-    layer.on({
-      mouseover: (e) => {
-        const newLayer = e.target as L.Path;
-        const prev = hoveredLayerRef.current;
-        if (prev && prev !== newLayer) {
-          geoJsonRef.current?.resetStyle(prev as never);
-        }
-        newLayer.setStyle(HIGHLIGHT_STYLE);
-        newLayer.bringToFront();
-        hoveredLayerRef.current = newLayer;
-      },
-      // mouseout intencionalmente NO restaura el estilo: el destacado persiste
-      // hasta que el mouse entra en otra comuna.
-    });
   };
 
   return (
     <GeoJSON
       key={variable}
-      ref={(r) => {
-        geoJsonRef.current = r as unknown as LeafletGeoJSON | null;
-      }}
+      ref={hover.setRef}
       data={fc}
-      style={styleForFeature}
+      style={hover.style as never}
       onEachFeature={onEachFeature}
     />
   );

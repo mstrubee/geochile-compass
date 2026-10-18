@@ -4,6 +4,7 @@ import L from "leaflet";
 import type { Feature, Geometry } from "geojson";
 import type { GeoJSON as LeafletGeoJSON, Layer, PathOptions } from "leaflet";
 import { useComunasGeoIndex, type ComunaProps } from "@/hooks/useComunasGeoIndex";
+import { useComunaHover } from "@/hooks/useComunaHover";
 import { useAgroplanetData, type AgroplanetComuna } from "@/hooks/useAgroplanetData";
 
 export type AgroplanetScoreMode =
@@ -192,10 +193,10 @@ interface Props {
 export const AgroplanetComunasLayer = ({ visible, scoreMode }: Props) => {
   const { ready, fc } = useComunasGeoIndex(visible);
   const { data: agroData, loading } = useAgroplanetData(visible);
-  const geoJsonRef  = useRef<LeafletGeoJSON | null>(null);
-  const hoveredRef  = useRef<Layer | null>(null);
   const scoreModeRef = useRef(scoreMode);
   scoreModeRef.current = scoreMode;
+  const agroDataRef = useRef(agroData);
+  agroDataRef.current = agroData;
 
   // Umbrales dinámicos para los modos de cultivo
   const agroThresholds = useMemo((): [number, number, number, number] => {
@@ -257,12 +258,12 @@ export const AgroplanetComunasLayer = ({ visible, scoreMode }: Props) => {
     [scoreMode, agroData, agroThresholds, getScore, getQuintil],
   );
 
-  // Re-estilizar al cambiar modo o datos (sin recrear la capa GeoJSON completa)
+  const hover = useComunaHover(styleForFeature as never, { highlight: HIGHLIGHT_STYLE });
+
+  // Re-estilizar al cambiar modo o datos (sin recrear la capa GeoJSON completa y sin perder el resaltado vigente)
   useEffect(() => {
-    if (geoJsonRef.current && !loading) {
-      geoJsonRef.current.setStyle(styleForFeature as never);
-      hoveredRef.current = null;
-    }
+    if (!loading) hover.restyle();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scoreMode, agroData, loading, styleForFeature]);
 
   if (!visible || !ready || !fc) return null;
@@ -271,41 +272,23 @@ export const AgroplanetComunasLayer = ({ visible, scoreMode }: Props) => {
     const rawCut =
       feature?.properties?.codigo_comuna ?? feature?.properties?.cod_comuna ?? "";
     const cut = String(rawCut).padStart(5, "0");
-    const d   = agroData.get(cut);
 
-    const tooltipContent = d
-      ? buildTooltipHtml(d, scoreModeRef.current)
-      : `<strong>${cut}</strong> — sin datos`;
+    // El tooltip se arma al pasar el puntero con los datos MÁS RECIENTES (los datos pueden llegar después de crear la capa).
+    const tooltipContent = () => {
+      const d = agroDataRef.current.get(cut);
+      return d ? buildTooltipHtml(d, scoreModeRef.current) : `<strong>${cut}</strong> — sin datos`;
+    };
 
-    (layer as L.Path).bindTooltip(tooltipContent, {
-      sticky:    true,
-      opacity:   0.97,
-      className: "leaflet-tooltip-agroplanet",
-    });
-
-    layer.on({
-      mouseover(e) {
-        const prev = hoveredRef.current;
-        if (prev && prev !== layer) geoJsonRef.current?.resetStyle(prev as never);
-        (layer as L.Path).setStyle(HIGHLIGHT_STYLE);
-        hoveredRef.current = layer;
-        (e as L.LeafletMouseEvent).originalEvent.stopPropagation?.();
-      },
-      mouseout() {
-        if (hoveredRef.current === layer) {
-          geoJsonRef.current?.resetStyle(layer as never);
-          hoveredRef.current = null;
-        }
-      },
-    });
+    // Tooltip propio de esta capa (resumen del score) con el mismo hover compartido
+    hover.bind(layer, tooltipContent, { opacity: 0.97, className: "leaflet-tooltip-agroplanet" });
   };
 
   return (
     <GeoJSON
       key={`agroplanet-${scoreMode}`}
-      ref={(r) => { geoJsonRef.current = r as unknown as LeafletGeoJSON | null; }}
+      ref={hover.setRef}
       data={fc}
-      style={styleForFeature as never}
+      style={hover.style as never}
       onEachFeature={onEachFeature}
     />
   );
