@@ -18,12 +18,18 @@ type RpcResult<T> = Promise<{ data: T | null; error: { message: string } | null 
 const rpc = <T>(name: string, args: Record<string, unknown>): RpcResult<T> =>
   (supabase.rpc as unknown as (n: string, a: Record<string, unknown>) => RpcResult<T>)(name, args);
 
-/** Hojas del árbol marcadas como capas temáticas. Nunca lanza: sin tabla (migración 3 pendiente) → []. */
+type ThematicQuery = { from: (t: string) => { select: (c: string) => PromiseLike<{ data: ThematicLayerRow[] | null; error: { message: string } | null }> } };
+
+/**
+ * Hojas del árbol marcadas como capas temáticas. Nunca lanza: sin tabla (migración 3 pendiente) → [].
+ * `client_ready` (regla 6) llega con 20261102000100: si la columna aún no existe se repite la consulta anterior, para no dejar sin mapa a las capas que ya funcionan.
+ */
 export const fetchThematicLayers = async (): Promise<ThematicLayerRow[]> => {
-  const q = (supabase as unknown as { from: (t: string) => { select: (c: string) => PromiseLike<{ data: ThematicLayerRow[] | null; error: { message: string } | null }> } })
-    .from("thematic_layers")
-    .select("layer_id, renderer, dataset, default_params");
-  const { data, error } = await q;
+  const from = (supabase as unknown as ThematicQuery).from("thematic_layers");
+  let { data, error } = await from.select("layer_id, renderer, dataset, default_params, client_ready, client_ready_note");
+  if (error) {
+    ({ data, error } = await (supabase as unknown as ThematicQuery).from("thematic_layers").select("layer_id, renderer, dataset, default_params"));
+  }
   if (error) {
     console.warn("[permits] thematic_layers no disponible:", error.message);
     return [];

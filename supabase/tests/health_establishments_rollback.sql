@@ -13,7 +13,7 @@
 --     \i supabase/rollbacks/20261102000100_health_layer_nodes_down.sql      (dos veces: idempotencia)
 --     \i supabase/rollbacks/20261102000000_health_establishments_down.sql
 --     \i supabase/rollbacks/20261102000000_health_establishments_down.sql   (dos veces)
---     select pg_temp.part_b();                                        (parte B: comprueba)
+--     \i supabase/tests/health_rollback_check.sql                    (parte B: select pg_temp.part_b(); comprueba)
 --     \i supabase/migrations/20261102000000_health_establishments.sql  (se puede volver a aplicar)
 --     \i supabase/migrations/20261102000100_health_layer_nodes.sql
 --     do $$ begin raise exception 'DRYRUN_OK %', (select count(*) from _tr); end $$;

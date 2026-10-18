@@ -24,7 +24,8 @@ import { AnalysisConfigDialog } from "@/components/panels/AnalysisConfigDialog";
 import { ComputeFeaturesDialog } from "@/components/panels/ComputeFeaturesDialog";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
-import { visibleIdsToHideForCapture } from "@/utils/clientReady";
+import { visibleIdsToHideForCapture, withThematicClientReady } from "@/utils/clientReady";
+import { useThematicLayers } from "@/hooks/usePermits";
 // SalesProjectionPanel ahora vive dentro de AnalysisPanel
 import { useAnalysisSettings } from "@/hooks/useAnalysisConfig";
 import { useComputePerformanceBatch } from "@/hooks/usePoiPerformance";
@@ -289,8 +290,10 @@ const Index = () => {
 
   // ── Capturas de mapa para el informe de isócrona (portada/GSE/gasto endógeno) ──
   // Capas del ÁRBOL (territoriales/temáticas): las que NO son client_ready se apagan mientras dura la foto y se
-  // restauran después (regla 6). Hoy ninguna trae la bandera, así que no cambia lo que se ve.
-  const { layers: treeLayers } = useTerritorialLayers();
+  // restauran después (regla 6). La bandera vive en thematic_layers; las capas sin evaluar (null) se siguen viendo igual.
+  const { layers: treeLayersRaw } = useTerritorialLayers();
+  const { data: thematicForCapture } = useThematicLayers();
+  const treeLayers = useMemo(() => withThematicClientReady(treeLayersRaw, thematicForCapture), [treeLayersRaw, thematicForCapture]);
   const { visibleLayerIds: treeVisibleIds, setLayers: setTreeLayersVisible } = useTerritorialVisibility();
   const ALL_LAYERS_OFF: LayerState = {
     communes: false, communesGeo: false, nse: false, traffic: false, density: false,
