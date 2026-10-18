@@ -46,7 +46,7 @@ describe("PrevisionHost", () => {
     mount([]);
     Object.values(svc).forEach((m) => expect(m).not.toHaveBeenCalled());
     expect(screen.queryByTestId("isapre-choropleth-panel")).toBeNull();
-    expect(screen.queryByTestId("casen-region-panel")).toBeNull();
+    expect(screen.queryByTestId("casen-region-section")).toBeNull();
   });
 
   it("Isapre: pide las comunas sin filtros, pasa los rangos a la capa y pide la procedencia de SU dataset", async () => {
@@ -83,21 +83,48 @@ describe("PrevisionHost", () => {
     expect(screen.getByTestId("isapre-legend").textContent).toContain("2 comunas");
   });
 
-  it("CASEN: solo panel (no monta capa de mapa) y pide la procedencia de su dataset", async () => {
-    mount(["CA"]);
-    await waitFor(() => expect(screen.getByTestId("casen-13-isapre")).toBeTruthy());
-    expect(svc.prov).toHaveBeenCalledWith("casen_prevision");
-    expect(got.layer).toBeNull();
-    expect(svc.comuna).not.toHaveBeenCalled();
+  it("CASEN ya no es una capa aparte: apagada la capa Isapre no hay panel CASEN ni consulta, aunque su fila temática exista", () => {
+    mount(["CA"]);                                                 // un interruptor CASEN que ya no existe en el árbol: no monta nada
+    expect(screen.queryByTestId("casen-region-section")).toBeNull();
+    expect(screen.queryByTestId("isapre-choropleth-panel")).toBeNull();
+    Object.values(svc).forEach((m) => expect(m).not.toHaveBeenCalled());
   });
 
-  it("los paneles se apilan sin pisarse y a la IZQUIERDA de los de salud y permisos abiertos", async () => {
+  it("CASEN es una sección plegable DENTRO del panel Isapre: cerrada no consulta nada; al abrirla pide los datos y la procedencia de SU dataset, y sigue sin pintar comunas", async () => {
+    mount(["IS"]);
+    await waitFor(() => expect(screen.getByTestId("isapre-sin-alta-value")).toBeTruthy());
+    const sec = screen.getByTestId("casen-region-section") as HTMLDetailsElement;
+    expect(screen.getByTestId("isapre-choropleth-panel").contains(sec)).toBe(true);
+    expect(sec.open).toBe(false);
+    expect(svc.casen).not.toHaveBeenCalled();
+    expect(svc.prov).not.toHaveBeenCalledWith("casen_prevision");
+    sec.open = true;
+    fireEvent(sec, new Event("toggle"));
+    await waitFor(() => expect(screen.getByTestId("casen-13-isapre")).toBeTruthy());
+    expect(svc.casen).toHaveBeenCalledTimes(1);
+    expect(svc.prov).toHaveBeenCalledWith("casen_prevision");
+    expect((got.layer as { rows: unknown[] }).rows).toHaveLength(2);           // la capa de mapa sigue siendo la de Isapre: no recibió datos regionales
+    expect(Object.keys(got.layer as object)).not.toContain("casen");
+  });
+
+  it("client_ready propio: la fila temática de CASEN (client_ready false) rige el aviso de la sección aunque la de Isapre sea apta", async () => {
+    const thematic = [T("IS", "choropleth_isapre", "isapre_cartera", { client_ready: true, client_ready_note: null }), T("CA", "panel_casen_region", "casen_prevision", { client_ready: false, client_ready_note: "CASEN sin licencia confirmada." })];
+    mount(["IS"], thematic);
+    await waitFor(() => expect(screen.getByTestId("isapre-sin-alta-value")).toBeTruthy());
+    expect(screen.queryByTestId("health-not-client-ready")).toBeNull();        // Isapre apta: sin aviso arriba
+    const sec = screen.getByTestId("casen-region-section") as HTMLDetailsElement;
+    sec.open = true;
+    fireEvent(sec, new Event("toggle"));
+    await waitFor(() => expect(screen.getByTestId("health-not-client-ready").textContent).toContain("CASEN sin licencia confirmada."));
+    expect(sec.contains(screen.getByTestId("health-not-client-ready"))).toBe(true);
+  });
+
+  it("el panel Isapre se apila a la IZQUIERDA de los de salud y permisos abiertos (ya no hay un segundo panel de previsión)", async () => {
     const others = [T("HC", "choropleth_health", "health_establishments", { client_ready: null }), T("PE", "points_permits", "ine_permit_points", { client_ready: null })];
-    mount(["IS", "CA", "HC", "PE"], [...THEMATIC, ...others]);
-    await waitFor(() => expect(screen.getByTestId("casen-region-panel")).toBeTruthy());
-    const right = (id: string) => (screen.getByTestId(id) as HTMLElement).style.right;
-    expect(right("isapre-choropleth-panel")).toContain("2 *");
-    expect(right("casen-region-panel")).toContain("3 *");
+    mount(["IS", "HC", "PE"], [...THEMATIC, ...others]);
+    await waitFor(() => expect(screen.getByTestId("isapre-choropleth-panel")).toBeTruthy());
+    expect((screen.getByTestId("isapre-choropleth-panel") as HTMLElement).style.right).toContain("2 *");
+    expect(screen.queryByTestId("casen-region-panel")).toBeNull();
   });
 
   it("no captura la capa de permisos ni la de salud: esos renderers no son de previsión", () => {

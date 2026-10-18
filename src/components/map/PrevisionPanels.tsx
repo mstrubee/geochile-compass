@@ -54,6 +54,8 @@ interface IsapreProps {
   penShown?: IsaprePenetracionRow[];
   penLoading?: boolean;
   penError?: string | null;
+  /** CASEN regional: sección plegable dentro de este panel (ya no es una capa aparte). */
+  casen?: CasenSectionProps;
 }
 
 const dateText = (d: string | null | undefined) => d ?? "no la declara";
@@ -150,56 +152,70 @@ export const IsapreChoroplethPanel = (p: IsapreProps) => {
         </details>
       )}
       {p.resumenError && <p role="alert" className="text-destructive">No se pudo leer el resumen: {p.resumenError}</p>}
+      {p.casen && <CasenRegionSection {...p.casen} />}
       <QuestionsBlock ids={["1b-1", "1b-2", "1b-5"]} />
       <SourceBlock title="Isapre: beneficiarios por comuna" sources={p.sources} error={p.provenanceError} loading={p.provenanceLoading} warnings={warnings} />
     </ProjectsPanelShell>
   );
 };
 
-interface CasenProps {
+/** Datos de la sección «Previsión regional (CASEN 2024, estimada)», que vive DENTRO del panel de la capa Isapre. Su `layer` es la capa temática de CASEN: conserva su PROPIO client_ready. */
+export interface CasenSectionProps {
   layer: Notice;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   rows: CasenRegionRow[] | undefined;
   loading: boolean;
   error: string | null;
   sources: LayerProvenanceRow[];
   provenanceError: string | null;
   provenanceLoading: boolean;
-  offset: number;
 }
 
-export const CasenRegionPanel = (p: CasenProps) => {
+export const CASEN_SECTION_TITLE = "Previsión regional (CASEN 2024, estimada)";
+
+/**
+ * CASEN regional como sección plegable (cerrada por defecto) del panel Isapre. SOLO texto y tablas: no pinta comunas ni regiones (D6: la encuesta no es representativa a nivel comunal).
+ * El cuerpo se monta al abrir (la consulta de CASEN también se pide recién entonces). Rangos con IC 95 %, nivel «Estimada», sello «Estimado» y sus advertencias.
+ */
+export const CasenRegionSection = (p: CasenSectionProps) => {
   const [all, setAll] = useState(false);
   const regions = casenByRegion(p.rows);
   const counts = casenCounts(p.rows);
   const shown = all ? (Object.keys(SISTEMA_LABEL) as (keyof typeof SISTEMA_LABEL)[]) : SISTEMAS_SHOWN;
   const warnings = [WARN_CASEN.estimate, WARN_CASEN.method, WARN_CASEN.notPublishable, WARN_CASEN.noSum, WARN_CASEN.license];
   return (
-    <ProjectsPanelShell title="Previsión regional (CASEN, estimada)" offset={p.offset} testId="casen-region-panel">
-      <ClientReadyNotice layer={p.layer} />
-      <p data-testid="prevision-level-seal"><span className="font-medium">Nivel: </span>{CASEN_LEVEL_SEAL.level} · <span className="font-medium">Sello: </span>{CASEN_LEVEL_SEAL.seal}</p>
-      <p>{WARN_CASEN.estimate}</p>
-      <label className="inline-flex items-center gap-1">
-        <input type="checkbox" aria-label="Mostrar todos los sistemas" checked={all} onChange={(e) => setAll(e.target.checked)} />Mostrar todos los sistemas
-      </label>
-      <div data-testid="casen-regions" className="space-y-2">
-        {p.loading && <p role="status">Cargando…</p>}
-        {p.error && <p role="alert" className="text-destructive">No se pudieron leer los datos: {p.error}</p>}
-        {!p.loading && !p.error && regions.length === 0 && <p role="status">Todavía no hay estimaciones cargadas.</p>}
-        {counts.total > 0 && <p data-testid="casen-counts">{counts.publishable} de {counts.total} estimaciones tienen valor publicable.</p>}
-        {regions.map((r) => (
-          <div key={r.region_cut} data-testid={`casen-${r.region_cut}`} className="border-t pt-1">
-            <p className="font-medium">{r.region_name}</p>
-            <ul className="space-y-0.5">
-              {shown.map((s) => {
-                const e = r.bySistema[s];
-                return e ? <li key={s} data-testid={`casen-${r.region_cut}-${s}`}>{SISTEMA_LABEL[s]}: <span className={e.publishable ? "tabular-nums" : "text-muted-foreground"}>{casenRangeText(e)}</span></li> : null;
-              })}
-            </ul>
+    <details data-testid="casen-region-section" open={p.open} onToggle={(e) => p.onOpenChange((e.currentTarget as HTMLDetailsElement).open)} className="space-y-2 border-t pt-2">
+      <summary className="cursor-pointer font-medium">{CASEN_SECTION_TITLE}</summary>
+      {p.open && (
+        <div className="mt-2 space-y-3" data-testid="casen-region-body">
+          <ClientReadyNotice layer={p.layer} />
+          <p data-testid="casen-level-seal"><span className="font-medium">Nivel: </span>{CASEN_LEVEL_SEAL.level} · <span className="font-medium">Sello: </span>{CASEN_LEVEL_SEAL.seal}</p>
+          <p>{WARN_CASEN.estimate}</p>
+          <label className="inline-flex items-center gap-1">
+            <input type="checkbox" aria-label="Mostrar todos los sistemas" checked={all} onChange={(e) => setAll(e.target.checked)} />Mostrar todos los sistemas
+          </label>
+          <div data-testid="casen-regions" className="space-y-2">
+            {p.loading && <p role="status">Cargando…</p>}
+            {p.error && <p role="alert" className="text-destructive">No se pudieron leer los datos: {p.error}</p>}
+            {!p.loading && !p.error && regions.length === 0 && <p role="status">Todavía no hay estimaciones cargadas.</p>}
+            {counts.total > 0 && <p data-testid="casen-counts">{counts.publishable} de {counts.total} estimaciones tienen valor publicable.</p>}
+            {regions.map((r) => (
+              <div key={r.region_cut} data-testid={`casen-${r.region_cut}`} className="border-t pt-1">
+                <p className="font-medium">{r.region_name}</p>
+                <ul className="space-y-0.5">
+                  {shown.map((s) => {
+                    const e = r.bySistema[s];
+                    return e ? <li key={s} data-testid={`casen-${r.region_cut}-${s}`}>{SISTEMA_LABEL[s]}: <span className={e.publishable ? "tabular-nums" : "text-muted-foreground"}>{casenRangeText(e)}</span></li> : null;
+                  })}
+                </ul>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <QuestionsBlock ids={["1b-3", "1b-4"]} />
-      <SourceBlock title="Previsión regional (CASEN, estimada)" sources={p.sources} error={p.provenanceError} loading={p.provenanceLoading} warnings={warnings} />
-    </ProjectsPanelShell>
+          <QuestionsBlock ids={["1b-3", "1b-4"]} />
+          <SourceBlock title={CASEN_SECTION_TITLE} sources={p.sources} error={p.provenanceError} loading={p.provenanceLoading} warnings={warnings} />
+        </div>
+      )}
+    </details>
   );
 };
