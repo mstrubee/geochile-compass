@@ -18,6 +18,8 @@ export interface TerritorialLayer {
   feature_count: number;
   source_file_id: string | null;
   bbox: [number, number, number, number] | null;
+  /** Regla 6 (docs/salud/BRIEF.md): `false` = la capa no entra a informes ni exportaciones. Aún no existe en la base: `undefined` = lista. */
+  client_ready?: boolean | null;
 }
 
 export interface TerritorialFeature {

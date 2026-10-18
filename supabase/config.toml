@@ -1,7 +1,12 @@
 project_id = "fmynxmxrtponfuqxmjli"
 
+# isochrone y sign-urls: el gateway verifica el JWT (defensa en profundidad). La clave anon también es un JWT válido
+# para el gateway, así que la validación real (usuario + rol + cuota) está en el código: _shared/edge-auth.ts.
 [functions.isochrone]
-verify_jwt = false
+verify_jwt = true
+
+[functions.sign-urls]
+verify_jwt = true
 
 [functions.isochrone-insights]
 verify_jwt = false
