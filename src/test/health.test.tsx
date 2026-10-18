@@ -341,7 +341,7 @@ describe("qué se cuenta (anomalía del ranking)", () => {
 
   it("la heterogeneidad entre regiones aparece como advertencia en el panel (no es oferta ni comparable)", () => {
     render(<HealthChoroplethPanel {...props} />);
-    expect(screen.getByTestId("health-choropleth-panel").textContent).toContain("cada SEREMI los autoriza y registra");
+    expect(screen.getByTestId("health-choropleth-panel").textContent).toContain("La causa NO está comprobada");
     expect(screen.getByTestId("health-choropleth-panel").textContent).toContain("NO es oferta");
   });
 
@@ -403,6 +403,8 @@ describe("ficha", () => {
     expect(t).toContain("Qué NO dice esta capa");
     expect(t).toContain("decisión de diseño");
     expect(screen.getByTestId("health-ficha-heterogeneity").textContent).toContain("NO es oferta");
+    expect(screen.getByTestId("health-ficha-heterogeneity").textContent).toContain("La causa NO está comprobada");     // [NO COMPROBADO] hasta que responda la SEREMI/DEIS (R5)
+    expect(screen.getByTestId("health-ficha-report-rule").textContent).toContain("NO se publica el ranking nacional o interregional");
     expect(t).toContain("Se cuentan TODOS los tipos de establecimiento");
   });
 
