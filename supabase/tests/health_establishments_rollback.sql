@@ -22,6 +22,11 @@
 create temp table _tr (seq serial primary key, name text not null);
 grant all on _tr to public;
 grant all on sequence _tr_seq_seq to public;
+-- La base de pruebas puede traer cargas previas de pytest; el rollback conserva la fuente si tiene capturas, así que se parte de cero DENTRO de esta transacción.
+delete from public.source_checks where source_id in (select id from public.data_sources where source_key = 'deis_establecimientos');
+delete from public.health_establishments;
+delete from public.health_establishments_stage;
+delete from public.source_snapshots where source_id in (select id from public.data_sources where source_key = 'deis_establecimientos');
 create temp table _before as
   select 'layer_nodes'::text as t, count(*)::bigint as n from public.layer_nodes where style ->> 'slug' is distinct from 'salud' and id not in (select layer_id from public.thematic_layers where dataset = 'health_establishments')
   union all select 'territorial_layers', count(*) from public.territorial_layers where id not in (select layer_id from public.thematic_layers where dataset = 'health_establishments')

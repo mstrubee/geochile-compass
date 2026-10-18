@@ -72,6 +72,12 @@ create or replace function pg_temp.pub(p_tag text) returns jsonb language sql as
   select public.publish_health_establishments((select id from public.source_snapshots where storage_path = 'test/' || p_tag))
 $$;
 
+-- La base de pruebas puede traer cargas previas de las pruebas de pytest: se parte de cero DENTRO de esta transacción (se revierte al terminar).
+delete from public.source_checks where source_id in (select id from public.data_sources where source_key = 'deis_establecimientos');
+delete from public.health_establishments;
+delete from public.health_establishments_stage;
+delete from public.source_snapshots where source_id in (select id from public.data_sources where source_key = 'deis_establecimientos');
+
 -- =============================== 0. Estructura ===============================
 select pg_temp.assert_that('346 comunas en la referencia', (select count(*) from public.comunas) = 346);
 select pg_temp.assert_that('la fuente deis_establecimientos está sembrada, CC0, verificada, con fecha',
