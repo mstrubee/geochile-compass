@@ -37,7 +37,7 @@ export const WARN_PENETRACION = {
   noClip: "No se recorta a 100 %: un valor sobre 100 % se muestra tal cual. Puede reflejar diferencias de definición territorial o de fecha entre las dos fuentes, o el efecto de poblaciones muy pequeñas; la causa no está comprobada.",
   noSex: "«Sexo sin información» no tiene penetración: el Censo no tiene ese grupo.",
   noFonasa: "Solo Isapre. Fonasa y los demás sistemas no se incluyen ni se estiman: no hay «resto» ni «sin previsión».",
-  classes: "El color es por clases fijas (0–2 %, 2–5 %, 5–10 %, 10–20 %, 20–35 %, 35–50 % y ≥ 50 %), iguales para todas las edades, 60+ y por sexo; cada comuna se clasifica por el punto medio de su rango. La ventana de cada comuna trae el valor.",
+  classes: "El color es por clases fijas (0–2 %, 2–5 %, 5–10 %, 10–20 %, 20–40 %, 40–60 % y ≥ 60 %), iguales para todas las edades, 60+ y por sexo; cada comuna se clasifica por el punto medio de su rango. La ventana de cada comuna trae el valor.",
 } as const;
 
 export const WARN_CASEN = {

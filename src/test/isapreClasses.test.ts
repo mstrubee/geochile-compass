@@ -12,14 +12,16 @@ const dist = (a: string, b: string) => [1, 3, 5].reduce((s, i) => s + (parseInt(
 
 describe("clases de Penetración: cortes redondos y fijos", () => {
   it("7 clases con las etiquetas pedidas", () => {
-    expect(PCT_SCALE.cuts).toEqual([2, 5, 10, 20, 35, 50]);
-    expect(PCT_SCALE.labels).toEqual(["0–2 %", "2–5 %", "5–10 %", "10–20 %", "20–35 %", "35–50 %", "≥ 50 %"]);
+    expect(PCT_SCALE.cuts).toEqual([2, 5, 10, 20, 40, 60]);
+    expect(PCT_SCALE.labels).toEqual(["0–2 %", "2–5 %", "5–10 %", "10–20 %", "20–40 %", "40–60 %", "≥ 60 %"]);
   });
 
-  it("un valor IGUAL a un límite cae en la clase SUPERIOR: 2, 5, 10, 20, 35 y 50", () => {
+  it("un valor IGUAL a un límite cae en la clase SUPERIOR: 2, 5, 10, 20, 40 y 60", () => {
     const idx = (v: number) => classIndex(PCT_SCALE, v);
-    expect([2, 5, 10, 20, 35, 50].map(idx)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect([1.999, 4.999, 9.999, 19.999, 34.999, 49.999].map(idx)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect([2, 5, 10, 20, 40, 60].map(idx)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect([1.999, 4.999, 9.999, 19.999, 39.999, 59.999].map(idx)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(idx(40)).toBe(5);                                   // 40 → «40–60 %» (no «20–40 %»)
+    expect(idx(60)).toBe(6);                                   // 60 → «≥ 60 %» (no «40–60 %»)
     expect(idx(0.01)).toBe(0);
     expect(idx(89.53)).toBe(6);
     expect(idx(125)).toBe(6);                                  // sin recorte: la última clase
@@ -86,7 +88,7 @@ describe("leyenda: una fila por clase con su color, rango y número de comunas",
   });
 
   it("los valores en el límite se cuentan en la clase superior; el 0 aparece con su conteo; null no cuenta como dato", () => {
-    const rows = legendRows(PCT_SCALE, [0, 0, 2, 5, 10, 20, 35, 50, null], 10);
+    const rows = legendRows(PCT_SCALE, [0, 0, 2, 5, 10, 20, 40, 60, null], 10);
     expect(rows[0]).toMatchObject({ kind: "zero", count: 2, color: ZERO_COLOR });
     expect(rows.slice(1, 8).map((r) => r.count)).toEqual([0, 1, 1, 1, 1, 1, 1]);
     expect(rows[8]).toMatchObject({ kind: "nodata", count: 2 });      // 10 − 8 con dato (el null y la que falta)

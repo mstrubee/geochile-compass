@@ -33,8 +33,8 @@ const nf = new Intl.NumberFormat("es-CL", { maximumFractionDigits: 0 });
 /** Penetración (% de la población censada 2024): cortes redondos y FIJOS para todas las edades, 60+ y por sexo. */
 export const PCT_SCALE: ClassScale = {
   id: "pct",
-  cuts: [2, 5, 10, 20, 35, 50],
-  labels: ["0–2 %", "2–5 %", "5–10 %", "10–20 %", "20–35 %", "35–50 %", "≥ 50 %"],
+  cuts: [2, 5, 10, 20, 40, 60],
+  labels: ["0–2 %", "2–5 %", "5–10 %", "10–20 %", "20–40 %", "40–60 %", "≥ 60 %"],
   zeroLabel: "0 % (cero publicado)",
 };
 

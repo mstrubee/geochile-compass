@@ -174,9 +174,17 @@ describe("panel con métrica «Penetración»", () => {
     const r = [...screen.getByTestId("isapre-class-legend").querySelectorAll('[data-testid="isapre-legend-row"]')];
     expect(r.map((e) => e.getAttribute("data-kind"))).toEqual(["zero", "class", "class", "class", "class", "class", "class", "class", "nodata"]);
     expect(r.map((e) => e.querySelector("span.flex-1")?.textContent)).toEqual(["0 % (cero publicado)", ...PCT_SCALE.labels, "Sin dato"]);
-    expect(r.map((e) => e.getAttribute("data-count"))).toEqual(["1", "0", "0", "1", "0", "0", "1", "0", "1"]);   // 0 · 0–2 · 2–5 · 5–10 · 10–20 · 20–35 · 35–50 · ≥50 · sin dato (40 % cae en 35–50 %)
+    expect(r.map((e) => e.getAttribute("data-count"))).toEqual(["1", "0", "0", "1", "0", "0", "1", "0", "1"]);   // 0 · 0–2 · 2–5 · 5–10 · 10–20 · 20–35 · 35–50 · ≥50 · sin dato (40 % cae en 40–60 %)
     expect(r.map((e) => e.getAttribute("data-color"))).toEqual(["#d6cfc4", ...VIRIDIS_7, "#9ca3af"]);
     expect(screen.getByTestId("isapre-fonasa-pending").textContent).toBe("Fonasa: pendiente (fase C)");
+  });
+
+  it("con valores justo en 40 y 60: 40 en «40–60 %», 60 en «≥ 60 %», y la leyenda los cuenta ahí", () => {
+    const rows = [pen("90001", "A", 39.9, 39.9, 100), pen("90002", "B", 40, 40, 100), pen("90003", "C", 59.9, 59.9, 100), pen("90004", "D", 60, 60, 100)];
+    render(<IsapreChoroplethPanel {...baseProps()} penRows={rows} penShown={rows} />);
+    const r = [...screen.getByTestId("isapre-class-legend").querySelectorAll('[data-testid="isapre-legend-row"]')];
+    expect(r.map((e) => e.querySelector("span.flex-1")?.textContent).slice(4, 8)).toEqual(["20–40 %", "40–60 %", "≥ 60 %", "Sin dato"]);
+    expect(r.map((e) => e.getAttribute("data-count")).slice(4, 8)).toEqual(["1", "2", "1", "0"]);
   });
 
   it("las clases vacías se muestran igual, con 0 comunas; sin penetración que mostrar siguen las 7 filas", () => {
@@ -202,7 +210,7 @@ describe("panel con métrica «Penetración»", () => {
     const rows = [pen("90001", "A", 5, 5, 100)];
     render(<IsapreChoroplethPanel {...baseProps()} penRows={rows} penShown={rows} />);
     const w = screen.getByTestId("projects-warnings").textContent ?? "";
-    for (const k of ["población censada 2024 (INE) del mismo sexo", "EXCLUYE la edad sin información e INCLUYE el sexo sin información", "diciembre de 2025", "[NO COMPROBADO]", "no hay «resto» ni «sin previsión»", "Sexo sin información", "clases fijas (0–2 %, 2–5 %, 5–10 %, 10–20 %, 20–35 %, 35–50 % y ≥ 50 %)"]) expect(w).toContain(k);
+    for (const k of ["población censada 2024 (INE) del mismo sexo", "EXCLUYE la edad sin información e INCLUYE el sexo sin información", "diciembre de 2025", "[NO COMPROBADO]", "no hay «resto» ni «sin previsión»", "Sexo sin información", "clases fijas (0–2 %, 2–5 %, 5–10 %, 10–20 %, 20–40 %, 40–60 % y ≥ 60 %)"]) expect(w).toContain(k);
     expect(w).not.toContain("percentil 95");
     expect(w).not.toMatch(/porque|se debe a|debido a|causa(da)? por/i);
     expect(Object.values(WARN_PENETRACION).join(" ")).not.toMatch(/porque|se debe a|debido a|causa(da)? por/i);
@@ -341,12 +349,12 @@ describe("PrevisionHost con la penetración", () => {
 describe("capa en el mapa: clases discretas viridis, relleno 0,7, borde visible, gris punteado sin dato", () => {
   const feat = (c: string) => ({ type: "Feature", properties: { codigo_comuna: c }, geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } });
   const setup = async (metric: "n" | "pct") => {
-    geo.value = { ready: true, nombresPorCodigo: { "90001": "A", "90002": "B", "90003": "C", "90004": "D", "90005": "E" }, fc: { type: "FeatureCollection", features: ["90001", "90002", "90003", "90004", "90005"].map(feat) } };
+    geo.value = { ready: true, nombresPorCodigo: { "90001": "A", "90002": "B", "90003": "C", "90004": "D", "90005": "E", "90006": "F", "90007": "G" }, fc: { type: "FeatureCollection", features: ["90001", "90002", "90003", "90004", "90005", "90006", "90007"].map(feat) } };
     gj.props = null;
     svc.comuna.mockResolvedValue([comuna("90001", "A", 0, 0), comuna("90002", "B", 50, 50), comuna("90004", "D", 2999, 3000), comuna("90005", "E", 30000, 30000)]);
-    svc.pen.mockResolvedValue([pen("90001", "A", 0, 0, 100), pen("90002", "B", 50, 50, 100), pen("90003", "C", null, null, 100), pen("90004", "D", 5, 5, 4), pen("90005", "E", 3, 3, 100)]);
+    svc.pen.mockResolvedValue([pen("90001", "A", 0, 0, 100), pen("90002", "B", 50, 50, 100), pen("90003", "C", null, null, 100), pen("90004", "D", 5, 5, 4), pen("90005", "E", 3, 3, 100), pen("90006", "F", 40, 40, 100), pen("90007", "G", 60, 60, 100)]);
     mount();
-    await waitFor(() => expect(got.layer?.penShown).toHaveLength(5));
+    await waitFor(() => expect(got.layer?.penShown).toHaveLength(7));
     await waitFor(() => expect(got.layer?.rows).toHaveLength(4));
     if (metric === "pct") {
       fireEvent.change(screen.getByLabelText("Métrica"), { target: { value: "pct" } });
@@ -359,8 +367,10 @@ describe("capa en el mapa: clases discretas viridis, relleno 0,7, borde visible,
     await setup("pct");
     expect(style("90001")).toMatchObject({ fillColor: "#d6cfc4", fillOpacity: 0.7 });        // 0 % publicado
     expect(style("90005")).toMatchObject({ fillColor: VIRIDIS_7[1], fillOpacity: 0.7 });      // 3 % → «2–5 %»
-    expect(style("90002")).toMatchObject({ fillColor: VIRIDIS_7[6], fillOpacity: 0.7 });      // 50 % cae en la clase superior «≥ 50 %»
+    expect(style("90002")).toMatchObject({ fillColor: VIRIDIS_7[5], fillOpacity: 0.7 });      // 50 % → «40–60 %»
     expect(style("90004")).toMatchObject({ fillColor: VIRIDIS_7[6], fillOpacity: 0.7 });      // 125 %: sin recorte, última clase
+    expect(style("90006")).toMatchObject({ fillColor: VIRIDIS_7[5], fillOpacity: 0.7 });      // 40 % cae en la clase SUPERIOR «40–60 %» (no en «20–40 %»)
+    expect(style("90007")).toMatchObject({ fillColor: VIRIDIS_7[6], fillOpacity: 0.7 });      // 60 % cae en la clase SUPERIOR «≥ 60 %» (no en «40–60 %»)
     expect(style("90003")).toMatchObject({ fillColor: "#9ca3af", fillOpacity: 0.4, dashArray: "3 3" });
     expect(style("90001").dashArray).toBeUndefined();
     expect(style("99999")).toMatchObject({ fillColor: "#9ca3af", dashArray: "3 3" });         // comuna que no figura: sin dato
