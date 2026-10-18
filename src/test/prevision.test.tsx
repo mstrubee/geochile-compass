@@ -86,10 +86,12 @@ describe("utilidades", () => {
     expect(casenCounts(undefined)).toEqual({ total: 0, publishable: 0 });
   });
 
-  it("las preguntas: 1b-1 y 1b-3 construidas; 1b-2 en espera; 1b-4 y 1b-5 no respondibles, con motivo", () => {
+  it("las preguntas: 1b-1, 1b-2 y 1b-3 construidas; 1b-4 y 1b-5 no respondibles, con motivo", () => {
     const st = Object.fromEntries(QUESTIONS.map((q) => [q.id, q.state]));
-    expect(st).toEqual({ "1b-1": "construida", "1b-2": "en_espera", "1b-3": "construida", "1b-4": "no_respondible", "1b-5": "no_respondible" });
-    for (const id of ["1b-2", "1b-4", "1b-5"]) expect(QUESTION_STATE_TEXT[id].length).toBeGreaterThan(20);
+    expect(st).toEqual({ "1b-1": "construida", "1b-2": "construida", "1b-3": "construida", "1b-4": "no_respondible", "1b-5": "no_respondible" });
+    for (const id of ["1b-4", "1b-5"]) expect(QUESTION_STATE_TEXT[id].length).toBeGreaterThan(20);
+    expect(QUESTION_STATE_TEXT["1b-2"]).toBeUndefined();
+    expect(QUESTIONS.find((q) => q.id === "1b-2")).toMatchObject({ level: "Respondida con rigor", seal: "Oficial con advertencia" });
     expect(QUESTIONS.find((q) => q.id === "1b-3")?.level).toMatch(/Estimada/);
     expect(QUESTIONS.find((q) => q.id === "1b-1")?.level).toMatch(/rigor/);
   });
@@ -202,9 +204,10 @@ describe("panel Isapre", () => {
     expect(screen.getByTestId("license-line").textContent).toContain("por confirmar");
   });
 
-  it("las preguntas 1b-2 (en espera) y 1b-5 (no respondible) se ven con su motivo", () => {
+  it("la pregunta 1b-2 se ve construida con su nivel y sello, y la 1b-5 (no respondible) con su motivo", () => {
     render(<IsapreChoroplethPanel {...isapreProps()} />);
-    expect(screen.getByTestId("question-1b-2").textContent).toContain("En espera: falta la población comunal del Censo 2024");
+    expect(screen.getByTestId("question-1b-2").textContent).toContain("Nivel: Respondida con rigor · Sello: Oficial con advertencia");
+    expect(screen.getByTestId("question-1b-2").textContent).not.toContain("En espera");
     expect(screen.getByTestId("question-1b-5").textContent).toContain("faltan los archivos de Fonasa");
     expect(screen.getByTestId("question-1b-5").textContent).toContain("No respondible hoy");
   });

@@ -286,7 +286,7 @@ Decisiones: (1) **no se corrige ningún dato**; (2) por defecto se cuenta solo `
 ## 3. Fase 1b — Previsión (Isapre comunal y CASEN regional) — decisiones tomadas ANTES de codificar
 
 **Alcance (D3, D6).** Solo **Isapre** (cartera comunal de la Superintendencia de Salud) y **CASEN regional**. **Fonasa no está descargado: no se crea nada que dependa de él** y la 1b-5 queda *No respondible hoy*.
-La población comunal del Censo 2024 sigue pendiente: **1b-2 queda EN ESPERA** (no se construye ninguna tabla de población ni proporción). Regla 8: Isapre, Fonasa y Censo no se suman ni se restan; no hay residuo «sin previsión» por comuna.
+La población comunal del Censo 2024 ya está en producción (`20261104000000`): **1b-2 está CONSTRUIDA** (§3.7). Regla 8: Isapre, Fonasa y Censo no se suman ni se restan; no hay residuo «sin previsión» por comuna.
 
 ### 3.1 Fuentes (regla 1: organismo, URL exacta, publicación ≠ período, licencia, hash)
 
@@ -348,10 +348,27 @@ Estimación de la distribución del sistema previsional de salud (`s13`: Fonasa,
 | # | Pregunta | Nivel | Estado |
 |---|---|---|---|
 | 1b-1 | ¿Cuántos beneficiarios Isapre de **60 años o más** hay en comunas **sin** hospital de alta complejidad **en la comuna**? (dos definiciones D1) | **Respondida con rigor** · *Oficial con advertencia* | construida (agregado con datos completos + rango publicado) |
-| 1b-2 | ¿Qué comunas tienen la mayor proporción de beneficiarios Isapre sobre el Censo 2024? | Respondida con rigor · *Oficial con advertencia* | **EN ESPERA** (falta población comunal) |
+| 1b-2 | ¿Qué comunas tienen la mayor **penetración** de beneficiarios Isapre sobre la población censada 2024 (INE)? | **Respondida con rigor** · *Oficial con advertencia* | **construida** (§3.7; `get_isapre_penetracion`, migración `20261105000000`) |
 | 1b-3 | ¿Qué proporción de cada **región** declara Fonasa o Isapre (CASEN 2024)? | **Estimada** (rango con IC 95 %) · *Estimado* | construida (regional; contraste con el tabulado oficial) |
 | 1b-4 | Esa proporción **por comuna** | **No respondible hoy** | CASEN no es representativa a nivel comunal (D6) |
 | 1b-5 | Inscritos **Fonasa** por comuna, tramo, edad y sexo | **No respondible hoy** | faltan los archivos de Fonasa (D3); no se crea nada que dependa de ellos |
 
 **«En la comuna» no es «accesible»** (misma advertencia que 1a): la población Isapre puede atenderse en comunas vecinas.
+
+### 3.7 1b-2 — Penetración Isapre sobre la población censada 2024 (construida)
+
+**Qué es.** Por comuna: beneficiarios Isapre (cotizantes + cargas, cartera vigente a dic-2025) ÷ población censada 2024 (INE) del **mismo sexo y de la misma edad**. Une dos capturas de fechas distintas y de fuentes distintas (regla 8: se dividen, no se suman ni se restan; no hay Fonasa ni residuo «sin previsión»). RPC `get_isapre_penetracion(p_sexo, p_min_tramo)`, SECURITY INVOKER, lectura solo para `authenticated` y `service_role`.
+
+**Método (todo lo siguiente está fijado por pruebas SQL).**
+1. **Numerador = SOLO lo publicado.** Sale de `get_isapre_comuna()` (celdas publicadas, totales de grupo y residuo) —exacto o rango `[n_lo, n_hi]`—, nunca de `salud_restringido` (la función no tiene acceso al esquema ni lo menciona). Como la población es pública, `pct × población = n` reconstruye el rango publicado y **no revela nada que ese rango no revele ya** (prueba: `pct_lo × población = n_lo`, `pct_hi × población = n_hi`).
+2. **Denominador = el Censo con el mismo filtro.** Ambos sexos → total censado; `F` → mujeres; `M` → hombres. `SI` (sexo sin información) se **rechaza** con `22023`: el Censo no tiene ese grupo.
+3. **Edad: solo 0 (todas las edades) y 12 (60 años o más).** El tramo Isapre *k* (5k a 5k+4 años) coincide **exactamente** con el grupo *k* del Censo para *k* = 0 … 17 (el grupo «85 o más» = tramos 17..20; los cortes 18, 19 y 20 no tienen grupo equivalente en el Censo). Aun así solo se abren 0 y 12: con dos cortes consecutivos la resta aísla un **tramo** del numerador (regla 5, «un corte único evita aislar tramos restando»). Medido con la captura real: de 16.608 intervalos de tramo obtenidos por resta, 104 (0,6 %) quedan más estrechos que las cotas por celda (aprovechan el residuo publicado del grupo) y **ninguna** celda suprimida queda exacta; no es una filtración de lo no publicado, pero la penetración no necesita ese detalle. **Hallazgo para el dueño:** `get_isapre_comuna` (1b, ya en producción) admite todos los cortes 0..20 y `get_isapre_celdas` publica las celdas con su residuo; esta fase **no** lo cambia.
+4. **Asimetría del numerador (declarada en la ficha y en el código).** Con todas las edades incluye la edad **sin información** (tramo 21) y, con ambos sexos, el sexo sin información; con 60+ **excluye** la edad sin información e **incluye** el sexo sin información (ambos sexos). El Censo no tiene «sin información»: su denominador es la población con edad y sexo conocidos.
+5. **Sin recorte a 100 %.** Un valor sobre 100 % se muestra tal cual, con la advertencia (domicilio Isapre [NO COMPROBADO] frente a residencia censal; capturas de fechas distintas). La interfaz no afirma una causa.
+6. **Sin dato, nunca respaldo.** Comuna sin fila Isapre, sin población censada, con población 0 para el filtro o sin captura vigente de alguna fuente ⇒ `null` («sin dato»). Siempre 346 filas.
+
+**Interfaz.** En la capa «Isapre: beneficiarios por comuna» un selector de métrica (*Beneficiarios (n.º)* / *Penetración (% de la población censada 2024)*); sexo, edad y «sin alta complejidad» siguen activos (con penetración, «sexo sin información» se deshabilita; el filtro «sin alta» se aplica en el cliente con las comunas de `get_isapre_comuna`). Color: degradado **continuo** de blanco (menor %) a azul profundo (`#08306b`) sobre el **punto medio** del rango, relleno 0,5; dominio de 0 % al **percentil 95** de las comunas mostradas (el máximo publicado se informa aparte): con una mediana de 3,8 % y un máximo de 89,5 %, sin tope todo el país queda casi blanco; la leyenda dice «≥ tope» y el valor real está en la ventana de cada comuna. Sin dato: gris punteado. La ventana de la comuna lleva el bloque «Previsión de salud»: beneficiarios Isapre, *Población censada 2024 (INE)*, penetración (exacta o «entre a % y b %»), «Fonasa: pendiente (fase C)» sin cifra, el sello *Oficial con advertencia* y las fuentes con período y fecha de publicación de las dos capturas. No se creó ningún nodo en `thematic_layers`.
+
+**Nivel y sello (reglas 2 y 9).** *Respondida con rigor* · *Oficial con advertencia*.
+
 

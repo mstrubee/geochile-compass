@@ -22,6 +22,10 @@ export interface IsapreFilters {
 }
 export const DEFAULT_ISAPRE_FILTERS: IsapreFilters = { sexo: null, minTramo: 0, sinAlta: null };
 
+/** Métrica de la capa: beneficiarios Isapre (n.º) o penetración (% de la población censada 2024, 1b-2). */
+export type IsapreMetric = "n" | "pct";
+export const METRIC_LABEL: Record<IsapreMetric, string> = { n: "Beneficiarios (n.º)", pct: "Penetración (% de la población censada 2024)" };
+
 /** Fila de get_isapre_comuna(): UNA por comuna con dato. [n_lo, n_hi] es el rango publicado; `exact` = ninguna celda suprimida (n_lo = n_hi). */
 export interface IsapreComunaRow {
   cut: string;
@@ -33,6 +37,27 @@ export interface IsapreComunaRow {
   suppressed_cells: number;
   snapshot_id: string;
   period_end: string;
+}
+
+/**
+ * Fila de get_isapre_penetracion() (1b-2): UNA por comuna (346). Numerador = SOLO lo publicado (mismo rango que get_isapre_comuna); denominador = población censada 2024 del MISMO
+ * sexo y edad. Todo es null cuando falta: comuna sin fila Isapre (n_*, pct_*), sin población censada o con población 0 para el filtro (pct_*), o sin captura vigente.
+ * `pct_*` NO se recorta a 100 %.
+ */
+export interface IsaprePenetracionRow {
+  cut: string;
+  name: string;
+  region_cut: string;
+  n_lo: number | null;
+  n_hi: number | null;
+  exact: boolean | null;
+  poblacion: number | null;
+  pct_lo: number | null;
+  pct_hi: number | null;
+  isapre_snapshot_id: string | null;
+  isapre_period_end: string | null;
+  censo_snapshot_id: string | null;
+  censo_period_end: string | null;
 }
 
 /** Fila de get_isapre_resumen(): captura vigente (período ≠ fecha de publicación ≠ extracción) y estadísticas de la supresión. */

@@ -131,7 +131,7 @@ El agregado se calcula **dentro de la base con los conteos completos** con una f
 | # | Pregunta | Nivel | Sello | Estado |
 |---|---|---|---|---|
 | 1b-1 | Beneficiarios Isapre 60+ en comunas sin hospital de alta complejidad | **Respondida con rigor** | Oficial con advertencia | construida: 116.128 (hospitales) / 93.058 (ampliada) |
-| 1b-2 | Comunas con mayor proporción de beneficiarios Isapre sobre el Censo 2024 | Respondida con rigor | Oficial con advertencia | **EN ESPERA** — falta la población comunal del Censo 2024 |
+| 1b-2 | Comunas con mayor penetración de beneficiarios Isapre sobre la población censada 2024 (INE) | **Respondida con rigor** | Oficial con advertencia | **construida** (Fase 1b-2, §8): mediana 3,8 %, máximo 89,5 % (Vitacura) |
 | 1b-3 | Proporción regional que declara Fonasa o Isapre (CASEN 2024) | **Estimada con rango** (IC 95 %) | Estimado | construida: 67 de 96 estimaciones publicables |
 | 1b-4 | Esa proporción por comuna | **No respondible hoy** | — | CASEN no es representativa a nivel comunal (D6) |
 | 1b-5 | Inscritos Fonasa por comuna, tramo, edad y sexo | **No respondible hoy** | — | faltan los archivos de Fonasa (D3) |
@@ -150,6 +150,81 @@ El agregado se calcula **dentro de la base con los conteos completos** con una f
 
 ## 7. Decisiones del dueño y pendientes
 
-Resueltas en las revisiones del PR: licencias (las confirma el dueño; la ficha sigue en «por confirmar»); Censo 2024 y Fonasa pendientes (1b-2 y 1b-5 en espera); regla 5 sin cambios (no se publica el total comunal con conteos completos); **retención del residuo generalizada** a grupos y regiones (§2.2 y §2.3); **la diferencia entre consultas de 1b-1 (hospitales − ampliada = 23.070, cuatro comunas) queda aceptada como límite declarado**: es un agregado grande que se puede derivar igual del XLSX público.
+Resueltas en las revisiones del PR: licencias (las confirma el dueño; la ficha sigue en «por confirmar»); Censo 2024 y Fonasa pendientes (1b-2 y 1b-5 en espera; **1b-2 quedó construida en la Fase 1b-2, §8**, al cargarse el Censo); regla 5 sin cambios (no se publica el total comunal con conteos completos); **retención del residuo generalizada** a grupos y regiones (§2.2 y §2.3); **la diferencia entre consultas de 1b-1 (hospitales − ampliada = 23.070, cuatro comunas) queda aceptada como límite declarado**: es un agregado grande que se puede derivar igual del XLSX público.
 
 Pendiente de aplicar (lo hace el dueño con `RUNBOOK_1B.md` y respaldo): migraciones 1 y 2 → cargas → front → migración 3. Requiere 1a aplicada y cargada.
+
+## 8. Fase 1b-2 — Penetración Isapre sobre la población censada 2024 (construida)
+
+Método, reglas y interfaz: `DISENO.md` §3.7. Aplicar con `RUNBOOK_1B2.md` (migración `20261105000000`, solo aditiva: dos funciones). **Nivel:** Respondida con rigor · **Sello:** Oficial con advertencia.
+Cifras calculadas con las capturas **reales** (Isapre dic-2025, SHA-256 `0b810d74…0ff1`; Censo 2024, SHA-256 `1f3a9c97…e009`) en una base local; son las de producción (mismas capturas y mismo SQL).
+
+### 8.1 Con todas las edades y ambos sexos — `get_isapre_penetracion(null, 0)`
+Σ población = 18.480.432 (el total censado). Beneficiarios en las 346 comunas: 2.517.228 a 2.517.830.
+
+| Mayor penetración (punto medio) | Beneficiarios | Población censada | Penetración |
+|---|---:|---:|---:|
+| Vitacura | 77.372 | 86.420 | 89,5 % |
+| Las Condes | 220.870 | 296.134 | 74,6 % |
+| Lo Barnechea | 74.828 – 74.860 | 112.620 | 66,4 % – 66,5 % |
+| Providencia | 95.492 | 143.974 | 66,3 % |
+| La Reina | 48.230 – 48.233 | 89.870 | 53,7 % |
+| Ñuñoa | 121.181 | 241.467 | 50,2 % |
+| Colina | 59.377 – 59.380 | 173.293 | 34,3 % |
+| Huechuraba | 34.272 | 101.808 | 33,7 % |
+| Concón | 15.922 – 15.925 | 48.294 | 33,0 % |
+| Machalí | 19.837 – 19.840 | 60.875 | 32,6 % |
+
+| Menor penetración (punto medio) | Beneficiarios | Población censada | Penetración |
+|---|---:|---:|---:|
+| Camarones | 2 – 4 | 861 | 0,2 % – 0,5 % |
+| San Juan de la Costa | 35 | 7.776 | 0,5 % |
+| Putre | 8 – 9 | 1.547 | 0,5 % – 0,6 % |
+| General Lagos | 2 – 4 | 508 | 0,4 % – 0,8 % |
+| Ercilla | 55 | 7.730 | 0,7 % |
+| Tirúa | 74 | 10.208 | 0,7 % |
+| Galvarino | 97 | 12.710 | 0,8 % |
+| Lago Verde | 4 – 8 | 779 | 0,5 % – 1,0 % |
+| Ninhue | 45 | 5.763 | 0,8 % |
+| Saavedra | 105 | 12.877 | 0,8 % |
+
+Distribución del punto medio (346 comunas): mínimo 0,35 % · p25 2,04 % · mediana 3,82 % · p75 7,78 % · p95 20,30 % · máximo 89,53 %. **88 comunas** (25 %) se muestran como rango por conteos pequeños suprimidos; el ancho máximo es **11,8 puntos porcentuales** (Torres del Paine: 18–42 beneficiarios sobre 203 → 8,9 % – 20,7 %). **Ninguna comuna supera 100 %.** Sin comunas «sin dato».
+
+### 8.2 60 años o más, ambos sexos — `get_isapre_penetracion(null, 12)`
+Σ población 60+ = 3.665.028 (mujeres 2.036.940 + hombres 1.628.088); beneficiarios 394.750 a 396.700.
+
+| Mayor penetración | Beneficiarios | Población censada | Penetración |
+|---|---:|---:|---:|
+| Vitacura | 17.393 – 17.396 | 21.269 | 81,8 % |
+| Las Condes | 47.482 | 70.514 | 67,3 % |
+| Lo Barnechea | 12.249 – 12.279 | 19.272 | 63,6 % – 63,7 % |
+| Providencia | 17.846 – 17.849 | 29.585 | 60,3 % |
+| La Reina | 10.483 | 21.562 | 48,6 % |
+| Ñuñoa | 17.113 – 17.116 | 47.952 | 35,7 % |
+| Machalí | 2.712 | 9.803 | 27,7 % |
+| Calama | 6.243 | 23.130 | 27,0 % |
+| Concón | 2.820 | 10.476 | 26,9 % |
+| Laguna Blanca | 6 – 17 | 51 | 11,8 % – 33,3 % |
+
+| Menor penetración | Beneficiarios | Población censada | Penetración |
+|---|---:|---:|---:|
+| Juan Fernández · Tortel · Río Verde · San Gregorio · General Lagos (cero publicado) | 0 | 171 · 59 · 24 · 63 · 157 | 0,0 % |
+| San Juan de la Costa | 6 – 14 | 2.332 | 0,3 % – 0,6 % |
+| Ñiquén | 7 – 27 | 3.810 | 0,2 % – 0,7 % |
+| San Ignacio | 12 – 28 | 4.482 | 0,3 % – 0,6 % |
+| Monte Patria | 24 – 39 | 6.954 | 0,3 % – 0,6 % |
+| Putre | 1 – 2 | 331 | 0,3 % – 0,6 % |
+
+Distribución: mínimo 0,00 % · p25 1,40 % · mediana 2,37 % · p75 5,92 % · p95 18,38 % · máximo 81,78 %. **171 comunas** como rango; ancho máximo **21,6 puntos** (Laguna Blanca, 51 personas de 60+: 6–17 beneficiarios). **Ninguna supera 100 %.** **Una comuna sin penetración: Antártica**, población censada 60+ = 0 (hay 0 beneficiarios 60+); se muestra «sin dato».
+
+### 8.3 Otros filtros (mismo método)
+Mujeres, todas las edades: **1 comuna supera 100 %**: **Antártica**, 5 beneficiarias sobre 4 mujeres censadas (125,0 %) — se muestra tal cual (diferencia de definición y de fecha [NO COMPROBADO]; son poblaciones de pocas personas). Hombres, todas las edades; mujeres y hombres 60+: ninguna sobre 100 % (con 60+, Antártica queda «sin dato»: población 0). Medianas: mujeres 3,15 % / hombres 4,25 % (todas las edades); mujeres 2,22 % / hombres 2,76 % (60+). Rango por filtro: 29 y 24 comunas (todas las edades, F y M), 146 y 137 (60+, F y M).
+
+### 8.4 Cortes de edad habilitados
+**Solo 0 y 12.** Los cortes 1..17 calzan con los grupos del Censo (probado contra `get_poblacion_comunal_edad`) pero **no se abren**: restar dos cortes consecutivos aísla un tramo del numerador y en 104 de 16.608 casos (0,6 %) el intervalo resultante es más estrecho que las cotas por celda; ninguna celda suprimida queda exacta. Los cortes 18..20 (90+, 95+, 100+) no tienen grupo equivalente en el Censo. `get_isapre_comuna` (1b) ya admite 0..20 en producción: **decisión del dueño** si conviene limitarlo también (esta fase no lo toca).
+
+### 8.5 Advertencias que lleva la interfaz
+Solo Isapre (sin Fonasa ni «resto»); numerador con la asimetría de edad y sexo sin información (§3.7 punto 4); períodos distintos (dic-2025 frente a 2024); comuna de la cartera Isapre no declarada [NO COMPROBADO] frente a residencia censal; sin recorte a 100 %; el color topa en el percentil 95 de las comunas mostradas.
+
+### 8.6 [NO COMPROBADO] de esta fase
+Que el domicilio de la cartera Isapre sea la residencia censal; la causa de cualquier valor extremo (Vitacura 89,5 %, Antártica 125 %) — no se afirma ninguna; que las licencias de ambas fuentes permitan mostrarlas juntas en informes a clientes (Isapre sigue «por confirmar»; Censo CC BY-SA 4.0 declarada por el INE). La interfaz solo se probó en jsdom con capas simuladas: **no se vio en un navegador real**.
