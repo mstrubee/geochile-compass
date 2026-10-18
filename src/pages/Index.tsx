@@ -24,6 +24,7 @@ import { AnalysisConfigDialog } from "@/components/panels/AnalysisConfigDialog";
 import { ComputeFeaturesDialog } from "@/components/panels/ComputeFeaturesDialog";
 import { useTerritorialLayers } from "@/hooks/useTerritorialLayers";
 import { useTerritorialVisibility } from "@/hooks/useTerritorialVisibility";
+import { useSavedPoisVisible } from "@/hooks/useSavedPoisVisible";
 import { visibleIdsToHideForCapture, withThematicClientReady } from "@/utils/clientReady";
 import { useThematicLayers } from "@/hooks/usePermits";
 // SalesProjectionPanel ahora vive dentro de AnalysisPanel
@@ -732,7 +733,8 @@ const Index = () => {
     refresh: refreshFolders,
     loading: foldersLoading,
   } = usePoiFolders();
-  const [savedPoisVisible, setSavedPoisVisible] = useState(true);
+  // «Mostrar en mapa» arranca apagado en cada carga (estado de sesión, sin persistencia)
+  const { visible: savedPoisVisible, toggle: toggleSavedPoisVisible, enable: enableSavedPois } = useSavedPoisVisible();
   const [hiddenPoiFolders, setHiddenPoiFolders] = useState<Set<string>>(
     () => new Set<string>(),
   );
@@ -778,7 +780,7 @@ const Index = () => {
       // Si el usuario enciende al menos una carpeta y el toggle global está apagado,
       // lo encendemos automáticamente para que los markers aparezcan en el mapa.
       if (activated.length > 0) {
-        setSavedPoisVisible((v) => (v ? v : true));
+        enableSavedPois();
       }
       const childrenByParent = new Map<string | null, string[]>();
       folders.forEach((f) => {
@@ -796,7 +798,7 @@ const Index = () => {
       const folderIdsToLoad = Array.from(folderIds);
       if (folderIdsToLoad.length > 0) void loadPoiFoldersOnce(folderIdsToLoad);
     },
-    [folders, hiddenPoiFolders, loadPoiFoldersOnce],
+    [folders, hiddenPoiFolders, loadPoiFoldersOnce, enableSavedPois],
   );
 
   // Filtra POIs visibles según la jerarquía: si una carpeta padre está oculta,
@@ -2144,7 +2146,7 @@ const Index = () => {
             setFlyTarget({ id: Date.now(), lat: p.lat, lng: p.lng, bbox: null })
           }
           savedPoisVisible={savedPoisVisible}
-          onToggleSavedPoisVisible={() => setSavedPoisVisible((v) => !v)}
+          onToggleSavedPoisVisible={toggleSavedPoisVisible}
           onRemoveSavedPoi={removePoi}
           onClearSavedPois={clearAllPois}
           onOpenPoiManager={() => setManagerOpen(true)}
