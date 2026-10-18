@@ -86,6 +86,9 @@ Se reproduce con `bash etl/salud/dev_env.sh` (idempotente; ver su cabecera). Lí
 
 * `npm ci` falla en `main` (lock desincronizado: falta `esbuild@0.28.2`); se usa `npm install --no-save`.
 * Las migraciones se aplican con `psql -1` (necesitan transacción: usan `SET LOCAL` y tablas temporales).
+* **Migraciones y rollbacks (convención, `supabase/README.md`):** las migraciones nuevas usan versión `>= 20261101000000` y su `down` va **siempre** en
+  `supabase/rollbacks/<misma versión>_<nombre>_down.sql`, **nunca** en `supabase/migrations/` (`supabase db push` lo trataría como otra migración). Lo hace cumplir
+  `src/test/migrationsConvention.test.ts`.
 * **Corrección de la línea base (Fase 0):** el texto original decía que `api_quota`, `layer_nodes`, `layer_nodes_edit`, `layer_import` y `legacy_retired`
   «no corren porque asumen objetos del esquema base que no están en el repo (p. ej. `public.user_roles`)». **Esa causa era errónea**: `user_roles` y
   `app_role` sí los crea el repo. La causa real está en `HALLAZGOS_FASE0.md` §8 (necesitan datos reales y 3 objetos que el repo no crea en orden).

@@ -30,8 +30,9 @@ SKIP_CHECK=0; RESET_DBS=0
 for a in "$@"; do case "$a" in --skip-check) SKIP_CHECK=1;; --reset-dbs) RESET_DBS=1;; *) echo "opción desconocida: $a" >&2; exit 2;; esac; done
 
 # LÍNEA BASE (medida en main, commit 9026d67). Un PR no puede empeorarla; si cambia, se actualiza AQUÍ y se explica en el PR.
-# Vitest: 472 tests / 34 archivos en main (9026d67) + 36 tests / 2 archivos de fix/seguridad-edge (edgeAuth, clientReady) = 508 / 36.
-BASE_VITEST_TESTS=508; BASE_VITEST_FILES=36
+# Vitest: 472 tests / 34 archivos en main (9026d67) + 40 tests / 3 archivos de fix/seguridad-edge
+# (edgeAuth 24, clientReady 12, migrationsConvention 4) = 512 / 37.
+BASE_VITEST_TESTS=512; BASE_VITEST_FILES=37
 BASE_PERMISOS_PASS=43; BASE_PERMISOS_SKIP=4; BASE_PROYECTOS_PASS=45
 BASE_SQL_P12=92; BASE_SQL_PARTE4_GEO=111; BASE_SQL_PARTE4_NODES=7
 

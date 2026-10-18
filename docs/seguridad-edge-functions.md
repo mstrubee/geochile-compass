@@ -27,6 +27,8 @@ dueño del proyecto, en el orden de abajo.
 **Cuota** (`supabase/migrations/20261101000000_api_quota_ors.sql`, rollback en `supabase/rollbacks/`)
 - `api_quota_config.api` admite `'ors'`; fila inicial con **límite mensual PROVISIONAL de 10.000** (no verificado contra el plan de ORS; ORS además limita por día y por
   minuto por su cuenta). Ajustar con `set_api_quota_limit('ors', n, <contraseña>)`.
+  **Antes de la Fase 3 el límite DEBE ajustarse al plan real de ORS, considerando sus límites diarios y por minuto** (hoy no se conocen: `[NO COMPROBADO]`): los lotes
+  de isócronas y matrices consumen mucho más que el uso interactivo, y un mes de 10.000 no protege de un límite diario más bajo ni de uno por minuto.
 - `consume_api_quota('ors', n)` **solo la puede llamar `service_role`**. Sin esto, cualquiera con la clave pública (que `consume_api_quota` concede a `anon`) podría vaciar
   la cuota de ORS por RPC directo y bloquear las isócronas de todos. Las APIs de Google no cambian.
 - `get_api_quota_status()` **no lista `ors`**: es público y alimenta el panel de Google Maps (que tiene etiquetas y textos solo de Google).
@@ -39,10 +41,11 @@ restauran en `finally`. La bandera aún no existe, así que **hoy no cambia nada
 1. `psql "$PROD" -1 -v ON_ERROR_STOP=1 -f supabase/migrations/20261101000000_api_quota_ors.sql` (necesita `20261015130000_api_quota.sql` ya aplicada). Revisar que `api_quota_config` tenga la fila `ors`.
 2. `supabase functions deploy isochrone` y `supabase functions deploy sign-urls`.
 3. Probar con la sesión de un usuario: isócrona con y sin permiso `isocronas`, y sin sesión.
+4. **Antes de la Fase 3:** confirmar el plan real de ORS (límites diarios y por minuto) y ajustar el límite de `ors` con `set_api_quota_limit` (ver arriba).
 
 **Si se despliega la función ANTES de aplicar la migración**, `isochrone` responde 503 (`quota_unavailable`): falla cerrado, no abre nada.
 
-**Reversión:** `supabase/rollbacks/20261101000000_api_quota_ors_down.sql` (borra el consumo de `ors` y restaura las funciones). Para volver al comportamiento anterior de las funciones, redesplegar la versión previa.
+**Reversión:** `supabase/rollbacks/20261101000000_api_quota_ors_down.sql` (los `down` van siempre en `supabase/rollbacks/`, nunca en `supabase/migrations/`; ver `supabase/README.md`) (borra el consumo de `ors` y restaura las funciones). Para volver al comportamiento anterior de las funciones, redesplegar la versión previa.
 
 ## Cambios de comportamiento que conviene conocer
 
