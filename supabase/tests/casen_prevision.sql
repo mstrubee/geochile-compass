@@ -105,6 +105,15 @@ update public.casen_prevision_stage set pct = pct - 0.5 where region_cut = '03' 
 update public.casen_prevision_stage set official_pct = official_pct + 0.01 where region_cut = '07' and sistema = 'isapre';
 select pg_temp.assert_that('una estimación propia que difiere del tabulado oficial detiene la publicación', pg_temp.raises_like($$select pg_temp.pub('c_n')$$, '%difiere del tabulado oficial%'));
 update public.casen_prevision_stage set official_pct = official_pct - 0.01 where region_cut = '07' and sistema = 'isapre';
+update public.casen_prevision_stage set se = se + 0.01 where region_cut = '09' and sistema = 'isapre';
+select pg_temp.assert_that('un ERROR ESTÁNDAR propio que difiere del oficial detiene la publicación (el contraste no es solo de la estimación puntual)', pg_temp.raises_like($$select pg_temp.pub('c_n')$$, '%error estándar propio difiere%'));
+update public.casen_prevision_stage set se = se - 0.01 where region_cut = '09' and sistema = 'isapre';
+update public.casen_prevision_stage set official_se = null where region_cut = '09' and sistema = 'isapre';
+select pg_temp.assert_that('sin el error estándar oficial para contrastar NO se publica', pg_temp.raises_like($$select pg_temp.pub('c_n')$$, '%error estándar propio difiere%'));
+update public.casen_prevision_stage set official_se = 0.5 where region_cut = '09' and sistema = 'isapre';
+update public.casen_prevision_stage set lonely_strata = 1 where region_cut = '05' and sistema = 'fonasa';
+select pg_temp.assert_that('un estrato con un solo conglomerado detiene la publicación (no se descarta en silencio)', pg_temp.raises_like($$select pg_temp.pub('c_n')$$, '%un solo conglomerado%'));
+update public.casen_prevision_stage set lonely_strata = 0 where region_cut = '05' and sistema = 'fonasa';
 update public.casen_prevision_stage set publishable = true, reason = null where region_cut = '07' and sistema = 'nosabe';
 select pg_temp.assert_that('marcar publicable una estimación con < 60 casos detiene la publicación', pg_temp.raises_like($$select pg_temp.pub('c_n')$$, '%no cumple el mínimo de casos%'));
 update public.casen_prevision_stage set publishable = false, reason = 'menos de 60 casos muestrales' where region_cut = '07' and sistema = 'nosabe';

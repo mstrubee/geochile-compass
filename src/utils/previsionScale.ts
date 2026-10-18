@@ -8,7 +8,7 @@ import { ALTA_LABEL, fmtN } from "@/utils/healthScale";
 import type { CasenRegionRow, CasenSistema, IsapreComunaRow, IsapreFilters, IsapreSexo } from "@/types/prevision";
 
 export const SEXO_LABEL: Record<IsapreSexo, string> = { F: "Mujeres", M: "Hombres", SI: "Sexo sin información" };
-export const MIN_TRAMO_LABEL: Record<number, string> = { 0: "Todas las edades", 12: "60 años o más" };
+export const MIN_TRAMO_LABEL: Record<number, string> = { 0: "Todas las edades", 12: "60 años o más (sin la edad sin información)" };
 
 /** Nivel de respuesta (regla 9) y sello (regla 2): ejes independientes. */
 export const ISAPRE_LEVEL_SEAL = { level: "Respondida con rigor (conteo del archivo oficial, con supresión de conteos pequeños)", seal: "Oficial con advertencia" } as const;
@@ -18,8 +18,9 @@ export const WARN_ISAPRE = {
   scope: "Cuenta beneficiarios (cotizantes + cargas) del Sistema Isapre. NO incluye Fonasa ni otros sistemas: no es la población de la comuna ni su cobertura de salud.",
   provisional: "Información PROVISIONAL: el archivo oficial la declara «sujeta a modificación».",
   comuna: "La fuente no declara qué comuna es (domicilio, contrato u otra): no se interpreta como «donde vive» ni «donde se atiende».",
+  age60: "«60 años o más» suma los tramos de 60-64 a 100 o más: EXCLUYE a quienes no informan edad e INCLUYE a quienes no informan sexo.",
   period: "El período de los datos (cartera vigente a diciembre de 2025) no es la fecha de publicación ni la de extracción, y difiere de la fecha de los establecimientos.",
-  suppression: (n: number) => `Los conteos de 1 a ${n - 1} personas por celda NO se publican (se muestra «<${n}»): por eso muchas comunas se ven como un rango «entre a y b». Es una política de presentación de esta plataforma; la fuente no declara una norma de supresión.`,
+  suppression: (n: number) => `Los conteos de 1 a ${n - 1} personas por celda NO se publican (se muestra «<${n}»). El valor de una comuna es exacto cuando lo publicado lo determina (totales de grupo y residuo) y, si no, un rango «entre a y b». Es una política de presentación de esta plataforma; la fuente no declara una norma de supresión.`,
   color: "El color usa el punto medio del rango; el valor exacto o el rango están en la ventana de cada comuna.",
   zero: "0 = el archivo trae 0 beneficiarios para esa comuna con ese filtro (cero publicado). «Sin dato» = la comuna no figura en el archivo: no es lo mismo que 0.",
   noAccess: "«Sin hospital de alta complejidad en la comuna» NO significa sin acceso: la población puede atenderse en comunas vecinas.",

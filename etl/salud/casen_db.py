@@ -12,14 +12,14 @@ from proyectos.db import connect  # noqa: F401  (reexportado)
 
 from .casen import SOURCE_KEY
 
-STAGE_COLS = ("snapshot_n, region_cut, sistema, n_sample, pct, se, ci_lo, ci_hi, n_psu, n_strata, df, publishable, reason, official_pct, official_se, official_n")
+STAGE_COLS = ("snapshot_n, region_cut, sistema, n_sample, pct, se, ci_lo, ci_hi, n_psu, n_strata, df, publishable, reason, official_pct, official_se, official_n, lonely_strata")
 
 
 def stage_rows(ests) -> list[tuple]:
     out = []
     for e in sorted(ests, key=lambda x: (x.region_cut, x.sistema)):
         o = e.official or {}
-        out.append((e.region_cut, e.sistema, e.n_sample, e.pct, e.se, e.ci_lo, e.ci_hi, e.n_psu, e.n_strata, e.df, e.publishable, e.reason, o.get("pct"), o.get("se"), o.get("n")))
+        out.append((e.region_cut, e.sistema, e.n_sample, e.pct, e.se, e.ci_lo, e.ci_hi, e.n_psu, e.n_strata, e.df, e.publishable, e.reason, o.get("pct"), o.get("se"), o.get("n"), e.lonely_strata))
     return out
 
 

@@ -13,6 +13,17 @@
 -- Requiere partes 1–4 de permisos/proyectos (data_sources, source_snapshots). SOLO ADITIVA. Rollback: supabase/rollbacks/20261103000100_casen_prevision_down.sql
 -- =============================================================================
 
+-- Guardrail de transacción: esta migración depende de UNA sola transacción (tablas temporales ON COMMIT DROP, advisory lock de transacción y SET LOCAL).
+-- Debe correr con `psql -1 -v ON_ERROR_STOP=1 -f …`. Sin -1 cada sentencia sería su propia transacción, la tabla de prueba se borraría al terminar su sentencia y esto falla de inmediato.
+drop table if exists pg_temp._tx_probe;
+create temp table _tx_probe (x int) on commit drop;
+do $$
+begin
+  if to_regclass('pg_temp._tx_probe') is null then
+    raise exception 'Guardrail: esta migración debe correr dentro de UNA transacción (psql -1 -v ON_ERROR_STOP=1 -f …); sin -1 las tablas temporales ON COMMIT DROP se pierden y el guardrail final no puede comparar los conteos';
+  end if;
+end $$;
+
 select pg_advisory_xact_lock(hashtext('salud_v1'));
 set local statement_timeout = '5min';
 
@@ -37,7 +48,7 @@ create temp table _casen_counts_before on commit drop as
 insert into public.pipeline_settings (key, value, description) values
   ('casen.min_cases',          60,   'Casos muestrales mínimos para publicar una estimación CASEN (nota técnica b del tabulado oficial). VALOR OFICIAL.'),
   ('casen.min_df',             30,   'Grados de libertad mínimos (conglomerados − estratos) para publicar un intervalo de confianza.'),
-  ('casen.max_diff_official',  0.001,'Diferencia máxima (puntos porcentuales) entre la estimación propia y la del tabulado oficial para poder publicar.')
+  ('casen.max_diff_official',  0.001,'Diferencia máxima (puntos porcentuales) entre la estimación propia y la del tabulado oficial, y entre el error estándar propio y el oficial, para poder publicar.')
 on conflict (key) do nothing;
 
 insert into public.data_sources
@@ -74,7 +85,8 @@ create unlogged table if not exists public.casen_prevision_stage (
   reason        text,
   official_pct  double precision,
   official_se   double precision,
-  official_n    integer
+  official_n    integer,
+  lonely_strata integer not null default 0          -- estratos con UN solo conglomerado: su varianza no se puede estimar (el ETL los descarta del cálculo); publicar se niega si hay alguno
 );
 
 create table if not exists public.casen_prevision_region (
@@ -140,9 +152,16 @@ begin
       raise exception 'cuadre con los casos muestrales totales del tabulado oficial (región %): publicado %, cargado %', v_old.region_cut, v_rep -> 'official_totals' -> v_old.region_cut ->> 'n', v_old.got;
     end if;
   end loop;
-  -- contraste con el tabulado oficial: estimación y error propios = oficiales
+  -- contraste con el tabulado oficial: estimación, ERROR ESTÁNDAR y casos propios = oficiales (misma tolerancia, en puntos porcentuales)
   if exists (select 1 from public.casen_prevision_stage where snapshot_n = v_n and (official_pct is null or abs(pct - official_pct) > v_tol or official_n is distinct from n_sample)) then
     raise exception 'la estimación propia difiere del tabulado oficial en más de % pp (o falta el contraste)', v_tol;
+  end if;
+  if exists (select 1 from public.casen_prevision_stage where snapshot_n = v_n and (official_se is null or abs(se - official_se) > v_tol)) then
+    raise exception 'el error estándar propio difiere del tabulado oficial en más de % pp (o falta el contraste)', v_tol;
+  end if;
+  -- un estrato con un solo conglomerado no aporta varianza: el error estándar quedaría subestimado en silencio. No se publica.
+  if exists (select 1 from public.casen_prevision_stage where snapshot_n = v_n and lonely_strata > 0) then
+    raise exception 'hay estratos con un solo conglomerado (% estimaciones afectadas): el error muestral estaría subestimado; no se publica', (select count(*) from public.casen_prevision_stage where snapshot_n = v_n and lonely_strata > 0);
   end if;
   -- publicable = >= mínimo de casos, df suficiente y no «no fiable»; si no, NULL
   if exists (select 1 from public.casen_prevision_stage where snapshot_n = v_n and publishable and (n_sample < v_min or df < v_mindf or ci_lo > pct or ci_hi < pct)) then

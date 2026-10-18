@@ -201,6 +201,11 @@ def files(tmp_path_factory):
     pyreadstat.write_sav(df, str(d / "casen_2024.sav"))
     make_official(d / "ok.xlsx", C.estimate(df), df)
     make_official(d / "bad.xlsx", C.estimate(df), df, tweak=0.01)
+    # estrato con UN solo conglomerado: el tabulado «oficial» es el del propio cálculo, así que el contraste pasa y solo ese motivo detiene la carga
+    lonely = df.copy()
+    lonely = lonely[~((lonely["region"] == 5) & (lonely["varstrat"] == 500000) & (lonely["varunit"] != 50000000))]
+    pyreadstat.write_sav(lonely, str(d / "lonely.sav"))
+    make_official(d / "lonely.xlsx", C.estimate(lonely), lonely)
     return d
 
 
@@ -223,3 +228,21 @@ def test_cli_json_and_exit_codes(files):
     r = run_cli(["--dry-run", "--sav", str(files / "casen_2024.sav"), "--tabulado", str(files / "bad.xlsx")])
     assert r.returncode == 5 and "NO SE CARGA" in r.stdout                                                   # la estimación no coincide con el oficial
     assert run_cli(["--dry-run", "--sav", str(files / "no_existe.sav"), "--tabulado", str(files / "ok.xlsx")]).returncode in (2, 3)
+
+
+def test_lonely_stratum_is_reported_and_blocks_the_load(files):
+    r = run_cli(["--dry-run", "--sav", str(files / "lonely.sav"), "--tabulado", str(files / "lonely.xlsx")])
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "NO SE CARGA" in r.stdout and "un solo conglomerado" in r.stdout
+    assert "✔ estimación propia vs oficial" in r.stdout                                                    # el contraste pasa: solo el estrato solitario detiene la carga
+    j = json.loads(run_cli(["--dry-run", "--json", "--sav", str(files / "lonely.sav"), "--tabulado", str(files / "lonely.xlsx")]).stdout)
+    assert j["lonely"] == 6 and not j["ready"]                                                             # 6 sistemas de la región 05 ven el estrato
+    ok = json.loads(run_cli(["--dry-run", "--json", "--sav", str(files / "casen_2024.sav"), "--tabulado", str(files / "ok.xlsx")]).stdout)
+    assert ok["lonely"] == 0 and ok["ready"]
+
+
+def test_estimate_counts_lonely_strata_per_region():
+    df = survey()
+    df = df[~((df["region"] == 5) & (df["varstrat"] == 500000) & (df["varunit"] != 50000000))]
+    ests = C.estimate(df)
+    assert {e.region_cut for e in ests if e.lonely_strata} == {"05"} and all(e.lonely_strata == 1 for e in ests if e.region_cut == "05")

@@ -31,7 +31,7 @@ const mount = (visible: string[], thematic: ThematicLayerRow[] = THEMATIC) => {
 };
 
 const comuna = (cut: string, name: string, lo: number, hi: number) => ({ cut, name, region_cut: cut.slice(0, 2), n_lo: lo, n_hi: hi, exact: lo === hi, suppressed_cells: lo === hi ? 0 : 2, snapshot_id: "s", period_end: "2025-12-31" });
-const sinAlta = { comunas_sin_alta: 20, comunas_con_dato: 18, benef_exacto: 5000, benef_pub_lo: 4900, benef_pub_hi: 5100, consistente: true, benef_total_pais: 90000, snapshot_id: "s", period_end: "2025-12-31", health_snapshot_id: "h" };
+const sinAlta = { comunas_sin_alta: 20, comunas_con_dato: 18, benef_exacto: 5000, benef_pub_lo: 4900, benef_pub_hi: 5100, consistente: true, benef_total_comunas: 90000, snapshot_id: "s", period_end: "2025-12-31", health_snapshot_id: "h" };
 const casen = { region_cut: "13", region_name: "Metropolitana", sistema: "isapre", publishable: true, reason: null, n_sample: 400, pct: 15, se: 1, ci_lo: 13, ci_hi: 17, snapshot_id: "c", period_end: "2024-12-31" };
 
 beforeEach(() => {

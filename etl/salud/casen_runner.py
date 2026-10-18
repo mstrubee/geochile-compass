@@ -122,6 +122,8 @@ def run(args) -> int:
             errors.append("la estimación propia no coincide con el tabulado oficial")
         if not totals_ok:
             errors.append("personas o población expandida por región no cuadran con el tabulado")
+        if s["lonely"] > 0:
+            errors.append(f"hay estratos con un solo conglomerado ({s['lonely']} casos): su varianza no se puede estimar y el error muestral quedaría subestimado")
         s["errors"], s["ready"] = errors, not errors
         print(json.dumps(s, ensure_ascii=False, indent=2, default=str) if args.json else render(s, args.dry_run))
         if errors:

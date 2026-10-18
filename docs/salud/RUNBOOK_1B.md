@@ -2,6 +2,7 @@
 
 Lo ejecuta **el dueño** (el agente no aplica migraciones ni despliega). **Requiere la Fase 1a ya aplicada y cargada** (`RUNBOOK_1A.md` pasos 0–4): la pregunta 1b-1 cruza con la captura de establecimientos y la migración 3 necesita la carpeta «Salud» y `thematic_layers.client_ready`.
 `$PROD` = conexión directa a Postgres del proyecto (no se guarda en el repo). Si un paso falla, **detenerse** y revertir con §6.
+**Las tres migraciones se corren SIEMPRE con `psql -1 -v ON_ERROR_STOP=1 -f …`** (una sola transacción: usan tablas temporales `ON COMMIT DROP`, advisory lock y `SET LOCAL`). Sin `-1` el *guardrail* del inicio las detiene de inmediato con «debe correr dentro de UNA transacción» y no toca nada.
 
 ## Paso 0 — Respaldo
 Igual que 1a (paso 0), más las tablas que toca 1b: `pipeline_settings`, `data_sources`, `source_snapshots`, `thematic_layers`, `layer_nodes`, `territorial_layers`.
@@ -21,12 +22,23 @@ psql "$PROD" -1 -v ON_ERROR_STOP=1 -f supabase/migrations/20261103000000_isapre_
 - `select source_key, verification_status, license_label from public.data_sources where source_key = 'superdesalud_isapre_cartera_comunal';` → `comprobado`, **licencia `null`** (por confirmar).
 - Permisos (el esquema restringido no es legible por la API): `select has_schema_privilege('anon','salud_restringido','usage'), has_schema_privilege('authenticated','salud_restringido','usage');` → `false, false`; `select has_function_privilege('anon','public.get_isapre_comuna(text,integer,text)','execute'), has_function_privilege('authenticated','public.get_isapre_comuna(text,integer,text)','execute'), has_function_privilege('authenticated','public.publish_isapre_snapshot(uuid)','execute');` → `false, true, false`.
 - Los conteos del paso 0 no cambiaron (salvo `data_sources` +1 y `pipeline_settings` +3).
+- Verificaciones de seguridad (todas deben dar lo indicado):
+  ```sql
+  select has_function_privilege('anon', 'public.get_isapre_resumen_sin_alta(text,integer)', 'execute');      -- false
+  select has_function_privilege('authenticated', 'public.get_isapre_resumen_sin_alta(text,integer)', 'execute');  -- true
+  select has_table_privilege('authenticated', 'public.isapre_cartera_celda', 'insert'),
+         has_table_privilege('authenticated', 'public.isapre_cartera_celda', 'update'),
+         has_table_privilege('authenticated', 'public.isapre_cartera_celda', 'delete');                      -- false, false, false
+  select proname, proconfig from pg_proc where pronamespace = 'public'::regnamespace and prosecdef and proname like '%isapre%';
+  -- 2 filas (publish_isapre_snapshot y get_isapre_resumen_sin_alta), cada una con proconfig = {search_path=public, salud_restringido}
+  ```
 
 ## Paso 2 — Migración 2: CASEN regional (`20261103000100_casen_prevision.sql`)
 ```bash
 psql "$PROD" -1 -v ON_ERROR_STOP=1 -f supabase/migrations/20261103000100_casen_prevision.sql
 ```
-**Verificar:** sin error; `select key, value from public.pipeline_settings where key like 'casen.%';` → `min_cases 60` (valor oficial), `min_df 30`; `data_sources` +1 (`mds_casen_2024_nacional`, licencia `null`).
+**Verificar:** sin error; `select key, value from public.pipeline_settings where key like 'casen.%';` → `min_cases 60` (valor oficial), `min_df 30`, `max_diff_official 0.001` (se aplica a la estimación **y al error estándar**); `data_sources` +1 (`mds_casen_2024_nacional`, licencia `null`).
+`select has_function_privilege('anon', 'public.get_casen_prevision_region()', 'execute'), has_function_privilege('authenticated', 'public.publish_casen_snapshot(uuid)', 'execute');` → `false, false`.
 
 ## Paso 3 — Cargas con el ETL
 ```bash
@@ -40,10 +52,18 @@ python etl/salud_casen.py --sav casen_2024.sav --tabulado Salud_Casen_2024.xlsx 
 ```
 Las URL de origen verificadas están en `data_sources.data_url`. `--declared-date` es la fecha de **publicación** (distinta del período).
 **Verificar:**
-- Isapre: el `--dry-run` imprime `unidades del archivo 363 = cargadas 363 + rechazadas 0 ✔ cuadra`, los diez cuadres con los totales del archivo ✔ y `VEREDICTO: LISTO para cargar` (si dice `NO SE CARGA`, no seguir). Con el archivo de dic-2025: **2.517.305** beneficiarios; 23.958 celdas; 12.090 ceros; suprimidas 2.783 primarias + 144 complementarias.
-- CASEN: `estimación propia vs oficial: diferencia máxima ≈ 3·10⁻⁶ pp`, `96 estimaciones · 67 publicables · 29 no publicables`, `LISTO para cargar`. Si el contraste falla (exit 5), no se carga: el método no coincide con el oficial.
+- Isapre: el `--dry-run` imprime `unidades del archivo 363 = cargadas 363 + rechazadas 0 ✔ cuadra`, los diez cuadres con los totales del archivo ✔ y `VEREDICTO: LISTO para cargar` (si dice `NO SE CARGA`, no seguir). Con el archivo de dic-2025: **2.517.305** beneficiarios; 23.958 celdas; 12.090 ceros; suprimidas 2.783 primarias + 144 complementarias; `regions_total_withheld = 4` (regiones 02, 03, 14 y 16 no publican su total regional).
+- CASEN: `estimación propia vs oficial: diferencia máxima ≈ 3·10⁻⁶ pp` (y error estándar ≈ 3·10⁻⁸ pp), `estratos con un solo conglomerado 0`, `96 estimaciones · 67 publicables · 29 no publicables`, `LISTO para cargar`. Si el contraste falla o aparece un estrato con un solo conglomerado (exit 5), no se carga.
 - `select * from public.get_isapre_resumen();` → período 2025-12, publicación 2026-01-28, extracción 2026-01-22. `select count(*) from public.get_casen_prevision_region();` → 96.
-- `select * from public.get_isapre_resumen_sin_alta('hospital', 12);` → `116128 | rango 114478–118358 | consistente = t` (con la captura de establecimientos del 2026-10-14).
+- `select * from public.get_isapre_resumen_sin_alta('hospital', 12);` → `292 | 292 | 116128 | 115632 | 117226 | t` (comunas sin alta, con dato, agregado exacto, rango publicado, consistente; con la captura de establecimientos del 2026-10-14). Con `'ampliada'`: `288 | 288 | 93058 | 92565 | 94156 | t`. Con `p_min_tramo` distinto de 12 la función **debe fallar** («solo admite 12»).
+- Regiones sin total publicado (fuga por resta regional): `select region_cut, rol, total, note from public.isapre_cartera_region where total is null;` → 8 filas (regiones 02, 03, 14, 16 × 2 roles).
+  Control de la invariante: **ninguna** región con total publicado puede tener exactamente un grupo suprimido:
+  ```sql
+  select u.region_cut, count(*) filter (where g.total_pub is null) as grupos_suprimidos
+    from public.isapre_cartera_grupo g join public.isapre_cartera_unidad u using (snapshot_n, unit)
+   where u.region_cut is not null and g.snapshot_n = (select snapshot_n from public._isapre_current_snapshot())
+   group by 1 having count(*) filter (where g.total_pub is null) = 1;     -- debe devolver las mismas 4 regiones: 02, 03, 14, 16 (las que NO publican total)
+  ```
 - `select freshness_status, license_label from public.get_layer_provenance('isapre_cartera');` y con `'casen_prevision'` → licencia `null`.
 - Repetir los mismos comandos → `already_loaded`. Los originales quedan en el bucket `source-snapshots` (`.xlsx` y `.sav`/tabulado).
 
@@ -65,8 +85,16 @@ Reglas de informes: el agregado 1b-1 y los rangos CASEN se citan **con su nivel 
 
 ## 6. Reversión
 Orden inverso, un archivo a la vez, con `psql "$PROD" -1 -v ON_ERROR_STOP=1 -f …`:
-1. `supabase/rollbacks/20261103000200_prevision_layer_nodes_down.sql`
+1. `supabase/rollbacks/20261103000200_prevision_layer_nodes_down.sql` (borra las dos hojas y **restaura el CHECK de `thematic_layers.renderer` a los 6 renderers** de 1a)
 2. `supabase/rollbacks/20261103000100_casen_prevision_down.sql`
 3. `supabase/rollbacks/20261103000000_isapre_cartera_down.sql` (borra el esquema restringido; **conserva** la fuente si ya tiene capturas y lo avisa)
 
 **Verificar:** conteos iguales a los de 1a. Los originales siguen en Storage; restaurar desde `respaldo_pre_1b.dump` si algo salió mal más allá de esto.
+
+**Antes de volver a cargar después de un rollback** (esto es obligatorio): los `down` borran las tablas pero **no** las filas de `source_snapshots`; el ETL las ve como `loaded` y responde `already_loaded` con las tablas vacías. Marcarlas como rechazadas:
+```sql
+update public.source_snapshots set status = 'rejected'
+ where status in ('loaded', 'validated', 'superseded')
+   and source_id in (select id from public.data_sources where source_key in ('superdesalud_isapre_cartera_comunal', 'mds_casen_2024_nacional'));
+```
+(Verificado con la captura real: sin esta sentencia el ETL contesta `already_loaded`; con ella carga de nuevo y deja las mismas cifras.) Después, repetir los pasos 1, 2 y 3.

@@ -25,6 +25,7 @@ URL de origen de cada archivo: guardada en `source_snapshots.origin_url` y en la
 | Celdas staged (incluidos ceros) | 47.916 filas (363 unidades × 22 tramos × 3 sexos × 2 roles) |
 | Publicadas | 23.958 celdas (unidad × sexo × tramo) y 1.089 grupos |
 | Réplica Python de la supresión vs. base | **idénticas celda por celda** (prueba pytest con base) |
+| Totales regionales publicados | 12 de 16 (4 regiones con un único grupo suprimido no publican su total; ver §2.2) |
 
 **CASEN** (`etl/salud_casen.py`):
 
@@ -34,7 +35,7 @@ URL de origen de cada archivo: guardada en `source_snapshots.origin_url` y en la
 | Estimaciones | 96 (16 regiones × 6 sistemas) |
 | **Contraste con el tabulado oficial** (hoja 3) | estimación puntual: diferencia máxima **2,98·10⁻⁶ pp**; error estándar: **3,4·10⁻⁸ pp**; casos muestrales: **0** de diferencia |
 | Publicables | **67 de 96**; 29 no publicables (< 60 casos muestrales y/o «no fiable» según las notas oficiales), todas «Otro sistema» y «No sabe» |
-| Diseño | df mínimo 173; estratos con un solo conglomerado: 0 |
+| Diseño | df mínimo 173; estratos con un solo conglomerado: 0 (la carga **se niega** si apareciera alguno: antes se descartaba en silencio del cálculo de la varianza); la base contrasta además el **error estándar** con el del tabulado oficial |
 
 Ejemplos (Isapre, IC 95 %): región 01 **8,0 %** (entre 6,9 y 9,2 %) · región 13 **20,6 %** (entre 19,8 y 21,5 %) · región 15 **5,8 %** (entre 4,9 y 6,8 %). Fonasa región 13: entre 75,0 y 76,7 %.
 
@@ -49,30 +50,50 @@ Ejemplos (Isapre, IC 95 %): región 01 **8,0 %** (entre 6,9 y 9,2 %) · región 
 | Grupos (unidad × sexo) con total «<5» | 71 de 1.089 |
 | Grupos cuyo cuadre por cotas falla | **0** |
 
-### 2.1 Qué ve el usuario (medido con las RPC sobre la captura real)
+### 2.1 Qué ve el usuario (medido con las RPC sobre la captura real, con las migraciones corregidas tras la revisión del PR)
 
-| Consulta | Comunas | Con rango (no exactas) | Σ rango publicado |
+El valor por comuna es **exacto cuando lo publicado lo determina** y un **rango** si no (DISENO §3.3 punto 6): con todas las edades y el total del grupo publicado el valor es exactamente ese total; con un filtro de edad, las celdas suprimidas dentro del filtro se acotan por el **residuo publicado** del grupo. Nada de esto usa conteos completos.
+
+| Consulta | Comunas | Con rango (no exactas) | Σ del rango publicado | Real (conteos completos) |
+|---|---|---|---|---|
+| `get_isapre_comuna(null, 0, null)` — todas las edades, ambos sexos | 346 | **59** (antes **342**) | 2.517.246 a 2.517.421 | 2.517.270 (comunas) |
+| ídem, solo mujeres / solo hombres / sexo sin información | 346 | 7 / 6 / 49 | F 1.191.787–1.191.802 · M 1.325.308–1.325.321 · SI 151–298 | |
+| `get_isapre_comuna(null, 12, null)` — 60+, todas las comunas | 346 | 141 | 394.768 a 396.372 | |
+| `get_isapre_comuna(null, 12, 'hospital')` — 60+ en comunas sin hospital de alta complejidad | 292 | **137** (antes **283**) | **115.632 a 117.226** (antes 114.478–118.358) | 116.128 |
+| `get_isapre_comuna(null, 12, 'ampliada')` | 288 | 136 | **92.565 a 94.156** (antes 91.440–95.276) | 93.058 |
+
+**Corrección del rango verificada en las 2.768 combinaciones** (346 comunas × 4 sexos × 2 cortes de edad): el valor real, calculado con los conteos completos, cae **siempre** dentro del rango publicado (0 fuera). Una prueba SQL aleatoria hace la misma comprobación sobre 640 combinaciones en cada corrida. Las comunas que quedan en rango son las que tienen un grupo (casi siempre «sexo sin información») con total «<5».
+
+**Declaración honesta:** la cartera completa por comuna, edad y sexo ya es **pública** en el XLSX de la Superintendencia. La supresión es una **política de presentación** de esta plataforma (regla 5), no una protección real de las personas; la fuente **no declara** una norma de supresión. Por eso no se publica el total comunal calculado con los conteos completos: restarle los grupos publicados despejaría un grupo «sexo sin información» de 1 a 4.
+
+### 2.2 Fuga por resta regional (encontrada en la revisión del PR)
+
+Σ de los totales regionales − Σ de los totales de grupo publicados de la región = Σ de los totales de grupo **suprimidos** de esa región; si la región tiene **un solo** grupo suprimido, eso despeja su total. Con la captura real ocurría en **4 de 16 regiones**:
+
+| Región | Residuo regional (total − Σ grupos publicados) | Grupos suprimidos | Qué revelaba |
 |---|---|---|---|
-| `get_isapre_comuna(null, 0, null)` — todas las edades | 346 | **342** | 2.513.324 a 2.521.850 (real: 2.517.270 en comunas) |
-| `get_isapre_comuna(null, 12, 'hospital')` — 60+ en comunas sin hospital de alta complejidad | 292 | **283** | 114.478 a 118.358 |
+| 02 | 4 | 1 | ese grupo suma exactamente 4 |
+| 03 | 1 | 1 | exactamente 1 |
+| 14 | 3 | 1 | exactamente 3 |
+| 16 | 1 | 1 | exactamente 1 |
 
-Casi todas las comunas se ven como rango porque basta **una** celda suprimida (hay 66 celdas por comuna: 22 tramos × 3 sexos) para que el total deje de ser exacto; por eso el panel muestra siempre el rango, dice cuántas comunas lo son y lo explica. Para el agregado de la pregunta 1b-1 **no** se usa el rango (ver §3).
-
-**Declaración honesta:** la cartera completa por comuna, edad y sexo ya es **pública** en el XLSX de la Superintendencia. La supresión es una **política de presentación** de esta plataforma (regla 5), no una protección real de las personas; la fuente **no declara** una norma de supresión.
+Corrección (misma regla que en las celdas): en esas regiones el **total regional no se publica** (`total` NULL con su nota; la base lo cuadró contra el archivo **antes** de retenerlo, y la publicación re-valida la invariante). La captura real publica ahora 12 de 16 regiones; `regions_total_withheld = 4`. **Queda una limitación, igual que en las celdas:** con 2 o más grupos suprimidos el residuo regional da cotas; si fuera igual a `k` (todos 1) o a `4k` (todos 4) las cotas se vuelven exactas. Con la captura real ocurre en la región 06 (residuo 3 con 3 grupos suprimidos: los tres suman 1 cada uno). No lo cerré porque es la misma regla de cuadre por cotas ya aceptada para las celdas (DISENO §3.3 punto 5); decidir si se endurece para las regiones está en §7.
 
 ## 3. Pregunta 1b-1 y su verificación independiente
 
-*¿Cuántos beneficiarios Isapre de 60 años o más hay en comunas sin hospital de alta complejidad en la comuna?* (D1: dos definiciones; «sin alta» = ningún establecimiento **vigente** que cumpla la definición, según la captura de 1a.)
+*¿Cuántos beneficiarios Isapre de 60 años o más hay en comunas sin hospital de alta complejidad en la comuna?* (D1: dos definiciones; «sin alta» = ningún establecimiento **vigente** que cumpla la definición, según la captura de 1a. **«60+» = tramos 60-64 a ≥100: excluye la edad sin información e incluye el sexo sin información.**)
 
 | Definición (D1) | Comunas sin alta | Beneficiarios 60+ (conteos completos) | Rango que sale de lo publicado | ¿Cae dentro? |
 |---|---|---|---|---|
-| Solo hospitales | 292 de 346 | **116.128** | 114.478 a 118.358 | sí |
-| Ampliada (+ clínicas y centros de especialidades) | 288 de 346 | **93.058** | 91.440 a 95.276 | sí |
+| Solo hospitales | 292 de 346 | **116.128** | 115.632 a 117.226 | sí |
+| Ampliada (+ clínicas y centros de especialidades) | 288 de 346 | **93.058** | 92.565 a 94.156 | sí |
 
-Total del país con 60+ (todas las unidades): 395.273; en comunas sin hospital de alta complejidad: 29,4 %.
-El agregado se calcula **dentro de la base con los conteos completos** (regla 5: las métricas derivadas usan datos completos) con una función `SECURITY DEFINER` que **solo devuelve el agregado** y **se niega** si el conjunto tiene menos de 10 comunas (`salud.min_aggregate_comunas`). Se entrega junto al rango publicado como control de consistencia.
+`benef_total_comunas` = 60+ en las unidades de tipo **comuna** con fila: **395.273** (sin las unidades «sin dato de comuna» ni «sin dato de región»; **no es el total del país**; en la versión anterior de esta función la columna se llamaba `benef_total_pais`, con un nombre que decía más de lo que sumaba). En comunas sin hospital de alta complejidad: 29,4 % de ese total.
+El agregado se calcula **dentro de la base con los conteos completos** con una función `SECURITY DEFINER` que **solo devuelve el agregado**, **solo admite el corte 60+** (`p_min_tramo = 12`) y se **niega** si el conjunto tiene menos de 10 comunas (`salud.min_aggregate_comunas`).
 
-**Verificación independiente** (`docs/salud/planb/verificar_1b1_independiente.py`; no usa el ETL ni el lector del repo): el conjunto de comunas se recalcula desde el CSV de establecimientos (54 comunas con hospital de alta complejidad → 292 sin) y es **igual** al de la base; la suma de los tramos 60-64 a ≥100 de las seis hojas del XLSX original para esas comunas da **116.128**, igual que la base. (Las comunas sin fila en el archivo Isapre: ninguna; el único nombre sin cruzar es la fila «-» que no es comuna.)
+**Límite que no se resuelve y queda declarado.** El mínimo de comunas **no resiste la diferencia entre consultas**: el conjunto ampliado (288) está dentro del de hospitales (292), así que 116.128 − 93.058 = **23.070** es el agregado exacto de las 4 comunas que los separan (Hualpén, Vitacura, Puerto Varas y Huechuraba). Restringir `p_min_tramo` a un solo corte cierra el aislamiento de **tramos** individuales, no el de **conjuntos**. Es una barrera de presentación: los mismos conteos están en el XLSX público. Una prueba SQL deja el comportamiento fijado.
+
+**Verificación independiente** (`docs/salud/planb/verificar_1b1_independiente.py`; no usa el ETL ni el lector del repo): el conjunto de comunas se recalcula desde el CSV de establecimientos (54 comunas con hospital de alta complejidad → 292 sin) y es **igual** al de la base; la suma de los tramos 60-64 a ≥100 de las seis hojas del XLSX original para esas comunas da **116.128**, igual que la base. (El único nombre sin cruzar es la fila «-» que no es comuna.)
 
 **«Sin alta complejidad en la comuna» no es «sin acceso»**: la población puede atenderse en comunas vecinas. El texto del panel lo dice.
 
@@ -109,14 +130,16 @@ El agregado se calcula **dentro de la base con los conteos completos** (regla 5:
 * **Fecha exacta de publicación** de la cartera: se tomó de la cabecera `Last-Modified` (2026-01-28), que es una señal del servidor, no una declaración del archivo. La de CASEN (2026-06-10) la indicó el operador.
 * **Fechas de terreno de CASEN 2024**.
 * **Información provisional**: el archivo la declara «sujeta a modificación»; no se sabe cuándo se consolida.
+* **Garantías de privacidad:** son las de una política de presentación (la cartera es pública). Se probó que el rango publicado contiene siempre el valor real y que ninguna resta regional despeja un grupo; **no** se probó (ni se afirma) resistencia a un atacante que combine consultas (§3).
 * **Cómo se registra el error muestral** de CASEN más allá de lo que reproduce el tabulado (un nivel de conglomerados); el contraste con el tabulado oficial coincide, pero no equivale a una validación del diseño completo.
 * La interfaz solo se probó en jsdom (Vitest con capas Leaflet simuladas); **no se vio en un navegador real** ni contra Supabase real. Las migraciones **no están aplicadas** en producción.
 * No se subió el original a Storage en la carga local (`--no-storage`).
 
-## 7. Decisiones que necesito del dueño
+## 7. Decisiones del dueño y pendientes
 
-1. **Licencias:** confirmar (o pedir) la de la cartera Isapre y la de la base CASEN antes de pasar las capas a `client_ready = true`.
-2. **Censo 2024 comunal (1b-2):** entregar la población por comuna (y edad si se quiere 60+) para habilitar la pregunta.
-3. **Fonasa (1b-5):** entregar los archivos; mientras tanto no hay ninguna capa ni cifra que dependa de ellos.
-4. **Presentación del rango:** casi todas las comunas aparecen como «entre a y b». ¿Se mantiene (conservador) o se prefiere publicar el total por comuna calculado con conteos completos y suprimir solo el detalle por edad/sexo? Es un cambio de política (regla 5), no técnico.
-5. **Orden de aplicación** (`RUNBOOK_1B.md`): migraciones 1 y 2 → cargas → front → migración 3 (hojas del árbol), igual que en 1a.
+Resueltas en la revisión del PR: **(1)** las licencias de Isapre y CASEN las confirma el dueño (la ficha sigue en «por confirmar»; no bloquea el merge porque las capas quedan en `client_ready = false`); **(2)** Censo 2024 y Fonasa siguen pendientes (1b-2 y 1b-5 en espera); **(3)** la regla 5 **no se cambia**: no se publica el total comunal con conteos completos (la opción de la versión anterior de este informe se descartó porque permitiría despejar por resta un grupo «sexo sin información» de 1 a 4); el rango se resuelve con la precisión de §2.1.
+
+Quedan abiertas:
+1. **Región 06** (residuo regional = k): ¿endurecer la regla para que no se publique el total regional cuando el residuo es `k` o `4k`? Hoy es la misma cota que aceptan las celdas.
+2. **Diferencia entre consultas de 1b-1** (§3): ¿se acepta como límite declarado o se retira la segunda definición del agregado? No tiene arreglo técnico mientras haya dos conjuntos anidados.
+3. **Orden de aplicación** (`RUNBOOK_1B.md`): migraciones 1 y 2 → cargas → front → migración 3 (igual que 1a). Requiere 1a aplicada y cargada.

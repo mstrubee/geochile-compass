@@ -367,3 +367,19 @@ def test_load_is_all_or_nothing_when_the_base_revalidates(conn, tmp_path):
     assert r.returncode == 4 and "período más nuevo" in r.stderr
     assert conn.execute("select status from public.source_snapshots where period_end = %s", (date(2024, 12, 31),)).fetchall() == [("rejected",)]
     assert conn.execute("select count(*) from salud_restringido.isapre_stage").fetchone()[0] == 0
+
+
+MIGRATIONS_1B = ["20261103000000_isapre_cartera.sql", "20261103000100_casen_prevision.sql", "20261103000200_prevision_layer_nodes.sql"]
+
+
+@pytest.mark.parametrize("name", MIGRATIONS_1B)
+def test_migration_without_one_transaction_fails_immediately_and_changes_nothing(conn, name):
+    """Las migraciones de 1b dependen de `psql -1` (tablas ON COMMIT DROP, advisory lock y SET LOCAL de transacción): sin -1 el guardrail del inicio las detiene antes de tocar nada."""
+    import shutil
+    psql = shutil.which("psql")
+    if not psql:
+        pytest.skip("no hay psql en el PATH")
+    before = conn.execute("select count(*) from public._migration_log").fetchone()[0]
+    r = subprocess.run([psql, URL, "-v", "ON_ERROR_STOP=1", "-f", str(ETL.parents[0] / "supabase" / "migrations" / name)], capture_output=True, text=True, timeout=120)
+    assert r.returncode != 0 and "Guardrail" in r.stderr and "UNA transacción" in r.stderr, r.stdout + r.stderr
+    assert conn.execute("select count(*) from public._migration_log").fetchone()[0] == before

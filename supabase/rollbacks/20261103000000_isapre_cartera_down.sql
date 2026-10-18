@@ -7,6 +7,7 @@ drop function if exists public.get_isapre_resumen();
 drop function if exists public.get_isapre_region();
 drop function if exists public.get_isapre_celdas(text);
 drop function if exists public.get_isapre_comuna(text, integer, text);
+drop function if exists public._isapre_comuna_rango(integer, text, integer);
 drop function if exists public._health_comunas_sin_alta(text);
 drop function if exists public._isapre_current_snapshot();
 drop function if exists public.publish_isapre_snapshot(uuid);

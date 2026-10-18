@@ -36,7 +36,7 @@ const resumen: IsapreResumenRow = {
   cells: 1000, zeros_published: 400, suppressed_primary: 120, suppressed_complementary: 30, groups: 100, groups_total_suppressed: 7,
 };
 const sinAlta: IsapreSinAltaRow = {
-  comunas_sin_alta: 20, comunas_con_dato: 18, benef_exacto: 5000, benef_pub_lo: 4900, benef_pub_hi: 5100, consistente: true, benef_total_pais: 90000,
+  comunas_sin_alta: 20, comunas_con_dato: 18, benef_exacto: 5000, benef_pub_lo: 4900, benef_pub_hi: 5100, consistente: true, benef_total_comunas: 90000,
   snapshot_id: "s1", period_end: "2025-12-31", health_snapshot_id: "h1",
 };
 
@@ -174,6 +174,16 @@ describe("panel Isapre", () => {
     expect(screen.queryByTestId("isapre-sin-alta-value")).toBeNull();
   });
 
+  it("1b-1 dice qué significa «60+»: sin la edad sin información, con el sexo sin información, y que el total NO es el del país", () => {
+    render(<IsapreChoroplethPanel {...isapreProps()} />);
+    expect(screen.getByTestId("isapre-age60-note").textContent).toMatch(/EXCLUYE a quienes no informan edad.*INCLUYE a quienes no informan sexo/);
+    const t = screen.getByTestId("isapre-sin-alta").textContent ?? "";
+    expect(t).toContain("90.000");
+    expect(t).toContain("no es el total del país");
+    expect(t).not.toContain("Total del país");
+    expect(screen.getByLabelText("Edad").textContent).toContain("sin la edad sin información");
+  });
+
   it("los filtros devuelven edad, sexo y «solo comunas sin alta complejidad» (D1)", () => {
     const onFilters = vi.fn();
     render(<IsapreChoroplethPanel {...isapreProps({ onFilters })} />);
@@ -188,7 +198,7 @@ describe("panel Isapre", () => {
   it("las advertencias de uso siempre están (alcance, provisional, comuna no declarada, período, supresión, 0 ≠ sin dato, acceso)", () => {
     render(<IsapreChoroplethPanel {...isapreProps()} />);
     const w = screen.getByTestId("projects-warnings").textContent ?? "";
-    for (const k of ["NO incluye Fonasa", "PROVISIONAL", "no declara qué comuna", "no es la fecha de publicación", "1 a 4", "Sin dato", "NO significa sin acceso"]) expect(w).toContain(k);
+    for (const k of ["NO incluye Fonasa", "PROVISIONAL", "no declara qué comuna", "no es la fecha de publicación", "1 a 4", "Sin dato", "NO significa sin acceso", "EXCLUYE a quienes no informan edad", "INCLUYE a quienes no informan sexo"]) expect(w).toContain(k);
     expect(screen.getByTestId("license-line").textContent).toContain("por confirmar");
   });
 

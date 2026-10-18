@@ -10,6 +10,17 @@
 -- Rollback: supabase/rollbacks/20261103000200_prevision_layer_nodes_down.sql
 -- =============================================================================
 
+-- Guardrail de transacción: esta migración depende de UNA sola transacción (tablas temporales ON COMMIT DROP, advisory lock de transacción y SET LOCAL).
+-- Debe correr con `psql -1 -v ON_ERROR_STOP=1 -f …`. Sin -1 cada sentencia sería su propia transacción, la tabla de prueba se borraría al terminar su sentencia y esto falla de inmediato.
+drop table if exists pg_temp._tx_probe;
+create temp table _tx_probe (x int) on commit drop;
+do $$
+begin
+  if to_regclass('pg_temp._tx_probe') is null then
+    raise exception 'Guardrail: esta migración debe correr dentro de UNA transacción (psql -1 -v ON_ERROR_STOP=1 -f …); sin -1 las tablas temporales ON COMMIT DROP se pierden y el guardrail final no puede comparar los conteos';
+  end if;
+end $$;
+
 select pg_advisory_xact_lock(hashtext('layer_nodes_v1'));
 set local statement_timeout = '5min';
 

@@ -59,7 +59,8 @@ export interface IsapreSinAltaRow {
   benef_pub_lo: number;
   benef_pub_hi: number;
   consistente: boolean;
-  benef_total_pais: number;
+  /** 60+ en las unidades de tipo COMUNA con fila (sin «sin dato de comuna» ni «sin dato de región»): NO es el total del país */
+  benef_total_comunas: number;
   snapshot_id: string;
   period_end: string;
   health_snapshot_id: string;

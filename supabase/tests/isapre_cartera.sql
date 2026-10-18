@@ -183,10 +183,22 @@ select pg_temp.assert_that('la zona de paso quedó vacía y el snapshot loaded',
   (select count(*) from salud_restringido.isapre_stage) = 0 and (select status from public.source_snapshots where storage_path = 'test/i1') = 'loaded');
 
 -- =============================== 2. Lectura: RPC ===============================
-select pg_temp.assert_that('get_isapre_comuna: valor EXACTO donde no hay celdas suprimidas en la selección y RANGO donde sí',
-  (select exact and n_lo = n_hi from public.get_isapre_comuna() where cut = '13102') is false
-  and (select n_lo from public.get_isapre_comuna() where cut = '13104') = 1 and (select n_hi from public.get_isapre_comuna() where cut = '13104') = 4
-  and (select not exact from public.get_isapre_comuna() where cut = '13104'));
+select pg_temp.assert_that('B2 todas las edades: EXACTO (= Σ de los totales de grupo publicados) cuando todos los grupos publican su total, aunque haya celdas suprimidas; RANGO si un total es «<5»',
+  (select exact and n_lo = 33 and n_hi = 33 and suppressed_cells = 2 from public.get_isapre_comuna() where cut = '13102')                -- F 33 (2 celdas suprimidas) + M 0 + SI 0
+  and (select n_lo = 1 and n_hi = 4 and not exact from public.get_isapre_comuna() where cut = '13104')                                   -- total del grupo «<5»: entre 1 y 4
+  and (select n_lo = 3 and n_hi = 4 and not exact from public.get_isapre_comuna() where cut = '13105'));                                 -- tres primarias: total entre 3 y 4
+select pg_temp.assert_that('B2 13103 (F total 22 con 2 suprimidas) y 13101 (total 1923, F + M + SI publicados) son EXACTOS en todas las edades',
+  (select exact and n_lo = 22 from public.get_isapre_comuna() where cut = '13103')
+  and (select exact and n_lo = 1923 + 541 + 9 and n_hi = 1923 + 541 + 9 from public.get_isapre_comuna() where cut = '13101'),
+  (select n_lo || '..' || n_hi from public.get_isapre_comuna() where cut = '13101'));
+select pg_temp.assert_that('B2 60+: el residuo del grupo acota. 13106 F (suprimidas 12 y 13 DENTRO de 60+, residuo 7) = 21 EXACTO; 13104, 13105 y 13103 (suprimidas fuera de 60+) = 0 exacto',
+  (select exact and n_lo = 21 and n_hi = 21 from public.get_isapre_comuna(null, 12) where cut = '13106')
+  and (select exact and n_lo = 0 and n_hi = 0 from public.get_isapre_comuna(null, 12) where cut = '13104')
+  and (select exact and n_lo = 0 and n_hi = 0 from public.get_isapre_comuna(null, 12) where cut = '13105')
+  and (select exact and n_lo = 0 and n_hi = 0 from public.get_isapre_comuna(null, 12) where cut = '13103'));
+select pg_temp.assert_that('B2 60+ con suprimidas dentro y fuera del filtro: 13101 F (tramo 21 primaria =3 FUERA, tramo 20 complementaria =10 DENTRO, residuo 13) = [449, 452] y el real (450) cae dentro; más estrecho que solo con cotas de celda ([445, 452])',
+  (select n_lo = 449 and n_hi = 452 and not exact from public.get_isapre_comuna('F', 12) where cut = '13101')
+  and (select 450 between n_lo and n_hi from public.get_isapre_comuna('F', 12) where cut = '13101'));
 select pg_temp.assert_that('el valor real SIEMPRE cae dentro del rango publicado (13101 todas las edades: real = Σ de la zona de paso)',
   (select (select sum(c.n) from salud_restringido.isapre_cartera c join public.source_snapshots s on s.n = c.snapshot_n where s.storage_path = 'test/i1' and c.unit = '13101')
           between n_lo and n_hi from public.get_isapre_comuna() where cut = '13101'));
@@ -227,25 +239,56 @@ select pg_temp.assert_that('con el mínimo por defecto (10 comunas) el conjunto 
   pg_temp.raises_like($$select * from public.get_isapre_resumen_sin_alta('hospital', 12)$$, '%no se entrega un agregado tan acotado%'));
 update public.pipeline_settings set value = 2 where key = 'salud.min_aggregate_comunas';
 create temp table _r1 as select * from public.get_isapre_resumen_sin_alta('hospital', 12);
-select pg_temp.assert_that('1b-1: 60+ en las comunas sin alta (13104, 13105, 13106) = 21 EXACTO (de los conteos completos), dentro del rango publicado [20,22]',
-  (select benef_exacto = 21 and benef_pub_lo = 20 and benef_pub_hi = 22 and consistente and comunas_con_dato = 3 and comunas_sin_alta = 343 from _r1),
+select pg_temp.assert_that('1b-1: 60+ en las comunas sin alta (13104, 13105, 13106) = 21 EXACTO (de los conteos completos); lo publicado lo determina igual ([21,21], mismo cálculo que get_isapre_comuna) y es consistente',
+  (select benef_exacto = 21 and benef_pub_lo = 21 and benef_pub_hi = 21 and consistente and comunas_con_dato = 3 and comunas_sin_alta = 343 from _r1),
   (select benef_exacto || ' [' || benef_pub_lo || ',' || benef_pub_hi || '] ' || comunas_con_dato from _r1));
-select pg_temp.assert_that('benef_total_pais 60+ (todas las comunas con dato) = 561 + 21 = 582, y apunta a las dos capturas vigentes',
-  (select benef_total_pais = 582 and snapshot_id is not null and health_snapshot_id is not null and period_end = date '2025-12-31' from _r1));
-select pg_temp.assert_that('con p_min_tramo = 0 (todas las edades, incluida la edad S/I) el agregado también cae dentro de su rango publicado',
-  (select consistente and benef_exacto = (select sum(c.n) from salud_restringido.isapre_cartera c join public.source_snapshots s on s.n = c.snapshot_n
-       where s.storage_path = 'test/i1' and c.unit in ('13104', '13105', '13106')) from public.get_isapre_resumen_sin_alta('hospital', 0)));
+select pg_temp.assert_that('benef_total_comunas = 60+ en las unidades de tipo COMUNA con fila (561 + 21 = 582; SIN «sin dato de comuna» ni «sin dato de región»), y apunta a las dos capturas vigentes',
+  (select benef_total_comunas = 582 and snapshot_id is not null and health_snapshot_id is not null and period_end = date '2025-12-31' from _r1)
+  and not exists (select 1 from pg_proc p, unnest(p.proargnames) a where p.proname = 'get_isapre_resumen_sin_alta' and a = 'benef_total_pais'));
+select pg_temp.assert_that('B1 p_min_tramo SOLO admite 12: cualquier otro corte (0, 11, 13, 20, null) se rechaza, para que restar consultas no aísle un tramo',
+  pg_temp.raises_like($$select * from public.get_isapre_resumen_sin_alta('hospital', 0)$$, '%solo admite 12%')
+  and pg_temp.raises_like($$select * from public.get_isapre_resumen_sin_alta('hospital', 11)$$, '%solo admite 12%')
+  and pg_temp.raises_like($$select * from public.get_isapre_resumen_sin_alta('hospital', 13)$$, '%solo admite 12%')
+  and pg_temp.raises_like($$select * from public.get_isapre_resumen_sin_alta('hospital', 20)$$, '%solo admite 12%')
+  and pg_temp.raises_like($$select * from public.get_isapre_resumen_sin_alta('hospital', null)$$, '%solo admite 12%')
+  and (select benef_exacto = 21 from public.get_isapre_resumen_sin_alta('hospital', 12)));
+-- LÍMITE documentado (DISENO §3.3.6): una clínica que cuenta solo en la definición ampliada en 13106 saca a 13106 de ese conjunto; la resta aísla EXACTO el agregado de 13106 (21),
+-- aunque sean menos de salud.min_aggregate_comunas comunas. El mínimo de comunas es una barrera de presentación, no resiste diferencias entre consultas.
+insert into public.health_establishments (snapshot_n, code, name, region_cut, comuna_cut, tipo_glosa, tipo_norm, dependencia_norm, complejidad, tipo_atencion, clase_servicio,
+                                          clase_fuente, alta_hospital, alta_ampliada, estado, geo_status)
+  select snapshot_n, '999999', 'FIXTURE clínica', '13', '13106', 'Clínica', 'hospital', 'privado', 'alta', 'hospitalaria', 'hospitalario', 'oficial', false, true, 'vigente', 4
+    from public._health_current_snapshot();
+select pg_temp.assert_that('B1 límite: hospitales − ampliada = 21 = el agregado EXACTO de 13106 (una sola comuna, < 10): la diferencia entre consultas lo aísla',
+  (select (select benef_exacto from public.get_isapre_resumen_sin_alta('hospital', 12)) - (select benef_exacto from public.get_isapre_resumen_sin_alta('ampliada', 12))) = 21);
+delete from public.health_establishments where code = '999999';
 select pg_temp.assert_that('get_isapre_comuna con «solo comunas sin alta»: solo 13104, 13105 y 13106 de las comunas con dato',
   (select array_agg(cut order by cut) from public.get_isapre_comuna(null, 0, 'hospital') where cut::text like '1310%') = array['13104', '13105', '13106']::char(5)[]);
 update public.pipeline_settings set value = 10 where key = 'salud.min_aggregate_comunas';
+-- Sin captura publicada del registro de establecimientos la función NO contesta «las 346 comunas no tienen alta complejidad»: se niega.
+update public.source_snapshots set status = 'superseded' where storage_path = 'test/h';
+select pg_temp.assert_that('sin captura de la 1a, _health_comunas_sin_alta y get_isapre_comuna(…, p_sin_alta) lanzan error en vez de devolver las 346 comunas',
+  pg_temp.raises_like($$select count(*) from public._health_comunas_sin_alta('hospital')$$, '%no hay una captura publicada del registro%')
+  and pg_temp.raises_like($$select * from public.get_isapre_comuna(null, 0, 'ampliada')$$, '%no hay una captura publicada del registro%')
+  and pg_temp.raises_like($$select * from public.get_isapre_resumen_sin_alta('hospital', 12)$$, '%no hay una captura publicada del registro%')
+  and (select count(*) from public.get_isapre_comuna()) > 0);                                                                                                           -- sin filtro de alta sigue funcionando
+update public.source_snapshots set status = 'loaded' where storage_path = 'test/h';
 
 -- ========== Permisos ==========
 select pg_temp.as_role('anon');
 select pg_temp.assert_that('anon no ejecuta ninguna RPC de Isapre ni lee las tablas publicadas',
   pg_temp.try_sql('select * from public.get_isapre_comuna()') like '42501%' and pg_temp.try_sql('select * from public.get_isapre_resumen()') like '42501%'
   and pg_temp.try_sql($$select * from public.get_isapre_resumen_sin_alta('hospital')$$) like '42501%'
-  and pg_temp.try_sql('select count(*) from public.isapre_cartera_celda') like '42501%');
+  and pg_temp.try_sql('select count(*) from public.isapre_cartera_celda') like '42501%'
+  and pg_temp.try_sql($$select * from public._isapre_comuna_rango(1, null, 0)$$) like '42501%');
 select pg_temp.reset_role();
+select pg_temp.assert_that('verificaciones del runbook: anon sin EXECUTE en get_isapre_resumen_sin_alta; authenticated sin INSERT/UPDATE/DELETE en las tablas publicadas; las funciones SECURITY DEFINER fijan search_path',
+  not has_function_privilege('anon', 'public.get_isapre_resumen_sin_alta(text, integer)', 'execute')
+  and has_function_privilege('authenticated', 'public.get_isapre_resumen_sin_alta(text, integer)', 'execute')
+  and not has_table_privilege('authenticated', 'public.isapre_cartera_celda', 'insert') and not has_table_privilege('authenticated', 'public.isapre_cartera_celda', 'update')
+  and not has_table_privilege('authenticated', 'public.isapre_cartera_celda', 'delete') and not has_table_privilege('authenticated', 'public.isapre_cartera_region', 'insert')
+  and (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef and p.proname like '%isapre%') = 2
+  and (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef and p.proname like '%isapre%'
+         and exists (select 1 from unnest(p.proconfig) c where c like 'search_path=%')) = 2);
 select pg_temp.as_role('authenticated');
 select pg_temp.assert_that('authenticated lee las RPC (incluida 1b-1, SECURITY DEFINER) pero NO publica, NO escribe y NO ve el esquema restringido',
   pg_temp.try_sql('select count(*) from public.get_isapre_comuna()') = 'OK'
@@ -355,3 +398,61 @@ select pg_temp.assert_that('ALEATORIO: la complementaria es la menor celda publi
       and exists (select 1 from _rc c2 join _rf f2 using (unit, sexo, tramo) where c2.unit = c.unit and c2.sexo = c.sexo and not c2.suppressed and f2.n >= 5 and (f2.n < f.n or (f2.n = f.n and c2.tramo < c.tramo)))) = 0);
 select pg_temp.assert_that('ALEATORIO: los totales de grupo de 1 a 4 NO se publican, y los de 0 o ≥ 5 sí',
   (select count(*) from _rg g join (select unit, sexo, sum(n) t from _rf group by 1, 2) f using (unit, sexo) where (f.t between 1 and 4) <> (g.total_pub is null)) = 0);
+
+-- ========== B2: PROPIEDAD del rango publicado (las 80 unidades aleatorias; 'ir' es la captura vigente) ==========
+-- Verdad = conteos completos de la zona restringida (_rf); el valor publicado debe CONTENERLA, para todo sexo y toda edad mínima, y nunca ser más ancho que sumar las cotas de cada celda.
+create temp table _v as
+  select s.sexo, m.min_tramo, c.cut::text as cut, c.n_lo, c.n_hi, c.exact, c.suppressed_cells
+    from (values (null::text), ('F'), ('M'), ('SI')) s(sexo) cross join (values (0), (12)) m(min_tramo)
+    cross join lateral public.get_isapre_comuna(s.sexo, m.min_tramo) c;
+create temp table _vt as
+  select v.sexo, v.min_tramo, v.cut,
+         coalesce((select sum(f.n) from _rf f where f.unit = v.cut and (v.sexo is null or f.sexo = v.sexo) and (v.min_tramo = 0 or f.tramo between 12 and 20)), 0)::bigint as real_n,
+         coalesce((select sum(coalesce(c.n_pub, c.lo)) from _rc c where c.unit = v.cut and (v.sexo is null or c.sexo = v.sexo) and (v.min_tramo = 0 or c.tramo between 12 and 20)), 0)::bigint as naive_lo,
+         coalesce((select sum(coalesce(c.n_pub, c.hi)) from _rc c where c.unit = v.cut and (v.sexo is null or c.sexo = v.sexo) and (v.min_tramo = 0 or c.tramo between 12 and 20)), 0)::bigint as naive_hi
+    from _v v;
+select pg_temp.assert_that('B2 ALEATORIO: 4 sexos × 2 cortes de edad × 80 comunas = 640 valores',
+  (select count(*) from _v) = 640);
+select pg_temp.assert_that('B2 ALEATORIO: el valor REAL cae dentro del rango publicado en las 640 combinaciones (el rango es correcto, no solo más estrecho)',
+  (select count(*) from _v join _vt using (sexo, min_tramo, cut) where _vt.real_n < _v.n_lo or _vt.real_n > _v.n_hi) = 0,
+  (select count(*) || ' fuera' from _v join _vt using (sexo, min_tramo, cut) where _vt.real_n < _v.n_lo or _vt.real_n > _v.n_hi));
+select pg_temp.assert_that('B2 ALEATORIO: nunca más ancho que sumar las cotas de cada celda, y en varias combinaciones estrictamente más estrecho',
+  (select count(*) from _v join _vt using (sexo, min_tramo, cut) where _v.n_lo < _vt.naive_lo or _v.n_hi > _vt.naive_hi) = 0
+  and (select count(*) from _v join _vt using (sexo, min_tramo, cut) where _v.n_lo > _vt.naive_lo or _v.n_hi < _vt.naive_hi) > 20);
+select pg_temp.assert_that('B2 ALEATORIO: todas las edades con TODOS los totales de grupo publicados ⇒ valor EXACTO = Σ de los totales publicados',
+  (select count(*) from _v v where v.min_tramo = 0 and not exists (select 1 from _rg g where g.unit = v.cut and (v.sexo is null or g.sexo = v.sexo) and g.total_pub is null)
+      and not (v.exact and v.n_lo = (select sum(g.total_pub) from _rg g where g.unit = v.cut and (v.sexo is null or g.sexo = v.sexo)))) = 0
+  and (select count(*) from _v v where v.min_tramo = 0 and v.exact and v.suppressed_cells > 0) > 10);                      -- hay comunas con celdas suprimidas que ahora salen exactas
+select pg_temp.assert_that('B2 ALEATORIO: con un total de grupo «<5» (todas las edades) el valor NO es exacto salvo que el total quede determinado (4 celdas de 1); nunca 0 si hay 1–4 personas',
+  (select count(*) from _v v where v.min_tramo = 0 and v.sexo is not null and exists (select 1 from _rg g where g.unit = v.cut and g.sexo = v.sexo and g.total_pub is null)
+      and (v.n_lo < 1 or v.n_hi > 4)) = 0);
+select pg_temp.assert_that('B2 ALEATORIO: el agregado de 1b-1 (60+) con conteos completos cae dentro del rango que devuelve la propia función (mismo cálculo)',
+  (select count(*) from public.get_isapre_comuna(null, 12)) = 80);
+
+-- ========== Fuga por resta regional: Σ totales regionales − Σ totales de grupo publicados = Σ totales de grupo SUPRIMIDOS de la región ==========
+-- Región 02: UN solo grupo con total «<5» (02102 F = 2) ⇒ el total regional lo despejaría exacto ⇒ NO se publica. Región 01: DOS grupos suprimidos ⇒ se publica (cota del residuo, como en las celdas). Región 03: ninguno.
+select pg_temp.mk('iw', 6, 0, date '2029-12-31');
+select pg_temp.su(n, '02101', pg_temp.vec('{{5,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '02102', pg_temp.vec('{{5,2}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '01101', pg_temp.vec('{{5,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '01107', pg_temp.vec('{{5,2}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '01401', pg_temp.vec('{{5,3}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '03101', pg_temp.vec('{{5,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.rep(n) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+create temp table _pw as select pg_temp.pub('iw') as r;
+create temp table _wr as select r.* from public.isapre_cartera_region r join public.source_snapshots s on s.n = r.snapshot_n where s.storage_path = 'test/iw';
+select pg_temp.assert_that('región con UN solo grupo suprimido (02): los dos totales regionales (cotizante y carga) NO se publican, y dicen por qué',
+  (select count(*) from _wr where region_cut = '02') = 2 and (select count(*) from _wr where region_cut = '02' and total is null and note like 'total regional no publicado%') = 2);
+select pg_temp.assert_that('región con 2 grupos suprimidos (01) y región sin ninguno (03): el total regional SÍ se publica, exacto',
+  (select total = 35 and note is null from _wr where region_cut = '01' and rol = 'cotizante') and (select total = 0 from _wr where region_cut = '01' and rol = 'carga')
+  and (select total = 30 and note is null from _wr where region_cut = '03' and rol = 'cotizante'));
+select pg_temp.assert_that('INVARIANTE: ninguna región con total publicado tiene exactamente un grupo suprimido (restar no despeja ningún total de grupo)',
+  (select count(*) from _wr r where r.total is not null and (
+      select count(*) from public.isapre_cartera_grupo g join public.isapre_cartera_unidad u on u.snapshot_n = g.snapshot_n and u.unit = g.unit
+       where g.snapshot_n = r.snapshot_n and u.region_cut = r.region_cut and g.total_pub is null) = 1) = 0);
+select pg_temp.assert_that('el reporte cuenta las regiones sin total y get_isapre_region devuelve NULL (no 0) para ellas',
+  (select (r ->> 'regions_total_withheld')::int = 1 from _pw)
+  and (select count(*) from public.get_isapre_region() where region_cut = '02' and total is null) = 2
+  and (select count(*) from public.get_isapre_region() where region_cut = '02' and total = 0) = 0);
+select pg_temp.assert_that('el cuadre con el archivo se hizo ANTES de retener el total: la zona restringida conserva los totales completos de la región 02',
+  (select sum(c.n) from salud_restringido.isapre_cartera c join public.source_snapshots s on s.n = c.snapshot_n where s.storage_path = 'test/iw' and c.unit like '02%') = 32);

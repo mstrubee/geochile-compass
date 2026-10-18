@@ -56,7 +56,7 @@ export const IsapreChoroplethPanel = (p: IsapreProps) => {
   const range = totalRange(p.rows);
   const inexact = countInexact(p.rows);
   const legend = legendEntries("value", "units", p.breaks);
-  const warnings = [WARN_ISAPRE.scope, WARN_ISAPRE.provisional, WARN_ISAPRE.comuna, WARN_ISAPRE.period, WARN_ISAPRE.suppression(p.resumen?.suppress_below ?? 5), WARN_ISAPRE.color, WARN_ISAPRE.zero, WARN_ISAPRE.noAccess];
+  const warnings = [WARN_ISAPRE.scope, WARN_ISAPRE.provisional, WARN_ISAPRE.comuna, WARN_ISAPRE.age60, WARN_ISAPRE.period, WARN_ISAPRE.suppression(p.resumen?.suppress_below ?? 5), WARN_ISAPRE.color, WARN_ISAPRE.zero, WARN_ISAPRE.noAccess];
   const s = p.sinAlta;
   return (
     <ProjectsPanelShell title="Isapre: beneficiarios por comuna" offset={p.offset} testId="isapre-choropleth-panel">
@@ -100,7 +100,8 @@ export const IsapreChoroplethPanel = (p: IsapreProps) => {
           <>
             <p data-testid="isapre-sin-alta-value"><span className="text-base font-semibold tabular-nums">{fmtN(s.benef_exacto)}</span> beneficiarios Isapre de 60 años o más en {fmtN(s.comunas_con_dato)} comunas.</p>
             <p className="text-muted-foreground">Calculado con los conteos completos del archivo. Lo publicado, con supresión, da {rangeText(s.benef_pub_lo, s.benef_pub_hi, false)}.{!s.consistente && " ¡El agregado cae FUERA del rango publicado: no usar!"}</p>
-            <p className="text-muted-foreground">Comunas sin alta complejidad según el registro: {fmtN(s.comunas_sin_alta)} ({fmtN(s.comunas_sin_alta - s.comunas_con_dato)} sin fila en el archivo Isapre). Total del país con la misma edad: {fmtN(s.benef_total_pais)}.</p>
+            <p className="text-muted-foreground">Comunas sin alta complejidad según el registro: {fmtN(s.comunas_sin_alta)} ({fmtN(s.comunas_sin_alta - s.comunas_con_dato)} sin fila en el archivo Isapre). Total de 60+ en las comunas con fila del archivo (sin «sin dato de comuna» ni «sin dato de región»; no es el total del país): {fmtN(s.benef_total_comunas)}.</p>
+            <p className="text-muted-foreground" data-testid="isapre-age60-note">{WARN_ISAPRE.age60}</p>
           </>
         )}
       </div>

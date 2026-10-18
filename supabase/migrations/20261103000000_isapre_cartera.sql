@@ -11,9 +11,10 @@
 --   isapre_cartera_grupo         total del grupo (unidad × sexo), suma publicada y residuo «<5 agrupado», cotas y cuadre
 --   isapre_cartera_region        totales por región y rol (siempre grandes; se cuadran contra los subtotales del archivo)
 --   publish_isapre_snapshot()    único camino (SECURITY DEFINER, todo-o-nada): cuadra contra los totales del archivo, SUPRIME en la base y re-valida
---   get_isapre_comuna()          valor por comuna con filtros (sexo, edad mínima, «solo comunas sin hospital de alta complejidad»); RANGO si hay celdas suprimidas
+--   get_isapre_comuna()          valor por comuna con filtros (sexo, edad mínima, «solo comunas sin hospital de alta complejidad»); EXACTO cuando lo publicado lo determina
+--                                (todos los totales de grupo publicados, o el residuo cae por completo dentro del filtro) y RANGO si no
 --   get_isapre_celdas()          la pirámide publicada de una unidad
---   get_isapre_resumen_sin_alta() 1b-1: agregado con DATOS COMPLETOS sobre un conjunto fijo y grande de comunas + su contraste con el rango publicado
+--   get_isapre_resumen_sin_alta() 1b-1: agregado con DATOS COMPLETOS sobre un conjunto fijo y grande de comunas (SOLO 60+) + su contraste con el rango publicado
 --   get_isapre_resumen()         captura vigente y estadísticas de supresión (ficha)
 --
 -- Semántica que la interfaz NO puede perder: información PROVISIONAL («sujeta a modificación»); la semántica de «comuna» (domicilio, contrato) NO está declarada
@@ -22,6 +23,17 @@
 -- Requiere 20261102000000_health_establishments (get_isapre_resumen_sin_alta lee el registro de establecimientos). SOLO ADITIVA.
 -- Rollback: supabase/rollbacks/20261103000000_isapre_cartera_down.sql
 -- =============================================================================
+
+-- Guardrail de transacción: esta migración depende de UNA sola transacción (tablas temporales ON COMMIT DROP, advisory lock de transacción y SET LOCAL).
+-- Debe correr con `psql -1 -v ON_ERROR_STOP=1 -f …`. Sin -1 cada sentencia sería su propia transacción, la tabla de prueba se borraría al terminar su sentencia y esto falla de inmediato.
+drop table if exists pg_temp._tx_probe;
+create temp table _tx_probe (x int) on commit drop;
+do $$
+begin
+  if to_regclass('pg_temp._tx_probe') is null then
+    raise exception 'Guardrail: esta migración debe correr dentro de UNA transacción (psql -1 -v ON_ERROR_STOP=1 -f …); sin -1 las tablas temporales ON COMMIT DROP se pierden y el guardrail final no puede comparar los conteos';
+  end if;
+end $$;
 
 select pg_advisory_xact_lock(hashtext('salud_v1'));
 set local statement_timeout = '5min';
@@ -166,8 +178,10 @@ create table if not exists public.isapre_cartera_region (
   snapshot_n  integer  not null,
   region_cut  char(2)  not null check (region_cut ~ '^[0-9]{2}$'),
   rol         text     not null check (rol in ('cotizante', 'carga')),
-  total       integer  not null check (total = 0 or total >= 5),                -- un 1–4 aquí no se publica (la base lo rechaza)
-  constraint isapre_cartera_region_pk primary key (snapshot_n, region_cut, rol)
+  total       integer  check (total is null or total = 0 or total >= 5),       -- un 1–4 aquí no se publica (la base lo rechaza); NULL = total NO publicado (ver note)
+  note        text,
+  constraint isapre_cartera_region_pk primary key (snapshot_n, region_cut, rol),
+  constraint isapre_region_nota check ((total is null) = (note is not null))
 );
 
 comment on table public.isapre_cartera_celda is 'Beneficiarios Isapre (cotizantes + cargas) por unidad, sexo y tramo. n_pub NULL = «<5» (primaria o complementaria); lo/hi son las cotas. Política de presentación, no protección real: el archivo completo es público.';
@@ -305,10 +319,20 @@ begin
   insert into public.isapre_cartera_grupo (snapshot_n, unit, sexo, total_pub, published_sum, suppressed_cells, residual, lo_sum, cuadre_ok)
     select v_n, unit, sexo, total_pub, pub_sum, k, residual, lo_sum, ok from _isa_grp;
 
-  -- totales por región y rol (siempre grandes); un valor 1–4 aquí exigiría extender el algoritmo
-  insert into public.isapre_cartera_region (snapshot_n, region_cut, rol, total)
-    select v_n, s.region_cut, s.rol, sum(s.n) from salud_restringido.isapre_stage s
-     where s.snapshot_n = v_n and s.region_cut is not null group by s.region_cut, s.rol;
+  -- totales por región y rol (siempre grandes; un valor 1–4 aquí exigiría extender el algoritmo).
+  -- FUGA POR RESTA REGIONAL: Σ de los dos totales regionales − Σ de los totales de grupo publicados de la región = Σ de los totales de grupo SUPRIMIDOS de esa región.
+  -- Con EXACTAMENTE un grupo suprimido eso despeja su total (1 a 4). Misma regla que en las celdas (una sola suprimida se despeja por resta): el total regional NO se publica
+  -- en esas regiones (total NULL con su nota). Con 2 o más grupos suprimidos queda la cota del residuo «<5 agrupado», como en las celdas.
+  drop table if exists pg_temp._isa_reg_withheld;
+  create temp table _isa_reg_withheld on commit drop as
+    select u.region_cut from public.isapre_cartera_grupo g join public.isapre_cartera_unidad u on u.snapshot_n = g.snapshot_n and u.unit = g.unit
+     where g.snapshot_n = v_n and u.region_cut is not null
+     group by u.region_cut having count(*) filter (where g.total_pub is null) = 1;
+  insert into public.isapre_cartera_region (snapshot_n, region_cut, rol, total, note)
+    select v_n, s.region_cut, s.rol, case when w.region_cut is null then sum(s.n)::int end,
+           case when w.region_cut is not null then 'total regional no publicado: restado de los totales de grupo despejaría el total de un único grupo suprimido' end
+      from salud_restringido.isapre_stage s left join _isa_reg_withheld w on w.region_cut = s.region_cut
+     where s.snapshot_n = v_n and s.region_cut is not null group by s.region_cut, s.rol, w.region_cut;
 
   -- ---- POSTCONDICIONES: la base re-valida lo que acaba de publicar ----
   if exists (select 1 from public.isapre_cartera_celda where snapshot_n = v_n and n_pub between 1 and v_thr - 1) then
@@ -333,6 +357,11 @@ begin
   end if;
   if exists (select 1 from public.isapre_cartera_region where snapshot_n = v_n and total between 1 and v_thr - 1) then
     raise exception 'un total regional es menor que el umbral: extender el algoritmo de supresión a las regiones';
+  end if;
+  if exists (select 1 from public.isapre_cartera_region r join public.isapre_cartera_unidad u on u.snapshot_n = r.snapshot_n and u.region_cut = r.region_cut
+              join public.isapre_cartera_grupo g on g.snapshot_n = u.snapshot_n and g.unit = u.unit
+              where r.snapshot_n = v_n and r.total is not null group by r.region_cut having count(distinct g.unit || g.sexo) filter (where g.total_pub is null) = 1) then
+    raise exception 'postcondición: un total regional publicado despejaría por resta el total de un único grupo suprimido';
   end if;
 
   update public.source_snapshots set status = 'superseded' where source_id = v_snap.source_id and status = 'loaded' and id <> p_snapshot_id;
@@ -363,6 +392,7 @@ begin
     'groups_total_suppressed', (select count(*) from public.isapre_cartera_grupo where snapshot_n = v_n and total_pub is null),
     'groups_with_complementary', (select count(distinct (unit, sexo)) from public.isapre_cartera_celda where snapshot_n = v_n and kind = 'complementary'),
     'groups_cuadre_failed', (select count(*) from public.isapre_cartera_grupo where snapshot_n = v_n and not cuadre_ok),
+    'regions_total_withheld', (select count(distinct region_cut) from public.isapre_cartera_region where snapshot_n = v_n and total is null),
     'benef_total', (select sum(n) from salud_restringido.isapre_cartera where snapshot_n = v_n));
   update public.source_snapshots set validation_report = validation_report || jsonb_build_object('publish', v_report) where id = p_snapshot_id;
   return v_report;
@@ -388,6 +418,10 @@ begin
   if p_alta is null or p_alta not in ('hospital', 'ampliada') then
     raise exception 'p_alta debe ser hospital o ampliada' using errcode = '22023';
   end if;
+  -- sin captura del registro de establecimientos NINGUNA comuna «tiene» alta complejidad y la consulta devolvería las 346: se niega en vez de contestar algo falso
+  if (select cs.snapshot_n from public._health_current_snapshot() cs) is null then
+    raise exception 'no hay una captura publicada del registro de establecimientos (Fase 1a): no se puede saber qué comunas carecen de alta complejidad' using errcode = '55000';
+  end if;
   return query
   select c.cut from public.comunas c
    where not exists (
@@ -397,8 +431,40 @@ begin
         and ((p_alta = 'hospital' and e.alta_hospital) or (p_alta = 'ampliada' and e.alta_ampliada)));
 end $$;
 
--- Beneficiarios Isapre por COMUNA según lo PUBLICADO. p_sexo: null | 'F' | 'M' | 'SI'. p_min_tramo: 0 = todas las edades (incluye edad S/I);
--- 12 = 60 años o más (tramos 12..20, sin edad S/I). Con celdas suprimidas el valor es un RANGO [n_lo, n_hi]; exact = sin celdas suprimidas.
+-- Valor por UNIDAD según lo PUBLICADO (celdas, totales de grupo y residuo), con filtros de sexo y edad mínima. Solo lee tablas publicadas.
+-- p_min_tramo: 0 = todas las edades (incluye edad S/I) · 12 = 60 años o más (tramos 12..20, SIN edad S/I). Por grupo (unidad × sexo):
+--   P = Σ celdas publicadas dentro del filtro; X = Σ celdas suprimidas dentro del filtro, acotada por (a) las cotas de cada celda, (b) el residuo publicado del grupo
+--   (X + suprimidas fuera del filtro = residuo) y (c) si el total del grupo es «<5», X + suprimidas fuera ≤ umbral−1 (y X ≥ Σ cotas inferiores).
+--   Con todas las edades y el total del grupo publicado, X = residuo y el valor del grupo es EXACTAMENTE el total publicado.
+-- Todo sale de datos ya publicados (get_isapre_celdas devuelve los mismos totales y residuos): no revela nada que no estuviera público.
+create or replace function public._isapre_comuna_rango(p_snapshot_n integer, p_sexo text, p_min_tramo integer)
+returns table (unit text, n_lo bigint, n_hi bigint, suppressed_cells bigint)
+language sql stable security invoker set search_path = public as $$
+  with c as (
+    select k.unit, k.sexo, k.n_pub, k.suppressed, k.lo, k.hi, (p_min_tramo = 0 or k.tramo between p_min_tramo and 20) as inr
+      from public.isapre_cartera_celda k where k.snapshot_n = p_snapshot_n and (p_sexo is null or k.sexo = p_sexo)),
+  g as (
+    select gr.unit, gr.sexo, gr.residual,
+           coalesce(sum(c.n_pub) filter (where c.inr), 0) as p,
+           coalesce(sum(c.lo) filter (where c.inr and c.suppressed), 0) as lo_in,
+           coalesce(sum(c.hi) filter (where c.inr and c.suppressed), 0) as hi_in,
+           coalesce(sum(c.lo) filter (where not c.inr and c.suppressed), 0) as lo_out,
+           coalesce(sum(c.hi) filter (where not c.inr and c.suppressed), 0) as hi_out,
+           count(*) filter (where c.inr and c.suppressed) as k_in
+      from public.isapre_cartera_grupo gr join c on c.unit = gr.unit and c.sexo = gr.sexo
+     where gr.snapshot_n = p_snapshot_n
+     group by gr.unit, gr.sexo, gr.residual)
+  select g.unit,
+         sum(g.p + case when g.residual is not null then greatest(g.lo_in, g.residual - g.hi_out) else g.lo_in end)::bigint,
+         sum(g.p + case when g.residual is not null then least(g.hi_in, g.residual - g.lo_out)
+                        else least(g.hi_in, public.pipeline_setting('salud.suppress_below')::int - 1 - g.lo_out) end)::bigint,
+         sum(g.k_in)::bigint
+    from g group by g.unit
+$$;
+
+-- Beneficiarios Isapre por COMUNA según lo PUBLICADO. p_sexo: null | 'F' | 'M' | 'SI'. p_min_tramo: 0 = todas las edades (incluye edad S/I); 12 = 60 años o más
+-- (tramos 12..20: EXCLUYE la edad sin información e INCLUYE el sexo sin información). El valor es EXACTO (n_lo = n_hi) cuando lo publicado lo determina y un RANGO [n_lo, n_hi] si no.
+-- suppressed_cells = celdas suprimidas dentro del filtro.
 create or replace function public.get_isapre_comuna(p_sexo text default null, p_min_tramo integer default 0, p_sin_alta text default null)
 returns table (
   cut char(5), name text, region_cut char(2), n_lo bigint, n_hi bigint, exact boolean, suppressed_cells bigint,
@@ -410,17 +476,12 @@ begin
   if p_sin_alta is not null and p_sin_alta not in ('hospital', 'ampliada') then raise exception 'p_sin_alta inválido' using errcode = '22023'; end if;
   return query
   with cs as (select * from public._isapre_current_snapshot())
-  select u.comuna_cut, c.name, c.region_cut,
-         coalesce(sum(coalesce(k.n_pub, k.lo)), 0)::bigint, coalesce(sum(coalesce(k.n_pub, k.hi)), 0)::bigint,
-         coalesce(bool_and(not k.suppressed), true), coalesce(count(*) filter (where k.suppressed), 0)::bigint,
-         cs.snapshot_id, cs.period_end
+  select u.comuna_cut, c.name, c.region_cut, r.n_lo, r.n_hi, (r.n_lo = r.n_hi), r.suppressed_cells, cs.snapshot_id, cs.period_end
     from cs
     join public.isapre_cartera_unidad u on u.snapshot_n = cs.snapshot_n and u.kind = 'comuna'
     join public.comunas c on c.cut = u.comuna_cut
-    left join public.isapre_cartera_celda k on k.snapshot_n = u.snapshot_n and k.unit = u.unit
-         and (p_sexo is null or k.sexo = p_sexo) and k.tramo >= p_min_tramo and (p_min_tramo = 0 or k.tramo <= 20)
+    join public._isapre_comuna_rango(cs.snapshot_n, p_sexo, p_min_tramo) r on r.unit = u.unit
    where p_sin_alta is null or c.cut in (select s.cut from public._health_comunas_sin_alta(p_sin_alta) s)
-   group by u.comuna_cut, c.name, c.region_cut, cs.snapshot_id, cs.period_end
    order by 4 desc, 1;
 end $$;
 
@@ -458,20 +519,29 @@ language sql stable security invoker set search_path = public as $$
     from public._isapre_current_snapshot() cs join public.source_snapshots s on s.id = cs.snapshot_id
 $$;
 
--- 1b-1: beneficiarios Isapre de p_min_tramo o más (por defecto 60+) en comunas SIN establecimiento de alta complejidad EN la comuna (D1: p_alta).
--- Se calcula con los CONTEOS COMPLETOS (regla 5: las métricas derivadas usan datos completos) y SOLO devuelve el agregado de un conjunto fijo y grande
--- de comunas (mínimo salud.min_aggregate_comunas). Se entrega junto al RANGO que sale de lo publicado: el agregado debe caer dentro.
+-- 1b-1: beneficiarios Isapre de 60 años o más en comunas SIN establecimiento de alta complejidad EN la comuna (D1: p_alta).
+-- Se calcula con los CONTEOS COMPLETOS (regla 5: las métricas derivadas usan datos completos) y SOLO devuelve el agregado de un conjunto de comunas de al menos
+-- salud.min_aggregate_comunas. Se entrega junto al RANGO que sale de lo publicado (mismo cálculo que get_isapre_comuna): el agregado debe caer dentro.
+-- LÍMITES, dichos sin rodeos (DISENO §3.3 punto 6):
+--  · p_min_tramo SOLO admite 12 (60+). Con cualquier corte la resta entre dos consultas aísla un tramo individual (60+ − 65+ = 60-64) y, con el sexo y la edad sin
+--    información, celdas pequeñas. Con un único corte no hay tramos que restar.
+--  · El mínimo de comunas NO resiste la diferencia entre consultas: el conjunto de la definición ampliada está dentro del de hospitales, así que
+--    (hospitales − ampliada) da el agregado EXACTO de las comunas que las separan, aunque sean menos de salud.min_aggregate_comunas. Es una barrera de presentación,
+--    no una protección: la cartera completa por comuna, edad y sexo ya es pública en el XLSX de la Superintendencia (regla 5, «política de presentación»).
+--  · Devuelve el total del grupo (60+ en las 346 comunas con fila) como contexto, SIN las unidades «sin dato de comuna» ni «sin dato de región».
 -- Quién puede llamarla lo decide el GRANT (authenticated y service_role; anon no): como SECURITY DEFINER lee el esquema restringido en nombre del llamador.
 create or replace function public.get_isapre_resumen_sin_alta(p_alta text, p_min_tramo integer default 12)
 returns table (
   comunas_sin_alta integer, comunas_con_dato integer, benef_exacto bigint, benef_pub_lo bigint, benef_pub_hi bigint, consistente boolean,
-  benef_total_pais bigint, snapshot_id uuid, period_end date, health_snapshot_id uuid)
+  benef_total_comunas bigint, snapshot_id uuid, period_end date, health_snapshot_id uuid)
 language plpgsql stable security definer set search_path = public, salud_restringido as $$
 declare
   v_cs record; v_hs record; v_ids char(5)[]; v_min int; v_sin int; v_exact bigint; v_lo bigint; v_hi bigint; v_tot bigint;
 begin
   if p_alta is null or p_alta not in ('hospital', 'ampliada') then raise exception 'p_alta debe ser hospital o ampliada' using errcode = '22023'; end if;
-  if p_min_tramo is null or p_min_tramo not between 0 and 20 then raise exception 'p_min_tramo debe estar entre 0 y 20' using errcode = '22023'; end if;
+  if p_min_tramo is distinct from 12 then
+    raise exception 'p_min_tramo solo admite 12 (60 años o más): otros cortes permitirían aislar un tramo por resta entre consultas' using errcode = '22023';
+  end if;
   select * into v_cs from public._isapre_current_snapshot();
   if v_cs.snapshot_n is null then raise exception 'no hay una captura publicada de la cartera Isapre'; end if;
   select * into v_hs from public._health_current_snapshot();
@@ -485,11 +555,10 @@ begin
     raise exception 'el conjunto cubre % comunas (< %): no se entrega un agregado tan acotado', coalesce(cardinality(v_ids), 0), v_min using errcode = '22023';
   end if;
   select coalesce(sum(c.n), 0) into v_exact from salud_restringido.isapre_cartera c
-   where c.snapshot_n = v_cs.snapshot_n and c.unit = any (v_ids) and c.tramo >= p_min_tramo and (p_min_tramo = 0 or c.tramo <= 20);
-  select coalesce(sum(coalesce(k.n_pub, k.lo)), 0), coalesce(sum(coalesce(k.n_pub, k.hi)), 0) into v_lo, v_hi from public.isapre_cartera_celda k
-   where k.snapshot_n = v_cs.snapshot_n and k.unit = any (v_ids) and k.tramo >= p_min_tramo and (p_min_tramo = 0 or k.tramo <= 20);
+   where c.snapshot_n = v_cs.snapshot_n and c.unit = any (v_ids) and c.tramo between p_min_tramo and 20;
+  select coalesce(sum(r.n_lo), 0), coalesce(sum(r.n_hi), 0) into v_lo, v_hi from public._isapre_comuna_rango(v_cs.snapshot_n, null, p_min_tramo) r where r.unit = any (v_ids);
   select coalesce(sum(c.n), 0) into v_tot from salud_restringido.isapre_cartera c join salud_restringido.isapre_unidad u on u.snapshot_n = c.snapshot_n and u.unit = c.unit
-   where c.snapshot_n = v_cs.snapshot_n and u.kind = 'comuna' and c.tramo >= p_min_tramo and (p_min_tramo = 0 or c.tramo <= 20);
+   where c.snapshot_n = v_cs.snapshot_n and u.kind = 'comuna' and c.tramo between p_min_tramo and 20;
   return query select v_sin, cardinality(v_ids), v_exact, v_lo, v_hi, (v_exact between v_lo and v_hi), v_tot, v_cs.snapshot_id, v_cs.period_end, v_hs.snapshot_id;
 end $$;
 
@@ -527,6 +596,8 @@ revoke insert, update, delete, truncate on public.isapre_cartera_unidad, public.
 
 revoke all on function public.publish_isapre_snapshot(uuid) from public, anon, authenticated;
 grant execute on function public.publish_isapre_snapshot(uuid) to service_role;
+revoke all on function public._isapre_comuna_rango(integer, text, integer) from public, anon;
+grant execute on function public._isapre_comuna_rango(integer, text, integer) to authenticated, service_role;
 revoke all on function public._isapre_current_snapshot(), public._health_comunas_sin_alta(text),
   public.get_isapre_comuna(text, integer, text), public.get_isapre_celdas(text), public.get_isapre_region(), public.get_isapre_resumen(),
   public.get_isapre_resumen_sin_alta(text, integer) from public, anon;
