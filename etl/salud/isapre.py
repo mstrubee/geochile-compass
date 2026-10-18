@@ -273,6 +273,11 @@ class GroupOut:
     lo_sum: int
     cuadre_ok: bool
     cells: list[CellOut]
+    total_withheld: bool = False  # total RETENIDO: publicarlo (con las cotas) determinaría exactamente las suprimidas; sin total ni cota «<5»
+
+
+class SuppressionError(Exception):
+    """La supresión no tiene salida publicable con las reglas actuales (hay que extender el algoritmo); no se carga nada."""
 
 
 def suppress_group(values: list[int], threshold: int = THRESHOLD) -> GroupOut:
@@ -292,24 +297,36 @@ def suppress_group(values: list[int], threshold: int = THRESHOLD) -> GroupOut:
     residual = None if total_pub is None else total - pub_sum
     lo = [(1 if kind[i] == "primary" else (threshold if kind[i] == "complementary" and values[i] >= threshold else 0)) if supp[i] else None for i in range(N_TRAMOS)]
     lo_sum = sum(x for x in lo if x is not None)
+    has_comp = any(c == "complementary" for c in kind)
+    if residual is not None:
+        ok = lo_sum <= residual and (has_comp or residual <= (threshold - 1) * k)
+    else:
+        ok = sum(v for v in values) <= (threshold - 1) * k if k else total == 0 or total_pub is not None
+    # RETENCIÓN DEL RESIDUO (DISENO §3.3 punto 5b): el total no se publica si, junto con las cotas, determina EXACTAMENTE las suprimidas:
+    # (a) todas valen su cota inferior, (b) sin complementaria todas valen umbral−1, (c) total «<5» con Σ cotas inferiores = umbral−1.
+    withheld = k > 0 and ((total_pub is not None and (residual == lo_sum or (residual == (threshold - 1) * k and not has_comp)))
+                          or (total_pub is None and lo_sum >= threshold - 1))
     cells = []
     for i, v in enumerate(values):
         if not supp[i]:
             cells.append(CellOut(i, v, False, None, None, None))
             continue
         hi = threshold - 1 if kind[i] == "primary" else None
-        if residual is not None:
+        if withheld:
+            if hi is None:                  # complementaria: la menor OTRA celda publicada >= umbral (se eligió como la menor, regla pública)
+                others = [x for j, x in enumerate(values) if not supp[j] and x >= threshold]
+                if not others:
+                    raise SuppressionError("grupo con total retenido sin cota superior publicable para su celda complementaria (no hay otra celda publicada >= umbral)")
+                hi = min(others)
+        elif residual is not None:
             cap = residual - (lo_sum - lo[i])
             hi = cap if hi is None else min(hi, cap)
         elif hi is None:
             hi = threshold - 1
         cells.append(CellOut(i, None, True, kind[i], lo[i], hi))
-    has_comp = any(c == "complementary" for c in kind)
-    if residual is not None:
-        ok = lo_sum <= residual and (has_comp or residual <= (threshold - 1) * k)
-    else:
-        ok = sum(v for v in values) <= (threshold - 1) * k if k else total == 0 or total_pub is not None
-    return GroupOut(total, total_pub, pub_sum, residual, k, lo_sum, ok, cells)
+    if withheld:
+        total_pub, residual = None, None
+    return GroupOut(total, total_pub, pub_sum, residual, k, lo_sum, ok, cells, withheld)
 
 
 def beneficiaries(cart: Cartera) -> dict[tuple[str, str], list[int]]:
@@ -339,6 +356,30 @@ def summarize(groups: dict[tuple[str, str], GroupOut]) -> dict:
             elif cell.n_pub == 0:
                 c["ceros_publicados"] += 1
         c["grupos_con_total_suprimido"] += g.total_pub is None and g.total > 0
+        c["grupos_con_total_retenido"] += g.total_withheld
+        c["grupos_con_total_lt5"] += g.total_pub is None and not g.total_withheld and g.total > 0
         c["grupos_con_complementaria"] += any(x.kind == "complementary" for x in g.cells)
         c["grupos_cuadre_fallido"] += not g.cuadre_ok
     return dict(c)
+
+
+def region_withheld(cart: Cartera, groups: dict[tuple[str, str], GroupOut], threshold: int = THRESHOLD) -> set[str]:
+    """Regiones cuyo total NO se publica: Σ totales regionales − Σ totales de grupo publicados = R (Σ de los totales de los grupos sin total publicado) y R, con las cotas
+    de esos totales, determina exactamente su valor: (1) un solo grupo sin total; (2) R = Σ cotas inferiores; (3) R = (umbral−1)·k si todos son «<5». Réplica de la base."""
+    tot: dict[str, int] = {}
+    for (unit, rol, sexo), v in cart.counts.items():
+        reg = cart.units[unit].region_cut
+        if reg is not None:
+            tot[reg] = tot.get(reg, 0) + sum(v)
+    out = set()
+    for reg, total in tot.items():
+        gs = [g for (unit, _s), g in groups.items() if cart.units[unit].region_cut == reg]
+        unknown = [g for g in gs if g.total_pub is None]
+        k = len(unknown)
+        known = sum(g.total_pub for g in gs if g.total_pub is not None)
+        lo_t = sum((g.published_sum + g.lo_sum) if g.total_withheld else max(g.lo_sum, 1) for g in unknown)
+        all_lt5 = all(not g.total_withheld for g in unknown)
+        r = total - known
+        if k == 1 or (k >= 2 and (r == lo_t or (all_lt5 and r == (threshold - 1) * k))):
+            out.add(reg)
+    return out

@@ -35,8 +35,8 @@ for a in "$@"; do case "$a" in --skip-check) SKIP_CHECK=1;; --reset-dbs) RESET_D
 BASE_VITEST_TESTS=594; BASE_VITEST_FILES=41
 BASE_PERMISOS_PASS=43; BASE_PERMISOS_SKIP=4; BASE_PROYECTOS_PASS=45
 BASE_SQL_P12=92; BASE_SQL_PARTE4_GEO=111; BASE_SQL_PARTE4_NODES=7
-BASE_SQL_HEALTH=71; BASE_SQL_HEALTH_RB=4; BASE_SALUD_PASS=82        # Fase 1a (establecimientos): pruebas SQL, rollback y pytest de etl/salud
-BASE_SQL_ISAPRE=76; BASE_SQL_ISAPRE_RB=2; BASE_SQL_CASEN=24; BASE_SQL_PREVISION=5   # Fase 1b (previsión): Isapre, CASEN regional, hojas del árbol y rollbacks
+BASE_SQL_HEALTH=71; BASE_SQL_HEALTH_RB=4; BASE_SALUD_PASS=92        # Fase 1a (establecimientos): pruebas SQL, rollback y pytest de etl/salud
+BASE_SQL_ISAPRE=88; BASE_SQL_ISAPRE_RB=2; BASE_SQL_CASEN=24; BASE_SQL_PREVISION=5   # Fase 1b (previsión): Isapre, CASEN regional, hojas del árbol y rollbacks
 
 log() { printf '\n== %s\n' "$*"; }
 need_root() { [ "$(id -u)" = 0 ] || { echo "este paso necesita root (apt/initdb como postgres)" >&2; exit 1; }; }

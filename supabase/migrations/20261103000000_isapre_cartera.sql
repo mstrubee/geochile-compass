@@ -170,6 +170,8 @@ create table if not exists public.isapre_cartera_grupo (
   residual          integer  check (residual is null or residual >= 0),           -- «<5 agrupado»: total − Σ publicadas (solo si el total se publica)
   lo_sum            integer  not null,
   cuadre_ok         boolean  not null,
+  total_withheld    boolean  not null default false,                               -- total RETENIDO: publicarlo, con las cotas, determinaría EXACTAMENTE las celdas suprimidas (sin cota «<5»)
+  constraint isapre_grupo_retenido check (not total_withheld or (total_pub is null and residual is null)),
   constraint isapre_cartera_grupo_pk primary key (snapshot_n, unit, sexo),
   constraint isapre_cartera_grupo_unidad_fk foreign key (snapshot_n, unit) references public.isapre_cartera_unidad (snapshot_n, unit) on delete cascade
 );
@@ -314,23 +316,49 @@ begin
            and (exists (select 1 from _isa_cell c where c.unit = g.unit and c.sexo = g.sexo and c.kind = 'complementary') or g.residual <= (v_thr - 1) * g.k)
       else g.total <= (v_thr - 1) * g.k end;
 
+  -- RETENCIÓN DEL RESIDUO (regla general, DISENO §3.3 punto 5b): un residuo publicado (total − Σ publicadas) NO se publica cuando, junto con las cotas, determina EXACTAMENTE el valor
+  -- de las suprimidas: (a) todas valen su cota inferior (residuo = Σ cotas inferiores: p. ej. k celdas de 1, o primarias de 1 más una complementaria de 5), (b) sin complementaria,
+  -- todas valen umbral−1 (residuo = (umbral−1)·k), (c) el total es «<5» y Σ cotas inferiores = umbral−1 (cuatro celdas de 1 con total 4). En esos grupos el total NO se publica
+  -- (total_pub NULL, total_withheld = true: ni siquiera la cota «<5»). Las cotas superiores salen sin residuo: primaria umbral−1; complementaria = la menor otra celda publicada
+  -- ≥ umbral (la complementaria se eligió como la menor ≥ umbral, regla pública).
+  alter table _isa_grp add column withheld boolean not null default false;
+  update _isa_grp g set withheld = true
+   where g.k > 0 and (
+         (g.total_pub is not null and (g.residual = g.lo_sum
+            or (g.residual = (v_thr - 1) * g.k and not exists (select 1 from _isa_cell c where c.unit = g.unit and c.sexo = g.sexo and c.kind = 'complementary'))))
+      or (g.total_pub is null and g.lo_sum >= v_thr - 1));
+  update _isa_cell c set hi = case when c.kind = 'primary' then v_thr - 1
+                                   else (select min(o.n) from _isa_cell o where o.unit = c.unit and o.sexo = c.sexo and not o.supp and o.n >= v_thr) end
+    from _isa_grp g where g.withheld and c.supp and c.unit = g.unit and c.sexo = g.sexo;
+  if exists (select 1 from _isa_cell where supp and hi is null) then
+    raise exception 'un grupo con total retenido no tiene cota superior publicable para su celda complementaria (no hay otra celda publicada >= umbral): extender el algoritmo de supresión';
+  end if;
+  update _isa_grp set total_pub = null, residual = null where withheld;
+
   insert into public.isapre_cartera_celda (snapshot_n, unit, sexo, tramo, n_pub, suppressed, kind, lo, hi)
     select v_n, unit, sexo, tramo, case when supp then null else n end, supp, kind, lo, hi from _isa_cell;
-  insert into public.isapre_cartera_grupo (snapshot_n, unit, sexo, total_pub, published_sum, suppressed_cells, residual, lo_sum, cuadre_ok)
-    select v_n, unit, sexo, total_pub, pub_sum, k, residual, lo_sum, ok from _isa_grp;
+  insert into public.isapre_cartera_grupo (snapshot_n, unit, sexo, total_pub, published_sum, suppressed_cells, residual, lo_sum, cuadre_ok, total_withheld)
+    select v_n, unit, sexo, total_pub, pub_sum, k, residual, lo_sum, ok, withheld from _isa_grp;
 
   -- totales por región y rol (siempre grandes; un valor 1–4 aquí exigiría extender el algoritmo).
-  -- FUGA POR RESTA REGIONAL: Σ de los dos totales regionales − Σ de los totales de grupo publicados de la región = Σ de los totales de grupo SUPRIMIDOS de esa región.
-  -- Con EXACTAMENTE un grupo suprimido eso despeja su total (1 a 4). Misma regla que en las celdas (una sola suprimida se despeja por resta): el total regional NO se publica
-  -- en esas regiones (total NULL con su nota). Con 2 o más grupos suprimidos queda la cota del residuo «<5 agrupado», como en las celdas.
+  -- FUGA POR RESTA REGIONAL: Σ de los dos totales regionales − Σ de los totales de grupo PUBLICADOS de la región = Σ de los totales de los grupos SIN total publicado (R).
+  -- La misma regla que en los grupos: el total regional NO se publica (total NULL con su nota, ambos roles) cuando R, junto con las cotas de esos totales, determina EXACTAMENTE su valor:
+  --   (1) un solo grupo sin total publicado; (2) R = Σ de las cotas inferiores (todos valen lo mínimo: «<5» ≥ 1 y retenidos ≥ publicadas + cotas inferiores);
+  --   (3) R = (umbral−1)·k cuando todos son «<5» (todos valen umbral−1). Los grupos con total retenido cuentan como sin total (sin cota superior).
   drop table if exists pg_temp._isa_reg_withheld;
   create temp table _isa_reg_withheld on commit drop as
-    select u.region_cut from public.isapre_cartera_grupo g join public.isapre_cartera_unidad u on u.snapshot_n = g.snapshot_n and u.unit = g.unit
-     where g.snapshot_n = v_n and u.region_cut is not null
-     group by u.region_cut having count(*) filter (where g.total_pub is null) = 1;
+    with g as (select u.region_cut, gg.total_pub, gg.withheld, gg.pub_sum, gg.lo_sum
+                 from _isa_grp gg join public.isapre_cartera_unidad u on u.snapshot_n = v_n and u.unit = gg.unit where u.region_cut is not null),
+         a as (select region_cut, count(*) filter (where total_pub is null) as k, coalesce(sum(total_pub), 0) as known,
+                      coalesce(sum(case when withheld then pub_sum + lo_sum else greatest(lo_sum, 1) end) filter (where total_pub is null), 0) as lo_t,
+                      coalesce(bool_and(not withheld) filter (where total_pub is null), true) as all_lt5
+                 from g group by region_cut),
+         t as (select region_cut, sum(n)::bigint as tot from salud_restringido.isapre_stage where snapshot_n = v_n and region_cut is not null group by region_cut)
+    select a.region_cut from a join t on t.region_cut = a.region_cut
+     where a.k = 1 or (a.k >= 2 and (t.tot - a.known = a.lo_t or (a.all_lt5 and t.tot - a.known = (v_thr - 1) * a.k)));
   insert into public.isapre_cartera_region (snapshot_n, region_cut, rol, total, note)
     select v_n, s.region_cut, s.rol, case when w.region_cut is null then sum(s.n)::int end,
-           case when w.region_cut is not null then 'total regional no publicado: restado de los totales de grupo despejaría el total de un único grupo suprimido' end
+           case when w.region_cut is not null then 'total regional no publicado: restado de los totales de grupo publicados despejaría exactamente el valor de los grupos sin total publicado' end
       from salud_restringido.isapre_stage s left join _isa_reg_withheld w on w.region_cut = s.region_cut
      where s.snapshot_n = v_n and s.region_cut is not null group by s.region_cut, s.rol, w.region_cut;
 
@@ -358,10 +386,28 @@ begin
   if exists (select 1 from public.isapre_cartera_region where snapshot_n = v_n and total between 1 and v_thr - 1) then
     raise exception 'un total regional es menor que el umbral: extender el algoritmo de supresión a las regiones';
   end if;
-  if exists (select 1 from public.isapre_cartera_region r join public.isapre_cartera_unidad u on u.snapshot_n = r.snapshot_n and u.region_cut = r.region_cut
-              join public.isapre_cartera_grupo g on g.snapshot_n = u.snapshot_n and g.unit = u.unit
-              where r.snapshot_n = v_n and r.total is not null group by r.region_cut having count(distinct g.unit || g.sexo) filter (where g.total_pub is null) = 1) then
-    raise exception 'postcondición: un total regional publicado despejaría por resta el total de un único grupo suprimido';
+  if exists (select 1 from public.isapre_cartera_grupo g where g.snapshot_n = v_n and not g.total_withheld and g.suppressed_cells > 0 and (
+               (g.total_pub is not null and (g.residual = g.lo_sum
+                  or (g.residual = (v_thr - 1) * g.suppressed_cells and not exists (select 1 from public.isapre_cartera_celda c where c.snapshot_n = g.snapshot_n and c.unit = g.unit and c.sexo = g.sexo and c.kind = 'complementary'))))
+               or (g.total_pub is null and g.lo_sum >= v_thr - 1))) then
+    raise exception 'postcondición: un residuo o total «<5» publicado determina exactamente el valor de las celdas suprimidas de un grupo (debió retenerse el total)';
+  end if;
+  if exists (select 1 from public.isapre_cartera_celda c join public.isapre_cartera_grupo g on g.snapshot_n = c.snapshot_n and g.unit = c.unit and g.sexo = c.sexo
+              where c.snapshot_n = v_n and g.total_withheld and c.suppressed and (c.hi is null or c.lo > c.hi)) then
+    raise exception 'postcondición: una celda de un grupo con total retenido no tiene cotas válidas';
+  end if;
+  if exists (
+    with g as (select u.region_cut, gr.total_pub, gr.total_withheld, gr.published_sum, gr.lo_sum
+                 from public.isapre_cartera_grupo gr join public.isapre_cartera_unidad u on u.snapshot_n = gr.snapshot_n and u.unit = gr.unit
+                where gr.snapshot_n = v_n and u.region_cut is not null),
+         a as (select region_cut, count(*) filter (where total_pub is null) as k, coalesce(sum(total_pub), 0) as known,
+                      coalesce(sum(case when total_withheld then published_sum + lo_sum else greatest(lo_sum, 1) end) filter (where total_pub is null), 0) as lo_t,
+                      coalesce(bool_and(not total_withheld) filter (where total_pub is null), true) as all_lt5
+                 from g group by region_cut),
+         r as (select region_cut, sum(total) as tot from public.isapre_cartera_region where snapshot_n = v_n and total is not null group by region_cut having count(*) = 2)
+    select 1 from a join r on r.region_cut = a.region_cut
+     where a.k = 1 or (a.k >= 2 and (r.tot - a.known = a.lo_t or (a.all_lt5 and r.tot - a.known = (v_thr - 1) * a.k)))) then
+    raise exception 'postcondición: un total regional publicado determinaría exactamente el valor de los grupos sin total publicado (debió retenerse)';
   end if;
 
   update public.source_snapshots set status = 'superseded' where source_id = v_snap.source_id and status = 'loaded' and id <> p_snapshot_id;
@@ -393,6 +439,8 @@ begin
     'groups_with_complementary', (select count(distinct (unit, sexo)) from public.isapre_cartera_celda where snapshot_n = v_n and kind = 'complementary'),
     'groups_cuadre_failed', (select count(*) from public.isapre_cartera_grupo where snapshot_n = v_n and not cuadre_ok),
     'regions_total_withheld', (select count(distinct region_cut) from public.isapre_cartera_region where snapshot_n = v_n and total is null),
+    'groups_total_withheld', (select count(*) from public.isapre_cartera_grupo where snapshot_n = v_n and total_withheld),
+    'groups_total_lt5', (select count(*) from public.isapre_cartera_grupo where snapshot_n = v_n and total_pub is null and not total_withheld),
     'benef_total', (select sum(n) from salud_restringido.isapre_cartera where snapshot_n = v_n));
   update public.source_snapshots set validation_report = validation_report || jsonb_build_object('publish', v_report) where id = p_snapshot_id;
   return v_report;
@@ -435,6 +483,7 @@ end $$;
 -- p_min_tramo: 0 = todas las edades (incluye edad S/I) · 12 = 60 años o más (tramos 12..20, SIN edad S/I). Por grupo (unidad × sexo):
 --   P = Σ celdas publicadas dentro del filtro; X = Σ celdas suprimidas dentro del filtro, acotada por (a) las cotas de cada celda, (b) el residuo publicado del grupo
 --   (X + suprimidas fuera del filtro = residuo) y (c) si el total del grupo es «<5», X + suprimidas fuera ≤ umbral−1 (y X ≥ Σ cotas inferiores).
+--   Un grupo con total RETENIDO (total_withheld) no tiene residuo ni cota «<5»: solo cuentan las cotas de cada celda.
 --   Con todas las edades y el total del grupo publicado, X = residuo y el valor del grupo es EXACTAMENTE el total publicado.
 -- Todo sale de datos ya publicados (get_isapre_celdas devuelve los mismos totales y residuos): no revela nada que no estuviera público.
 create or replace function public._isapre_comuna_rango(p_snapshot_n integer, p_sexo text, p_min_tramo integer)
@@ -444,7 +493,7 @@ language sql stable security invoker set search_path = public as $$
     select k.unit, k.sexo, k.n_pub, k.suppressed, k.lo, k.hi, (p_min_tramo = 0 or k.tramo between p_min_tramo and 20) as inr
       from public.isapre_cartera_celda k where k.snapshot_n = p_snapshot_n and (p_sexo is null or k.sexo = p_sexo)),
   g as (
-    select gr.unit, gr.sexo, gr.residual,
+    select gr.unit, gr.sexo, gr.residual, gr.total_withheld,
            coalesce(sum(c.n_pub) filter (where c.inr), 0) as p,
            coalesce(sum(c.lo) filter (where c.inr and c.suppressed), 0) as lo_in,
            coalesce(sum(c.hi) filter (where c.inr and c.suppressed), 0) as hi_in,
@@ -453,10 +502,11 @@ language sql stable security invoker set search_path = public as $$
            count(*) filter (where c.inr and c.suppressed) as k_in
       from public.isapre_cartera_grupo gr join c on c.unit = gr.unit and c.sexo = gr.sexo
      where gr.snapshot_n = p_snapshot_n
-     group by gr.unit, gr.sexo, gr.residual)
+     group by gr.unit, gr.sexo, gr.residual, gr.total_withheld)
   select g.unit,
          sum(g.p + case when g.residual is not null then greatest(g.lo_in, g.residual - g.hi_out) else g.lo_in end)::bigint,
          sum(g.p + case when g.residual is not null then least(g.hi_in, g.residual - g.lo_out)
+                        when g.total_withheld then g.hi_in                                        -- total retenido: sin residuo ni cota «<5»; solo las cotas de cada celda
                         else least(g.hi_in, public.pipeline_setting('salud.suppress_below')::int - 1 - g.lo_out) end)::bigint,
          sum(g.k_in)::bigint
     from g group by g.unit
@@ -488,9 +538,9 @@ end $$;
 -- La pirámide PUBLICADA de una unidad (comuna o «sin dato»): celdas con su valor o «<5» y sus cotas, y el residuo de cada grupo.
 create or replace function public.get_isapre_celdas(p_unit text)
 returns table (unit text, sexo text, tramo smallint, n_pub integer, suppressed boolean, kind text, lo integer, hi integer,
-               group_total integer, group_residual integer, group_suppressed_cells smallint, group_cuadre_ok boolean)
+               group_total integer, group_residual integer, group_suppressed_cells smallint, group_cuadre_ok boolean, group_total_withheld boolean)
 language sql stable security invoker set search_path = public as $$
-  select k.unit, k.sexo, k.tramo, k.n_pub, k.suppressed, k.kind, k.lo, k.hi, g.total_pub, g.residual, g.suppressed_cells, g.cuadre_ok
+  select k.unit, k.sexo, k.tramo, k.n_pub, k.suppressed, k.kind, k.lo, k.hi, g.total_pub, g.residual, g.suppressed_cells, g.cuadre_ok, g.total_withheld
     from public._isapre_current_snapshot() cs
     join public.isapre_cartera_celda k on k.snapshot_n = cs.snapshot_n and k.unit = p_unit
     join public.isapre_cartera_grupo g on g.snapshot_n = k.snapshot_n and g.unit = k.unit and g.sexo = k.sexo

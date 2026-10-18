@@ -205,9 +205,61 @@ def test_bounds_contain_the_real_value_and_hi_never_exceeds_residual():
             assert c.lo <= v[c.tramo] <= c.hi <= g.residual
 
 
+@pytest.mark.parametrize("pairs,case", [
+    ({"t5": 1, "t8": 1, "t9": 30}, "k·1 (R = Σ cotas inferiores)"),
+    ({"t5": 4, "t8": 4, "t9": 30}, "k·4 sin complementaria (R = 4·k)"),
+    ({"t5": 1, "t6": 5, "t7": 9}, "1 + complementaria de 5 (R = Σ cotas inferiores)"),
+    ({"t2": 1, "t3": 1, "t4": 1, "t5": 1}, "total «<5» con cuatro celdas de 1 (caso combinado)"),
+])
+def test_determined_group_withholds_its_total_and_publishes_bounds_without_residual(pairs, case):
+    v = vec(**pairs)
+    g = sup(v)
+    assert g.total_withheld and g.total_pub is None and g.residual is None, case
+    for c in g.cells:
+        if c.suppressed:
+            assert c.lo <= v[c.tramo] <= c.hi, case
+            assert c.hi == 4 if c.kind == "primary" else c.hi == min(x for i, x in enumerate(v) if not g.cells[i].suppressed and x >= 5)
+
+
+@pytest.mark.parametrize("pairs", [{"t5": 2, "t8": 3, "t9": 30}, {"t5": 4, "t8": 3, "t9": 30}, {"t2": 1, "t3": 1, "t4": 1}, {"t5": 1, "t6": 6, "t7": 9}])
+def test_neighbour_groups_that_do_not_determine_are_not_withheld(pairs):
+    g = sup(vec(**pairs))
+    assert not g.total_withheld
+
+
+def test_withheld_complementary_without_another_published_cell_has_no_publishable_bound():
+    with pytest.raises(I.SuppressionError):
+        sup(vec(t5=1, t6=5))                    # total 6 = 1 + 5 y no hay otra celda ≥ 5: la cota superior de la complementaria no existe
+
+
+def test_region_withheld_replica_rules(tmp_path):
+    def g(**pairs):
+        return sup(vec(**pairs))
+    def reg(groups, total):                 # cartera mínima en la región 01: una unidad por grupo; el replica solo necesita el total regional y los grupos
+        cart = I.Cartera(12, 2025, None)
+        gr = {}
+        for n, gg in enumerate(groups):
+            u = f"0110{n}"
+            cart.units[u] = I.Unit(u, "comuna", "01", u, u)
+            for sx in I.SEXOS:
+                gr[(u, sx)] = gg if sx == "F" else sup([0] * 22)
+        cart.counts = {("01100", "cotizante", "F"): [total] + [0] * 21}
+        return I.region_withheld(cart, gr)
+    one = g(t5=2)                       # «<5» de 2: único grupo sin total
+    big = g(t5=30)
+    assert reg([one, big], 32) == {"01"}                                        # k = 1
+    assert reg([g(t5=1), g(t5=1), big], 32) == {"01"}                           # R = 2 = Σ cotas inferiores
+    assert reg([g(t5=4), g(t5=4), big], 38) == {"01"}                           # R = 8 = 4·2
+    assert reg([g(t5=2), g(t5=3), big], 35) == set()                            # R = 5: no determina
+    ret = g(t5=1, t6=1, t7=30)          # retenido: total 32, publicado 30, Σ cotas inferiores 2
+    assert ret.total_withheld
+    assert reg([ret, g(t5=1)], 33) == {"01"}                                    # combinado: 32 + 1 = Σ cotas inferiores (publicadas + cotas)
+    assert reg([ret, g(t5=3)], 35) == set()                                     # 35 ≠ 33
+
+
 def test_property_thousands_of_random_groups():
     rng = random.Random(42)
-    comp = prim = 0
+    comp = prim = withheld_n = 0
     for _ in range(4000):
         v = rand_vec(rng, small=rng.choice([0.02, 0.1, 0.4]), zero=rng.choice([0.2, 0.55, 0.9]))
         g = sup(v)
@@ -219,12 +271,18 @@ def test_property_thousands_of_random_groups():
         if g.total_pub is not None:
             assert g.suppressed_cells != 1                                                            # 0 o ≥ 2: no se despeja por resta
             assert g.total_pub == g.published_sum + g.residual == total
+            assert not g.total_withheld
+            assert not (g.suppressed_cells and (g.residual == g.lo_sum or (g.residual == 4 * g.suppressed_cells and not any(c.kind == "complementary" for c in g.cells))))   # el residuo no determina nada
+        elif g.total_withheld:
+            assert g.residual is None and g.suppressed_cells > 0                                      # retenido: sin total, sin residuo, sin cota «<5»
         else:
             assert 1 <= total <= 4
+            assert g.lo_sum < 4                                                                       # «<5» con cuatro celdas de 1 se retiene
         assert g.cuadre_ok
         for c in g.cells:
             if c.suppressed:
                 assert c.lo <= v[c.tramo] <= c.hi
+                withheld_n += g.total_withheld
                 prim += c.kind == "primary"
                 comp += c.kind == "complementary"
         if g.total_pub is not None and g.suppressed_cells:
@@ -232,7 +290,7 @@ def test_property_thousands_of_random_groups():
             if comp_cell:
                 cand = sorted((v[i], i) for i, x in enumerate(g.cells) if not x.suppressed and v[i] >= 5) + [(v[comp_cell[0].tramo], comp_cell[0].tramo)]
                 assert min(cand)[1] == comp_cell[0].tramo                                             # la complementaria es la menor ≥ 5 (empate: menor tramo)
-    assert prim > 1000 and comp > 100                                                                 # la prueba ejercita las tres ramas
+    assert prim > 1000 and comp > 100 and withheld_n > 50                                             # la prueba ejercita las tres ramas y la retención
 
 
 def test_suppress_all_covers_every_unit_and_sex_even_if_absent(tmp_path):
@@ -345,9 +403,12 @@ def test_load_matches_python_replica_cell_by_cell_and_is_idempotent(conn, tmp_pa
     db = {(un, s, t): (n, sp, k, lo, hi) for un, s, t, n, sp, k, lo, hi in conn.execute("select unit, sexo, tramo, n_pub, suppressed, kind, lo, hi from public.isapre_cartera_celda").fetchall()}
     exp = {(un, s, c.tramo): (c.n_pub, c.suppressed, c.kind, c.lo, c.hi) for (un, s), g in py.items() for c in g.cells}
     assert db == exp and len(db) == len(cart.units) * 3 * 22
-    grp = {(un, s): (tp, ps, k, rs, ls, ok) for un, s, tp, ps, k, rs, ls, ok in conn.execute(
-        "select unit, sexo, total_pub, published_sum, suppressed_cells, residual, lo_sum, cuadre_ok from public.isapre_cartera_grupo").fetchall()}
-    assert grp == {k: (g.total_pub, g.published_sum, g.suppressed_cells, g.residual, g.lo_sum, g.cuadre_ok) for k, g in py.items()}
+    grp = {(un, s): (tp, ps, k, rs, ls, ok, wh) for un, s, tp, ps, k, rs, ls, ok, wh in conn.execute(
+        "select unit, sexo, total_pub, published_sum, suppressed_cells, residual, lo_sum, cuadre_ok, total_withheld from public.isapre_cartera_grupo").fetchall()}
+    assert grp == {k: (g.total_pub, g.published_sum, g.suppressed_cells, g.residual, g.lo_sum, g.cuadre_ok, g.total_withheld) for k, g in py.items()}
+    assert any(g.total_withheld for g in py.values())                                                      # el fixture aleatorio ejercita la retención
+    withheld_db = {r for (r,) in conn.execute("select distinct region_cut from public.isapre_cartera_region where total is null").fetchall()}
+    assert withheld_db == I.region_withheld(cart, py)                                                       # misma regla regional en la réplica y en la base
     assert conn.execute("select count(*) from salud_restringido.isapre_stage").fetchone()[0] == 0
     snap = conn.execute("select status, row_count_raw, rejected_count, declared_date, period_start, period_end, capture_method from public.source_snapshots "
                         "where source_id in (select id from public.data_sources where source_key = %s)", (I.SOURCE_KEY,)).fetchall()

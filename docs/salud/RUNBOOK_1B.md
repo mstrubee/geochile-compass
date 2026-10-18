@@ -52,20 +52,25 @@ python etl/salud_casen.py --sav casen_2024.sav --tabulado Salud_Casen_2024.xlsx 
 ```
 Las URL de origen verificadas están en `data_sources.data_url`. `--declared-date` es la fecha de **publicación** (distinta del período).
 **Verificar:**
-- Isapre: el `--dry-run` imprime `unidades del archivo 363 = cargadas 363 + rechazadas 0 ✔ cuadra`, los diez cuadres con los totales del archivo ✔ y `VEREDICTO: LISTO para cargar` (si dice `NO SE CARGA`, no seguir). Con el archivo de dic-2025: **2.517.305** beneficiarios; 23.958 celdas; 12.090 ceros; suprimidas 2.783 primarias + 144 complementarias; `regions_total_withheld = 4` (regiones 02, 03, 14 y 16 no publican su total regional).
+- Isapre: el `--dry-run` imprime `unidades del archivo 363 = cargadas 363 + rechazadas 0 ✔ cuadra`, los diez cuadres con los totales del archivo ✔ y `VEREDICTO: LISTO para cargar` (si dice `NO SE CARGA`, no seguir). Con el archivo de dic-2025: **2.517.305** beneficiarios; 23.958 celdas; 12.090 ceros; suprimidas 2.783 primarias + 144 complementarias; **`groups_total_withheld = 40`** (totales de grupo retenidos), `groups_total_lt5 = 65` y **`regions_total_withheld = 5`** (las regiones 01, 02, 06, 11 y 16 no publican su total regional).
 - CASEN: `estimación propia vs oficial: diferencia máxima ≈ 3·10⁻⁶ pp` (y error estándar ≈ 3·10⁻⁸ pp), `estratos con un solo conglomerado 0`, `96 estimaciones · 67 publicables · 29 no publicables`, `LISTO para cargar`. Si el contraste falla o aparece un estrato con un solo conglomerado (exit 5), no se carga.
 - `select * from public.get_isapre_resumen();` → período 2025-12, publicación 2026-01-28, extracción 2026-01-22. `select count(*) from public.get_casen_prevision_region();` → 96.
-- `select * from public.get_isapre_resumen_sin_alta('hospital', 12);` → `292 | 292 | 116128 | 115632 | 117226 | t` (comunas sin alta, con dato, agregado exacto, rango publicado, consistente; con la captura de establecimientos del 2026-10-14). Con `'ampliada'`: `288 | 288 | 93058 | 92565 | 94156 | t`. Con `p_min_tramo` distinto de 12 la función **debe fallar** («solo admite 12»).
-- Regiones sin total publicado (fuga por resta regional): `select region_cut, rol, total, note from public.isapre_cartera_region where total is null;` → 8 filas (regiones 02, 03, 14, 16 × 2 roles).
-  Control de la invariante: **ninguna** región con total publicado puede tener exactamente un grupo suprimido:
+- `select * from public.get_isapre_resumen_sin_alta('hospital', 12);` → `292 | 292 | 116128 | 115614 | 117442 | t` (comunas sin alta, con dato, agregado exacto, rango publicado, consistente; con la captura de establecimientos del 2026-10-14). Con `'ampliada'`: `288 | 288 | 93058 | 92547 | 94353 | t`. Con `p_min_tramo` distinto de 12 la función **debe fallar** («solo admite 12»).
+- Retención del residuo (regla general, DISENO §3.3 punto 5b). Regiones sin total publicado: `select distinct region_cut from public.isapre_cartera_region where total is null order by 1;` → **01, 02, 06, 11, 16**. Grupos con total retenido: `select count(*) from public.isapre_cartera_grupo where total_withheld;` → **40** (y `total_pub` y `residual` NULL en todos).
+  Controles de la invariante (ambos deben devolver **0 filas**): ningún grupo con residuo o total «<5» publicado que determine exactamente sus suprimidas, y ninguna región con total publicado con un solo grupo sin total:
   ```sql
-  select u.region_cut, count(*) filter (where g.total_pub is null) as grupos_suprimidos
-    from public.isapre_cartera_grupo g join public.isapre_cartera_unidad u using (snapshot_n, unit)
-   where u.region_cut is not null and g.snapshot_n = (select snapshot_n from public._isapre_current_snapshot())
-   group by 1 having count(*) filter (where g.total_pub is null) = 1;     -- debe devolver las mismas 4 regiones: 02, 03, 14, 16 (las que NO publican total)
+  select unit, sexo from public.isapre_cartera_grupo g
+   where g.snapshot_n = (select snapshot_n from public._isapre_current_snapshot()) and not g.total_withheld and g.suppressed_cells > 0
+     and ((g.total_pub is not null and (g.residual = g.lo_sum
+            or (g.residual = 4 * g.suppressed_cells and not exists (select 1 from public.isapre_cartera_celda c
+                  where c.snapshot_n = g.snapshot_n and c.unit = g.unit and c.sexo = g.sexo and c.kind = 'complementary'))))
+          or (g.total_pub is null and g.lo_sum >= 4));
+  select u.region_cut from public.isapre_cartera_grupo g join public.isapre_cartera_unidad u using (snapshot_n, unit)
+   where g.snapshot_n = (select snapshot_n from public._isapre_current_snapshot()) and u.region_cut is not null
+     and u.region_cut not in (select region_cut from public.isapre_cartera_region where total is null)
+   group by 1 having count(*) filter (where g.total_pub is null) = 1;
   ```
-- `select freshness_status, license_label from public.get_layer_provenance('isapre_cartera');` y con `'casen_prevision'` → licencia `null`.
-- Repetir los mismos comandos → `already_loaded`. Los originales quedan en el bucket `source-snapshots` (`.xlsx` y `.sav`/tabulado).
+- Rangos por comuna: `select count(*), count(*) filter (where not exact), sum(n_lo), sum(n_hi) from public.get_isapre_comuna(null, 0, null);` → `346 | 88 | 2517228 | 2517830`; con `(null, 12, 'hospital')` → `292 | 158 | 115614 | 117442`.
 
 ## Paso 4 — Desplegar el front
 Como siempre. **Verificar** antes de la migración 3: el mapa carga y las capas de permisos, proyectos y salud 1a funcionan igual que antes; sin errores nuevos en consola.

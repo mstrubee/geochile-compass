@@ -25,7 +25,7 @@ URL de origen de cada archivo: guardada en `source_snapshots.origin_url` y en la
 | Celdas staged (incluidos ceros) | 47.916 filas (363 unidades × 22 tramos × 3 sexos × 2 roles) |
 | Publicadas | 23.958 celdas (unidad × sexo × tramo) y 1.089 grupos |
 | Réplica Python de la supresión vs. base | **idénticas celda por celda** (prueba pytest con base) |
-| Totales regionales publicados | 12 de 16 (4 regiones con un único grupo suprimido no publican su total; ver §2.2) |
+| Totales regionales publicados | **11 de 16** (las regiones 01, 02, 06, 11 y 16 no publican su total; ver §2.2) |
 
 **CASEN** (`etl/salud_casen.py`):
 
@@ -47,37 +47,50 @@ Ejemplos (Isapre, IC 95 %): región 01 **8,0 %** (entre 6,9 y 9,2 %) · región 
 | Ceros publicados (0 es 0, no se suprime) | 12.090 |
 | Suprimidas primarias (1 a 4 personas) | 2.783 |
 | Suprimidas complementarias (para que la primaria no se deduzca restando) | 144 |
-| Grupos (unidad × sexo) con total «<5» | 71 de 1.089 |
+| Grupos (unidad × sexo) con total «<5» | **65** de 1.089 (eran 71: 6 se retienen, ver §2.3) |
+| Grupos con el total **retenido** (el residuo determinaría exactamente las suprimidas) | **40** de 1.089 (§2.3) |
 | Grupos cuyo cuadre por cotas falla | **0** |
 
-### 2.1 Qué ve el usuario (medido con las RPC sobre la captura real, con las migraciones corregidas tras la revisión del PR)
+### 2.1 Qué ve el usuario (medido con las RPC sobre la captura real, con las migraciones corregidas)
 
-El valor por comuna es **exacto cuando lo publicado lo determina** y un **rango** si no (DISENO §3.3 punto 6): con todas las edades y el total del grupo publicado el valor es exactamente ese total; con un filtro de edad, las celdas suprimidas dentro del filtro se acotan por el **residuo publicado** del grupo. Nada de esto usa conteos completos.
+El valor por comuna es **exacto cuando lo publicado lo determina** y un **rango** si no (DISENO §3.3 punto 6): con todas las edades y el total del grupo publicado el valor es exactamente ese total; con un filtro de edad, las celdas suprimidas dentro del filtro se acotan por el **residuo publicado** del grupo; un grupo con total retenido solo tiene las cotas de cada celda. Nada de esto usa conteos completos.
 
 | Consulta | Comunas | Con rango (no exactas) | Σ del rango publicado | Real (conteos completos) |
 |---|---|---|---|---|
-| `get_isapre_comuna(null, 0, null)` — todas las edades, ambos sexos | 346 | **59** (antes **342**) | 2.517.246 a 2.517.421 | 2.517.270 (comunas) |
-| ídem, solo mujeres / solo hombres / sexo sin información | 346 | 7 / 6 / 49 | F 1.191.787–1.191.802 · M 1.325.308–1.325.321 · SI 151–298 | |
-| `get_isapre_comuna(null, 12, null)` — 60+, todas las comunas | 346 | 141 | 394.768 a 396.372 | |
-| `get_isapre_comuna(null, 12, 'hospital')` — 60+ en comunas sin hospital de alta complejidad | 292 | **137** (antes **283**) | **115.632 a 117.226** (antes 114.478–118.358) | 116.128 |
-| `get_isapre_comuna(null, 12, 'ampliada')` | 288 | 136 | **92.565 a 94.156** (antes 91.440–95.276) | 93.058 |
+| `get_isapre_comuna(null, 0, null)` — todas las edades, ambos sexos | 346 | **88** (342 antes de la corrección B2; 59 tras B2 y antes de la retención) | 2.517.228 a 2.517.830 | 2.517.270 (comunas) |
+| ídem, solo mujeres / solo hombres / sexo sin información | 346 | 29 / 24 / 49 | F 1.191.775–1.192.011 · M 1.325.302–1.325.521 · SI 151–298 | |
+| `get_isapre_comuna(null, 12, null)` — 60+, todas las comunas | 346 | 171 | 394.750 a 396.700 | |
+| `get_isapre_comuna(null, 12, 'hospital')` — 60+ en comunas sin hospital de alta complejidad | 292 | **158** (283 → 137 → 158) | **115.614 a 117.442** (114.478–118.358 → 115.632–117.226 → ahora) | 116.128 |
+| `get_isapre_comuna(null, 12, 'ampliada')` | 288 | 156 | **92.547 a 94.353** (91.440–95.276 → 92.565–94.156 → ahora) | 93.058 |
 
-**Corrección del rango verificada en las 2.768 combinaciones** (346 comunas × 4 sexos × 2 cortes de edad): el valor real, calculado con los conteos completos, cae **siempre** dentro del rango publicado (0 fuera). Una prueba SQL aleatoria hace la misma comprobación sobre 640 combinaciones en cada corrida. Las comunas que quedan en rango son las que tienen un grupo (casi siempre «sexo sin información») con total «<5».
+La retención de la §2.3 devuelve parte de la anchura que la corrección B2 había quitado: es el costo de no publicar un residuo que determinaría exactamente las celdas suprimidas.
+
+**Corrección del rango verificada tras la retención en las 2.768 combinaciones** (346 comunas × 4 sexos × 2 cortes de edad): el valor real, calculado con los conteos completos, cae **siempre** dentro del rango publicado (0 fuera). Una prueba SQL aleatoria hace la misma comprobación sobre 640 combinaciones en cada corrida.
 
 **Declaración honesta:** la cartera completa por comuna, edad y sexo ya es **pública** en el XLSX de la Superintendencia. La supresión es una **política de presentación** de esta plataforma (regla 5), no una protección real de las personas; la fuente **no declara** una norma de supresión. Por eso no se publica el total comunal calculado con los conteos completos: restarle los grupos publicados despejaría un grupo «sexo sin información» de 1 a 4.
 
 ### 2.2 Fuga por resta regional (encontrada en la revisión del PR)
 
-Σ de los totales regionales − Σ de los totales de grupo publicados de la región = Σ de los totales de grupo **suprimidos** de esa región; si la región tiene **un solo** grupo suprimido, eso despeja su total. Con la captura real ocurría en **4 de 16 regiones**:
+Σ de los totales regionales − Σ de los totales de grupo publicados de la región = **R**, la suma de los totales de los grupos **sin total publicado**. Con un solo grupo así, R es su total exacto. Con la captura real ocurría en **4 de 16 regiones** (02, 03, 14, 16: residuos 4, 1, 3 y 1).
 
-| Región | Residuo regional (total − Σ grupos publicados) | Grupos suprimidos | Qué revelaba |
-|---|---|---|---|
-| 02 | 4 | 1 | ese grupo suma exactamente 4 |
-| 03 | 1 | 1 | exactamente 1 |
-| 14 | 3 | 1 | exactamente 3 |
-| 16 | 1 | 1 | exactamente 1 |
+La regla se generalizó en la segunda revisión (DISENO §3.3 punto 5b): el total regional **no se publica** cuando R, junto con las cotas de los totales que la componen, determina exactamente su valor: (1) un solo grupo sin total; (2) R = Σ de las cotas inferiores (todos valen su mínimo); (3) todos «<5» y R = 4·k (todos valen 4). Los grupos con total retenido (§2.3) cuentan como sin total y sin cota superior. Resultado con la captura real: **5 regiones sin total: 01, 02, 06, 11 y 16** (la 06 era el caso `R = k` señalado en la revisión; la 01, 02 y 11 aparecen al contar los totales retenidos; las 03 y 14 dejan de ser determinadas porque ahora tienen más de un grupo sin total y su R ya no coincide con sus cotas). La base re-valida la invariante sobre lo publicado antes de cerrar y la réplica Python aplica la misma regla.
 
-Corrección (misma regla que en las celdas): en esas regiones el **total regional no se publica** (`total` NULL con su nota; la base lo cuadró contra el archivo **antes** de retenerlo, y la publicación re-valida la invariante). La captura real publica ahora 12 de 16 regiones; `regions_total_withheld = 4`. **Queda una limitación, igual que en las celdas:** con 2 o más grupos suprimidos el residuo regional da cotas; si fuera igual a `k` (todos 1) o a `4k` (todos 4) las cotas se vuelven exactas. Con la captura real ocurre en la región 06 (residuo 3 con 3 grupos suprimidos: los tres suman 1 cada uno). No lo cerré porque es la misma regla de cuadre por cotas ya aceptada para las celdas (DISENO §3.3 punto 5); decidir si se endurece para las regiones está en §7.
+### 2.3 Retención del residuo de grupo (segunda revisión del PR)
+
+Regla general (DISENO §3.3 punto 5b): un residuo publicado **no se publica** cuando, junto con las cotas, determina **exactamente** el valor de las celdas suprimidas: `residuo = Σ cota inferior` (todas valen su mínimo) o, sin complementaria, `residuo = 4·k` (todas valen 4); y el caso combinado de un total «<5» con cuatro celdas suprimidas (total 4, cada una 1). El total del grupo se **retiene** (`total_pub` NULL, `total_withheld`); las celdas quedan suprimidas con cotas sin residuo (primaria `[1,4]`; complementaria `[5, la menor otra celda publicada ≥ 5]`).
+
+Medido con la captura real **antes** de aplicar la regla (grupos con total publicado y celdas suprimidas: 636):
+
+| Caso | Grupos |
+|---|---|
+| Residuo = Σ cotas inferiores (todas valen su mínimo) | **31** (12 de ellos con una complementaria de 5) |
+| Residuo = 4·k sin complementaria (todas valen 4) | **3** |
+| Total «<5» con cuatro celdas suprimidas de 1 (caso combinado) | **6** (de 71 grupos con total «<5») |
+| **Total retenido** | **40 de 1.089** (34 + 6) |
+
+Con la regla aplicada: 65 grupos quedan con total «<5» y 40 con total retenido. Los 40 se identificaron igual en la base y en la réplica Python (`groups_total_withheld = 40`). Ningún grupo publicado, recalculado desde lo publicado, tiene un residuo que determine sus suprimidas (0). Ejemplos del efecto: un grupo con dos celdas de 1 y un total de 32 antes publicaba «32 = 30 + 2, y ambas valen 1»; ahora publica solo las 30 de las celdas visibles y cada suprimida entre 1 y 4. Cada celda suprimida de un grupo retenido tiene su valor real dentro de las cotas publicadas (comprobado en todos).
+
+Límite que se declara: en un grupo retenido con una complementaria, la cota superior de esa celda es la menor otra celda publicada ≥ 5; si no existiera ninguna (un grupo de una primaria de 1 y una única celda de 5) la publicación **se detiene** con un mensaje explícito en vez de publicar una cota falsa. Con el archivo real no ocurre (los 12 grupos retenidos con complementaria tienen entre 15 y 20 celdas ≥ 5).
 
 ## 3. Pregunta 1b-1 y su verificación independiente
 
@@ -85,8 +98,8 @@ Corrección (misma regla que en las celdas): en esas regiones el **total regiona
 
 | Definición (D1) | Comunas sin alta | Beneficiarios 60+ (conteos completos) | Rango que sale de lo publicado | ¿Cae dentro? |
 |---|---|---|---|---|
-| Solo hospitales | 292 de 346 | **116.128** | 115.632 a 117.226 | sí |
-| Ampliada (+ clínicas y centros de especialidades) | 288 de 346 | **93.058** | 92.565 a 94.156 | sí |
+| Solo hospitales | 292 de 346 | **116.128** | 115.614 a 117.442 | sí |
+| Ampliada (+ clínicas y centros de especialidades) | 288 de 346 | **93.058** | 92.547 a 94.353 | sí |
 
 `benef_total_comunas` = 60+ en las unidades de tipo **comuna** con fila: **395.273** (sin las unidades «sin dato de comuna» ni «sin dato de región»; **no es el total del país**; en la versión anterior de esta función la columna se llamaba `benef_total_pais`, con un nombre que decía más de lo que sumaba). En comunas sin hospital de alta complejidad: 29,4 % de ese total.
 El agregado se calcula **dentro de la base con los conteos completos** con una función `SECURITY DEFINER` que **solo devuelve el agregado**, **solo admite el corte 60+** (`p_min_tramo = 12`) y se **niega** si el conjunto tiene menos de 10 comunas (`salud.min_aggregate_comunas`).
@@ -130,16 +143,13 @@ El agregado se calcula **dentro de la base con los conteos completos** con una f
 * **Fecha exacta de publicación** de la cartera: se tomó de la cabecera `Last-Modified` (2026-01-28), que es una señal del servidor, no una declaración del archivo. La de CASEN (2026-06-10) la indicó el operador.
 * **Fechas de terreno de CASEN 2024**.
 * **Información provisional**: el archivo la declara «sujeta a modificación»; no se sabe cuándo se consolida.
-* **Garantías de privacidad:** son las de una política de presentación (la cartera es pública). Se probó que el rango publicado contiene siempre el valor real y que ninguna resta regional despeja un grupo; **no** se probó (ni se afirma) resistencia a un atacante que combine consultas (§3).
+* **Garantías de privacidad:** son las de una política de presentación (la cartera es pública). Se probó que el rango publicado contiene siempre el valor real y que ni un residuo de grupo ni uno regional determinan exactamente las suprimidas (§2.2 y §2.3); **no** se probó (ni se afirma) resistencia a un atacante que combine consultas (§3) ni que use la regla pública de la complementaria (la menor celda ≥ 5 del grupo) para acotar más de lo publicado.
 * **Cómo se registra el error muestral** de CASEN más allá de lo que reproduce el tabulado (un nivel de conglomerados); el contraste con el tabulado oficial coincide, pero no equivale a una validación del diseño completo.
 * La interfaz solo se probó en jsdom (Vitest con capas Leaflet simuladas); **no se vio en un navegador real** ni contra Supabase real. Las migraciones **no están aplicadas** en producción.
 * No se subió el original a Storage en la carga local (`--no-storage`).
 
 ## 7. Decisiones del dueño y pendientes
 
-Resueltas en la revisión del PR: **(1)** las licencias de Isapre y CASEN las confirma el dueño (la ficha sigue en «por confirmar»; no bloquea el merge porque las capas quedan en `client_ready = false`); **(2)** Censo 2024 y Fonasa siguen pendientes (1b-2 y 1b-5 en espera); **(3)** la regla 5 **no se cambia**: no se publica el total comunal con conteos completos (la opción de la versión anterior de este informe se descartó porque permitiría despejar por resta un grupo «sexo sin información» de 1 a 4); el rango se resuelve con la precisión de §2.1.
+Resueltas en las revisiones del PR: licencias (las confirma el dueño; la ficha sigue en «por confirmar»); Censo 2024 y Fonasa pendientes (1b-2 y 1b-5 en espera); regla 5 sin cambios (no se publica el total comunal con conteos completos); **retención del residuo generalizada** a grupos y regiones (§2.2 y §2.3); **la diferencia entre consultas de 1b-1 (hospitales − ampliada = 23.070, cuatro comunas) queda aceptada como límite declarado**: es un agregado grande que se puede derivar igual del XLSX público.
 
-Quedan abiertas:
-1. **Región 06** (residuo regional = k): ¿endurecer la regla para que no se publique el total regional cuando el residuo es `k` o `4k`? Hoy es la misma cota que aceptan las celdas.
-2. **Diferencia entre consultas de 1b-1** (§3): ¿se acepta como límite declarado o se retira la segunda definición del agregado? No tiene arreglo técnico mientras haya dos conjuntos anidados.
-3. **Orden de aplicación** (`RUNBOOK_1B.md`): migraciones 1 y 2 → cargas → front → migración 3 (igual que 1a). Requiere 1a aplicada y cargada.
+Pendiente de aplicar (lo hace el dueño con `RUNBOOK_1B.md` y respaldo): migraciones 1 y 2 → cargas → front → migración 3. Requiere 1a aplicada y cargada.

@@ -62,7 +62,8 @@ def render(s: dict, dry_run: bool, max_ratio: float) -> str:
     L += ["", f"SUPRESIÓN (regla 5; umbral < {sup['threshold']}; DISENO §3.3; réplica Python de la base)",
           f"  grupos (unidad × sexo) {isa_n(sup['grupos'])} · celdas {isa_n(sup['celdas'])} · ceros publicados {isa_n(sup.get('ceros_publicados', 0))}",
           f"  suprimidas: primarias {isa_n(sup.get('suprimidas_primary', 0))} · complementarias {isa_n(sup.get('suprimidas_complementary', 0))}",
-          f"  grupos con total «<5» {isa_n(sup.get('grupos_con_total_suprimido', 0))} · grupos con complementaria {isa_n(sup.get('grupos_con_complementaria', 0))} · cuadre por cotas fallido {sup.get('grupos_cuadre_fallido', 0)}",
+          f"  grupos con total «<5» {isa_n(sup.get('grupos_con_total_lt5', 0))} · totales de grupo RETENIDOS (determinarían las suprimidas) {isa_n(sup.get('grupos_con_total_retenido', 0))} · regiones sin total publicado {sup.get('regiones_con_total_retenido', 0)}",
+          f"  grupos con complementaria {isa_n(sup.get('grupos_con_complementaria', 0))} · cuadre por cotas fallido {sup.get('grupos_cuadre_fallido', 0)}",
           "  Declaración: la cartera completa por comuna, edad y sexo ya es pública en el XLSX; la supresión es una política de presentación, no una protección real."]
     L += ["", "VEREDICTO: " + ("LISTO para cargar" if s["ready"] else "NO SE CARGA — " + "; ".join(s["errors"]))]
     return "\n".join(L)
@@ -107,8 +108,13 @@ def run(args) -> int:
             except (isa.StructureError, KeyError, ValueError) as e:
                 print(f"\nESTRUCTURA INVÁLIDA: {e}\nNo se cargó nada.", file=sys.stderr)
                 return EXIT_STRUCTURE
-        groups = isa.suppress_all(cart)
+        try:
+            groups = isa.suppress_all(cart)
+        except isa.SuppressionError as e:
+            print(f"\nSUPRESIÓN IMPOSIBLE: {e}\nNo se cargó nada.", file=sys.stderr)
+            return EXIT_STRUCTURE
         ssum = isa.summarize(groups)
+        ssum["regiones_con_total_retenido"] = len(isa.region_withheld(cart, groups, thr))
         ssum["threshold"] = thr
         last = calendar.monthrange(cart.period_year, cart.period_month)[1]
         period = (date(cart.period_year, cart.period_month, 1), date(cart.period_year, cart.period_month, last))

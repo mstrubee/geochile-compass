@@ -396,8 +396,26 @@ select pg_temp.assert_that('ALEATORIO: la complementaria es la menor celda publi
   (select count(*) from _rc c join _rf f using (unit, sexo, tramo)
     where c.kind = 'complementary'
       and exists (select 1 from _rc c2 join _rf f2 using (unit, sexo, tramo) where c2.unit = c.unit and c2.sexo = c.sexo and not c2.suppressed and f2.n >= 5 and (f2.n < f.n or (f2.n = f.n and c2.tramo < c.tramo)))) = 0);
-select pg_temp.assert_that('ALEATORIO: los totales de grupo de 1 a 4 NO se publican, y los de 0 o ≥ 5 sí',
-  (select count(*) from _rg g join (select unit, sexo, sum(n) t from _rf group by 1, 2) f using (unit, sexo) where (f.t between 1 and 4) <> (g.total_pub is null)) = 0);
+select pg_temp.assert_that('ALEATORIO: los totales de grupo de 1 a 4 NO se publican; los de 0 o ≥ 5 sí, salvo los RETENIDOS (total_withheld), que tampoco llevan la cota «<5»',
+  (select count(*) from _rg g join (select unit, sexo, sum(n) t from _rf group by 1, 2) f using (unit, sexo) where (f.t between 1 and 4) and g.total_pub is not null) = 0
+  and (select count(*) from _rg g join (select unit, sexo, sum(n) t from _rf group by 1, 2) f using (unit, sexo) where not g.total_withheld and (f.t between 1 and 4) <> (g.total_pub is null)) = 0
+  and (select count(*) from _rg where total_withheld and (total_pub is not null or residual is not null)) = 0
+  and (select count(*) from _rg where total_withheld) > 5,
+  (select count(*) filter (where total_withheld) || ' retenidos' from _rg));
+select pg_temp.assert_that('ALEATORIO · RETENCIÓN: ningún residuo ni total «<5» publicado determina exactamente las suprimidas (recalculado aquí desde lo publicado, sin confiar en la función)',
+  (select count(*) from _rg g where not g.total_withheld and g.suppressed_cells > 0 and (
+      (g.total_pub is not null and (g.residual = g.lo_sum
+         or (g.residual = 4 * g.suppressed_cells and not exists (select 1 from _rc c where c.unit = g.unit and c.sexo = g.sexo and c.kind = 'complementary'))))
+      or (g.total_pub is null and g.lo_sum >= 4))) = 0);
+select pg_temp.assert_that('ALEATORIO · RETENCIÓN: se retienen exactamente los grupos que el conteo COMPLETO determina (todas valen su cota inferior; o todas 4 sin complementaria; o total «<5» con Σ cotas inferiores = 4), ni de más ni de menos',
+  (select count(*) from _rg g join (select unit, sexo, sum(n) t from _rf group by 1, 2) f using (unit, sexo)
+    where g.total_withheld <> (g.suppressed_cells > 0 and (
+        (f.t >= 5 and (f.t - g.published_sum = g.lo_sum
+           or (f.t - g.published_sum = 4 * g.suppressed_cells and not exists (select 1 from _rc c where c.unit = g.unit and c.sexo = g.sexo and c.kind = 'complementary'))))
+        or (f.t between 1 and 4 and g.lo_sum >= 4)))) = 0);
+select pg_temp.assert_that('ALEATORIO · RETENCIÓN: en los grupos con total retenido el valor real de cada suprimida cae dentro de las cotas que SÍ se publican (primaria [1,4]; complementaria [umbral, la menor otra celda ≥ umbral])',
+  (select count(*) from _rc c join _rf f using (unit, sexo, tramo) join _rg g using (unit, sexo) where g.total_withheld and c.suppressed and (f.n < c.lo or f.n > c.hi)) = 0
+  and (select count(*) from _rc c join _rg g using (unit, sexo) where g.total_withheld and c.kind = 'primary' and c.hi <> 4) = 0);
 
 -- ========== B2: PROPIEDAD del rango publicado (las 80 unidades aleatorias; 'ir' es la captura vigente) ==========
 -- Verdad = conteos completos de la zona restringida (_rf); el valor publicado debe CONTENERLA, para todo sexo y toda edad mínima, y nunca ser más ancho que sumar las cotas de cada celda.
@@ -423,36 +441,104 @@ select pg_temp.assert_that('B2 ALEATORIO: todas las edades con TODOS los totales
   (select count(*) from _v v where v.min_tramo = 0 and not exists (select 1 from _rg g where g.unit = v.cut and (v.sexo is null or g.sexo = v.sexo) and g.total_pub is null)
       and not (v.exact and v.n_lo = (select sum(g.total_pub) from _rg g where g.unit = v.cut and (v.sexo is null or g.sexo = v.sexo)))) = 0
   and (select count(*) from _v v where v.min_tramo = 0 and v.exact and v.suppressed_cells > 0) > 10);                      -- hay comunas con celdas suprimidas que ahora salen exactas
-select pg_temp.assert_that('B2 ALEATORIO: con un total de grupo «<5» (todas las edades) el valor NO es exacto salvo que el total quede determinado (4 celdas de 1); nunca 0 si hay 1–4 personas',
-  (select count(*) from _v v where v.min_tramo = 0 and v.sexo is not null and exists (select 1 from _rg g where g.unit = v.cut and g.sexo = v.sexo and g.total_pub is null)
+select pg_temp.assert_that('B2 ALEATORIO: con un total de grupo «<5» (todas las edades) el valor queda entre 1 y 4 (los retenidos no llevan esa cota)',
+  (select count(*) from _v v where v.min_tramo = 0 and v.sexo is not null and exists (select 1 from _rg g where g.unit = v.cut and g.sexo = v.sexo and g.total_pub is null and not g.total_withheld)
       and (v.n_lo < 1 or v.n_hi > 4)) = 0);
 select pg_temp.assert_that('B2 ALEATORIO: el agregado de 1b-1 (60+) con conteos completos cae dentro del rango que devuelve la propia función (mismo cálculo)',
   (select count(*) from public.get_isapre_comuna(null, 12)) = 80);
 
--- ========== Fuga por resta regional: Σ totales regionales − Σ totales de grupo publicados = Σ totales de grupo SUPRIMIDOS de la región ==========
--- Región 02: UN solo grupo con total «<5» (02102 F = 2) ⇒ el total regional lo despejaría exacto ⇒ NO se publica. Región 01: DOS grupos suprimidos ⇒ se publica (cota del residuo, como en las celdas). Región 03: ninguno.
-select pg_temp.mk('iw', 6, 0, date '2029-12-31');
+-- ========== RETENCIÓN DEL RESIDUO (regla general): perfiles determinísticos, uno por rama ==========
+-- Región 06 (solo F; M y SI en 0). Cada grupo documenta su rama: «k·1» (todas valen 1), «k·4» (todas valen 4, sin complementaria), «cota inferior con complementaria» (1 + 5),
+-- «total <5 con cuatro celdas de 1» (caso combinado: cota «<5» del total + residuo) y los casos vecinos que NO se retienen.
+select pg_temp.mk('ik', 7, 0, date '2029-06-30');
+select pg_temp.su(n, '06101', pg_temp.vec('{{5,1},{8,1},{9,30}}')) from (select n from public.source_snapshots where storage_path = 'test/ik') x;            -- k·1: total 32, R = 2 = Σ cotas inferiores
+select pg_temp.su(n, '06102', pg_temp.vec('{{5,4},{8,4},{9,30}}')) from (select n from public.source_snapshots where storage_path = 'test/ik') x;            -- k·4: total 38, R = 8 = 4·2, sin complementaria
+select pg_temp.su(n, '06103', pg_temp.vec('{{5,1},{6,5},{7,9}}')) from (select n from public.source_snapshots where storage_path = 'test/ik') x;             -- 1 + complementaria 5: total 15, R = 6 = Σ cotas inferiores
+select pg_temp.su(n, '06104', pg_temp.vec('{{5,2},{8,3},{9,30}}')) from (select n from public.source_snapshots where storage_path = 'test/ik') x;            -- R = 5 (no es 2 ni 8): se publica
+select pg_temp.su(n, '06105', pg_temp.vec('{{5,4},{8,3},{9,30}}')) from (select n from public.source_snapshots where storage_path = 'test/ik') x;            -- R = 7 (no es 2 ni 8): se publica
+select pg_temp.su(n, '06106', pg_temp.vec('{{2,1},{3,1},{4,1},{5,1}}')) from (select n from public.source_snapshots where storage_path = 'test/ik') x;      -- total «<5» con cuatro celdas de 1 ⇒ total 4 y cada una 1
+select pg_temp.su(n, '06107', pg_temp.vec('{{2,1},{3,1},{4,1}}')) from (select n from public.source_snapshots where storage_path = 'test/ik') x;            -- total «<5» con tres celdas de 1: [1,2] cada una, no exacto
+select pg_temp.rep(n) from (select n from public.source_snapshots where storage_path = 'test/ik') x;
+create temp table _pk as select pg_temp.pub('ik') as r;
+create temp table _kg as select g.* from public.isapre_cartera_grupo g join public.source_snapshots s on s.n = g.snapshot_n where s.storage_path = 'test/ik' and g.sexo = 'F';
+create temp table _kc as select k.* from public.isapre_cartera_celda k join public.source_snapshots s on s.n = k.snapshot_n where s.storage_path = 'test/ik' and k.sexo = 'F';
+select pg_temp.assert_that('se RETIENEN: k·1 (06101), k·4 sin complementaria (06102), 1 + complementaria 5 (06103) y total «<5» con cuatro celdas de 1 (06106): total_pub y residuo NULL, total_withheld',
+  (select count(*) = 4 from _kg where unit in ('06101', '06102', '06103', '06106') and total_withheld and total_pub is null and residual is null));
+select pg_temp.assert_that('NO se retienen los vecinos: R = 5 (06104), R = 7 (06105) y total «<5» con tres celdas de 1 (06107): el total se publica (o queda «<5»)',
+  (select total_pub = 35 and residual = 5 and not total_withheld from _kg where unit = '06104')
+  and (select total_pub = 37 and residual = 7 and not total_withheld from _kg where unit = '06105')
+  and (select total_pub is null and not total_withheld and suppressed_cells = 3 from _kg where unit = '06107'));
+select pg_temp.assert_that('cotas de un grupo retenido, sin residuo: primarias [1,4]; la complementaria [5, la menor OTRA celda publicada ≥ 5] = [5,9] en 06103',
+  (select lo = 1 and hi = 4 from _kc where unit = '06101' and tramo = 5) and (select lo = 1 and hi = 4 from _kc where unit = '06102' and tramo = 8)
+  and (select kind = 'complementary' and lo = 5 and hi = 9 from _kc where unit = '06103' and tramo = 6) and (select lo = 1 and hi = 4 from _kc where unit = '06103' and tramo = 5)
+  and (select count(*) from _kc where unit = '06106' and suppressed and lo = 1 and hi = 4) = 4);
+select pg_temp.assert_that('el valor real de cada celda suprimida de un grupo retenido cae dentro de sus cotas (k·1: 1 y 1; k·4: 4 y 4; 1+5: 1 y 5; cuatro 1)',
+  (select count(*) from _kc c join (select x.unit, x.tramo, sum(x.n) as n from salud_restringido.isapre_cartera x join public.source_snapshots s on s.n = x.snapshot_n where s.storage_path = 'test/ik' and x.sexo = 'F' group by 1, 2) f using (unit, tramo)
+    where c.suppressed and (f.n < c.lo or f.n > c.hi)) = 0);
+select pg_temp.assert_that('get_isapre_celdas dice que el total está retenido (no «<5» ni 0) y no entrega residuo',
+  (select group_total is null and group_residual is null and group_total_withheld from public.get_isapre_celdas('06101') where sexo = 'F' limit 1)
+  and (select not group_total_withheld and group_total = 35 and group_residual = 5 from public.get_isapre_celdas('06104') where sexo = 'F' limit 1));
+select pg_temp.assert_that('valor por comuna (todas las edades): retenido ⇒ RANGO por las cotas de cada celda, real dentro; no retenido con total publicado ⇒ exacto. 06101 [32,38] (real 32); 06102 [32,38] (38); 06103 [15,22] (15); 06106 [4,16] (4); 06104 = 35 exacto',
+  (select n_lo = 32 and n_hi = 38 and not exact from public.get_isapre_comuna() where cut = '06101')
+  and (select n_lo = 32 and n_hi = 38 and not exact from public.get_isapre_comuna() where cut = '06102')
+  and (select n_lo = 15 and n_hi = 22 and not exact from public.get_isapre_comuna() where cut = '06103')
+  and (select n_lo = 4 and n_hi = 16 and not exact from public.get_isapre_comuna() where cut = '06106')
+  and (select exact and n_lo = 35 from public.get_isapre_comuna() where cut = '06104')
+  and (select n_lo = 3 and n_hi = 4 and not exact from public.get_isapre_comuna() where cut = '06107'),
+  (select string_agg(cut || ':' || n_lo || '-' || n_hi || (case when exact then 'x' else '' end), ' ' order by cut) from public.get_isapre_comuna() where cut like '0610%'));
+select pg_temp.assert_that('INVARIANTE recalculado desde lo publicado: ningún grupo publicado con residuo o total «<5» determina exactamente sus suprimidas; el reporte cuenta los retenidos',
+  (select count(*) from _kg g where not g.total_withheld and g.suppressed_cells > 0 and (
+      (g.total_pub is not null and (g.residual = g.lo_sum or (g.residual = 4 * g.suppressed_cells and not exists (select 1 from _kc c where c.unit = g.unit and c.kind = 'complementary'))))
+      or (g.total_pub is null and g.lo_sum >= 4))) = 0
+  and (select (r ->> 'groups_total_withheld')::int = 4 and (r ->> 'groups_total_lt5')::int = 1 from _pk));
+
+-- ========== Fuga por resta regional: Σ totales regionales − Σ totales de grupo publicados = Σ totales de los grupos SIN total publicado (R) ==========
+-- Región 02: UN solo grupo sin total (k = 1). Región 03: dos «<5» de 1 (R = Σ cotas inferiores = 2). Región 04: dos «<5» de 4 (R = 4·2). Región 05: caso COMBINADO, un grupo con total retenido (32) y uno «<5» (1):
+-- R = 33 = Σ cotas inferiores (32 + 1). Se retienen las cuatro. Región 01 (R = 5 con dos «<5» de 2 y 3), región 07 (retenido 32 + «<5» de 3: R = 35 ≠ 33) y región 06 (sin ninguno) SE PUBLICAN.
+select pg_temp.mk('iw', 17, 0, date '2029-12-31');
 select pg_temp.su(n, '02101', pg_temp.vec('{{5,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
 select pg_temp.su(n, '02102', pg_temp.vec('{{5,2}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
 select pg_temp.su(n, '01101', pg_temp.vec('{{5,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
 select pg_temp.su(n, '01107', pg_temp.vec('{{5,2}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
 select pg_temp.su(n, '01401', pg_temp.vec('{{5,3}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
-select pg_temp.su(n, '03101', pg_temp.vec('{{5,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '03101', pg_temp.vec('{{5,1}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '03102', pg_temp.vec('{{5,1}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '03103', pg_temp.vec('{{5,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '04101', pg_temp.vec('{{5,4}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '04102', pg_temp.vec('{{5,4}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '04103', pg_temp.vec('{{5,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '05101', pg_temp.vec('{{5,1},{6,1},{7,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '05102', pg_temp.vec('{{5,1}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '06101', pg_temp.vec('{{5,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '07101', pg_temp.vec('{{5,1},{6,1},{7,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '07102', pg_temp.vec('{{5,3}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
+select pg_temp.su(n, '07103', pg_temp.vec('{{5,30}}')) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
 select pg_temp.rep(n) from (select n from public.source_snapshots where storage_path = 'test/iw') x;
 create temp table _pw as select pg_temp.pub('iw') as r;
 create temp table _wr as select r.* from public.isapre_cartera_region r join public.source_snapshots s on s.n = r.snapshot_n where s.storage_path = 'test/iw';
-select pg_temp.assert_that('región con UN solo grupo suprimido (02): los dos totales regionales (cotizante y carga) NO se publican, y dicen por qué',
+select pg_temp.assert_that('región con UN solo grupo sin total (02): los dos totales regionales (cotizante y carga) NO se publican, y dicen por qué',
   (select count(*) from _wr where region_cut = '02') = 2 and (select count(*) from _wr where region_cut = '02' and total is null and note like 'total regional no publicado%') = 2);
-select pg_temp.assert_that('región con 2 grupos suprimidos (01) y región sin ninguno (03): el total regional SÍ se publica, exacto',
+select pg_temp.assert_that('región con R = Σ cotas inferiores (03: dos «<5» de 1) y con R = (umbral−1)·k (04: dos «<5» de 4): el total regional NO se publica',
+  (select count(*) from _wr where region_cut in ('03', '04') and total is null and note is not null) = 4);
+select pg_temp.assert_that('caso COMBINADO (05): un grupo con total retenido (32) y uno «<5» (1) ⇒ R = 33 = Σ cotas inferiores ⇒ el total regional NO se publica',
+  (select count(*) from _wr where region_cut = '05' and total is null) = 2
+  and (select total_withheld and total_pub is null from public.isapre_cartera_grupo g join public.source_snapshots s on s.n = g.snapshot_n where s.storage_path = 'test/iw' and unit = '05101' and sexo = 'F'));
+select pg_temp.assert_that('regiones NO determinadas SÍ publican su total, exacto: 01 (R = 5 con «<5» de 2 y 3 → 35), 06 (sin grupos sin total → 30) y 07 (retenido 32 + «<5» de 3: R = 35 ≠ 33 → 65)',
   (select total = 35 and note is null from _wr where region_cut = '01' and rol = 'cotizante') and (select total = 0 from _wr where region_cut = '01' and rol = 'carga')
-  and (select total = 30 and note is null from _wr where region_cut = '03' and rol = 'cotizante'));
-select pg_temp.assert_that('INVARIANTE: ninguna región con total publicado tiene exactamente un grupo suprimido (restar no despeja ningún total de grupo)',
-  (select count(*) from _wr r where r.total is not null and (
-      select count(*) from public.isapre_cartera_grupo g join public.isapre_cartera_unidad u on u.snapshot_n = g.snapshot_n and u.unit = g.unit
-       where g.snapshot_n = r.snapshot_n and u.region_cut = r.region_cut and g.total_pub is null) = 1) = 0);
-select pg_temp.assert_that('el reporte cuenta las regiones sin total y get_isapre_region devuelve NULL (no 0) para ellas',
-  (select (r ->> 'regions_total_withheld')::int = 1 from _pw)
-  and (select count(*) from public.get_isapre_region() where region_cut = '02' and total is null) = 2
-  and (select count(*) from public.get_isapre_region() where region_cut = '02' and total = 0) = 0);
+  and (select total = 30 and note is null from _wr where region_cut = '06' and rol = 'cotizante')
+  and (select total = 65 and note is null from _wr where region_cut = '07' and rol = 'cotizante'));
+select pg_temp.assert_that('INVARIANTE recalculado desde lo publicado: ninguna región con total publicado queda determinada (un solo grupo sin total; R = Σ cotas inferiores; R = (umbral−1)·k con todos «<5»)',
+  (select count(*) from _wr r where r.total is not null and exists (
+     with g as (select u.region_cut, gr.total_pub, gr.total_withheld, gr.published_sum, gr.lo_sum from public.isapre_cartera_grupo gr
+                  join public.isapre_cartera_unidad u on u.snapshot_n = gr.snapshot_n and u.unit = gr.unit where gr.snapshot_n = r.snapshot_n and u.region_cut = r.region_cut),
+          a as (select count(*) filter (where total_pub is null) as k, coalesce(sum(total_pub), 0) as known,
+                       coalesce(sum(case when total_withheld then published_sum + lo_sum else greatest(lo_sum, 1) end) filter (where total_pub is null), 0) as lo_t,
+                       coalesce(bool_and(not total_withheld) filter (where total_pub is null), true) as all_lt5 from g)
+     select 1 from a, (select sum(total) as tot from _wr where region_cut = r.region_cut) t
+      where a.k = 1 or (a.k >= 2 and (t.tot - a.known = a.lo_t or (a.all_lt5 and t.tot - a.known = 4 * a.k))))) = 0);
+select pg_temp.assert_that('el reporte cuenta las regiones sin total (02, 03, 04 y 05) y get_isapre_region devuelve NULL (no 0) para ellas',
+  (select (r ->> 'regions_total_withheld')::int = 4 from _pw)
+  and (select count(*) from public.get_isapre_region() where region_cut in ('02', '03', '04', '05') and total is null) = 8
+  and (select count(*) from public.get_isapre_region() where region_cut in ('02', '03', '04', '05') and total = 0) = 0);
 select pg_temp.assert_that('el cuadre con el archivo se hizo ANTES de retener el total: la zona restringida conserva los totales completos de la región 02',
   (select sum(c.n) from salud_restringido.isapre_cartera c join public.source_snapshots s on s.n = c.snapshot_n where s.storage_path = 'test/iw' and c.unit like '02%') = 32);
