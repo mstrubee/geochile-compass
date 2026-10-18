@@ -336,7 +336,8 @@ Se ejecuta **en la base** (`publish_isapre_snapshot`, fuente única de verdad) c
 ### 3.4 Qué muestra la interfaz y con qué nivel
 
 * **Capa «Isapre: beneficiarios por comuna»** (renderer propio `choropleth_isapre`): métrica (todas las edades o edad mínima), sexo, y filtro «solo comunas sin hospital de alta complejidad (en la comuna)» con las dos definiciones de D1. Valor por comuna = **exacto** cuando lo publicado lo determina y **rango** («entre a y b») si no (§3.3 punto 6); 0 verdadero ≠ sin dato; «60+» excluye la edad sin información e incluye el sexo sin información.
-* **Panel «Previsión regional (CASEN, estimada)»** (renderer propio `panel_casen_region`; **sin pintar comunas**: una región no se pinta sobre sus comunas para no insinuar un dato comunal).
+* **Sección plegable «Previsión regional (CASEN 2024, estimada)»** dentro del panel de la capa Isapre (antes era un panel/nodo propio) (renderer propio `panel_casen_region`; **sin pintar comunas**: una región no se pinta sobre sus comunas para no insinuar un dato comunal).
+  Decisión (UI, 18-oct-2026): el nodo del árbol «Previsión regional» ya no se muestra; el front lo oculta (`utils/embeddedLayers.ts`) y NO se archivó en la base, porque `purge_archived_layer_nodes` borra en cascada nodo → `territorial_layers` → `thematic_layers` y se perdería la fila de CASEN (`client_ready`, dataset, parámetros). `client_ready` de CASEN sigue siendo propio: la sección lo muestra con su aviso y Isapre no lo hereda. Sin migración.
 * **Niveles (regla 9) y sello (regla 2):** Isapre = *Respondida con rigor* · sello *Oficial con advertencia* (provisional, domicilio no declarado, fecha distinta de los establecimientos). CASEN = *Estimada* (siempre rango con intervalo de confianza) · sello *Estimado* con nota metodológica. Todo con `client_ready = false` hasta la revisión del dueño (mismo procedimiento que 1a, `RUNBOOK_1A.md` §5).
 
 ### 3.5 CASEN regional: método
