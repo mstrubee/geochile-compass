@@ -18,12 +18,22 @@ type RpcResult<T> = Promise<{ data: T | null; error: { message: string } | null 
 const rpc = <T>(name: string, args: Record<string, unknown>): RpcResult<T> =>
   (supabase.rpc as unknown as (n: string, a: Record<string, unknown>) => RpcResult<T>)(name, args);
 
-/** Hojas del árbol marcadas como capas temáticas. Nunca lanza: sin tabla (migración 3 pendiente) → []. */
+type ThematicQuery = { from: (t: string) => { select: (c: string) => PromiseLike<{ data: ThematicLayerRow[] | null; error: { message: string; code?: string } | null }> } };
+
+/** Postgres: undefined_column. */
+const UNDEFINED_COLUMN = "42703";
+
+/**
+ * Hojas del árbol marcadas como capas temáticas. Nunca lanza: sin tabla (migración 3 pendiente) → [].
+ * `client_ready` (regla 6) llega con 20261102000100: SOLO si el error es de columna inexistente (42703) se repite la consulta anterior, para no dejar sin mapa
+ * a las capas que ya funcionan; cualquier otro fallo (permisos, red, tabla ausente) no se esconde con un reintento.
+ */
 export const fetchThematicLayers = async (): Promise<ThematicLayerRow[]> => {
-  const q = (supabase as unknown as { from: (t: string) => { select: (c: string) => PromiseLike<{ data: ThematicLayerRow[] | null; error: { message: string } | null }> } })
-    .from("thematic_layers")
-    .select("layer_id, renderer, dataset, default_params");
-  const { data, error } = await q;
+  const from = (supabase as unknown as ThematicQuery).from("thematic_layers");
+  let { data, error } = await from.select("layer_id, renderer, dataset, default_params, client_ready, client_ready_note");
+  if (error?.code === UNDEFINED_COLUMN) {
+    ({ data, error } = await (supabase as unknown as ThematicQuery).from("thematic_layers").select("layer_id, renderer, dataset, default_params"));
+  }
   if (error) {
     console.warn("[permits] thematic_layers no disponible:", error.message);
     return [];

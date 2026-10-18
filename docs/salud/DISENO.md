@@ -4,7 +4,7 @@ Documento vivo de la iniciativa. **Una sección por fase**; cada fase la relee a
 tal cual en la Fase 0). La evidencia con los archivos reales vive en [`HALLAZGOS_FASE0.md`](./HALLAZGOS_FASE0.md). Este documento recoge solo las
 **decisiones de diseño** y las convenciones; no repite cifras.
 
-Estado: **Fase 0 (entorno y sondeo) — esta sección**. Las demás secciones se agregan en su fase.
+Estado: **Fase 0 cerrada · Fase 1a (establecimientos) en curso — §2**. Las demás secciones se agregan en su fase.
 
 ---
 
@@ -74,15 +74,17 @@ como máximo en «Oficial con advertencia», y la advertencia lo dice.
 
 ### 0.7 Entorno de pruebas y línea base
 
-Se reproduce con `bash etl/salud/dev_env.sh` (idempotente; ver su cabecera). Línea base de `main` (commit `9026d67`), que un PR no puede empeorar:
+Se reproduce con `bash etl/salud/dev_env.sh` (idempotente; ver su cabecera). Línea base de `main` (commit `9026d67`, actualizada por cada PR de salud al mergear), que un PR no puede empeorar:
 
 | Suite | Comando | Línea base |
 |---|---|---|
-| Vitest | `VITE_SUPABASE_URL=… VITE_SUPABASE_PUBLISHABLE_KEY=… npm test` (valores falsos solo en el comando) | 472 tests en 34 archivos (433 sin las variables) |
+| Vitest | `VITE_SUPABASE_URL=… VITE_SUPABASE_PUBLISHABLE_KEY=… npm test` (valores falsos solo en el comando) | 560 tests en 39 archivos (472 de `main` + 40 de seguridad y convención + 48 de salud 1a; sin las variables fallan los que no mockean el cliente) |
 | pytest permisos | `TEST_DATABASE_URL=… python -m pytest etl/permisos/tests -q -p no:cacheprovider` | 43 pasan, 4 omitidos |
 | pytest proyectos | `TEST_DATABASE_URL=… python -m pytest etl/proyectos/tests -q -p no:cacheprovider` | 45 pasan |
 | SQL `permits_stats.test.sql` | `psql -f` sobre base con **solo** las migraciones 1 y 2 | 92 aserciones |
 | SQL `parte4_geo.test.sql` / `parte4_nodes.test.sql` | `psql -f` sobre base con migraciones 2026102x | 111 / 7 |
+| SQL `health_establishments.sql` / `health_establishments_rollback.sql` (Fase 1a) | receta de su cabecera (migraciones dos veces + prueba, una transacción que termina en error) en `geochile_salud_test` | 71 / 4 aserciones |
+| pytest salud | `TEST_DATABASE_URL=…/geochile_salud_test python -m pytest etl/salud/tests -q -p no:cacheprovider` | 46 pasan (16 del sondeo + 30 de establecimientos) |
 
 * `npm ci` falla en `main` (lock desincronizado: falta `esbuild@0.28.2`); se usa `npm install --no-save`.
 * Las migraciones se aplican con `psql -1` (necesitan transacción: usan `SET LOCAL` y tablas temporales).
@@ -127,3 +129,153 @@ la app.
 fija (D1, D2); (b) el residuo `*` de los egresos es siempre una fila propia, nunca se reparte.
 
 *Las secciones de las fases 1a, 1b, 1c, 2, 2b, 3 y 4 se agregan aquí al empezar cada una.*
+
+---
+
+## 2. Fase 1a — Establecimientos de salud (decisiones tomadas ANTES de codificar)
+
+**Alcance.** Registro oficial de establecimientos (DEIS/MINSAL, datos.gob.cl, CC0, `establecimientos_20261014.csv`, 5.782 filas, 33 columnas), su validación geográfica,
+y una capa derivada «establecimientos por comuna» filtrable y rankeable. **Fuera de esta fase:** población comunal del Censo 2024 (archivo pendiente) → las preguntas
+**1a-1** y **1a-2** quedan **EN ESPERA** y no se construye ninguna tabla de población hasta ver el layout real del archivo.
+
+### 2.1 Definiciones que fija el dueño (D1, D2) y cómo se implementan
+
+| Definición | Regla exacta | Dónde |
+|---|---|---|
+| **Alta complejidad (D1, por defecto)** | `NivelComplejidadEstabGlosa = 'Alta Complejidad'` **y** `TipoEstablecimientoGlosa = 'Hospital'` | columna `alta_hospital` |
+| **Alta complejidad ampliada (D1, variante)** | lo anterior **más** `Clínica` y `Centro de Especialidades` con `Alta Complejidad` | columna `alta_ampliada` |
+| Alta complejidad fuera de ambas | los 2 registros `Alta Complejidad` de tipo `Otro` y `SAMU` | se reportan aparte; **no** se pierden |
+| **Privado (D2)** | `DependenciaAdministrativa = 'Privado'` | columna `dependencia_norm = 'privado'` |
+
+* Las dos definiciones se **muestran siempre con su etiqueta** y el selector del panel las nombra; ninguna se presenta como «la» definición.
+* La ficha documenta que «privado» **no** coincide con `TipoSistemaSaludGlosa = 'Privado'` ni con «no perteneciente al SNSS» (cifras de `HALLAZGOS_FASE0.md`); la
+  columna cruda de cada una se conserva para poder auditarlo.
+* Las cifras «82 / 39 / 8» de D1 cuentan **todos** los estados; la capa **oculta los cerrados por defecto**, de modo que los conteos vigentes son menores. Cada
+  respuesta dice si incluye cerrados.
+
+### 2.2 Normalización (explícita, nada implícito)
+
+| Campo | Regla |
+|---|---|
+| CUT | `ComunaCodigo` ya trae 5 dígitos; se valida contra `public.comunas` (FK). Si no existe → **rechazo `cut_unknown`**. Se **conserva** `ComunaGlosa` tal cual para auditar discrepancias nombre↔CUT (se reportan, no se corrigen). |
+| Estado | `Vigente en Operación Habitual` y `Vigente en operación habitual` (212 filas con minúscula) → `vigente`; `Cerrado` → `cerrado`. Cualquier otro texto → rechazo `other` (`estado_desconocido`). 73 cerrados sin `FechaCierre` se **reportan**, no se inventa fecha. |
+| Complejidad | `Alta/Mediana/Baja Complejidad` → `alta/mediana/baja`; `No Aplica` → `no_aplica`; vacío (287) → `sin_dato`. **Vacío ≠ No Aplica ≠ baja.** |
+| Tipo de atención | `Atención Abierta-Ambulatoria` → `ambulatoria`; `Atención Cerrada-Hospitalaria` → `hospitalaria`; **`Atención Abierta-Ambu` (1 fila truncada en la fuente) → `ambulatoria` por equivalencia explícita y contada en el reporte**; `No Aplica` → `no_aplica`; vacío → `sin_dato`. |
+| Dependencia | tabla de equivalencias explícita (`Municipal`, `Privado`, `Servicio de Salud`, FFAA/Orden = Ejército, Armada, FACh, Carabineros, PDI, Gendarmería, `SEREMI`, `Delegado`, `Otra Institución`); vacío (8) → `sin_dato`. Un valor nuevo **no se adivina**: va a rechazo `other` y detiene la publicación por encima del umbral. |
+| Pertenencia SNSS | `Perteneciente…` / `No Perteneciente…` / `No perteneciente…` (dos mayúsculas distintas en la fuente) → booleano; `No Aplica` → nulo. |
+| Código | `EstablecimientoCodigo` (6 dígitos, único en la fuente) es la clave. Duplicado → `duplicate_key`; vacío/no numérico → `other` (`codigo_invalido`). |
+
+### 2.3 Clasificación ambulatorio / hospitalario — **decisión de diseño propia (activa la advertencia de la regla 3)**
+
+La fuente declara `TipoAtencionEstabGlosa`, pero está vacía o `No Aplica` en 300 filas. Regla: **manda lo oficial**; solo si no hay dato se completa con la tabla
+`health_tipo_clasificacion` (tipo de establecimiento → clase), derivada de lo que el propio registro declara para ese tipo:
+
+| Clase en la tabla | Tipos |
+|---|---|
+| `ambulatorio` | la mayoría (CESFAM, CECOSF, Posta, Consultorio, SAPU/SUR/SAR, Centro de Salud Privado, Centro de Especialidades, Hospital de Día, Laboratorio, Clínica Dental, Diálisis, Vacunatorio, etc.): >99 % de sus filas con dato son ambulatorias |
+| `hospitalario` | `Hospital` (233 de 234), `CONIN` (9 de 9) |
+| `mixto` | `Clínica` (106 hospitalarias y 62 ambulatorias con dato): **no se imputa** |
+| `sin_clasificar` | `Otro`, `Dispositivo Incorporado por Crisis Sanitaria`, `Atención Remota`: sin base para imputar |
+
+* Cada fila guarda `clase_servicio` **y** `clase_fuente` (`oficial` · `tabla` · `sin_clasificar`). Todo conteo que mezcle filas imputadas lo declara: **«N de M
+  establecimientos tienen la clase imputada por una tabla de diseño, no por la fuente»**. Esa es la advertencia de la regla 3; el sello baja a *Oficial con advertencia*.
+* La tabla es **datos, editable por admin**, versionada en la migración con su justificación por fila. Cambiarla no requiere código.
+
+### 2.4 Validación geográfica (§14.4: se **marca**, jamás se mueve)
+
+Cada punto se compara con el polígono de **su propia comuna declarada** (`public.comunas`). El punto original nunca se modifica; solo recibe un estado.
+
+| `geo_status` | Significado | Cómo se decide |
+|---|---|---|
+| 0 `dentro` | dentro de su comuna | `ST_Covers(comuna.geom, punto)` |
+| 1 `borde` | fuera por ≤ `health.near_border_m` | distancia geográfica al polígono declarado |
+| 2 `costero` | fuera de su comuna por ≤ `health.coast_buffer_m` **y no dentro de ningún otro polígono** | cubre la costa simplificada del polígono comunal (puntos que caen «en el mar») |
+| 3 `fuera_declarada` | dentro de otra comuna o más lejos que el buffer | **se muestra con borde de aviso y se cuenta aparte; no se mueve** |
+| 4 `sin_coordenadas` | sin latitud/longitud (370 filas) | el establecimiento **sí cuenta en la comuna** (por su CUT) pero no se dibuja |
+| 5 `comuna_sin_poligono` | su comuna no tiene polígono (12202 Antártica) | idem; no se puede validar |
+| 6 `coordenada_invalida` | fuera del rectángulo de Chile (incl. Rapa Nui y la Antártica), `0,0` o lat/lon invertidos | se guardan los valores crudos, **sin geometría** |
+
+* `health.near_border_m` y `health.coast_buffer_m` viven en `pipeline_settings` (nada hardcodeado). Valores iniciales y su medición real: ver §2.9.
+* Casos de prueba obligatorios: **Isla de Pascua** (05201), **Juan Fernández** (05104) y **Antártica** (12202/12201): el reporte los muestra por separado.
+* Conteos por comuna usan el **CUT declarado**, no la posición del punto: un establecimiento mal ubicado cuenta en su comuna y se marca; el mapa de puntos lo dibuja
+  donde dice la fuente con el aviso.
+
+### 2.5 Modelo de datos (aditivo; patrón de `permisos`/`proyectos`)
+
+| Objeto | Rol |
+|---|---|
+| `data_sources` `deis_establecimientos` | URL, licencia CC0, atribución, `verification_status = 'comprobado'` (sondeo de la Fase 0), `scope_note` con lo que la capa **no** dice |
+| `health_tipo_clasificacion` | tabla de §2.3 (editable por admin) |
+| `health_establishments` | una fila por (`snapshot_n`, `code`); conserva los textos crudos y los normalizados; `geom` punto 4326, `geo_status`, `geo_distance_m` |
+| `health_establishments_stage` (UNLOGGED) | zona de paso; se vacía al publicar |
+| `publish_health_establishments(snapshot)` | **único camino** (SECURITY DEFINER, todo-o-nada): re-valida dominios, duplicados, CUT, cuadres, calcula `geo_status` y las dos definiciones de alta complejidad **en la base** |
+| `get_health_establishments(bbox, filtros)` | puntos para el mapa (SECURITY INVOKER) |
+| `get_health_comuna_counts(filtros)` | **capa derivada**: por comuna, conteo con los filtros elegidos, etiquetado `ranking`; incluye las 346 comunas (un cero verdadero se distingue de «sin dato») |
+| `get_health_comuna_tipos(cut)` | desglose de una comuna por tipo, ámbito y estado: qué hay detrás de un número del ranking (§2.12) |
+| `get_health_summary()` | leyenda y ficha: conteos por estado, geo_status, clase imputada, alta complejidad (ambas definiciones) |
+| `thematic_layers.client_ready` + nota | regla 6 (ver §2.8); renderers nuevos `points_health` y `choropleth_health` (**`choropleth_comuna` está capturado por `PermitsHost`**, no se reutiliza) |
+
+Retención: `retention.keep_point_snapshots` (ya existe). Los nombres, direcciones y teléfonos son **datos públicos del registro** (CC0), no personales de pacientes.
+
+### 2.6 Cuadres que la publicación exige (si no cuadran, no se publica)
+
+`filas del archivo = cargadas + rechazadas` · rechazo ≤ `publish.max_reject_ratio` · `cargadas = suma por geo_status = suma por estado` · cero duplicados de `code` · todos los CUT en `comunas`
+· todos los dominios conocidos. El reporte del dry-run los imprime **antes** de escribir y el SQL los vuelve a comprobar.
+
+### 2.7 Preguntas de esta fase
+
+| # | Pregunta | Nivel | Estado |
+|---|---|---|---|
+| 1a-3 | ¿Cuántos establecimientos vigentes hay por comuna, por complejidad y clase? (filtrable, con ranking) | **Respondida con rigor** (conteo del registro) | construida; sello *Oficial con advertencia* si incluye clase imputada |
+| 1a-4 | ¿Cuántos hospitales de alta complejidad hay y dónde (dos definiciones)? | **Respondida con rigor**, con las dos definiciones etiquetadas | construida |
+| 1a-1 | Comunas > 50.000 hab. sin establecimiento de alta complejidad **en** la comuna | Respondida con rigor · *Oficial con advertencia* | **EN ESPERA** (falta población comunal Censo 2024) |
+| 1a-2 | Establecimientos ambulatorios privados por 10.000 hab. en comunas de la RM | Respondida con rigor · *Oficial con advertencia* | **EN ESPERA** (idem) |
+
+Regla 8: nunca se suman ni restan Fonasa/Isapre/Censo; aquí solo hay un registro de establecimientos. «**En** la comuna» no implica «accesible»: la advertencia dice que un
+paciente puede atenderse fuera de su comuna y que la capa no mide distancia ni tiempo (eso es la Fase 3).
+
+### 2.8 `client_ready` en esta fase (regla 6)
+
+* `thematic_layers.client_ready boolean` **nullable**: `NULL` = sin evaluar (comportamiento previo, las capas existentes **no cambian**); `false` = no entra a informes ni exportaciones y
+  el panel lo avisa; `true` = apta. Las dos capas de salud nacen con `false` y la nota «pendiente de revisión del dueño»: **el dueño decide** cuándo pasan a `true`.
+* **Procedimiento para pasar a `true`** (decidido por el dueño; **no se automatiza**): (a) resuelta la anomalía del ranking (§2.12); (b) revisión del dueño en un navegador contra Supabase real, después de aplicar; (c) un `UPDATE` explícito que registre en `client_ready_note` la fecha, quién revisó y qué se revisó. Plantilla y lista de revisión en [`RUNBOOK_1A.md`](./RUNBOOK_1A.md) §5.
+* El front lee la bandera de `thematic_layers` (con *fallback* a la consulta anterior si la columna aún no existe) y la une a las capas del árbol que usan las capturas de
+  mapa de `Index.tsx` (ya preparadas en el PR de seguridad). Las capas de salud no tienen filas en `territorial_features`, así que los análisis por isócrona no las ven.
+
+### 2.9 Supresión de conteos pequeños (regla 5) — **algoritmo definido ahora, se codifica en la primera fase que publique conteos de personas (1c)**
+
+**D11 (CONFIRMADO por el dueño):** los conteos de **establecimientos** de esta fase **no** llevan supresión: son instalaciones de un registro público con nombre y dirección, no
+personas. Se sigue publicando el número real (incluidos 1–4). La regla 5 se aplica desde que haya **conteos de personas** (egresos, atenciones, inscritos).
+
+**Algoritmo (especificación, pruebas con fixtures sintéticos en 1c):**
+
+1. **Alcance.** Toda celda publicada que cuente personas = combinación de dimensiones (comuna × período × sexo × grupo de edad × agrupación diagnóstica). El conteo completo vive **solo** en
+   `salud_restringido` (esquema fuera de «Exposed schemas», `REVOKE ALL` a `anon` y `authenticated`, RLS, acceso `service_role`/admin). Lo público es lo ya suprimido.
+2. **Supresión primaria.** Celda con valor **1 a 4 → suprimida** (se publica «< 5», valor nulo + bandera `suprimida`). **0 no se suprime** (un cero no identifica a nadie y
+   suprimirlo ocultaría un hallazgo). Umbral configurable `salud.suppress_below = 5`.
+3. **Supresión complementaria.** Si en un grupo cuyo total se publica queda **exactamente una** celda suprimida, se suprime también la **menor** de las restantes del grupo, hasta que cada
+   grupo tenga 0 o ≥ 2 suprimidas (así nadie obtiene el valor por resta). **Orden de dimensiones:** primero la más gruesa (región ⊃ comuna), luego sexo, luego edad; una celda
+   suprimida en un nivel fino no se «rescata» sumando en uno grueso: los totales publicados son los **reales** (calculados antes de suprimir), y un total que a su vez sea < 5 se suprime.
+4. **Residual `*` de la fuente** (el propio DEIS enmascara conteos pequeños con `*`): se muestra **como fila propia «Enmascarado por la fuente»**, nunca se reparte entre celdas.
+5. **Cuadre por cotas.** Por grupo con total publicado `T`, suma publicada `S` y `k` celdas suprimidas: `k ≤ T − S ≤ 4k` (con `k = 0`, `T = S`). Si falla, **no se publica**. La prueba incluye mutación
+   (quitar la complementaria debe hacer fallar el test de «no recuperable por resta»).
+6. **Declaración honesta:** los egresos DEIS ya son **microdatos públicos**; esta supresión es una **política de presentación**, no una protección real. Se dice en la ficha.
+
+### 2.10 Valores iniciales de la validación geográfica (medidos con el archivo real)
+
+Medido con el archivo real (`HALLAZGOS_FASE1A.md` §3): los 33 puntos fuera de su polígono caen **todos dentro de otra comuna**; **9** quedan a ≤ 500 m (`borde`) y **24** más lejos (`fuera_declarada`); ninguno cae en el mar.
+`health.near_border_m = 500` marca 9 filas; **`health.coast_buffer_m = 2.000` no marca ninguna** con este archivo y los polígonos del repo: se conserva configurable porque el polígono comunal es simplificado, pero es un valor inicial **no respaldado por datos de este archivo**.
+
+### 2.11 [NO COMPROBADO] y decisiones pendientes de esta fase
+
+* Población comunal Censo 2024 (1a-1/1a-2) — **pendiente del dueño**.
+* D11 (supresión no aplica a establecimientos) — **pendiente de confirmar**.
+* La clase `hospitalario/ambulatorio` imputada por tabla es una **decisión de diseño**, no un dato oficial. `Clínica` queda como mixta (no se imputa) y `Hospital de Día` como ambulatorio: **confirmado por el dueño**.
+* Causa de la heterogeneidad entre regiones en los privados (§2.12): **[NO COMPROBADO]**; habría que preguntarla a la SEREMI de Salud de Coquimbo o al DEIS.
+* Si el polígono comunal del repo (`public/comunas.geojson`) es simplificado: el efecto en `borde/costero` se mide en §2.10; no se compara contra un límite oficial de alta resolución.
+
+### 2.12 Qué cuenta el ranking, y por qué no es oferta (hallazgo de la revisión del dueño)
+
+El conteo por comuna de la primera entrega contaba **todos los tipos** del registro. Al revisarlo, La Serena (239) quedaba sobre Providencia (110), Santiago (99) y Puente Alto (50); el análisis (`HALLAZGOS_FASE1A.md` §7) muestra que **no es un error de código de comuna** (238 de 239 puntos caen en su polígono) sino que **el registro no es homogéneo entre regiones**: la región de Coquimbo trae 119 clínicas dentales privadas (Biobío 9, RM 62) y 63 centros de especialidades privados (Biobío 0, RM 1). Causa **[NO COMPROBADO]**.
+
+Decisiones: (1) **no se corrige ningún dato**; (2) por defecto se cuenta solo `AmbitoFuncionamiento = 'Establecimiento de Salud'` (las unidades de atención y los programas cuelgan de un establecimiento) — el filtro por sí solo no corrige la distorsión y se dice; (3) **cada panel declara qué se cuenta** (tipos, ámbito, estado) y la lista de tipos que entran; (4) filtro por **tipo** y **desglose por tipo** de la comuna elegida; (5) la **ficha** y el bloque de fuente advierten que el conteo no es oferta ni comparable entre comunas o regiones; (6) el nivel se mantiene en *Respondida con rigor* **como conteo del registro**, nunca como oferta asistencial.

@@ -1,0 +1,46 @@
+{
+ "_nota": "Equivalencias EXPLÍCITAS del registro de establecimientos (docs/salud/DISENO.md §2.2). Las claves van normalizadas (minúsculas, sin tildes, espacios colapsados). Un valor que no esté aquí NO se adivina: la fila se rechaza (other) y el reporte lo cuenta.",
+ "estado": {
+  "vigente en operacion habitual": "vigente",
+  "cerrado": "cerrado"
+ },
+ "complejidad": {
+  "alta complejidad": "alta",
+  "mediana complejidad": "mediana",
+  "baja complejidad": "baja",
+  "no aplica": "no_aplica",
+  "": "sin_dato"
+ },
+ "tipo_atencion": {
+  "atencion abierta-ambulatoria": "ambulatoria",
+  "atencion cerrada-hospitalaria": "hospitalaria",
+  "atencion abierta-ambu": "ambulatoria",
+  "no aplica": "no_aplica",
+  "": "sin_dato"
+ },
+ "tipo_atencion_truncadas": ["atencion abierta-ambu"],
+ "dependencia": {
+  "municipal": "municipal",
+  "privado": "privado",
+  "servicio de salud": "servicio_salud",
+  "seremi de salud": "seremi",
+  "delegado": "delegado",
+  "otra institucion": "otra_institucion",
+  "ejercito de chile": "ejercito",
+  "armada de chile": "armada",
+  "fuerza aerea de chile": "fach",
+  "carabineros": "carabineros",
+  "pdi": "pdi",
+  "gendameria": "gendarmeria",
+  "gendarmeria": "gendarmeria",
+  "": "sin_dato"
+ },
+ "dependencia_truncadas": ["gendameria"],
+ "snss": {
+  "perteneciente al sistema nacional de servicios de salud": true,
+  "no perteneciente al sistema nacional de servicios de salud": false,
+  "no aplica": null,
+  "": null
+ },
+ "si_no": {"si": true, "no": false, "no aplica": null, "": null}
+}

@@ -99,8 +99,11 @@ export interface LayerProvenanceRow {
 /** Fila de `thematic_layers`: marca una hoja del árbol como capa temática. */
 export interface ThematicLayerRow {
   layer_id: string;
-  renderer: "choropleth_comuna" | "points_projects" | "points_permits" | "polygons_crf";
+  renderer: "choropleth_comuna" | "points_projects" | "points_permits" | "polygons_crf" | "points_health" | "choropleth_health";
   dataset: string;
+  /** Regla 6: null/undefined = sin evaluar (se trata como lista); false = no entra a informes ni exportaciones. */
+  client_ready?: boolean | null;
+  client_ready_note?: string | null;
   default_params: Partial<{
     source_key: string;
     source_keys: string[];
@@ -109,5 +112,6 @@ export interface ThematicLayerRow {
     metric: PermitMetric;
     destination_class: PermitDestination;
     granularity: "year" | "month";
+    include_closed: boolean;
   }> | null;
 }

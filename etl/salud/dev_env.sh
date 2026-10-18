@@ -3,14 +3,14 @@
 #
 #   bash etl/salud/dev_env.sh                # prepara lo que falte (idempotente) y corre la línea base
 #   bash etl/salud/dev_env.sh --skip-check   # solo prepara
-#   bash etl/salud/dev_env.sh --reset-dbs    # recrea las 3 bases de prueba desde cero
+#   bash etl/salud/dev_env.sh --reset-dbs    # recrea las 4 bases de prueba desde cero
 #
 # Qué hace (cada paso se salta si ya está hecho):
 #   1. PostGIS por apt con fuentes https TEMPORALES y el proxy del entorno solo por línea de comandos (NO toca /etc/apt).
 #   2. Clúster Postgres local FUERA del repo (por defecto /var/tmp/geochile-pgtest, puerto 5433).
 #   3. venv FUERA del repo (por defecto /var/tmp/geochile-venv) con etl/requirements.txt.
 #   4. `npm install --no-save` (`npm ci` falla en main: package-lock desincronizado, DISENO de permisos §12). No escribe package*.json.
-#   5. Tres bases *test* con stub + migraciones + comunas sembradas (etl/permisos_comunas.py seed).
+#   5. Cuatro bases *test* con stub + migraciones + comunas sembradas (etl/permisos_comunas.py seed); la 4.ª (geochile_salud_test) suma las migraciones de salud.
 #   6. Corre los comandos de la línea base y compara los números. Sale con código 1 si algo no coincide o si cambió un archivo versionado.
 #
 # Nunca desactiva TLS ni quita HTTPS_PROXY: solo anula NO_PROXY en el comando de pip/npm/apt que lo necesita.
@@ -32,9 +32,10 @@ for a in "$@"; do case "$a" in --skip-check) SKIP_CHECK=1;; --reset-dbs) RESET_D
 # LÍNEA BASE (medida en main, commit 9026d67). Un PR no puede empeorarla; si cambia, se actualiza AQUÍ y se explica en el PR.
 # Vitest: 472 tests / 34 archivos en main (9026d67) + 40 tests / 3 archivos de fix/seguridad-edge
 # (edgeAuth 24, clientReady 12, migrationsConvention 4) = 512 / 37.
-BASE_VITEST_TESTS=512; BASE_VITEST_FILES=37
+BASE_VITEST_TESTS=560; BASE_VITEST_FILES=39
 BASE_PERMISOS_PASS=43; BASE_PERMISOS_SKIP=4; BASE_PROYECTOS_PASS=45
 BASE_SQL_P12=92; BASE_SQL_PARTE4_GEO=111; BASE_SQL_PARTE4_NODES=7
+BASE_SQL_HEALTH=71; BASE_SQL_HEALTH_RB=4; BASE_SALUD_PASS=46        # Fase 1a (establecimientos): pruebas SQL, rollback y pytest de etl/salud
 
 log() { printf '\n== %s\n' "$*"; }
 need_root() { [ "$(id -u)" = 0 ] || { echo "este paso necesita root (apt/initdb como postgres)" >&2; exit 1; }; }
@@ -123,10 +124,12 @@ ensure_dbs() {
   log "5. Bases de prueba (stub + migraciones + comunas)"
   local all=("$ROOT"/supabase/migrations/2026102*.sql)                                  # 7 migraciones: partes 1, 2, 3 y 4
   local p12=("$ROOT/supabase/migrations/20261020120000_permits_provenance.sql" "$ROOT/supabase/migrations/20261020120100_building_permit_statistics.sql")
-  for spec in "geochile_test:all" "geochile_sql_test:all" "geochile_p12_test:p12"; do
+  local salud=("${all[@]}" "$ROOT"/supabase/migrations/20261102*.sql)                      # + Fase 1a (establecimientos y capas del árbol de salud)
+  for spec in "geochile_test:all" "geochile_sql_test:all" "geochile_p12_test:p12" "geochile_salud_test:salud"; do
     local db="${spec%%:*}" set="${spec##*:}"
     if [ "$RESET_DBS" = 0 ] && db_ready "$db"; then echo "$db: lista (346 comunas)"; continue; fi
-    echo "$db: construyendo…"; if [ "$set" = all ]; then build_db "$db" "${all[@]}"; else build_db "$db" "${p12[@]}"; fi
+    echo "$db: construyendo…"
+    case "$set" in all) build_db "$db" "${all[@]}";; salud) build_db "$db" "${salud[@]}";; *) build_db "$db" "${p12[@]}";; esac
   done
 }
 
@@ -138,6 +141,14 @@ cmp_eq() { # cmp_eq <suite> <obtenido> <esperado>
 sql_ok() { # sql_ok <db> <archivo> -> nº de aserciones 'ok' (0 si el archivo falla)
   local out; out="$("${PSQL[@]}" -d "$1" -v ON_ERROR_STOP=1 -f "$ROOT/supabase/tests/$2" 2>&1)" || { echo 0; return; }
   grep -c 'NOTICE:  ok ' <<<"$out" || true
+}
+sql_recipe() { # sql_recipe <db> <archivo...>  (rutas relativas a ROOT; el último elemento es el texto final) -> N de «DRYRUN_OK N»
+  local db="$1" f out; shift
+  f="$(mktemp)"; : > "$f"
+  for x in "$@"; do echo "\\i $ROOT/$x" >> "$f"; done
+  echo "do \$\$ begin raise exception 'DRYRUN_OK %', (select count(*) from _tr); end \$\$;" >> "$f"
+  out="$("${PSQL[@]}" -d "$db" -1 -v ON_ERROR_STOP=1 -f "$f" 2>&1 || true)"; rm -f "$f"
+  grep -oE 'DRYRUN_OK [0-9]+' <<<"$out" | grep -oE '[0-9]+' || echo 0
 }
 run_baseline() {
   log "6. Línea base de main"
@@ -155,11 +166,12 @@ run_baseline() {
   cmp_eq "SQL permits_stats.test (base 1+2)" "$(sql_ok geochile_p12_test permits_stats.test.sql)" "$BASE_SQL_P12"
   cmp_eq "SQL parte4_geo.test" "$(sql_ok geochile_sql_test parte4_geo.test.sql)" "$BASE_SQL_PARTE4_GEO"
   cmp_eq "SQL parte4_nodes.test" "$(sql_ok geochile_sql_test parte4_nodes.test.sql)" "$BASE_SQL_PARTE4_NODES"
-  # no forman parte de la línea base de main; se informan aparte
-  if [ -d etl/salud/tests ]; then
-    pyout="$(PYTHONDONTWRITEBYTECODE=1 "$VENV/bin/python" -m pytest etl/salud/tests -q -p no:cacheprovider 2>&1 || true)"
-    printf '  INFO   %-34s %s\n' "pytest etl/salud (nuevo)" "$(tail -1 <<<"$pyout")"
-  fi
+  # Fase 1a (salud): migraciones 20261102*, pruebas SQL (dos veces cada migración = idempotencia), rollback y pytest con carga real a la base de prueba
+  local M=supabase/migrations/20261102 R=supabase/rollbacks/20261102
+  cmp_eq "SQL health_establishments.test" "$(sql_recipe geochile_salud_test ${M}000000_health_establishments.sql ${M}000000_health_establishments.sql ${M}000100_health_layer_nodes.sql ${M}000100_health_layer_nodes.sql supabase/tests/health_establishments.sql)" "$BASE_SQL_HEALTH"
+  cmp_eq "SQL health rollback" "$(sql_recipe geochile_salud_test ${M}000000_health_establishments.sql ${M}000100_health_layer_nodes.sql supabase/tests/health_establishments_rollback.sql ${R}000100_health_layer_nodes_down.sql ${R}000100_health_layer_nodes_down.sql ${R}000000_health_establishments_down.sql ${R}000000_health_establishments_down.sql supabase/tests/health_rollback_check.sql ${M}000000_health_establishments.sql ${M}000100_health_layer_nodes.sql)" "$BASE_SQL_HEALTH_RB"
+  pyout="$(TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:$PGPORT/geochile_salud_test" PYTHONDONTWRITEBYTECODE=1 "$VENV/bin/python" -m pytest etl/salud/tests -q -p no:cacheprovider 2>&1 || true)"
+  cmp_eq "pytest etl/salud (pasan)" "$(grep -oE '[0-9]+ passed' <<<"$pyout" | grep -oE '[0-9]+')" "$BASE_SALUD_PASS"
   echo "  (SQL api_quota, layer_nodes, layer_nodes_edit, layer_import, legacy_retired: NO corren en local; ver docs/salud/HALLAZGOS_FASE0.md §8)"
   local dirty; dirty="$(git status --short | grep -v '^??' || true)"
   if [ -n "$dirty" ]; then echo "  FALLA  hay archivos versionados modificados:"; echo "$dirty"; FAILS=$((FAILS+1)); else echo "  OK     git: ningún archivo versionado cambió"; fi

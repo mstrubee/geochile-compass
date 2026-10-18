@@ -2,9 +2,8 @@
  * `client_ready` (regla 6 del proyecto «Inteligencia territorial de salud», docs/salud/BRIEF.md): una capa con
  * `client_ready === false` NO entra a informes ni exportaciones (imágenes del informe, XLSX/PDF/PPTX/CSV, KMZ).
  *
- * La bandera todavía no existe en la base: hoy ninguna capa la trae, así que `undefined`/`null` cuentan como
- * «lista» y el comportamiento actual no cambia. Cuando exista (Fase 1a) nacerá en `false` para las capas nuevas de salud
- * y estas funciones las dejarán fuera sin tocar a los llamadores.
+ * La bandera vive en `thematic_layers` (migración 20261102000100): `undefined`/`null` cuentan como «lista» y el comportamiento
+ * previo no cambia. Las capas nuevas de salud nacen en `false`; `withThematicClientReady` la une a las capas del árbol.
  *
  * Esto NO es un control de seguridad: el acceso directo a las tablas con la clave anon lo cubre solo RLS.
  */
@@ -24,3 +23,15 @@ export const filterClientReady = <T extends MaybeClientReady>(layers: readonly T
  */
 export const visibleIdsToHideForCapture = (visibleIds: ReadonlySet<string>, layers: readonly MaybeClientReady[]): string[] =>
   layers.filter((l) => visibleIds.has(l.id) && !isClientReady(l)).map((l) => l.id);
+
+/**
+ * Une la bandera de `thematic_layers` (renderer propio de cada capa temática) a las capas del árbol, que son las que consultan las capturas de mapa.
+ * Solo se pisa `client_ready` cuando la tabla temática lo define (no nulo): una capa sin evaluar conserva lo que ya traía.
+ */
+export const withThematicClientReady = <T extends MaybeClientReady>(
+  layers: readonly T[], thematic: ReadonlyArray<{ layer_id: string; client_ready?: boolean | null }> | undefined,
+): T[] => {
+  const flag = new Map((thematic ?? []).filter((t) => t.client_ready != null).map((t) => [t.layer_id, t.client_ready as boolean]));
+  if (flag.size === 0) return [...layers];
+  return layers.map((l) => (flag.has(l.id) ? { ...l, client_ready: flag.get(l.id) } : l));
+};

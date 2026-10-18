@@ -1,0 +1,177 @@
+{
+ "_nota": "Copia de la semilla de health_tipo_clasificacion (supabase/migrations/20261102000000_health_establishments.sql). Un test comprueba que coinciden. Solo se usa en el --dry-run sin --db.",
+ "hospital": {
+  "label": "Hospital",
+  "clase": "hospitalario",
+  "alta_hospital": true,
+  "alta_ampliada": true
+ },
+ "clínica": {
+  "label": "Clínica",
+  "clase": "mixto",
+  "alta_hospital": false,
+  "alta_ampliada": true
+ },
+ "centro de especialidades": {
+  "label": "Centro de Especialidades",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": true
+ },
+ "centro de salud privado": {
+  "label": "Centro de Salud Privado",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "posta de salud rural (psr)": {
+  "label": "Posta de Salud Rural (PSR)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "centro de salud familiar (cesfam)": {
+  "label": "Centro de Salud Familiar (CESFAM)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "laboratorio clínico": {
+  "label": "Laboratorio Clínico",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "clínica dental": {
+  "label": "Clínica Dental",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "centro comunitario de salud familiar (cecosf)": {
+  "label": "Centro Comunitario de Salud Familiar (CECOSF)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "servicio de atención primaria de urgencia (sapu)": {
+  "label": "Servicio de Atención Primaria de Urgencia (SAPU)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "servicio de urgencia rural (sur)": {
+  "label": "Servicio de Urgencia Rural (SUR)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "servicio de atención primaria de urgencia de alta resolutividad (sar)": {
+  "label": "Servicio de Atención Primaria de Urgencia de Alta Resolutividad (SAR)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "vacunatorio": {
+  "label": "Vacunatorio",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "centro de diálisis": {
+  "label": "Centro de Diálisis",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "centro comunitario de salud mental (cosam)": {
+  "label": "Centro Comunitario de Salud Mental (COSAM)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "sala externa de toma de muestras (setm)": {
+  "label": "Sala Externa de Toma de Muestras (SETM)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "unidad de procedimientos móvil": {
+  "label": "Unidad de Procedimientos Móvil",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "consultorio general rural (cgr)": {
+  "label": "Consultorio General Rural (CGR)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "consultorio general urbano (cgu)": {
+  "label": "Consultorio General Urbano (CGU)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "centro de rehabilitación": {
+  "label": "Centro de Rehabilitación",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "centro de salud comunitario para personas con demencia": {
+  "label": "Centro de Salud Comunitario para Personas con Demencia",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "centro de especialidades de atención primaria (ceap)": {
+  "label": "Centro de Especialidades de Atención Primaria (CEAP)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "hospital de día": {
+  "label": "Hospital de Día",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "centros de diagnóstico y tratamiento privados": {
+  "label": "Centros de Diagnóstico y Tratamiento Privados",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "centro de regulación médica de las urgencias (samu)": {
+  "label": "Centro de Regulación Médica de las Urgencias (SAMU)",
+  "clase": "ambulatorio",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "centro corporación para la nutrición infantil (conin)": {
+  "label": "Centro Corporación para la Nutrición Infantil (CONIN)",
+  "clase": "hospitalario",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "otro": {
+  "label": "Otro",
+  "clase": "sin_clasificar",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "dispositivo incorporado por crisis sanitaria": {
+  "label": "Dispositivo Incorporado por Crisis Sanitaria",
+  "clase": "sin_clasificar",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ },
+ "atención remota": {
+  "label": "Atención Remota",
+  "clase": "sin_clasificar",
+  "alta_hospital": false,
+  "alta_ampliada": false
+ }
+}
