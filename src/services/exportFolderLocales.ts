@@ -2,17 +2,24 @@
  * Exporta un listado simple de locales de una carpeta de POIs (con subcarpetas),
  * una fila por local, como Excel (.xlsx, con hoja de metadatos) o CSV.
  *
- * Los valores vienen de la planilla importada (poi_attributes). Solo cuando el
- * dato falta se calcula por coordenadas (comuna) y la región siempre sale de las
- * coordenadas. Nunca se inventa un valor: si no hay dato, la celda queda vacía.
+ * Los valores vienen de la planilla importada (poi_attributes y, para la
+ * dirección, poi_address_aliases). Solo cuando el dato falta se calcula por
+ * coordenadas (comuna) y la región siempre sale de las coordenadas. Nunca se
+ * inventa un valor: si no hay dato, la celda queda vacía.
  */
 import * as XLSX from "xlsx";
 import { POI_STATUS_LABEL, type PoiFolder, type SavedPoi } from "@/types/pois";
-import { reverseGeocodeCommune } from "@/utils/communeReverseGeocode";
+import {
+  normalizeCommuneName,
+  regionCodeByCommuneName,
+  reverseGeocodeCommune,
+} from "@/utils/communeReverseGeocode";
 import { compareNatural } from "@/utils/naturalSort";
 import type { ExportResult } from "@/services/exportFolderDataset";
+import { supabase } from "@/integrations/supabase/client";
 import {
   collectFolderIds,
+  fetchPaginated,
   fetchPoiAttributes,
   folderPathOf,
   makeCsvEscape,
@@ -54,13 +61,10 @@ export const regionNameFromCode = (code: string | null | undefined): string =>
   (code && REGION_NAMES[code.slice(0, 2)]) || "";
 
 /** Minúsculas, sin tildes y con espacios colapsados: para comparar nombres de comuna. */
-export const normalizeName = (s: string): string =>
-  s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
+export const normalizeName = normalizeCommuneName;
+
+/** Texto que Excel interpretaría como fórmula (incluye tab y CR iniciales, que también la disparan). */
+const FORMULA_START = /^[=+\-@\t\r]/;
 
 /** Fecha y hora en America/Santiago: `date` = YYYYMMDD (para el nombre de archivo), `dateTime` = "YYYY-MM-DD HH:mm:ss". */
 export const santiagoStamp = (d: Date): { date: string; dateTime: string } => {
@@ -95,13 +99,19 @@ export interface LocalesRow {
   source: {
     numLocal: "Local" | "Centro Sap" | null;
     nombre: "atributo" | "poi";
-    direccion: "atributo" | "address" | "direccion" | null;
+    direccion: "atributo" | "alias" | "address" | "direccion" | null;
     comuna: "planilla" | "coordenadas" | null;
   };
   /** Comuna calculada por coordenadas (null si el punto cae fuera de los límites comunales). */
   comunaCoordenadas: string | null;
+  /** Región calculada por coordenadas; `region` queda vacía si la discrepancia de comuna cruza regiones. */
+  regionCoordenadas: string;
   /** La comuna de la planilla no coincide con la calculada por coordenadas. */
   discrepancia: boolean;
+  /** Región de la comuna de la planilla (solo en discrepancias; "" si el nombre no se identifica). */
+  regionPlanilla: string;
+  /** `region` se dejó vacía: la comuna de la planilla es de otra región o no se pudo identificar. */
+  regionOmitida: boolean;
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
@@ -114,6 +124,7 @@ export const buildLocalesRows = async (
   attrsByPoi: Map<string, Map<string, string>>,
   folderById: Map<string, PoiFolder>,
   includeFolder: boolean,
+  aliasByPoi: Map<string, string> = new Map(),
 ): Promise<LocalesRow[]> => {
   const rows = await Promise.all(
     pois.map(async (p): Promise<LocalesRow> => {
@@ -124,18 +135,27 @@ export const buildLocalesRows = async (
       const centroSap = local ? "" : attr(ATTR.centroSap);
       const nombreAttr = attr(ATTR.nombre);
       const dirAttr = attr(ATTR.direccion);
-      const dirAddress = dirAttr ? "" : str(props.address);
-      const dirDireccion = dirAttr || dirAddress ? "" : str(props.direccion);
+      const dirAlias = dirAttr ? "" : (aliasByPoi.get(p.id) ?? "").trim();
+      const dirAddress = dirAttr || dirAlias ? "" : str(props.address);
+      const dirDireccion = dirAttr || dirAlias || dirAddress ? "" : str(props.direccion);
       const comunaAttr = attr(ATTR.comuna);
 
       const geo = hasCoords(p) ? await reverseGeocodeCommune(p.lat, p.lng) : null;
+      const regionCoordenadas = regionNameFromCode(geo?.region_codigo);
+      const discrepancia = !!comunaAttr && !!geo && normalizeName(comunaAttr) !== normalizeName(geo.name);
+
+      // Con discrepancia, la región de las coordenadas solo se conserva si la comuna de la
+      // planilla es de la misma región; si es otra (o no se identifica) queda vacía, para
+      // no entregar la comuna de un lugar con la región de otro.
+      const regionPlanilla = discrepancia ? regionNameFromCode(await regionCodeByCommuneName(comunaAttr)) : "";
+      const regionOmitida = discrepancia && (!regionPlanilla || regionPlanilla !== regionCoordenadas);
 
       return {
         numLocal: local || centroSap,
         nombre: nombreAttr || p.name,
-        direccion: dirAttr || dirAddress || dirDireccion,
+        direccion: dirAttr || dirAlias || dirAddress || dirDireccion,
         comuna: comunaAttr || geo?.name || "",
-        region: regionNameFromCode(geo?.region_codigo),
+        region: regionOmitida ? "" : regionCoordenadas,
         lat: hasCoords(p) ? Number(p.lat.toFixed(6)) : null,
         lng: hasCoords(p) ? Number(p.lng.toFixed(6)) : null,
         estado: POI_STATUS_LABEL[p.operational_status ?? "operativo"] ?? String(p.operational_status),
@@ -143,11 +163,22 @@ export const buildLocalesRows = async (
         source: {
           numLocal: local ? "Local" : centroSap ? "Centro Sap" : null,
           nombre: nombreAttr ? "atributo" : "poi",
-          direccion: dirAttr ? "atributo" : dirAddress ? "address" : dirDireccion ? "direccion" : null,
+          direccion: dirAttr
+            ? "atributo"
+            : dirAlias
+              ? "alias"
+              : dirAddress
+                ? "address"
+                : dirDireccion
+                  ? "direccion"
+                  : null,
           comuna: comunaAttr ? "planilla" : geo ? "coordenadas" : null,
         },
         comunaCoordenadas: geo?.name ?? null,
-        discrepancia: !!comunaAttr && !!geo && normalizeName(comunaAttr) !== normalizeName(geo.name),
+        regionCoordenadas,
+        discrepancia,
+        regionPlanilla,
+        regionOmitida,
       };
     }),
   );
@@ -164,28 +195,42 @@ const numericLocal = (s: string): number | null => {
   return Number.isSafeInteger(n) && String(n) === s ? n : null;
 };
 
-/** CSV del listado: BOM UTF-8, separador ";" y "." decimal con 6 decimales en lat/lng. */
+/** Antepone un apóstrofo al texto que Excel leería como fórmula (=, +, -, @). */
+const guardFormula = (s: string): string => (FORMULA_START.test(s) ? `'${s}` : s);
+
+/**
+ * CSV del listado: BOM UTF-8, separador ";" y "." decimal con 6 decimales en lat/lng.
+ * Las celdas de texto que parecen fórmula llevan apóstrofo; lat/lng no se tocan.
+ */
 export const localesToCsv = (rows: LocalesRow[], includeFolder: boolean): string => {
   const esc = makeCsvEscape(",;");
   const lines = [headersFor(includeFolder).map(esc).join(";")];
   for (const r of rows) {
+    const text = [r.numLocal, r.nombre, r.direccion, r.comuna, r.region].map(guardFormula);
     const cells: unknown[] = [
-      r.numLocal,
-      r.nombre,
-      r.direccion,
-      r.comuna,
-      r.region,
+      ...text,
       r.lat === null ? "" : r.lat.toFixed(6),
       r.lng === null ? "" : r.lng.toFixed(6),
-      r.estado,
+      guardFormula(r.estado),
     ];
-    if (includeFolder) cells.push(r.carpeta);
+    if (includeFolder) cells.push(guardFormula(r.carpeta));
     lines.push(cells.map(esc).join(";"));
   }
-  return "﻿" + lines.join("\r\n");
+  return "\ufeff" + lines.join("\r\n");
 };
 
 const LAT_LNG_FORMAT = "0.000000";
+
+/** Fuerza tipo texto en las celdas de texto que parecen fórmula, para que Excel nunca las evalúe. */
+const forceFormulaTextCells = (ws: XLSX.WorkSheet): void => {
+  for (const [addr, cell] of Object.entries(ws)) {
+    if (addr.startsWith("!") || typeof cell !== "object" || cell === null) continue;
+    if (typeof cell.v === "string" && FORMULA_START.test(cell.v)) {
+      cell.t = "s";
+      delete cell.f;
+    }
+  }
+};
 
 const buildLocalesSheet = (rows: LocalesRow[], includeFolder: boolean): XLSX.WorkSheet => {
   const headers = headersFor(includeFolder);
@@ -212,6 +257,7 @@ const buildLocalesSheet = (rows: LocalesRow[], includeFolder: boolean): XLSX.Wor
       if (cell && cell.t === "n") cell.z = LAT_LNG_FORMAT;
     }
   }
+  forceFormulaTextCells(ws);
   ws["!autofilter"] = {
     ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: headers.length - 1 } }),
   };
@@ -238,7 +284,8 @@ const buildMetadataSheet = (
   const nombre = countBy(rows, (r) => r.source.nombre);
   const dir = countBy(rows, (r) => r.source.direccion);
   const comuna = countBy(rows, (r) => r.source.comuna);
-  const sinRegion = rows.filter((r) => !r.region).length;
+  const regionOmitida = rows.filter((r) => r.regionOmitida).length;
+  const sinRegion = rows.filter((r) => !r.region && !r.regionOmitida).length;
   const discrepancias = rows
     .map((r, i) => ({ r, fila: i + 2 })) // fila 1 de «Locales» son los encabezados
     .filter(({ r }) => r.discrepancia);
@@ -265,8 +312,8 @@ const buildMetadataSheet = (
     ],
     [
       "Dirección",
-      `Planilla: ${n(dir, "atributo")} · propiedades del POI: ${n(dir, "address") + n(dir, "direccion")} · vacío: ${n(dir, null)}`,
-      "Planilla importada: atributo «Dirección»; si falta, propiedades del POI (address / direccion).",
+      `Planilla: ${n(dir, "atributo")} · alias de importación: ${n(dir, "alias")} · propiedades del POI: ${n(dir, "address") + n(dir, "direccion")} · vacío: ${n(dir, null)}`,
+      "Planilla importada: atributo «Dirección»; si falta, alias de importación (poi_address_aliases, el más reciente); si falta, propiedades del POI (address / direccion).",
     ],
     [
       "Comuna",
@@ -275,8 +322,8 @@ const buildMetadataSheet = (
     ],
     [
       "Región",
-      `Calculada: ${rows.length - sinRegion} · sin dato: ${sinRegion}`,
-      "Calculada por coordenadas con los límites comunales INE (región de la comuna que contiene el punto).",
+      `Calculada: ${rows.filter((r) => r.region).length} · vacía por discrepancia entre regiones: ${regionOmitida} · sin dato: ${sinRegion}`,
+      "Calculada por coordenadas con los límites comunales INE (región de la comuna que contiene el punto). Vacía si la comuna de la planilla es de otra región.",
     ],
     ["Latitud / Longitud", "", "Coordenadas del POI, 6 decimales."],
     ["Estado", "", "Estado operativo del POI en la plataforma."],
@@ -287,15 +334,36 @@ const buildMetadataSheet = (
   if (discrepancias.length === 0) {
     aoa.push(["Sin discrepancias."]);
   } else {
-    aoa.push(["En la hoja «Locales» se conserva la comuna de la planilla; la Región sale de las coordenadas."]);
-    aoa.push(["Fila en «Locales»", "N° local", "Nombre", "Comuna (planilla)", "Comuna (coordenadas)", "Región (coordenadas)"]);
+    aoa.push([
+      "En «Locales» se conserva la comuna de la planilla. La Región se mantiene solo si ambas comunas son de la misma región; si no (o si la comuna de la planilla no se identifica), queda vacía.",
+    ]);
+    aoa.push([
+      "Fila en «Locales»",
+      "N° local",
+      "Nombre",
+      "Comuna (planilla)",
+      "Región (planilla)",
+      "Comuna (coordenadas)",
+      "Región (coordenadas)",
+      "Región en «Locales»",
+    ]);
     for (const { r, fila } of discrepancias) {
-      aoa.push([fila, r.numLocal || null, r.nombre, r.comuna, r.comunaCoordenadas, r.region || null]);
+      aoa.push([
+        fila,
+        r.numLocal || null,
+        r.nombre,
+        r.comuna,
+        r.regionPlanilla || "(no identificada)",
+        r.comunaCoordenadas,
+        r.regionCoordenadas || null,
+        r.region || "(vacía)",
+      ]);
     }
   }
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = [{ wch: 46 }, { wch: 52 }, { wch: 40 }, { wch: 24 }, { wch: 24 }, { wch: 30 }];
+  forceFormulaTextCells(ws);
+  ws["!cols"] = [{ wch: 46 }, { wch: 52 }, { wch: 40 }, { wch: 24 }, { wch: 30 }, { wch: 24 }, { wch: 30 }, { wch: 30 }];
   return ws;
 };
 
@@ -313,6 +381,28 @@ export const buildLocalesWorkbook = (
 
 const ATTR_KEYS = Object.values(ATTR);
 
+/** Dirección de importación por POI: la `raw_address` no vacía más reciente de poi_address_aliases. */
+export const fetchLatestAddressAliases = async (poiIds: string[]): Promise<Map<string, string>> => {
+  const rows = await fetchPaginated(poiIds, async (chunk, from, to) => {
+    const { data, error } = await supabase
+      .from("poi_address_aliases")
+      .select("poi_id,raw_address,created_at")
+      .in("poi_id", chunk)
+      .order("id") // orden estable para que el paginado no repita ni omita filas
+      .range(from, to);
+    if (error) throw new Error(`poi_address_aliases: ${error.message}`);
+    return (data ?? []) as Array<{ poi_id: string; raw_address: string | null; created_at: string }>;
+  });
+  const latest = new Map<string, { address: string; created_at: string }>();
+  for (const r of rows) {
+    const address = r.raw_address?.trim();
+    if (!address) continue;
+    const prev = latest.get(r.poi_id);
+    if (!prev || r.created_at > prev.created_at) latest.set(r.poi_id, { address, created_at: r.created_at });
+  }
+  return new Map([...latest].map(([id, v]) => [id, v.address] as const));
+};
+
 export const exportFolderLocales = async (
   folder: PoiFolder,
   allFolders: PoiFolder[],
@@ -328,10 +418,11 @@ export const exportFolderLocales = async (
     throw new Error("La carpeta no contiene POIs activos");
   }
 
-  const attrRows = await fetchPoiAttributes(
-    poisInScope.map((p) => p.id),
-    ATTR_KEYS,
-  );
+  const poiIds = poisInScope.map((p) => p.id);
+  const [attrRows, aliasByPoi] = await Promise.all([
+    fetchPoiAttributes(poiIds, ATTR_KEYS),
+    fetchLatestAddressAliases(poiIds),
+  ]);
   const attrsByPoi = new Map<string, Map<string, string>>();
   for (const r of attrRows) {
     let m = attrsByPoi.get(r.poi_id);
@@ -344,7 +435,7 @@ export const exportFolderLocales = async (
 
   let rows: LocalesRow[];
   try {
-    rows = await buildLocalesRows(poisInScope, attrsByPoi, folderById, includeFolder);
+    rows = await buildLocalesRows(poisInScope, attrsByPoi, folderById, includeFolder, aliasByPoi);
   } catch (err) {
     throw new Error(
       `No se pudieron calcular las comunas por coordenadas: ${err instanceof Error ? err.message : String(err)}`,

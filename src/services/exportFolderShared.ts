@@ -113,7 +113,7 @@ export const triggerDownload = (blob: Blob, filename: string) => {
 export const slugify = (s: string): string =>
   s
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .toLowerCase()

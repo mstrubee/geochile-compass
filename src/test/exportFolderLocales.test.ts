@@ -6,17 +6,22 @@ type Row = Record<string, unknown>;
 
 const h = vi.hoisted(() => ({
   attrs: [] as Row[],
+  aliases: [] as Row[],
   attrKeyFilter: [] as string[][],
   geo: {} as Record<string, { name: string; codigo: string; region_codigo: string } | null>,
+  /** nombre normalizado de comuna → código de región (lo que resolvería el índice INE) */
+  regionByName: {} as Record<string, string | null>,
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
-    from: () => {
+    from: (table: string) => {
+      const source = () => (table === "poi_address_aliases" ? h.aliases : h.attrs);
       let ids: string[] = [];
       let keys: string[] | null = null;
       const q = {
         select: () => q,
+        order: () => q,
         in: (col: string, v: string[]) => {
           if (col === "attr_key") {
             keys = v;
@@ -25,7 +30,7 @@ vi.mock("@/integrations/supabase/client", () => ({
           return q;
         },
         range: async (from: number, to: number) => ({
-          data: h.attrs
+          data: source()
             .filter((r) => ids.includes(r.poi_id as string) && (!keys || keys.includes(r.attr_key as string)))
             .slice(from, to + 1),
           error: null,
@@ -36,8 +41,11 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/utils/communeReverseGeocode", () => ({
+vi.mock("@/utils/communeReverseGeocode", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/utils/communeReverseGeocode")>()),
   reverseGeocodeCommune: async (lat: number, lng: number) => h.geo[`${lat},${lng}`] ?? null,
+  regionCodeByCommuneName: async (name: string) =>
+    h.regionByName[name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()] ?? null,
 }));
 
 import {
@@ -83,8 +91,10 @@ const BUIN = { name: "Buin", codigo: "13402", region_codigo: "13" };
 
 beforeEach(() => {
   h.attrs = [];
+  h.aliases = [];
   h.attrKeyFilter = [];
   h.geo = { "-33.45,-70.65": SCL };
+  h.regionByName = { santiago: "13", providencia: "13", buin: "13", valparaiso: "05", concepcion: "08" };
 });
 
 describe("regionNameFromCode", () => {
@@ -178,6 +188,30 @@ describe("buildLocalesRows · mapeo de columnas", () => {
     });
   });
 
+  it("dirección con alias de importación: atributo > alias > address > direccion", async () => {
+    const mk = (id: string, props: Record<string, unknown>) => poi(id, id, "R", { properties: props });
+    const rows = await buildLocalesRows(
+      [mk("a", { address: "Props A", direccion: "Props D" }), mk("b", { address: "Props B" }), mk("c", {}), mk("d", { address: "x" })],
+      new Map([["d", attrMap({ Dirección: "Del atributo" })]]),
+      byId(fs),
+      false,
+      new Map([
+        ["a", "Alias A"],
+        ["b", "   "], // alias en blanco: se ignora y cae a properties
+        ["d", "Alias D"], // el atributo gana al alias
+      ]),
+    );
+    const by = Object.fromEntries(rows.map((r) => [r.nombre, r]));
+    expect(by.a.direccion).toBe("Alias A");
+    expect(by.a.source.direccion).toBe("alias");
+    expect(by.b.direccion).toBe("Props B");
+    expect(by.b.source.direccion).toBe("address");
+    expect(by.c).toMatchObject({ direccion: "" });
+    expect(by.c.source.direccion).toBeNull();
+    expect(by.d.direccion).toBe("Del atributo");
+    expect(by.d.source.direccion).toBe("atributo");
+  });
+
   it("fallback de comuna: si el punto cae fuera de Chile, comuna y región quedan vacías", async () => {
     const [r] = await buildLocalesRows([poi("p1", "Mar", "R", { lat: 0, lng: 0 })], new Map(), byId(fs), false);
     expect(r).toMatchObject({ comuna: "", region: "", comunaCoordenadas: null, discrepancia: false });
@@ -197,8 +231,55 @@ describe("buildLocalesRows · mapeo de columnas", () => {
     const distinta = rows.find((r) => r.nombre === "Distinta")!;
     expect(igual.discrepancia).toBe(false);
     expect(distinta).toMatchObject({ comuna: "Providencia", comunaCoordenadas: "Santiago", discrepancia: true });
-    // La región sí sale de las coordenadas.
-    expect(distinta.region).toBe("Región Metropolitana de Santiago");
+    // Misma región (ambas son RM): se mantiene.
+    expect(distinta).toMatchObject({
+      region: "Región Metropolitana de Santiago",
+      regionPlanilla: "Región Metropolitana de Santiago",
+      regionOmitida: false,
+    });
+  });
+
+  it("discrepancia entre regiones: conserva la comuna de la planilla y deja la Región vacía", async () => {
+    const [r] = await buildLocalesRows(
+      [poi("a", "Cruzado", "R")],
+      new Map([["a", attrMap({ Comuna: "Valparaíso" })]]),
+      byId(fs),
+      false,
+    );
+    expect(r).toMatchObject({
+      comuna: "Valparaíso",
+      comunaCoordenadas: "Santiago",
+      discrepancia: true,
+      region: "",
+      regionCoordenadas: "Región Metropolitana de Santiago",
+      regionPlanilla: "Valparaíso",
+      regionOmitida: true,
+    });
+    // Lo demás de la fila no se toca.
+    expect([r.lat, r.lng]).toEqual([-33.45, -70.65]);
+  });
+
+  it("discrepancia con una comuna de la planilla que no se identifica: Región vacía (no se puede asegurar coherencia)", async () => {
+    const [r] = await buildLocalesRows(
+      [poi("a", "Typo", "R")],
+      new Map([["a", attrMap({ Comuna: "Santiag0" })]]),
+      byId(fs),
+      false,
+    );
+    expect(r).toMatchObject({ comuna: "Santiag0", region: "", regionPlanilla: "", regionOmitida: true });
+  });
+
+  it("sin discrepancia la región se mantiene, haya o no atributo de comuna", async () => {
+    const rows = await buildLocalesRows(
+      [poi("a", "Con", "R"), poi("b", "Sin", "R")],
+      new Map([["a", attrMap({ Comuna: "Santiago" })]]),
+      byId(fs),
+      false,
+    );
+    for (const r of rows) {
+      expect(r.region).toBe("Región Metropolitana de Santiago");
+      expect(r.regionOmitida).toBe(false);
+    }
   });
 
   it("latitud y longitud a 6 decimales", async () => {
@@ -253,7 +334,7 @@ describe("localesToCsv", () => {
       false,
     );
     const csv = localesToCsv(rows, false);
-    expect(csv.startsWith("﻿")).toBe(true);
+    expect(csv.startsWith("\ufeff")).toBe(true);
     expect(csv.slice(1).split("\r\n")).toEqual([
       "N° local;Nombre;Dirección;Comuna;Región;Latitud;Longitud;Estado",
       "5;Local Uno;;Santiago;Región Metropolitana de Santiago;-33.450000;-70.650000;Operativo",
@@ -282,6 +363,51 @@ describe("localesToCsv", () => {
     expect(csv).toContain('"Av. 1\nPiso 2\r\nOficina 3"');
     const sinCoords = csv.split("\r\n").find((l) => l.includes("Sin coords"))!;
     expect(sinCoords).toBe(";Sin coords;;;;;;Operativo");
+  });
+});
+
+describe("localesToCsv · inyección de fórmulas", () => {
+  const fs = [folder("R", "Raíz"), folder("S", "Sub", "R")];
+
+  it("antepone apóstrofo a texto que empieza con = + - @; no toca lat/lng ni números ni texto normal", async () => {
+    const rows = await buildLocalesRows(
+      [
+        poi("1", '=HYPERLINK("http://x")', "S", { properties: { address: "+56 9 1234" }, lat: -33.45, lng: -70.65 }),
+        poi("2", "@SUM(A1)", "R"),
+        poi("3", "-2+3", "R"),
+        poi("4", "Normal a=b", "R"),
+      ],
+      new Map([
+        ["1", attrMap({ Local: "5", Comuna: "-Santiago" })],
+        ["2", attrMap({ Local: "-7" })],
+        ["3", attrMap({ Local: "8" })],
+        ["4", attrMap({ Local: "9" })],
+      ]),
+      byId(fs),
+      true,
+    );
+    const lines = localesToCsv(rows, true).slice(1).split("\r\n");
+    const line = (needle: string) => lines.find((l) => l.includes(needle))!;
+
+    // fila 1: nombre con comillas (escape CSV sobre el texto ya protegido), dirección y comuna protegidas
+    expect(line("HYPERLINK")).toBe(
+      // "-Santiago" no es una comuna identificable y discrepa con las coordenadas: la Región queda vacía.
+      `5;"'=HYPERLINK(""http://x"")";'+56 9 1234;'-Santiago;;-33.450000;-70.650000;Operativo;Raíz › Sub`,
+    );
+    expect(line("SUM")).toMatch(/^'-7;'@SUM\(A1\);/);
+    expect(line("2+3")).toMatch(/^8;'-2\+3;/);
+    // texto que solo contiene el carácter en medio queda igual
+    expect(line("Normal")).toMatch(/^9;Normal a=b;/);
+    // lat/lng negativos siguen siendo números, sin apóstrofo
+    expect(lines.filter((l) => l.includes("'-33")).length).toBe(0);
+    expect(lines.every((l, i) => i === 0 || l.includes(";-33.450000;-70.650000;"))).toBe(true);
+  });
+
+  it("también protege los que empiezan con tab o retorno de carro", async () => {
+    const rows = await buildLocalesRows([poi("1", "\tTab", "R"), poi("2", "\rCR", "R")], new Map(), byId(fs), false);
+    const csv = localesToCsv(rows, false);
+    expect(csv).toContain(";'\tTab;");
+    expect(csv).toContain(`"'\rCR"`);
   });
 });
 
@@ -354,6 +480,12 @@ describe("exportFolderLocales", () => {
       names.push(this.download);
     });
     h.geo["-33.6,-70.7"] = BUIN;
+    h.aliases = [
+      { id: "a1", poi_id: "p2", raw_address: "Vieja 1", created_at: "2026-01-01T00:00:00Z" },
+      { id: "a2", poi_id: "p2", raw_address: "Nueva 2", created_at: "2026-03-01T00:00:00Z" },
+      { id: "a3", poi_id: "p2", raw_address: null, created_at: "2026-05-01T00:00:00Z" }, // más reciente pero vacía
+      { id: "a4", poi_id: "p3", raw_address: "Fuera de alcance", created_at: "2026-01-01T00:00:00Z" },
+    ];
     h.attrs = [
       { poi_id: "p1", attr_key: "Local", attr_value: "10" },
       { poi_id: "p1", attr_key: "Comuna", attr_value: "Providencia" }, // discrepa con Santiago
@@ -382,7 +514,7 @@ describe("exportFolderLocales", () => {
     const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null });
     expect(aoa[0]).toEqual(["N° local", "Nombre", "Dirección", "Comuna", "Región", "Latitud", "Longitud", "Estado", "Carpeta"]);
     // Orden natural: "007" (texto, conserva ceros) < 10
-    expect(aoa[1]).toEqual(["007", "Dos", null, "Buin", "Región Metropolitana de Santiago", -33.6, -70.7, "Operativo", "Retail Norte › Sub"]);
+    expect(aoa[1]).toEqual(["007", "Dos", "Nueva 2", "Buin", "Región Metropolitana de Santiago", -33.6, -70.7, "Operativo", "Retail Norte › Sub"]);
     expect(aoa[2]).toEqual([10, "Uno", null, "Providencia", "Región Metropolitana de Santiago", -33.45, -70.65, "Cerrado definitivamente", "Retail Norte"]);
 
     expect(ws["A3"].t).toBe("n"); // N° local numérico
@@ -400,9 +532,12 @@ describe("exportFolderLocales", () => {
       /\| \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/,
     );
     expect(flat.some((l) => l.startsWith("Comuna | Planilla: 1 · calculada: 1 · vacío: 0 | Planilla importada"))).toBe(true);
+    expect(flat.some((l) => l.startsWith("Dirección | Planilla: 0 · alias de importación: 1 · propiedades del POI: 0 · vacío: 1 |"))).toBe(true);
     expect(flat).toContain("Discrepancias de comuna (planilla vs. coordenadas): 1");
     // Fila 3 de «Locales» = el local 10 (Providencia en planilla, Santiago por coordenadas)
-    expect(flat).toContain("3 | 10 | Uno | Providencia | Santiago | Región Metropolitana de Santiago");
+    expect(flat).toContain(
+      "3 | 10 | Uno | Providencia | Región Metropolitana de Santiago | Santiago | Región Metropolitana de Santiago | Región Metropolitana de Santiago",
+    );
   });
 
   it("Excel sin subcarpetas: omite la columna Carpeta y dice que no hay discrepancias", async () => {
@@ -424,9 +559,59 @@ describe("exportFolderLocales", () => {
     const text = new TextDecoder().decode(bytes.slice(3));
     expect(text.split("\r\n")).toEqual([
       "N° local;Nombre;Dirección;Comuna;Región;Latitud;Longitud;Estado;Carpeta",
-      "007;Dos;;Buin;Región Metropolitana de Santiago;-33.600000;-70.700000;Operativo;Retail Norte › Sub",
+      "007;Dos;Nueva 2;Buin;Región Metropolitana de Santiago;-33.600000;-70.700000;Operativo;Retail Norte › Sub",
       "10;Uno;;Providencia;Región Metropolitana de Santiago;-33.450000;-70.650000;Cerrado definitivamente;Retail Norte",
     ]);
+  });
+
+  it("Excel: discrepancia entre regiones deja Región vacía en Locales y la explica en Metadatos", async () => {
+    const fs = [...folders, folder("V", "Cruce")];
+    const cruzado = poi("p7", "Cruzado", "V");
+    h.attrs.push({ poi_id: "p7", attr_key: "Comuna", attr_value: "Valparaíso" });
+    await exportFolderLocales(fs[5], fs, [cruzado], "xlsx");
+
+    const wb = XLSX.read(await readBytes(blobs[0]), { type: "array" });
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets["Locales"], { header: 1, defval: null });
+    expect(aoa[1]).toEqual([null, "Cruzado", null, "Valparaíso", null, -33.45, -70.65, "Operativo"]);
+    const flat = metaLines(wb);
+    expect(flat).toContain("Discrepancias de comuna (planilla vs. coordenadas): 1");
+    expect(flat).toContain(
+      "2 |  | Cruzado | Valparaíso | Valparaíso | Santiago | Región Metropolitana de Santiago | (vacía)",
+    );
+    expect(flat.some((l) => l.startsWith("Región | Calculada: 0 · vacía por discrepancia entre regiones: 1 · sin dato: 0"))).toBe(true);
+  });
+
+  it("Excel: celdas de texto que parecen fórmula quedan como texto, sin fórmula ni apóstrofo; lat/lng siguen numéricos", async () => {
+    const fs = [folder("F", "=Carpeta"), folder("G", "Sub", "F")];
+    const evil = [
+      poi("e1", "=HYPERLINK(\"http://x\")", "F", { properties: { address: "+56 9" } }),
+      poi("e2", "@SUM(A1)", "G"),
+      poi("e3", "-1+1", "F"),
+    ];
+    h.attrs.push({ poi_id: "e1", attr_key: "Comuna", attr_value: "-Santiago" });
+    await exportFolderLocales(fs[0], fs, evil, "xlsx");
+
+    const wb = XLSX.read(await readBytes(blobs[0]), { type: "array", cellFormula: true });
+    const ws = wb.Sheets["Locales"];
+    const texts = Object.entries(ws).filter(
+      ([k, c]) => !k.startsWith("!") && typeof (c as XLSX.CellObject).v === "string" && /^[=+\-@]/.test((c as XLSX.CellObject).v as string),
+    );
+    expect(texts.map(([, c]) => (c as XLSX.CellObject).v).sort()).toEqual(
+      ['+56 9', '-1+1', '-Santiago', '=Carpeta', '=Carpeta', '=Carpeta › Sub', '=HYPERLINK("http://x")', '@SUM(A1)'].sort(),
+    );
+    for (const [, c] of texts) {
+      const cell = c as XLSX.CellObject;
+      expect(cell.t).toBe("s");
+      expect(cell.f).toBeUndefined();
+    }
+    // Números sin tocar (negativos incluidos)
+    const lat = Object.entries(ws).filter(([k]) => /^F\d+$/.test(k) && k !== "F1");
+    expect(lat.length).toBe(3);
+    for (const [, c] of lat) expect((c as XLSX.CellObject).t).toBe("n");
+    // Metadatos: el nombre de carpeta "=Carpeta" también es texto
+    const meta = wb.Sheets["Metadatos"];
+    expect(meta["B3"]).toMatchObject({ t: "s", v: "=Carpeta" });
+    expect(meta["B3"].f).toBeUndefined();
   });
 
   it("falla si la carpeta no tiene POIs activos", async () => {

@@ -39,10 +39,23 @@ interface IndexedFeature {
   codigo: string;
 }
 
-let cache: {
+interface CommuneIndex {
   features: IndexedFeature[];
-} | null = null;
-let inflight: Promise<{ features: IndexedFeature[] }> | null = null;
+  /** nombre normalizado → código de región; null si el nombre se repite en regiones distintas. */
+  regionByName: Map<string, string | null>;
+}
+
+let cache: CommuneIndex | null = null;
+let inflight: Promise<CommuneIndex> | null = null;
+
+/** Minúsculas, sin tildes y con espacios colapsados: para comparar nombres de comuna. */
+export const normalizeCommuneName = (s: string): string =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 
 /* ---------- Spatial helpers ---------- */
 
@@ -91,7 +104,7 @@ const inBbox = (
 
 /* ---------- Carga del índice ---------- */
 
-const loadIndex = async (): Promise<{ features: IndexedFeature[] }> => {
+const loadIndex = async (): Promise<CommuneIndex> => {
   if (cache) return cache;
   if (inflight) return inflight;
 
@@ -131,7 +144,14 @@ const loadIndex = async (): Promise<{ features: IndexedFeature[] }> => {
       });
     }
 
-    cache = { features };
+    const regionByName = new Map<string, string | null>();
+    for (const f of features) {
+      const key = normalizeCommuneName(f.name);
+      const region = f.codigo.slice(0, 2);
+      regionByName.set(key, regionByName.has(key) && regionByName.get(key) !== region ? null : region);
+    }
+
+    cache = { features, regionByName };
     inflight = null;
     return cache;
   })().catch((e) => {
@@ -167,6 +187,15 @@ export const reverseGeocodeCommune = async (
     }
   }
   return null;
+};
+
+/**
+ * Código de región (2 dígitos) de una comuna según su nombre, sin distinguir
+ * tildes ni mayúsculas. Null si el nombre no existe o es ambiguo.
+ */
+export const regionCodeByCommuneName = async (name: string): Promise<string | null> => {
+  const { regionByName } = await loadIndex();
+  return regionByName.get(normalizeCommuneName(name)) ?? null;
 };
 
 /**
