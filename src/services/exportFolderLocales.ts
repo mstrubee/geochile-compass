@@ -10,7 +10,8 @@
 import * as XLSX from "xlsx";
 import { POI_STATUS_LABEL, type PoiFolder, type SavedPoi } from "@/types/pois";
 import {
-  normalizeCommuneName,
+  communeCodesByName,
+  officialCommuneName,
   regionCodeByCommuneName,
   reverseGeocodeCommune,
 } from "@/utils/communeReverseGeocode";
@@ -60,9 +61,6 @@ export const REGION_NAMES: Record<string, string> = {
 export const regionNameFromCode = (code: string | null | undefined): string =>
   (code && REGION_NAMES[code.slice(0, 2)]) || "";
 
-/** Minúsculas, sin tildes y con espacios colapsados: para comparar nombres de comuna. */
-export const normalizeName = normalizeCommuneName;
-
 /** Texto que Excel interpretaría como fórmula (incluye tab y CR iniciales, que también la disparan). */
 const FORMULA_START = /^[=+\-@\t\r]/;
 
@@ -102,6 +100,8 @@ export interface LocalesRow {
     direccion: "atributo" | "alias" | "address" | "direccion" | null;
     comuna: "planilla" | "coordenadas" | null;
   };
+  /** La comuna calculada salió con el nombre de codigos_territoriales.csv (sin tildes) porque el código no está en ine_communes.csv. */
+  comunaNombreRespaldo: boolean;
   /** Comuna calculada por coordenadas (null si el punto cae fuera de los límites comunales). */
   comunaCoordenadas: string | null;
   /** Región calculada por coordenadas; `region` queda vacía si la discrepancia de comuna cruza regiones. */
@@ -141,8 +141,14 @@ export const buildLocalesRows = async (
       const comunaAttr = attr(ATTR.comuna);
 
       const geo = hasCoords(p) ? await reverseGeocodeCommune(p.lat, p.lng) : null;
+      // Nombre oficial con tildes (ine_communes.csv); si el código no está, el de codigos_territoriales.
+      const nombreOficial = geo ? await officialCommuneName(geo.codigo) : null;
+      const comunaCalculada = geo ? (nombreOficial ?? geo.name) : null;
       const regionCoordenadas = regionNameFromCode(geo?.region_codigo);
-      const discrepancia = !!comunaAttr && !!geo && normalizeName(comunaAttr) !== normalizeName(geo.name);
+      // Se compara por código de comuna: cualquiera de los nombres de un código ("La Calera" /
+      // "Calera") resuelve al mismo código y no cuenta como discrepancia.
+      const discrepancia =
+        !!comunaAttr && !!geo && !(await communeCodesByName(comunaAttr)).includes(geo.codigo);
 
       // Con discrepancia, la región de las coordenadas solo se conserva si la comuna de la
       // planilla es de la misma región; si es otra (o no se identifica) queda vacía, para
@@ -154,7 +160,7 @@ export const buildLocalesRows = async (
         numLocal: local || centroSap,
         nombre: nombreAttr || p.name,
         direccion: dirAttr || dirAlias || dirAddress || dirDireccion,
-        comuna: comunaAttr || geo?.name || "",
+        comuna: comunaAttr || comunaCalculada || "",
         region: regionOmitida ? "" : regionCoordenadas,
         lat: hasCoords(p) ? Number(p.lat.toFixed(6)) : null,
         lng: hasCoords(p) ? Number(p.lng.toFixed(6)) : null,
@@ -174,7 +180,8 @@ export const buildLocalesRows = async (
                   : null,
           comuna: comunaAttr ? "planilla" : geo ? "coordenadas" : null,
         },
-        comunaCoordenadas: geo?.name ?? null,
+        comunaNombreRespaldo: !comunaAttr && !!geo && nombreOficial === null,
+        comunaCoordenadas: comunaCalculada,
         regionCoordenadas,
         discrepancia,
         regionPlanilla,
@@ -285,6 +292,7 @@ const buildMetadataSheet = (
   const dir = countBy(rows, (r) => r.source.direccion);
   const comuna = countBy(rows, (r) => r.source.comuna);
   const regionOmitida = rows.filter((r) => r.regionOmitida).length;
+  const comunaRespaldo = rows.filter((r) => r.comunaNombreRespaldo).length;
   const sinRegion = rows.filter((r) => !r.region && !r.regionOmitida).length;
   const discrepancias = rows
     .map((r, i) => ({ r, fila: i + 2 })) // fila 1 de «Locales» son los encabezados
@@ -317,8 +325,9 @@ const buildMetadataSheet = (
     ],
     [
       "Comuna",
-      `Planilla: ${n(comuna, "planilla")} · calculada: ${n(comuna, "coordenadas")} · vacío: ${n(comuna, null)}`,
-      "Planilla importada: atributo «Comuna»; si falta, calculada por coordenadas con los límites comunales INE.",
+      `Planilla: ${n(comuna, "planilla")} · calculada: ${n(comuna, "coordenadas")} · vacío: ${n(comuna, null)}` +
+        (comunaRespaldo ? ` · calculadas con nombre sin tildes (respaldo): ${comunaRespaldo}` : ""),
+      "Planilla importada: atributo «Comuna»; si falta, calculada por coordenadas con los límites comunales INE, con el nombre oficial de ine_communes.csv (si el código no está ahí, el de codigos_territoriales.csv).",
     ],
     [
       "Región",

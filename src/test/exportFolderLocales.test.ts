@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
+import { stubCommuneFetch } from "@/test/communeFixtures";
 
 type Row = Record<string, unknown>;
 
@@ -8,9 +9,6 @@ const h = vi.hoisted(() => ({
   attrs: [] as Row[],
   aliases: [] as Row[],
   attrKeyFilter: [] as string[][],
-  geo: {} as Record<string, { name: string; codigo: string; region_codigo: string } | null>,
-  /** nombre normalizado de comuna → código de región (lo que resolvería el índice INE) */
-  regionByName: {} as Record<string, string | null>,
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -41,18 +39,10 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/utils/communeReverseGeocode", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/utils/communeReverseGeocode")>()),
-  reverseGeocodeCommune: async (lat: number, lng: number) => h.geo[`${lat},${lng}`] ?? null,
-  regionCodeByCommuneName: async (name: string) =>
-    h.regionByName[name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()] ?? null,
-}));
-
 import {
   buildLocalesRows,
   exportFolderLocales,
   localesToCsv,
-  normalizeName,
   REGION_NAMES,
   regionNameFromCode,
   santiagoStamp,
@@ -86,16 +76,16 @@ const poi = (id: string, name: string, folder_id: string, extra: Partial<SavedPo
 const attrMap = (o: Record<string, string>) => new Map(Object.entries(o));
 const byId = (fs: PoiFolder[]) => new Map(fs.map((f) => [f.id, f] as const));
 
-const SCL = { name: "Santiago", codigo: "13101", region_codigo: "13" };
-const BUIN = { name: "Buin", codigo: "13402", region_codigo: "13" };
-
+// Coordenadas de prueba: Santiago (-33.45,-70.65), Buin (-33.6,-70.7), Ñuñoa (-33.25,-70.65),
+// Maipú (-33.9,-70.8, sin nombre en ine_communes) y La Calera (-32.8,-71.2); ver communeFixtures.ts.
 beforeEach(() => {
+  stubCommuneFetch();
   h.attrs = [];
   h.aliases = [];
   h.attrKeyFilter = [];
-  h.geo = { "-33.45,-70.65": SCL };
-  h.regionByName = { santiago: "13", providencia: "13", buin: "13", valparaiso: "05", concepcion: "08" };
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("regionNameFromCode", () => {
   it("devuelve los 16 nombres oficiales con tildes", () => {
@@ -217,6 +207,63 @@ describe("buildLocalesRows · mapeo de columnas", () => {
     expect(r).toMatchObject({ comuna: "", region: "", comunaCoordenadas: null, discrepancia: false });
   });
 
+  it("comuna por coordenadas con el nombre oficial con tildes (ine_communes.csv)", async () => {
+    const [r] = await buildLocalesRows([poi("a", "x", "R", { lat: -33.25, lng: -70.65 })], new Map(), byId(fs), false);
+    expect(r).toMatchObject({
+      comuna: "Ñuñoa",
+      comunaCoordenadas: "Ñuñoa",
+      comunaNombreRespaldo: false,
+      discrepancia: false,
+    });
+  });
+
+  it("si el código no está en ine_communes.csv usa el nombre de codigos_territoriales y no deja la celda vacía", async () => {
+    const [r] = await buildLocalesRows([poi("a", "x", "R", { lat: -33.9, lng: -70.8 })], new Map(), byId(fs), false);
+    expect(r).toMatchObject({ comuna: "Maipu", comunaNombreRespaldo: true });
+    expect(r.source.comuna).toBe("coordenadas");
+    expect(r.region).toBe("Región Metropolitana de Santiago");
+  });
+
+  it("grafías alternativas de una misma comuna no son discrepancia y se conserva lo que dice la planilla", async () => {
+    const casos: Array<[number, number, string]> = [
+      [-32.8, -71.2, "La Calera"],
+      [-32.8, -71.2, "Calera"],
+      [-32.85, -70.94, "Llay-Llay"],
+      [-32.85, -70.94, "Llaillay"],
+      [-33.1, -70.9, "Til Til"],
+      [-33.1, -70.9, "Tiltil"],
+      [-33.25, -70.65, "Nunoa"],
+      [-33.25, -70.65, "ÑUÑOA"],
+    ];
+    const pois = casos.map(([lat, lng, comuna], i) => poi(`c${i}`, comuna, "R", { lat, lng }));
+    const attrs = new Map(casos.map(([, , comuna], i) => [`c${i}`, attrMap({ Comuna: comuna })] as const));
+    const rows = await buildLocalesRows(pois, attrs, byId(fs), false);
+    expect(rows).toHaveLength(casos.length);
+    for (const r of rows) {
+      expect(r.discrepancia, r.nombre).toBe(false);
+      expect(r.comuna).toBe(r.nombre); // el nombre del POI se creó igual al de la planilla
+      expect(r.regionOmitida).toBe(false);
+      expect(r.region).not.toBe("");
+    }
+  });
+
+  it("una comuna distinta sigue siendo discrepancia aunque sea un nombre válido (La Calera en Santiago)", async () => {
+    const [r] = await buildLocalesRows(
+      [poi("a", "x", "R")],
+      new Map([["a", attrMap({ Comuna: "La Calera" })]]),
+      byId(fs),
+      false,
+    );
+    expect(r).toMatchObject({
+      comuna: "La Calera",
+      comunaCoordenadas: "Santiago",
+      discrepancia: true,
+      regionPlanilla: "Valparaíso",
+      region: "",
+      regionOmitida: true,
+    });
+  });
+
   it("si la comuna de la planilla no coincide con la de coordenadas la conserva y marca discrepancia", async () => {
     const rows = await buildLocalesRows(
       [poi("a", "Igual", "R"), poi("b", "Distinta", "R")],
@@ -283,7 +330,6 @@ describe("buildLocalesRows · mapeo de columnas", () => {
   });
 
   it("latitud y longitud a 6 decimales", async () => {
-    h.geo["-33.12345678,-70.98765432"] = BUIN;
     const [r] = await buildLocalesRows(
       [poi("a", "x", "R", { lat: -33.12345678, lng: -70.98765432 })],
       new Map(),
@@ -391,8 +437,8 @@ describe("localesToCsv · inyección de fórmulas", () => {
 
     // fila 1: nombre con comillas (escape CSV sobre el texto ya protegido), dirección y comuna protegidas
     expect(line("HYPERLINK")).toBe(
-      // "-Santiago" no es una comuna identificable y discrepa con las coordenadas: la Región queda vacía.
-      `5;"'=HYPERLINK(""http://x"")";'+56 9 1234;'-Santiago;;-33.450000;-70.650000;Operativo;Raíz › Sub`,
+      // "-Santiago" se reconoce como Santiago (el guion no cuenta al comparar): sin discrepancia, la Región se mantiene.
+      `5;"'=HYPERLINK(""http://x"")";'+56 9 1234;'-Santiago;Región Metropolitana de Santiago;-33.450000;-70.650000;Operativo;Raíz › Sub`,
     );
     expect(line("SUM")).toMatch(/^'-7;'@SUM\(A1\);/);
     expect(line("2+3")).toMatch(/^8;'-2\+3;/);
@@ -424,13 +470,6 @@ describe("santiagoStamp", () => {
       date: "20260701",
       dateTime: "2026-07-01 00:00:05",
     });
-  });
-});
-
-describe("normalizeName", () => {
-  it("ignora tildes, mayúsculas y espacios repetidos", () => {
-    expect(normalizeName("  ÑUÑOA  ")).toBe(normalizeName("Nunoa"));
-    expect(normalizeName("San  Bernardo")).toBe("san bernardo");
   });
 });
 
@@ -479,7 +518,6 @@ describe("exportFolderLocales", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
       names.push(this.download);
     });
-    h.geo["-33.6,-70.7"] = BUIN;
     h.aliases = [
       { id: "a1", poi_id: "p2", raw_address: "Vieja 1", created_at: "2026-01-01T00:00:00Z" },
       { id: "a2", poi_id: "p2", raw_address: "Nueva 2", created_at: "2026-03-01T00:00:00Z" },
@@ -562,6 +600,23 @@ describe("exportFolderLocales", () => {
       "007;Dos;Nueva 2;Buin;Región Metropolitana de Santiago;-33.600000;-70.700000;Operativo;Retail Norte › Sub",
       "10;Uno;;Providencia;Región Metropolitana de Santiago;-33.450000;-70.650000;Cerrado definitivamente;Retail Norte",
     ]);
+  });
+
+  it("Excel: comunas con nombre oficial con tildes y recuento de las que usaron el nombre de respaldo", async () => {
+    const fs = [...folders, folder("M", "Comunas")];
+    const m = [
+      poi("m1", "Ñuñoa local", "M", { lat: -33.25, lng: -70.65 }),
+      poi("m2", "Maipú local", "M", { lat: -33.9, lng: -70.8 }),
+    ];
+    await exportFolderLocales(fs[5], fs, m, "xlsx");
+    const wb = XLSX.read(await readBytes(blobs[0]), { type: "array" });
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets["Locales"], { header: 1, defval: null });
+    expect(aoa.slice(1).map((r) => [r[1], r[3]])).toEqual([
+      ["Maipú local", "Maipu"], // sin N° local: orden por nombre; código fuera de ine_communes → nombre de respaldo
+      ["Ñuñoa local", "Ñuñoa"],
+    ]);
+    const comunaLine = metaLines(wb).find((l) => l.startsWith("Comuna |"))!;
+    expect(comunaLine).toContain("Planilla: 0 · calculada: 2 · vacío: 0 · calculadas con nombre sin tildes (respaldo): 1");
   });
 
   it("Excel: discrepancia entre regiones deja Región vacía en Locales y la explica en Metadatos", async () => {

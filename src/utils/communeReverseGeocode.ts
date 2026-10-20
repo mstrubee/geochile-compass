@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, Polygon, MultiPolygon } from "geojson";
 import { polygonBbox } from "@/utils/spatial";
+import { parseCsvLine } from "@/utils/csv";
 
 /**
  * Reverse geocoding cliente: dado lat/lng → nombre de comuna chilena.
@@ -39,23 +40,10 @@ interface IndexedFeature {
   codigo: string;
 }
 
-interface CommuneIndex {
+let cache: {
   features: IndexedFeature[];
-  /** nombre normalizado → código de región; null si el nombre se repite en regiones distintas. */
-  regionByName: Map<string, string | null>;
-}
-
-let cache: CommuneIndex | null = null;
-let inflight: Promise<CommuneIndex> | null = null;
-
-/** Minúsculas, sin tildes y con espacios colapsados: para comparar nombres de comuna. */
-export const normalizeCommuneName = (s: string): string =>
-  s
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
+} | null = null;
+let inflight: Promise<{ features: IndexedFeature[] }> | null = null;
 
 /* ---------- Spatial helpers ---------- */
 
@@ -104,7 +92,7 @@ const inBbox = (
 
 /* ---------- Carga del índice ---------- */
 
-const loadIndex = async (): Promise<CommuneIndex> => {
+const loadIndex = async (): Promise<{ features: IndexedFeature[] }> => {
   if (cache) return cache;
   if (inflight) return inflight;
 
@@ -144,14 +132,7 @@ const loadIndex = async (): Promise<CommuneIndex> => {
       });
     }
 
-    const regionByName = new Map<string, string | null>();
-    for (const f of features) {
-      const key = normalizeCommuneName(f.name);
-      const region = f.codigo.slice(0, 2);
-      regionByName.set(key, regionByName.has(key) && regionByName.get(key) !== region ? null : region);
-    }
-
-    cache = { features, regionByName };
+    cache = { features };
     inflight = null;
     return cache;
   })().catch((e) => {
@@ -190,15 +171,6 @@ export const reverseGeocodeCommune = async (
 };
 
 /**
- * Código de región (2 dígitos) de una comuna según su nombre, sin distinguir
- * tildes ni mayúsculas. Null si el nombre no existe o es ambiguo.
- */
-export const regionCodeByCommuneName = async (name: string): Promise<string | null> => {
-  const { regionByName } = await loadIndex();
-  return regionByName.get(normalizeCommuneName(name)) ?? null;
-};
-
-/**
  * Devuelve true si el punto cae en la Región Metropolitana (código región 13).
  */
 export const isRmByCoords = async (lat: number, lng: number): Promise<boolean> => {
@@ -230,4 +202,95 @@ export const resolveCommuneAndRegion = async (
     return { comuna: null, codigo: null, isRm };
   }
   return { comuna: null, codigo: null, isRm: false };
+};
+
+/* ---------- Nombres oficiales y búsqueda por nombre (los usa el export de locales) ---------- */
+
+/**
+ * Clave para comparar nombres de comuna: sin tildes, en minúsculas y sin guiones,
+ * apóstrofos ni espacios ("Til Til" y "Tiltil" → "tiltil", "O'Higgins" → "ohiggins").
+ * No unifica grafías distintas ("Llay-Llay" vs "Llaillay"): eso lo resuelve el índice
+ * al registrar ambos nombres de cada código.
+ */
+export const communeNameKey = (s: string): string =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+/**
+ * Lee `public/ine_communes.csv` y devuelve código INE (5 dígitos) → nombre con tildes.
+ * Solo usa `commune_id` y `commune_name`; ignora el resto de las columnas.
+ */
+export const parseIneCommuneNames = (csvText: string): Map<string, string> => {
+  const lines = csvText.replace(/^\uFEFF/, "").split(/\r?\n/).filter((l) => l.trim());
+  const header = parseCsvLine(lines[0] ?? "", ",");
+  const idCol = header.indexOf("commune_id");
+  const nameCol = header.indexOf("commune_name");
+  if (idCol < 0 || nameCol < 0) throw new Error("ine_communes.csv: faltan las columnas commune_id/commune_name");
+  const out = new Map<string, string>();
+  for (const line of lines.slice(1)) {
+    const cols = parseCsvLine(line, ",");
+    const id = cols[idCol]?.padStart(5, "0");
+    const name = cols[nameCol];
+    if (id && name) out.set(id, name);
+  }
+  return out;
+};
+
+let ineNamesPromise: Promise<Map<string, string>> | null = null;
+
+// Se carga aparte de `loadIndex` para que quienes solo hacen reverse geocode no paguen este fetch.
+const loadIneNames = (): Promise<Map<string, string>> => {
+  ineNamesPromise ??= fetch("/ine_communes.csv")
+    .then(async (res) => {
+      if (!res.ok) throw new Error(`ine_communes.csv HTTP ${res.status}`);
+      return parseIneCommuneNames(await res.text());
+    })
+    .catch((e) => {
+      ineNamesPromise = null;
+      throw e;
+    });
+  return ineNamesPromise;
+};
+
+/** Nombre oficial con tildes de una comuna por código INE; null si el código no está en ine_communes.csv. */
+export const officialCommuneName = async (codigo: string): Promise<string | null> =>
+  (await loadIneNames()).get(codigo.padStart(5, "0")) ?? null;
+
+let codesByKeyPromise: Promise<Map<string, Set<string>>> | null = null;
+
+/** clave de nombre → códigos, con los dos nombres de cada código (ine_communes.csv y codigos_territoriales.csv). */
+const loadCodesByKey = (): Promise<Map<string, Set<string>>> => {
+  codesByKeyPromise ??= Promise.all([loadIndex(), loadIneNames()])
+    .then(([{ features }, ineNames]) => {
+      const out = new Map<string, Set<string>>();
+      const add = (name: string, codigo: string) => {
+        const key = communeNameKey(name);
+        if (key) out.set(key, (out.get(key) ?? new Set()).add(codigo));
+      };
+      for (const f of features) add(f.name, f.codigo);
+      for (const [codigo, name] of ineNames) add(name, codigo);
+      return out;
+    })
+    .catch((e) => {
+      codesByKeyPromise = null;
+      throw e;
+    });
+  return codesByKeyPromise;
+};
+
+/**
+ * Códigos de comuna que corresponden a un nombre. Se registran los dos nombres de cada código,
+ * así "La Calera"/"Calera" o "Llay-Llay"/"Llaillay" resuelven al mismo código. Vacío si no existe.
+ */
+export const communeCodesByName = async (name: string): Promise<string[]> => [
+  ...((await loadCodesByKey()).get(communeNameKey(name)) ?? []),
+];
+
+/** Código de región (2 dígitos) de una comuna por nombre; null si no existe o sus códigos caen en regiones distintas. */
+export const regionCodeByCommuneName = async (name: string): Promise<string | null> => {
+  const regions = new Set((await communeCodesByName(name)).map((c) => c.slice(0, 2)));
+  return regions.size === 1 ? [...regions][0] : null;
 };
