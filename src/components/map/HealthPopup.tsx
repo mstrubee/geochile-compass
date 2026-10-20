@@ -1,7 +1,8 @@
 import type { HealthEstablishmentRow } from "@/types/health";
+import { HealthCapacity } from "./HealthCapacity";
 import { claseText, COMPLEJIDAD_LABEL, DEPENDENCIA_LABEL, GEO_MARKED, GEO_STATUS_LABEL, WARN } from "@/utils/healthScale";
 
-/** Popup de un establecimiento. Siempre dice la clase (y si es imputada), el estado y, si corresponde, que la ubicación está marcada. */
+/** Popup de un establecimiento. Siempre dice la clase (y si es imputada), el estado y, si corresponde, que la ubicación está marcada. Los hospitales suman su capacidad (camas y ocupación, DEIS). */
 export const HealthPopup = ({ row }: { row: HealthEstablishmentRow }) => (
   <div className="min-w-[210px] space-y-1 text-xs" data-testid="health-popup">
     <p className="text-sm font-semibold">{row.name}</p>
@@ -22,6 +23,7 @@ export const HealthPopup = ({ row }: { row: HealthEstablishmentRow }) => (
         {GEO_STATUS_LABEL[row.geo_status]}{row.geo_distance_m != null ? ` · a ${Math.round(row.geo_distance_m).toLocaleString("es-CL")} m de su comuna` : ""}. El punto es el original de la fuente.
       </p>
     )}
+    {row.clase_servicio === "hospitalario" && <HealthCapacity code={row.code} />}
     <p className="text-muted-foreground">Código {row.code}. {WARN.registry}</p>
   </div>
 );

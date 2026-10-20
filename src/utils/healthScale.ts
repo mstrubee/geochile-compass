@@ -39,7 +39,7 @@ export const GEO_NOT_DRAWN: ReadonlySet<HealthGeoStatus> = new Set<HealthGeoStat
 export const LEVEL_SEAL = { level: "Respondida con rigor (conteo del registro oficial)", seal: "Oficial con advertencia" } as const;
 
 export const WARN = {
-  registry: "Es un registro de establecimientos: NO mide capacidad, dotación, camas ni acceso. Estar «en la comuna» no es ser accesible.",
+  registry: "Es un registro de establecimientos: por sí solo NO mide capacidad, dotación, camas ni acceso (la capacidad de los hospitales públicos viene de fuentes DEIS aparte, rotuladas en su ficha). Estar «en la comuna» no es ser accesible.",
   closedHidden: "Los establecimientos cerrados están ocultos. Actívelos para verlos.",
   closedShown: "Se incluyen establecimientos CERRADOS: no cuentan como oferta vigente.",
   imputed: (n: number, total: number) =>
