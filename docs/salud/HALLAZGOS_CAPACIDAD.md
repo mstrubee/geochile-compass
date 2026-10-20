@@ -9,11 +9,24 @@ Regla de la interfaz (del encargo): no se infiere, no se estima y no se resta na
 | # | Fuente | Estado | Efecto |
 |---|---|---|---|
 | 1 | Ocupación, REM 20 (datos.gob.cl, CC0) | **Verificada y descargada.** 2014-01 a 2026-08, mensual, 208 establecimientos, **todos empalman por código** con nuestra capa | Lista para modelar |
-| 2 | Dotación de camas DEIS/DIGERA | **Verificada y descargada.** El archivo que indicaste (2010-2023) **está desactualizado**: existen 2010-2024 y 2010-2025 con la misma ruta. Propongo la de **2010-2025** | Lista para modelar; licencia **[NO COMPROBADO]** |
-| 3 | Pabellones, REM A21 sección A | **Definiciones y columnas verificadas (manual y planilla oficiales). El archivo de datos NO se pudo ubicar ni descargar**: el listado de «Datos Abiertos» del DEIS se carga con una tabla AJAX tras el WAF de Cloudflare (403 «Just a moment…») y los patrones de URL probados dan 404. No lo eludí | **Bloquea solo los pabellones.** Necesito tu decisión (§7, pregunta P1) |
+| 2 | Dotación de camas DEIS/DIGERA | **Verificada y descargada.** El archivo que indicaste (2010-2023) **está desactualizado**: existen 2010-2024 y 2010-2025 con la misma ruta. **Fuente vigente: 2010-2025** (aprobado) | Lista para modelar; licencia **[NO COMPROBADO]** |
+| 3 | Pabellones, REM A21 sección A | **Definiciones y columnas verificadas (manual y planilla oficiales). El archivo de datos NO se pudo ubicar ni descargar**: el listado de «Datos Abiertos» del DEIS se carga con una tabla AJAX tras el WAF de Cloudflare (403 «Just a moment…») y los patrones de URL probados dan 404. No lo eludí | **Bloquea solo los pabellones.** Resuelto (P1): la Fase 1 va sin pabellones; irán en un PR aparte |
 | — | Clínicas privadas | **Casi no reportan.** De 145 establecimientos hospitalarios vigentes no SNSS de nuestra capa, solo 2 aparecen alguna vez en REM 20 (Clínica de Puerto Varas SpA, 2014-2015, y Hospital Naval de Puerto Williams, 2020). Ninguno en 2024-2026 | «sin dato» para privados es la norma, no la excepción |
 
 Número de migración tomado: **`20261108000000`** (reservado; ver §6).
+
+### Decisiones del dueño (aprobadas el 2026-10-20) — **vigentes para la Fase 1**
+
+| # | Decisión | Efecto en la Fase 1 |
+|---|---|---|
+| P1 | La Fase 1 va **SIN pabellones**. Los pabellones irán en un PR aparte cuando el dueño consiga el archivo REM A21. No se usan planillas de los Servicios de Salud | No existe `health_theatres_month`; la ficha no muestra el campo de pabellones (ni siquiera «sin dato»); no hay filtro «con pabellón» |
+| P2 | Índice del hospital = Σ ocupados ÷ Σ disponibles de **todas** las áreas funcionales | Desglose por área en la ficha y nota «incluye Pensionado, psiquiatría y sociosanitario» |
+| P3 | Último año completo (2025) + último mes publicado (2026-08), cada uno con su período visible y la nota «promedio del período, no en tiempo real» | Así lo calcula `get_health_capacity` (año = el último con diciembre en el archivo) |
+| P4 | Dotación: se usa el archivo **2010-2025** | **Fuente vigente de dotación:** `Dotación de camas 2010-2025 Establecimientos Pertenecientes al SNSS.xlsx`, sha256 `ef5ca456…a078f` (`ef5ca45f30c1e3937621e489826766cb9844c5bca0253a375be4851f28ba078f`), `Last-Modified` 2025-10-20; URL, hash y fecha de modificación quedan en `source_snapshots` (`origin_url`, `sha256`, `declared_date`). Los archivos 2010-2023 (`94dcecdf…`) y 2010-2024 (`1634e59b…`) quedan **solo como referencia histórica**: sus cifras de 2011-2013 difieren |
+| P5 | **No** se escribe al DEIS desde aquí; la consulta la envía el dueño | La licencia de la dotación sigue **[NO COMPROBADO]** en este documento y en `data_sources.license_label`; `client_ready = false` por campo |
+| P6 | Migración `20261108000000` confirmada | `20261106000000` y `20261107000000` quedan libres |
+
+Además: el ETL resuelve la URL de REM 20 por CKAN y registra la URL efectiva; los controles del runbook usan los nombres reales de la capa («Hospital San Luis (Buin)», `113150`, y «Hospital Dr. Luis Tisné B. (Santiago, Peñalolén)», `112101`); para privados y FF.AA. se muestra «sin dato» con la nota explicativa.
 
 ## 1. Fuente 1 — REM 20 (ocupación e indicadores del proceso de hospitalización)
 
@@ -216,14 +229,21 @@ health_rem20_month          (snapshot_n, code, period date, area, dias_cama_ocup
                             -- PK (snapshot_n, code, period, area); los 3 pares duplicados se SUMAN y se marca row_dups
 health_theatres_month       (snapshot_n, code, period date, tipo text, dotacion int, habilitados_prom numeric,
                              en_trabajo_prom numeric, horas_habilitadas_habil numeric, horas_ocupadas_* numeric ...)
-                            -- SOLO si P1 resuelve el archivo; si no, la tabla se crea vacía en una migración posterior
+                            -- NO SE CREA en esta fase (P1): llegará con el PR de pabellones, cuando exista el archivo oficial
 ```
+
+**Lo implementado en la Fase 1 difiere de esta propuesta en lo siguiente** (`supabase/migrations/20261108000000_health_capacity.sql`):
+
+* `health_beds_dotacion (snapshot_n, code, year, area, beds)`: solo cifras (celda vacía o de texto = no se guarda = «sin dato»); `area = 100` es el total publicado; `health_rem20_month` guarda además `filas` (2 = clave duplicada sumada). Sin `area_nom`: las glosas están en `health_areas_funcionales` (29 áreas + el total).
+* No hay vista `health_capacity_latest`: la lectura es la RPC `get_health_capacity(code)` (SECURITY INVOKER), que devuelve un `jsonb` con dotación, ocupación del último año completo y del último mes, fuentes y banderas.
+* `health_capacity_fields` guarda `client_ready` **por campo** (`dotacion`, `ocupacion`), ambos `false` (el de la capa de establecimientos no se toca).
+* Se agregan `publish_health_rem20_snapshot` y `publish_health_dotacion_snapshot` (todo o nada; cuadran con los totales del archivo y exigen que cada código exista en la captura vigente de establecimientos).
 
 Vista de lectura **sin inferencias** (`health_capacity_latest`, `security invoker`), una fila por establecimiento de la capa:
 
 * `dotacion_year`, `dotacion_total` (la fila «Total» publicada), `dotacion_snapshot`;
 * `rem_period_from`, `rem_period_to`, `dias_cama_ocupados`, `dias_cama_disponibles` (sumas del período), `indice_ocupacional` (**calculado solo con la fórmula oficial** y NULL si disponibles = 0);
-* `pabellones_period`, `quirofanos_dotacion` (si hay A21);
+* ~~`pabellones_period`, `quirofanos_dotacion` (si hay A21)~~ — fuera de esta fase (P1);
 * todo `NULL` cuando no hay fila ⇒ la interfaz escribe «sin dato». **Prohibido** cualquier `coalesce(..., 0)`.
 
 Período que muestra la ficha (propuesta, **P3**): ocupación = **los 12 meses del último año calendario con 12 meses informados** (hoy **2025**) y, aparte, el último mes publicado (hoy **2026-08**). El período que se calculó va siempre en el popup.
@@ -251,28 +271,27 @@ Camas de dotación: 280 (2025)
 Ocupación 2025 (ene-dic): 84,8 %
    87.230 días-cama ocupados de 102.835 disponibles. Promedio del período, no en tiempo real.
    Último mes publicado (2026-08): 87,6 %
-Pabellones (REM A21, <período>): sí · 9 quirófanos en dotación   |   «sin dato»
 Fuente: REM 20 (DEIS/MINSAL, CC0), descargado 2026-10-20 · Código 112101
 ```
 
-* **Sin dato** (hospital público sin fila en el período, p. ej. Hospital de Licantén): «Camas de dotación: **sin dato**», «Ocupación: **sin dato**», «Pabellones: **sin dato**».
-* **Privado / FF.AA. sin dato** (p. ej. Hospital Clínico UC-Christus): las mismas líneas en «sin dato» **más la nota** «Las camas, la ocupación y los pabellones se reportan al DEIS por la red pública (SNSS); este establecimiento no figura en esas fuentes».
+* **Sin dato** (hospital público sin fila en el período, p. ej. Hospital de Licantén): «Camas de dotación: **sin dato**» y «Ocupación: **sin dato**».
+* **Privado / FF.AA. sin dato** (p. ej. Hospital Clínico UC-Christus): las mismas líneas en «sin dato» **más la nota** «Las camas y la ocupación se reportan al DEIS por la red pública (SNSS); este establecimiento no figura en esas fuentes».
 * Ocupación > 100 %: «puede superar 100 % (la fuente lo permite)».
 * Denominador 0: «sin dato (sin días-cama disponibles)».
-* «Pabellones: sí/no» solo cuando hay una fila A21 del período; **un establecimiento sin fila no es «no»**, es «sin dato». Dotación 0 informado explícito = «no».
+* **Pabellones: fuera de esta fase (P1).** El popup no muestra el campo ni «sin dato de pabellones»; cuando exista la fuente, un establecimiento sin fila A21 será «sin dato» (no «no»).
 * Dotación y camas disponibles se rotulan distinto; **nunca se comparan ni restan**.
-* Filtro opcional «con pabellón» (solo establecimientos con A21 y quirófanos > 0); los «sin dato» **no** se excluyen en silencio: el contador dice «N sin dato de pabellón».
+* ~~Filtro opcional «con pabellón»~~ — fuera de esta fase (P1): sin fuente de pabellones no hay filtro.
 * Aplicación del hook `useComunaHover`: **no aplica** (es una capa de puntos, no una coropleta comunal).
 
 ## 8. Riesgos y pendientes
 
-1. **Pabellones (P1):** sin el archivo A21 no hay perfilado ni modelo definitivo. Es el único bloqueo real.
-2. **Licencia de la dotación [NO COMPROBADO]:** se puede cargar y mostrar internamente, pero no declarar `client_ready` hasta confirmar con el DEIS.
+1. **Pabellones (P1):** sin el archivo A21 no hay perfilado ni modelo definitivo: se difieren a un PR aparte (decisión del dueño).
+2. **Licencia de la dotación [NO COMPROBADO]:** se puede cargar y mostrar internamente, pero no declarar `client_ready` hasta confirmar con el DEIS (la consulta la envía el dueño).
 3. La URL de REM 20 cambia con cada publicación; el ETL debe resolverla vía CKAN y fallar si cambian las columnas (se valida el encabezado exacto).
 4. El archivo de dotación tiene una fila de encabezado con asteriscos (`2014*`), códigos solo en la fila «Total», una celda de texto `*******` y dos bloques para el Hospital Metropolitano; el ETL debe tratarlos explícitamente (todo documentado arriba).
 5. 2020-2022: años de pandemia con establecimientos de campaña (203 en 2020): marcarlo en el período.
 
-## 9. Decisiones que necesito (para entrar a la Fase 1)
+## 9. Decisiones (respondidas por el dueño el 2026-10-20; ver el cuadro al inicio)
 
 | # | Pregunta | Mi propuesta |
 |---|---|---|
@@ -282,3 +301,5 @@ Fuente: REM 20 (DEIS/MINSAL, CC0), descargado 2026-10-20 · Código 112101
 | **P4** | Dotación: ¿usar el archivo 2010-2025 (no el 2010-2023 que indicaste)? | Sí; guardo también los sha256 de las versiones anteriores como referencia |
 | **P5** | Licencia de la dotación: ¿escribo al DEIS para confirmarla? | Sí, antes de `client_ready = true` |
 | **P6** | Migración `20261108000000` | Confirmada |
+
+**Respuestas del dueño (2026-10-20):** P1 **sin pabellones** (PR aparte, sin planillas de los Servicios de Salud) · P2 sí · P3 sí · P4 sí (dotación 2010-2025 con URL, sha256 y fecha de modificación en `source_snapshots`) · P5 **no se escribe al DEIS desde aquí** (lo hace el dueño; licencia de la dotación sigue [NO COMPROBADO], `client_ready = false`) · P6 confirmada.
