@@ -85,3 +85,33 @@ export interface HealthTipoRow {
   alta_ampliada: boolean;
   evidence: string;
 }
+
+/**
+ * Capacidad de un hospital (20261108000000_health_capacity): respuesta de get_health_capacity(code). TODO lo ausente llega como null y la interfaz escribe «sin dato».
+ * Pabellones (REM A21) NO están: van en otro PR cuando exista la fuente.
+ */
+export interface HealthCapacityBedArea { area: number; nombre: string; camas: number }
+/** Último año de la captura vigente de dotación (camas asignadas por resolución). `total` es la fila «Total» PUBLICADA (null = no la trae); jamás se suma. */
+export interface HealthCapacityDotacion { year: number; total: number | null; snapshot_id: string; areas: HealthCapacityBedArea[] }
+export interface HealthCapacityOccArea { area: number; nombre: string; ocupados: number; disponibles: number; indice: number | null }
+/** Ocupación de un período: índice = Σ días-cama ocupados / Σ disponibles × 100 sobre TODAS las áreas (fórmula oficial DEIS). `year` (+ `months` de `expected_months`) o `period` (AAAA-MM). */
+export interface HealthCapacityOccupancy {
+  year?: number; months?: number; expected_months?: number; period?: string;
+  snapshot_id: string; ocupados: number; disponibles: number; indice: number | null; areas: HealthCapacityOccArea[];
+}
+export interface HealthCapacitySource {
+  name: string; origin_url: string; sha256: string; declared_date: string | null; declared_date_note: string | null; captured_at: string;
+  period_start: string; period_end: string; license_label: string | null; verification_status: string;
+}
+export type HealthCapacityField = "dotacion" | "ocupacion";
+export interface HealthCapacity {
+  code: string;
+  /** null = el código no está en la captura vigente de establecimientos */
+  snss: boolean | null;
+  dependencia_norm: string | null;
+  dotacion: HealthCapacityDotacion | null;
+  ocupacion_anual: HealthCapacityOccupancy | null;
+  ocupacion_mes: HealthCapacityOccupancy | null;
+  fuentes: { dotacion: HealthCapacitySource | null; rem20: HealthCapacitySource | null };
+  client_ready: Partial<Record<HealthCapacityField, { client_ready: boolean; note: string | null }>>;
+}

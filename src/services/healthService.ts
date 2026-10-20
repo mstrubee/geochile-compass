@@ -4,7 +4,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import type { Bounds } from "@/types/projects";
-import type { HealthComunaCountRow, HealthComunaTipoRow, HealthEstablishmentRow, HealthFilters, HealthSummaryRow, HealthTipoRow } from "@/types/health";
+import type { HealthCapacity, HealthComunaCountRow, HealthComunaTipoRow, HealthEstablishmentRow, HealthFilters, HealthSummaryRow, HealthTipoRow } from "@/types/health";
 
 type RpcResult<T> = Promise<{ data: T | null; error: { message: string } | null }>;
 const rpc = <T>(name: string, args: Record<string, unknown> = {}): RpcResult<T> =>
@@ -33,3 +33,10 @@ export const fetchHealthComunaCounts = (f: HealthFilters) => run<HealthComunaCou
 export const fetchHealthComunaTipos = (cut: string) => run<HealthComunaTipoRow>("get_health_comuna_tipos", { p_cut: cut });
 export const fetchHealthSummary = () => run<HealthSummaryRow>("get_health_summary");
 export const fetchHealthTipos = () => run<HealthTipoRow>("get_health_tipo_clasificacion");
+
+/** Capacidad (camas de dotación y ocupación) de UN establecimiento. Un error de la RPC se propaga: nunca se muestra como «sin dato». */
+export const fetchHealthCapacity = async (code: string): Promise<HealthCapacity | null> => {
+  const { data, error } = await rpc<HealthCapacity>("get_health_capacity", { p_code: code });
+  if (error) throw new Error(error.message);
+  return data ?? null;
+};

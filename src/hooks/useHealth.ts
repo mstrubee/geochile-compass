@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { fetchLayerProvenance } from "@/services/permitsService";
-import { fetchHealthComunaCounts, fetchHealthComunaTipos, fetchHealthEstablishments, fetchHealthSummary, fetchHealthTipos } from "@/services/healthService";
+import { fetchHealthCapacity, fetchHealthComunaCounts, fetchHealthComunaTipos, fetchHealthEstablishments, fetchHealthSummary, fetchHealthTipos } from "@/services/healthService";
 import { HEALTH_DATASET, type HealthFilters } from "@/types/health";
 import type { Bounds } from "@/types/projects";
 
@@ -28,3 +28,7 @@ export const useHealthTipos = (enabled: boolean) =>
 /** Fuente, captura y frescura de la capa de establecimientos (RPC genérica get_layer_provenance con el dataset de salud). */
 export const useHealthProvenance = (enabled: boolean) =>
   useQuery({ queryKey: ["health", "provenance"], queryFn: () => fetchLayerProvenance(HEALTH_DATASET), enabled, staleTime: STALE, retry: 1 });
+
+/** Capacidad de un hospital: se pide al abrir su ficha (popup), no con los puntos. */
+export const useHealthCapacity = (code: string | null) =>
+  useQuery({ queryKey: ["health", "capacity", code], queryFn: () => fetchHealthCapacity(code as string), enabled: code != null, staleTime: 5 * STALE, retry: 1 });

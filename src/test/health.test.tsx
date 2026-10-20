@@ -4,6 +4,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import type { LayerProvenanceRow, ThematicLayerRow } from "@/types/permits";
 import { DEFAULT_HEALTH_FILTERS, type HealthComunaCountRow, type HealthComunaTipoRow, type HealthEstablishmentRow, type HealthSummaryRow, type HealthTipoRow } from "@/types/health";
 
@@ -23,6 +25,11 @@ import { HealthChoroplethPanel, HealthPointsPanel, ClientReadyNotice } from "@/c
 import { HealthFichaDialog } from "@/components/map/HealthFichaDialog";
 
 beforeEach(() => { rpcMock.mockReset(); fromMock.mockReset(); });
+
+/** El popup de un hospital pide su capacidad con react-query: el árbol necesita un QueryClientProvider (la RPC de capacidad responde «sin captura» en estas pruebas). */
+const withQuery = (ui: ReactElement) => (
+  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>
+);
 
 const prov = (over: Partial<LayerProvenanceRow> = {}): LayerProvenanceRow => ({
   source_key: "deis_establecimientos", name: "FIXTURE", publisher: "Publicador de prueba", landing_url: "https://example.test/", attribution: "Atribución de prueba",
@@ -196,7 +203,7 @@ describe("capas temáticas y client_ready (regla 6)", () => {
 
 describe("popups", () => {
   it("HealthPopup: clase imputada, alta complejidad por definición, cerrado y ubicación marcada", () => {
-    render(<HealthPopup row={est({ clase_fuente: "tabla", clase_servicio: "ambulatorio", alta_hospital: false, alta_ampliada: true, estado: "cerrado", geo_status: 3, geo_distance_m: 12345 })} />);
+    render(withQuery(<HealthPopup row={est({ clase_fuente: "tabla", clase_servicio: "ambulatorio", alta_hospital: false, alta_ampliada: true, estado: "cerrado", geo_status: 3, geo_distance_m: 12345 })} />));
     const t = screen.getByTestId("health-popup").textContent ?? "";
     expect(t).toContain("imputada por tabla de diseño");
     expect(t).toContain("solo en la definición ampliada");
@@ -208,7 +215,7 @@ describe("popups", () => {
   });
 
   it("HealthPopup de un hospital de alta complejidad dice que entra en las dos definiciones", () => {
-    render(<HealthPopup row={est()} />);
+    render(withQuery(<HealthPopup row={est()} />));
     expect(screen.getByTestId("health-popup").textContent).toContain("hospital (definición por defecto y ampliada)");
   });
 
