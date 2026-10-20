@@ -8,93 +8,15 @@ import { supabase } from "@/integrations/supabase/client";
 import type { PoiFolder, SavedPoi } from "@/types/pois";
 import type { PoiFolderSchema } from "@/types/poiMetrics";
 import { compareNatural, byNameNatural } from "@/utils/naturalSort";
-
-const CHUNK = 200;
-const PAGE = 1000;
-
-/** Pagina una query filtrada por un set de poi_ids para sobrepasar el límite de 1000 filas de PostgREST. */
-const fetchPaginated = async <T,>(
-  ids: string[],
-  runPage: (chunk: string[], from: number, to: number) => Promise<T[]>,
-): Promise<T[]> => {
-  const out: T[] = [];
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const slice = ids.slice(i, i + CHUNK);
-    let from = 0;
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const to = from + PAGE - 1;
-      const rows = await runPage(slice, from, to);
-      out.push(...rows);
-      if (rows.length < PAGE) break;
-      from += PAGE;
-    }
-  }
-  return out;
-};
-
-const collectFolderIds = (rootId: string, allFolders: PoiFolder[]): Set<string> => {
-  const out = new Set<string>([rootId]);
-  const childrenOf = new Map<string, string[]>();
-  for (const f of allFolders) {
-    if (f.deleted_at) continue;
-    if (!f.parent_id) continue;
-    const arr = childrenOf.get(f.parent_id) ?? [];
-    arr.push(f.id);
-    childrenOf.set(f.parent_id, arr);
-  }
-  const walk = (id: string) => {
-    for (const child of childrenOf.get(id) ?? []) {
-      if (!out.has(child)) {
-        out.add(child);
-        walk(child);
-      }
-    }
-  };
-  walk(rootId);
-  return out;
-};
-
-const folderPathOf = (id: string | null, byId: Map<string, PoiFolder>): string => {
-  if (!id) return "";
-  const parts: string[] = [];
-  let cur: string | null = id;
-  let guard = 0;
-  while (cur && guard++ < 100) {
-    const f = byId.get(cur);
-    if (!f) break;
-    parts.unshift(f.name);
-    cur = f.parent_id;
-  }
-  return parts.join(" › ");
-};
-
-const csvEscape = (v: unknown): string => {
-  if (v === null || v === undefined) return "";
-  const s = String(v);
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-};
-
-const triggerDownload = (blob: Blob, filename: string) => {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
-};
-
-const slugify = (s: string): string =>
-  s
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .toLowerCase()
-    .slice(0, 60) || "carpeta";
+import {
+  collectFolderIds,
+  csvEscape,
+  fetchPaginated,
+  fetchPoiAttributes,
+  folderPathOf,
+  slugify,
+  triggerDownload,
+} from "@/services/exportFolderShared";
 
 export interface ExportResult {
   rows: number;
@@ -120,15 +42,7 @@ export const exportFolderDataset = async (
   const poiIds = poisInScope.map((p) => p.id);
 
   // 1) Atributos estáticos
-  const attrRows = await fetchPaginated(poiIds, async (chunk, from, to) => {
-    const { data, error } = await supabase
-      .from("poi_attributes")
-      .select("poi_id,attr_key,attr_value")
-      .in("poi_id", chunk)
-      .range(from, to);
-    if (error) throw new Error(`poi_attributes: ${error.message}`);
-    return (data ?? []) as Array<{ poi_id: string; attr_key: string; attr_value: string | null }>;
-  });
+  const attrRows = await fetchPoiAttributes(poiIds);
   const attrsByPoi = new Map<string, Map<string, string>>();
   const attrKeySet = new Set<string>();
   for (const r of attrRows) {

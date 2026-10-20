@@ -27,6 +27,7 @@ import { parseFile, getExtension, splitByFolderPath } from "@/utils/fileParsers"
 import { OVERPASS_PRESETS } from "@/services/overpassService";
 import { exportPoiAsKmz, exportFolderAsKmz } from "@/utils/kmzExport";
 import { exportFolderDataset } from "@/services/exportFolderDataset";
+import { exportFolderLocales, type LocalesFormat } from "@/services/exportFolderLocales";
 import { buildPoiFolderReport } from "@/services/poiFolderReportService";
 import { exportFolderReportToXlsx } from "@/utils/poiFolderReportXlsx";
 import { exportFolderReportToPdf } from "@/utils/poiFolderReportPdf";
@@ -265,6 +266,23 @@ function AgroplanetGapPanelConnected() {
     />
   );
 }
+
+const LOCALES_FORMAT_LABEL: Record<LocalesFormat, string> = { xlsx: "Excel", csv: "CSV" };
+
+const runLocalesExport = async (
+  folder: PoiFolder,
+  folders: PoiFolder[],
+  pois: SavedPoi[],
+  format: LocalesFormat,
+) => {
+  const tId = toast.loading(`Generando listado de locales (${LOCALES_FORMAT_LABEL[format]})…`);
+  try {
+    const res = await exportFolderLocales(folder, folders, pois, format);
+    toast.success(`Listado exportado · ${res.rows} locales × ${res.columns} columnas`, { id: tId });
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Error al exportar listado de locales", { id: tId });
+  }
+};
 
 const StatCard = ({ value, label }: { value: string | number; label: string }) => (
   <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
@@ -2314,27 +2332,44 @@ export const Sidebar = ({
                                 <Download className="mr-2 h-3.5 w-3.5" />
                                 Guardar como KMZ
                               </ContextMenuItem>
-                              <ContextMenuItem
-                                onSelect={async () => {
-                                  const tId = toast.loading("Generando dataset CSV…");
-                                  try {
-                                    const schema = poiFolderSchemas.find((s) => s.folder_id === f.id);
-                                    const res = await exportFolderDataset(f, poiFolders, savedPois, schema);
-                                    toast.success(
-                                      `Dataset exportado · ${res.rows} POIs × ${res.columns} columnas`,
-                                      { id: tId },
-                                    );
-                                  } catch (err) {
-                                    toast.error(
-                                      err instanceof Error ? err.message : "Error al exportar dataset",
-                                      { id: tId },
-                                    );
-                                  }
-                                }}
-                              >
-                                <FileText className="mr-2 h-3.5 w-3.5" />
-                                Exportar dataset (CSV)…
-                              </ContextMenuItem>
+                              {/* ── Exportar listado de locales / dataset ─────────── */}
+                              <ContextMenuSub>
+                                <ContextMenuSubTrigger>
+                                  <FileText className="mr-2 h-3.5 w-3.5" />
+                                  Exportar…
+                                </ContextMenuSubTrigger>
+                                <ContextMenuSubContent className="z-[1200] w-64">
+                                  <ContextMenuItem onSelect={() => runLocalesExport(f, poiFolders, savedPois, "xlsx")}>
+                                    <Sheet className="mr-2 h-3.5 w-3.5" />
+                                    Listado de locales (Excel .xlsx)
+                                  </ContextMenuItem>
+                                  <ContextMenuItem onSelect={() => runLocalesExport(f, poiFolders, savedPois, "csv")}>
+                                    <FileText className="mr-2 h-3.5 w-3.5" />
+                                    Listado de locales (CSV)
+                                  </ContextMenuItem>
+                                  <ContextMenuItem
+                                    onSelect={async () => {
+                                      const tId = toast.loading("Generando dataset CSV…");
+                                      try {
+                                        const schema = poiFolderSchemas.find((s) => s.folder_id === f.id);
+                                        const res = await exportFolderDataset(f, poiFolders, savedPois, schema);
+                                        toast.success(
+                                          `Dataset exportado · ${res.rows} POIs × ${res.columns} columnas`,
+                                          { id: tId },
+                                        );
+                                      } catch (err) {
+                                        toast.error(
+                                          err instanceof Error ? err.message : "Error al exportar dataset",
+                                          { id: tId },
+                                        );
+                                      }
+                                    }}
+                                  >
+                                    <FileText className="mr-2 h-3.5 w-3.5" />
+                                    Dataset completo (CSV)
+                                  </ContextMenuItem>
+                                </ContextMenuSubContent>
+                              </ContextMenuSub>
                               {/* ── Informe de ventas PDF / Excel ─────────── */}
                               <ContextMenuSub>
                                 <ContextMenuSubTrigger>
