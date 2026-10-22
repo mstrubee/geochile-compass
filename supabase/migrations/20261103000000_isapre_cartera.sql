@@ -643,6 +643,9 @@ revoke all on all tables in schema salud_restringido from public, anon, authenti
 grant select, insert, update, delete, truncate on all tables in schema salud_restringido to service_role;
 revoke all on public.isapre_cartera_unidad, public.isapre_cartera_celda, public.isapre_cartera_grupo, public.isapre_cartera_region from anon;
 revoke insert, update, delete, truncate on public.isapre_cartera_unidad, public.isapre_cartera_celda, public.isapre_cartera_grupo, public.isapre_cartera_region from authenticated;
+-- Data API: desde el 2026-10-30 Supabase ya no concede permisos automáticos sobre tablas nuevas de public; se declaran aquí (anon sigue sin acceso).
+grant select on public.isapre_cartera_unidad, public.isapre_cartera_celda, public.isapre_cartera_grupo, public.isapre_cartera_region to authenticated;
+grant all on public.isapre_cartera_unidad, public.isapre_cartera_celda, public.isapre_cartera_grupo, public.isapre_cartera_region to service_role;
 
 revoke all on function public.publish_isapre_snapshot(uuid) from public, anon, authenticated;
 grant execute on function public.publish_isapre_snapshot(uuid) to service_role;

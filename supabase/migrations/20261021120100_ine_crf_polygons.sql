@@ -323,6 +323,9 @@ create policy ine_crf_geom_repairs_read on public.ine_crf_geom_repairs for selec
 revoke all on public.ine_crf_polygons, public.ine_crf_stage, public.ine_crf_geom_repairs from anon;
 revoke insert, update, delete, truncate on public.ine_crf_polygons, public.ine_crf_geom_repairs from authenticated;
 revoke all on public.ine_crf_stage from authenticated;
+-- Data API: desde el 2026-10-30 Supabase ya no concede permisos automáticos sobre tablas nuevas de public; se declaran aquí (anon sigue sin acceso).
+grant select on public.ine_crf_polygons, public.ine_crf_geom_repairs to authenticated;
+grant all on public.ine_crf_polygons, public.ine_crf_geom_repairs, public.ine_crf_stage to service_role;
 
 revoke all on function public.publish_ine_crf_snapshot(uuid), public._ine_crf_make_partition(integer),
   public._repair_polygon(geometry, numeric), public._safe_area_m2(geometry) from public, anon, authenticated;

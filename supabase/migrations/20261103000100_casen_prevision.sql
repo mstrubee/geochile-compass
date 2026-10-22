@@ -219,6 +219,9 @@ create policy casen_prevision_read on public.casen_prevision_region for select t
 revoke all on public.casen_prevision_stage, public.casen_prevision_region from anon;
 revoke insert, update, delete, truncate on public.casen_prevision_region from authenticated;
 revoke all on public.casen_prevision_stage from authenticated;
+-- Data API: desde el 2026-10-30 Supabase ya no concede permisos automáticos sobre tablas nuevas de public; se declaran aquí (anon sigue sin acceso).
+grant select on public.casen_prevision_region to authenticated;
+grant all on public.casen_prevision_stage, public.casen_prevision_region to service_role;
 revoke all on function public.publish_casen_snapshot(uuid) from public, anon, authenticated;
 grant execute on function public.publish_casen_snapshot(uuid) to service_role;
 revoke all on function public._casen_current_snapshot(), public.get_casen_prevision_region() from public, anon;
