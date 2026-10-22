@@ -400,6 +400,9 @@ create policy ine_pe_points_read on public.ine_pe_points for select to authentic
 revoke all on public.geo_rejected_rows, public.ine_pe_glosas, public.ine_pe_points, public.ine_pe_stage from anon;
 revoke insert, update, delete, truncate on public.ine_pe_glosas, public.ine_pe_points, public.geo_rejected_rows from authenticated;
 revoke all on public.ine_pe_stage from authenticated;
+-- Data API: desde el 2026-10-30 Supabase ya no concede permisos automáticos sobre tablas nuevas de public; se declaran aquí (anon sigue sin acceso).
+grant select on public.geo_rejected_rows, public.ine_pe_glosas, public.ine_pe_points to authenticated;
+grant all on public.geo_rejected_rows, public.ine_pe_glosas, public.ine_pe_points, public.ine_pe_stage to service_role;
 
 revoke all on function public.publish_ine_pe_snapshot(uuid), public._ine_pe_make_partition(integer) from public, anon, authenticated;
 grant execute on function public.publish_ine_pe_snapshot(uuid) to service_role;

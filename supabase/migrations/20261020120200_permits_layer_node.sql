@@ -48,6 +48,9 @@ drop policy if exists thematic_layers_write on public.thematic_layers;
 create policy thematic_layers_write on public.thematic_layers for all to authenticated
   using (public.has_role(auth.uid(), 'admin')) with check (public.has_role(auth.uid(), 'admin'));
 revoke all on public.thematic_layers from anon;
+-- Data API: desde el 2026-10-30 Supabase ya no concede permisos automáticos sobre tablas nuevas de public; se declaran aquí (anon sigue sin acceso).
+grant select, insert, update, delete on public.thematic_layers to authenticated;
+grant all on public.thematic_layers to service_role;
 
 do $$
 declare v_root uuid; v_layer uuid;

@@ -16,6 +16,7 @@ supabase/
 - Idempotentes y no destructivas salvo que se justifique con `SQL_MIGRATION_GUARDRAILS.md` (backup versionado, validar antes de borrar, `_migration_log`).
 - Se aplican con `psql "$DB" -1 -v ON_ERROR_STOP=1 -f <archivo>`: **`-1` es obligatorio** (usan `SET LOCAL` y tablas temporales de vida de transacción).
 - Cabecera con: qué cambia, qué reemplaza, en qué orden se aplica y cómo se revierte.
+- **Permisos de la Data API explícitos:** desde el 2026-10-30 Supabase ya no concede `GRANT` automáticos sobre tablas nuevas de `public`. Toda tabla nueva declara en la misma migración sus `grant` (lectura → `select` a `authenticated`; escritura solo si hay política; zona de paso → nada a `authenticated`; `grant all … to service_role`; `anon` sin acceso). Sin eso, supabase-js/PostgREST responde «permission denied».
 
 ## 2. Rollbacks (`supabase/rollbacks/`) — **los `down` NUNCA van en `supabase/migrations/`**
 - Cada migración nueva lleva su rollback en **`supabase/rollbacks/<misma versión>_<nombre>_down.sql`**.

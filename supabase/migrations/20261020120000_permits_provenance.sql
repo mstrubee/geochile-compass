@@ -509,6 +509,10 @@ revoke all on public.pipeline_settings, public.data_sources, public.source_snaps
               public.source_alerts, public.comunas, public.comuna_geom_repairs, public.comuna_name_aliases,
               public.source_freshness_v, public.comunas_geom_review_v from anon;
 grant select on public.source_freshness_v, public.comunas_geom_review_v to authenticated;
+-- Data API: desde el 2026-10-30 Supabase ya no concede permisos automáticos sobre tablas nuevas de public; se declaran aquí (anon sigue sin acceso).
+grant select on public.pipeline_settings, public.data_sources, public.source_snapshots, public.source_checks, public.source_alerts, public.comunas, public.comuna_geom_repairs, public.comuna_name_aliases to authenticated;
+grant all on public.pipeline_settings, public.data_sources, public.source_snapshots, public.source_checks, public.source_alerts, public.comunas, public.comuna_geom_repairs, public.comuna_name_aliases, public.source_freshness_v, public.comunas_geom_review_v to service_role;
+grant insert, update, delete on public.pipeline_settings, public.data_sources, public.source_snapshots, public.source_checks, public.comuna_name_aliases to authenticated;  -- solo las admite la política *_write (admin)
 
 revoke all on function public.raise_freshness_alerts() from public, anon, authenticated;
 grant execute on function public.raise_freshness_alerts() to service_role;

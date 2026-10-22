@@ -273,6 +273,9 @@ create policy poblacion_comunal_edad_read on public.poblacion_comunal_edad for s
 revoke all on public.poblacion_comunal, public.poblacion_comunal_edad, public.poblacion_comunal_stage, public.poblacion_comunal_edad_stage from anon;
 revoke insert, update, delete, truncate on public.poblacion_comunal, public.poblacion_comunal_edad from authenticated;
 revoke all on public.poblacion_comunal_stage, public.poblacion_comunal_edad_stage from authenticated;
+-- Data API: desde el 2026-10-30 Supabase ya no concede permisos automáticos sobre tablas nuevas de public; se declaran aquí (anon sigue sin acceso).
+grant select on public.poblacion_comunal, public.poblacion_comunal_edad to authenticated;
+grant all on public.poblacion_comunal, public.poblacion_comunal_edad, public.poblacion_comunal_stage, public.poblacion_comunal_edad_stage to service_role;
 revoke all on function public.publish_poblacion_snapshot(uuid) from public, anon, authenticated;
 grant execute on function public.publish_poblacion_snapshot(uuid) to service_role;
 revoke all on function public._poblacion_current_snapshot(), public.get_poblacion_comunal(), public.get_poblacion_comunal_edad(text) from public, anon;

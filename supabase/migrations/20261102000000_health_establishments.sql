@@ -492,6 +492,10 @@ create policy health_establishments_read on public.health_establishments for sel
 revoke all on public.health_tipo_clasificacion, public.health_establishments, public.health_establishments_stage from anon;
 revoke insert, update, delete, truncate on public.health_establishments from authenticated;
 revoke all on public.health_establishments_stage from authenticated;
+-- Data API: desde el 2026-10-30 Supabase ya no concede permisos automáticos sobre tablas nuevas de public; se declaran aquí (anon sigue sin acceso).
+grant select on public.health_establishments to authenticated;
+grant select, insert, update, delete on public.health_tipo_clasificacion to authenticated;
+grant all on public.health_tipo_clasificacion, public.health_establishments, public.health_establishments_stage to service_role;
 
 revoke all on function public.publish_health_establishments(uuid) from public, anon, authenticated;
 grant execute on function public.publish_health_establishments(uuid) to service_role;

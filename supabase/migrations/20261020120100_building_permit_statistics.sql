@@ -543,6 +543,10 @@ create policy snapshot_control_totals_read on public.snapshot_control_totals for
 revoke all on public.permit_destination_map, public.permit_series, public.building_permit_statistics,
               public.permit_stage, public.permit_rejected_rows, public.snapshot_control_totals from anon;
 revoke all on public.permit_stage from authenticated;
+-- Data API: desde el 2026-10-30 Supabase ya no concede permisos automáticos sobre tablas nuevas de public; se declaran aquí (anon sigue sin acceso).
+grant select on public.permit_destination_map, public.permit_series, public.building_permit_statistics, public.permit_rejected_rows, public.snapshot_control_totals to authenticated;
+grant all on public.permit_destination_map, public.permit_series, public.building_permit_statistics, public.permit_stage, public.permit_rejected_rows, public.snapshot_control_totals to service_role;
+grant insert, update, delete on public.permit_destination_map, public.permit_series to authenticated;  -- solo las admite la política *_write (admin)
 
 revoke all on function public.publish_permit_snapshot(uuid, numeric), public.purge_superseded_permit_rows(uuid, int)
   from public, anon, authenticated;

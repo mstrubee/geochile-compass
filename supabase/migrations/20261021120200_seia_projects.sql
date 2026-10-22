@@ -362,6 +362,11 @@ revoke all on public.seia_typology_rules, public.building_projects, public.build
 revoke insert, update, delete, truncate on public.building_projects from authenticated;
 revoke update, delete, truncate on public.building_project_geo_reviews from authenticated;
 revoke all on public.seia_stage from authenticated;
+-- Data API: desde el 2026-10-30 Supabase ya no concede permisos automáticos sobre tablas nuevas de public; se declaran aquí (anon sigue sin acceso).
+grant select on public.building_projects to authenticated;
+grant select, insert, update, delete on public.seia_typology_rules to authenticated;
+grant select, insert on public.building_project_geo_reviews to authenticated;
+grant all on public.seia_typology_rules, public.building_projects, public.building_project_geo_reviews, public.seia_stage to service_role;
 
 revoke all on function public.publish_seia_snapshot(uuid) from public, anon, authenticated;
 grant execute on function public.publish_seia_snapshot(uuid) to service_role;
